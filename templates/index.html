@@ -1,0 +1,795 @@
+<!DOCTYPE html>
+
+<html lang="ko">
+
+<head>
+
+<meta charset="UTF-8">
+
+<meta
+    name="viewport"
+    content="width=device-width, initial-scale=1.0"
+>
+
+<title>Maple Growth Tracker</title>
+
+
+<link
+    rel="stylesheet"
+    href="{{ url_for('static', filename='style.css') }}"
+>
+
+
+<script
+    src="https://cdn.jsdelivr.net/npm/chart.js"
+></script>
+
+<script
+    src="https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js"
+></script>
+
+<script
+    src="https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js"
+></script>
+
+</head>
+
+<body>
+
+<main class="container">
+
+
+    <!-- =========================
+         Header
+    ========================== -->
+
+    <header class="header">
+
+        <div class="header-inner">
+
+            <div class="logo-area">
+
+                <h1 class="logo">
+                    Maple Growth Tracker
+                </h1>
+
+                <p class="subtitle">
+                    메이플스토리 캐릭터의 성장 기록을 한눈에 확인하세요.
+                </p>
+
+            </div>
+
+        </div>
+
+    </header>
+
+
+
+    <!-- =========================
+         검색
+    ========================== -->
+
+    <section class="search-section">
+
+        <div class="search-card">
+
+            <form
+                id="searchForm"
+                class="search-form"
+            >
+
+                <input
+                    type="text"
+                    id="characterName"
+                    class="search-input"
+                    placeholder="캐릭터명을 입력하세요"
+                    autocomplete="off"
+                >
+
+
+                <button
+                    type="submit"
+                    class="search-button"
+                >
+                    조회하기 →
+                </button>
+
+
+                <button
+                    type="button"
+                    id="saveImageButton"
+                    class="export-button"
+                >
+                    이미지 저장
+                </button>
+
+
+                <button
+                    type="button"
+                    id="savePdfButton"
+                    class="export-button"
+                >
+                    PDF 저장
+                </button>
+
+            </form>
+
+
+            <div
+                id="loadingMessage"
+                class="loading-message"
+                hidden
+            >
+                캐릭터 정보를 조회하고 있습니다...
+            </div>
+
+
+            <div
+                id="errorMessage"
+                class="error-message"
+                hidden
+            ></div>
+
+        </div>
+
+    </section>
+
+
+
+    <!-- =========================
+         결과
+    ========================== -->
+
+    <section
+        id="resultSection"
+        class="result-section"
+        hidden
+    >
+
+
+        <!-- =========================
+             캐릭터 정보
+        ========================== -->
+
+        <section class="section">
+
+            <div class="character-card">
+
+                <div class="character-main">
+
+                    <h2
+                        id="characterNameResult"
+                        class="character-name"
+                    >
+                        -
+                    </h2>
+
+
+                    <div class="character-meta">
+
+                        <span
+                            id="worldName"
+                            class="meta-item"
+                        >
+                            -
+                        </span>
+
+                        <span
+                            id="jobName"
+                            class="meta-item"
+                        >
+                            -
+                        </span>
+
+                        <span
+                            id="guildName"
+                            class="meta-item"
+                        >
+                            -
+                        </span>
+
+                    </div>
+
+
+                    <div class="character-stats">
+
+
+                        <!-- 레벨 -->
+
+                        <div class="stat">
+
+                            <div class="stat-label">
+                                레벨
+                            </div>
+
+                            <div
+                                id="levelValue"
+                                class="stat-value"
+                            >
+                                -
+                            </div>
+
+                        </div>
+
+
+                        <!-- 경험치 진행도 -->
+
+                        <div class="stat">
+
+                            <div class="stat-label">
+                                경험치 진행도
+                            </div>
+
+                            <div
+                                id="experienceRate"
+                                class="stat-value"
+                            >
+                                -
+                            </div>
+
+                        </div>
+
+
+                        <!-- 일일 평균 경험치 -->
+
+                        <div class="stat">
+
+                            <div class="stat-label">
+                                일일 평균 경험치
+                            </div>
+
+                            <div
+                                id="averageDailyExperience"
+                                class="stat-value"
+                            >
+                                -
+                            </div>
+
+                        </div>
+
+                    </div>
+
+                </div>
+
+            </div>
+
+        </section>
+
+
+
+        <!-- =========================
+             랭킹
+        ========================== -->
+
+        <section class="section">
+
+            <div class="section-header">
+
+                <h2 class="section-title">
+                    랭킹
+                </h2>
+
+                <p class="section-description">
+                    현재 캐릭터의 주요 랭킹을 확인합니다.
+                </p>
+
+            </div>
+
+
+            <div class="ranking-grid">
+
+
+                <div class="ranking-card">
+
+                    <div class="ranking-label">
+                        종합 랭킹
+                    </div>
+
+                    <div
+                        id="overallRanking"
+                        class="ranking-value"
+                    >
+                        -
+                    </div>
+
+                </div>
+
+
+                <div class="ranking-card">
+
+                    <div class="ranking-label">
+                        월드 랭킹
+                    </div>
+
+                    <div
+                        id="worldRanking"
+                        class="ranking-value"
+                    >
+                        -
+                    </div>
+
+                </div>
+
+
+                <div class="ranking-card">
+
+                    <div class="ranking-label">
+                        직업 랭킹 (월드)
+                    </div>
+
+                    <div
+                        id="jobWorldRanking"
+                        class="ranking-value"
+                    >
+                        -
+                    </div>
+
+                </div>
+
+
+                <div class="ranking-card">
+
+                    <div class="ranking-label">
+                        직업 랭킹 (전체)
+                    </div>
+
+                    <div
+                        id="jobRanking"
+                        class="ranking-value"
+                    >
+                        -
+                    </div>
+
+                </div>
+
+            </div>
+
+        </section>
+
+
+
+        <!-- =========================
+             성장 요약
+        ========================== -->
+
+        <section class="section">
+
+            <div class="section-header">
+
+                <h2 class="section-title">
+                    성장 요약
+                </h2>
+
+                <p class="section-description">
+                    최근 경험치와 랭킹 변화를 요약합니다.
+                </p>
+
+            </div>
+
+
+            <div class="summary-grid">
+
+
+                <div class="summary-card">
+
+                    <div class="summary-label">
+                        어제보다
+                    </div>
+
+                    <div
+                        id="yesterdayGrowth"
+                        class="summary-value positive"
+                    >
+                        -
+                    </div>
+
+                </div>
+
+
+                <div class="summary-card">
+
+                    <div class="summary-label">
+                        랭킹 변화
+                    </div>
+
+                    <div
+                        id="rankingChange"
+                        class="summary-value"
+                    >
+                        -
+                    </div>
+
+                </div>
+
+
+                <div class="summary-card">
+
+                    <div class="summary-label">
+                        최근 7일 성장
+                    </div>
+
+                    <div
+                        id="weeklyGrowth"
+                        class="summary-value positive"
+                    >
+                        -
+                    </div>
+
+                </div>
+
+
+                <div class="summary-card">
+
+                    <div class="summary-label">
+                        일 평균 획득량
+                    </div>
+
+                    <div
+                        id="averageGrowth"
+                        class="summary-value positive"
+                    >
+                        -
+                    </div>
+
+                </div>
+
+            </div>
+
+        </section>
+
+
+
+        <!-- =========================
+             성장 그래프
+        ========================== -->
+
+        <section class="section">
+
+            <div class="section-header">
+
+                <h2 class="section-title">
+                    최근 성장 추이
+                </h2>
+
+                <p class="section-description">
+                    최근 7일 동안의 누적 성장과 일일 획득량입니다.
+                </p>
+
+            </div>
+
+
+            <div class="chart-card">
+
+                <div class="chart-wrapper">
+
+                    <canvas id="growthChart"></canvas>
+
+                </div>
+
+            </div>
+
+        </section>
+
+
+
+        <!-- =========================
+             AI 성장 판독
+        ========================== -->
+
+        <section class="section">
+
+            <div class="section-header">
+
+                <h2 class="section-title">
+                    AI 성장 판독
+                </h2>
+
+                <p class="section-description">
+                    최근 성장 데이터를 Gemini AI가 분석합니다.
+                </p>
+
+            </div>
+
+
+            <div
+                id="aiAnalysisCard"
+                class="ai-analysis-card"
+            >
+
+
+                <!-- AI 로딩 -->
+
+                <div
+                    id="aiAnalysisLoading"
+                    class="ai-analysis-loading"
+                    hidden
+                >
+                    성장 데이터를 분석하고 있습니다...
+                </div>
+
+
+                <!-- AI 오류 -->
+
+                <div
+                    id="aiAnalysisError"
+                    class="ai-analysis-error"
+                    hidden
+                ></div>
+
+
+                <!-- AI 결과 -->
+
+                <div
+                    id="aiAnalysisResult"
+                    class="ai-analysis-result"
+                    hidden
+                >
+
+
+                    <!-- 성장 패턴 -->
+
+                    <div class="ai-analysis-item">
+
+                        <div class="ai-analysis-label">
+                            성장 패턴
+                        </div>
+
+                        <div
+                            id="aiGrowthPattern"
+                            class="ai-analysis-text"
+                        >
+                            -
+                        </div>
+
+                    </div>
+
+
+                    <!-- 성장 분석 -->
+
+                    <div class="ai-analysis-item">
+
+                        <div class="ai-analysis-label">
+                            성장 분석
+                        </div>
+
+                        <div
+                            id="aiGrowthAnalysis"
+                            class="ai-analysis-text"
+                        >
+                            -
+                        </div>
+
+                    </div>
+
+
+                    <!-- 레벨업 -->
+
+                    <div class="ai-analysis-item">
+
+                        <div class="ai-analysis-label">
+                            레벨업
+                        </div>
+
+                        <div
+                            id="aiLevelUp"
+                            class="ai-analysis-text"
+                        >
+                            -
+                        </div>
+
+                    </div>
+
+
+                    <!-- AI 판단 -->
+
+                    <div class="ai-analysis-item">
+
+                        <div class="ai-analysis-label">
+                            AI 판단
+                        </div>
+
+                        <div
+                            id="aiJudgement"
+                            class="ai-analysis-text"
+                        >
+                            -
+                        </div>
+
+                    </div>
+
+                </div>
+
+            </div>
+
+        </section>
+
+
+
+        <!-- =========================
+             성장 예측
+        ========================== -->
+
+        <section class="section">
+
+            <div class="section-header">
+
+                <h2 class="section-title">
+                    성장 예측
+                </h2>
+
+                <p class="section-description">
+                    최근 7일 성장 속도를 기준으로 다음 레벨업을 예상합니다.
+                </p>
+
+            </div>
+
+
+            <div class="prediction-card">
+
+                <div class="prediction-grid">
+
+
+                    <div class="prediction-item">
+
+                        <div class="prediction-label">
+                            다음 레벨까지
+                        </div>
+
+                        <div
+                            id="predictionRequired"
+                            class="prediction-value"
+                        >
+                            -
+                        </div>
+
+                    </div>
+
+
+                    <div class="prediction-item">
+
+                        <div class="prediction-label">
+                            예상 소요
+                        </div>
+
+                        <div
+                            id="predictionDays"
+                            class="prediction-value"
+                        >
+                            -
+                        </div>
+
+                    </div>
+
+
+                    <div class="prediction-item">
+
+                        <div class="prediction-label">
+                            예상 레벨업
+                        </div>
+
+                        <div
+                            id="predictionDate"
+                            class="prediction-value"
+                        >
+                            -
+                        </div>
+
+                    </div>
+
+
+                    <div class="prediction-item">
+
+                        <div class="prediction-label">
+                            최근 평균
+                        </div>
+
+                        <div
+                            id="predictionAverage"
+                            class="prediction-value"
+                        >
+                            -
+                        </div>
+
+                    </div>
+
+                </div>
+
+
+                <p class="prediction-note">
+                    최근 평균 획득량이 유지된다는 가정의 예상치입니다.
+                    경험치 비율을 기반으로 계산한 값이므로 실제 레벨업 시점과 차이가 있을 수 있습니다.
+                </p>
+
+            </div>
+
+        </section>
+
+
+
+        <!-- =========================
+             성장 기록
+        ========================== -->
+
+        <section class="section">
+
+            <div class="section-header">
+
+                <h2 class="section-title">
+                    최근 성장 기록
+                </h2>
+
+                <p class="section-description">
+                    최근 7일간의 경험치와 랭킹 변화입니다.
+                </p>
+
+            </div>
+
+
+            <div class="history-card">
+
+                <div class="history-table-wrapper">
+
+                    <table class="history-table">
+
+                        <thead>
+
+                            <tr>
+                                <th>날짜</th>
+                                <th>랭킹</th>
+                                <th>경험치</th>
+                            </tr>
+
+                        </thead>
+
+
+                        <tbody id="historyBody">
+                        </tbody>
+
+                    </table>
+
+                </div>
+
+            </div>
+
+        </section>
+
+
+    </section>
+
+
+
+    <!-- =========================
+         Footer
+    ========================== -->
+
+    <footer class="footer">
+
+        <p>
+
+            Data based on
+
+            <a
+                href="https://openapi.nexon.com/"
+                target="_blank"
+                rel="noopener noreferrer"
+            >
+                NEXON Open API
+            </a>
+
+        </p>
+
+    </footer>
+
+</main>
+
+
+
+<!-- =========================
+     JavaScript
+========================== -->
+
+<script src="/static/app.js"></script>
+
+</body>
+
+</html>

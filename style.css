@@ -1,0 +1,857 @@
+/* =========================
+   기본 설정
+========================= */
+
+* {
+    box-sizing: border-box;
+}
+
+html {
+    scroll-behavior: smooth;
+}
+
+body {
+    margin: 0;
+    min-height: 100vh;
+
+    font-family:
+        "Pretendard",
+        "Noto Sans KR",
+        Arial,
+        sans-serif;
+
+    color: #25233a;
+
+    background:
+        radial-gradient(
+            circle at 15% 10%,
+            rgba(174, 157, 255, 0.28),
+            transparent 32%
+        ),
+        radial-gradient(
+            circle at 85% 15%,
+            rgba(120, 195, 255, 0.25),
+            transparent 32%
+        ),
+        linear-gradient(
+            135deg,
+            #f7f4ff 0%,
+            #eef7ff 52%,
+            #faf7ff 100%
+        );
+}
+
+
+/* =========================
+   전체 컨테이너
+========================= */
+
+.container {
+    width: min(1100px, calc(100% - 40px));
+    margin: 0 auto;
+    padding: 64px 0 80px;
+}
+
+
+/* =========================
+   헤더
+========================= */
+
+.header {
+    text-align: center;
+    margin-bottom: 38px;
+}
+
+.header h1 {
+    margin: 0;
+
+    font-size: 42px;
+    line-height: 1.2;
+    font-weight: 800;
+
+    letter-spacing: -1.8px;
+
+    background:
+        linear-gradient(
+            90deg,
+            #6955d9,
+            #4c8de8
+        );
+
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+}
+
+.header p {
+    margin: 12px 0 0;
+
+    color: #77748b;
+
+    font-size: 15px;
+    line-height: 1.6;
+}
+
+
+/* =========================
+   검색 박스
+========================= */
+
+.search-box {
+    display: grid;
+
+    grid-template-columns: 1.5fr 1fr 1fr auto;
+
+    gap: 14px;
+
+    align-items: end;
+
+    padding: 24px;
+
+    border: 1px solid rgba(120, 105, 190, 0.15);
+    border-radius: 20px;
+
+    background: rgba(255, 255, 255, 0.8);
+
+    box-shadow:
+        0 10px 30px rgba(79, 68, 140, 0.08);
+
+    backdrop-filter: blur(10px);
+
+    margin-bottom: 28px;
+}
+
+
+/* =========================
+   검색 필드
+========================= */
+
+.search-field {
+    min-width: 0;
+}
+
+.search-field input,
+.search-field select {
+    width: 100%;
+    height: 50px;
+
+    padding: 0 15px;
+
+    border: 1px solid #ddd9ed;
+    border-radius: 12px;
+
+    background: #ffffff;
+
+    color: #302b4a;
+
+    font-family: inherit;
+    font-size: 14px;
+
+    outline: none;
+}
+
+.search-field input:focus,
+.search-field select:focus {
+    border-color: #7b68e8;
+
+    box-shadow:
+        0 0 0 4px rgba(123, 104, 232, 0.12);
+}
+
+#searchButton {
+    height: 50px;
+
+    padding: 0 24px;
+
+    border: none;
+    border-radius: 12px;
+
+    background:
+        linear-gradient(
+            135deg,
+            #735fe0,
+            #4d8fe9
+        );
+
+    color: white;
+
+    font-family: inherit;
+    font-size: 14px;
+    font-weight: 700;
+
+    white-space: nowrap;
+
+    cursor: pointer;
+}
+
+.search-field input::placeholder {
+    color: #aaa6b5;
+}
+
+.search-field input:focus,
+.search-field select:focus {
+    border-color: #7b68e8;
+
+    box-shadow:
+        0 0 0 4px
+        rgba(123, 104, 232, 0.11);
+}
+
+
+/* =========================
+   조회 버튼
+========================= */
+
+#searchButton {
+    height: 50px;
+
+    padding: 0 24px;
+
+    border: none;
+    border-radius: 12px;
+
+    background:
+        linear-gradient(
+            135deg,
+            #735fe0,
+            #4d8fe9
+        );
+
+    color: #ffffff;
+
+    font-family: inherit;
+    font-size: 14px;
+    font-weight: 800;
+
+    white-space: nowrap;
+
+    cursor: pointer;
+
+    box-shadow:
+        0 7px 18px
+        rgba(92, 77, 205, 0.24);
+
+    transition:
+        transform 0.15s ease,
+        box-shadow 0.15s ease,
+        filter 0.15s ease;
+}
+
+#searchButton:hover {
+    transform: translateY(-2px);
+
+    box-shadow:
+        0 10px 24px
+        rgba(92, 77, 205, 0.3);
+
+    filter: brightness(1.03);
+}
+
+#searchButton:active {
+    transform: translateY(0);
+}
+
+
+/* =========================
+   캐릭터 / 성장 / 기록 카드
+========================= */
+
+.character-card,
+.growth-card,
+.history-card {
+    border:
+        1px solid
+        rgba(120, 105, 190, 0.13);
+
+    border-radius: 22px;
+
+    background:
+        rgba(255, 255, 255, 0.88);
+
+    box-shadow:
+        0 12px 35px
+        rgba(67, 57, 125, 0.08);
+
+    backdrop-filter: blur(10px);
+}
+
+
+/* =========================
+   캐릭터 카드
+========================= */
+
+.character-card {
+    overflow: hidden;
+    margin-bottom: 20px;
+}
+
+.character-header {
+    display: flex;
+
+    justify-content: space-between;
+    align-items: center;
+
+    gap: 20px;
+
+    padding: 30px;
+
+    background:
+        linear-gradient(
+            135deg,
+            rgba(115, 95, 224, 0.10),
+            rgba(77, 143, 233, 0.10)
+        );
+}
+
+.world {
+    margin: 0 0 5px;
+
+    color: #756ca0;
+
+    font-size: 13px;
+    font-weight: 700;
+}
+
+.character-header h2 {
+    margin: 0;
+
+    color: #29253f;
+
+    font-size: 30px;
+    font-weight: 800;
+
+    letter-spacing: -1px;
+}
+
+.level {
+    padding: 9px 15px;
+
+    border-radius: 999px;
+
+    background: #eeeaff;
+
+    color: #6754c9;
+
+    font-size: 14px;
+    font-weight: 800;
+
+    white-space: nowrap;
+}
+
+
+/* =========================
+   현재 스탯
+========================= */
+
+.stats {
+    display: grid;
+
+    grid-template-columns:
+        repeat(3, 1fr);
+
+    border-top:
+        1px solid
+        #eeeaf7;
+}
+
+.stat {
+    padding: 25px 30px;
+
+    border-right:
+        1px solid
+        #eeeaf7;
+}
+
+.stat:last-child {
+    border-right: none;
+}
+
+.stat span {
+    display: block;
+
+    margin-bottom: 9px;
+
+    color: #8b879b;
+
+    font-size: 13px;
+    font-weight: 600;
+}
+
+.stat strong {
+    display: block;
+
+    color: #29253f;
+
+    font-size: 22px;
+    font-weight: 800;
+
+    letter-spacing: -0.5px;
+
+    word-break: break-all;
+}
+
+
+/* =========================
+   성장 / 기록 카드
+========================= */
+
+.growth-card,
+.history-card {
+    padding: 28px;
+
+    margin-bottom: 20px;
+}
+
+.growth-card h2,
+.history-card h2 {
+    margin: 0 0 22px;
+
+    color: #302b4a;
+
+    font-size: 19px;
+    font-weight: 800;
+
+    letter-spacing: -0.4px;
+}
+
+
+/* =========================
+   성장 요약
+========================= */
+
+.growth-grid {
+    display: grid;
+
+    grid-template-columns:
+        repeat(4, 1fr);
+
+    gap: 12px;
+}
+
+.growth-item {
+    padding: 20px;
+
+    border:
+        1px solid
+        #eeeaf7;
+
+    border-radius: 15px;
+
+    background: #f8f7fc;
+
+    transition:
+        transform 0.15s ease,
+        box-shadow 0.15s ease;
+}
+
+.growth-item:hover {
+    transform: translateY(-2px);
+
+    box-shadow:
+        0 7px 18px
+        rgba(75, 63, 140, 0.07);
+}
+
+.growth-item span {
+    display: block;
+
+    margin-bottom: 9px;
+
+    color: #8c889d;
+
+    font-size: 12px;
+    font-weight: 600;
+}
+
+.growth-item strong {
+    display: block;
+
+    color: #302b4a;
+
+    font-size: 16px;
+    font-weight: 800;
+
+    word-break: break-all;
+}
+
+
+/* =========================
+   기록 테이블
+========================= */
+
+.history-table {
+    width: 100%;
+
+    overflow-x: auto;
+}
+
+.history-row {
+    display: grid;
+
+    grid-template-columns:
+        1fr
+        0.8fr
+        2fr
+        1.3fr;
+
+    align-items: center;
+
+    min-width: 650px;
+
+    padding: 15px 14px;
+
+    border-bottom:
+        1px solid
+        #f0edf7;
+
+    font-size: 13px;
+}
+
+.history-row:last-child {
+    border-bottom: none;
+}
+
+.history-head {
+    padding-top: 0;
+
+    color: #8a8699;
+
+    font-size: 12px;
+    font-weight: 700;
+}
+
+.history-row:not(.history-head):hover {
+    border-radius: 10px;
+
+    background: #faf9ff;
+}
+
+.experience-cell {
+    white-space: nowrap;
+}
+
+.experience-up {
+    margin-left: 8px;
+
+    color: #2777df;
+
+    font-size: 0.85em;
+    font-weight: 700;
+}
+
+
+/* =========================
+   초기 화면 / 메시지
+========================= */
+
+.empty,
+.message,
+.loading,
+.error {
+    padding: 65px 20px;
+
+    text-align: center;
+
+    border:
+        1px solid
+        rgba(120, 105, 190, 0.12);
+
+    border-radius: 22px;
+
+    background:
+        rgba(255, 255, 255, 0.82);
+
+    box-shadow:
+        0 10px 30px
+        rgba(79, 68, 140, 0.06);
+}
+
+.empty h2 {
+    margin: 0 0 10px;
+
+    color: #302b4a;
+
+    font-size: 21px;
+    font-weight: 800;
+}
+
+.empty p {
+    margin: 0;
+
+    color: #888497;
+
+    font-size: 14px;
+    line-height: 1.7;
+}
+
+.loading {
+    color: #6656c9;
+
+    font-weight: 700;
+}
+
+.error {
+    color: #d14f65;
+}
+
+
+/* =========================
+   안내 문구
+========================= */
+
+.notice {
+    margin-top: 25px;
+
+    text-align: center;
+}
+
+.notice p {
+    margin: 0;
+
+    color: #aaa6b5;
+
+    font-size: 11px;
+}
+
+
+/* =========================
+   푸터
+========================= */
+
+footer {
+    margin-top: 35px;
+
+    text-align: center;
+
+    color: #aaa6b5;
+
+    font-size: 11px;
+}
+
+
+/* =========================
+   태블릿
+========================= */
+
+@media (max-width: 850px) {
+
+    .container {
+        width: min(
+            100% - 30px,
+            700px
+        );
+
+        padding-top: 45px;
+    }
+
+    .header h1 {
+        font-size: 35px;
+    }
+
+    .search-box {
+        grid-template-columns:
+            1fr
+            1fr;
+    }
+
+    #searchButton {
+        width: 100%;
+    }
+
+    .character-header {
+        padding: 24px;
+    }
+
+    .character-header h2 {
+        font-size: 25px;
+    }
+
+    .stats {
+        grid-template-columns:
+            1fr;
+    }
+
+    .stat {
+        border-right: none;
+
+        border-bottom:
+            1px solid
+            #eeeaf7;
+    }
+
+    .stat:last-child {
+        border-bottom: none;
+    }
+
+    .growth-grid {
+        grid-template-columns:
+            repeat(2, 1fr);
+    }
+}
+
+
+/* =========================
+   모바일
+========================= */
+
+@media (max-width: 520px) {
+
+    .container {
+        width: calc(100% - 18px);
+
+        padding-top: 28px;
+        padding-bottom: 50px;
+    }
+
+    .header {
+        margin-bottom: 25px;
+    }
+
+    .header h1 {
+        font-size: 28px;
+        letter-spacing: -1px;
+    }
+
+    .header p {
+        font-size: 13px;
+    }
+
+    .search-box {
+        grid-template-columns: 1fr;
+
+        padding: 18px;
+
+        border-radius: 18px;
+    }
+
+    .character-header {
+        align-items: flex-start;
+
+        padding: 20px;
+    }
+
+    .character-header h2 {
+        font-size: 23px;
+    }
+
+    .level {
+        padding: 7px 11px;
+
+        font-size: 12px;
+    }
+
+    .growth-card,
+    .history-card {
+        padding: 20px;
+
+        border-radius: 18px;
+    }
+
+    .growth-grid {
+        grid-template-columns: 1fr;
+    }
+
+    .stat {
+        padding: 20px;
+    }
+}
+
+/* TEST */
+.search-box {
+    display: flex !important;
+    flex-direction: row !important;
+    align-items: flex-end !important;
+    gap: 15px !important;
+}
+
+.search-field {
+    flex: 1 !important;
+}
+
+#searchButton {
+    flex-shrink: 0 !important;
+}
+
+/* =========================
+   경험치 그래프
+========================= */
+
+.chart-card {
+    margin-top: 24px;
+    padding: 24px;
+    background: #ffffff;
+    border-radius: 20px;
+    box-shadow: 0 8px 30px rgba(30, 30, 60, 0.08);
+}
+
+.chart-header h2 {
+    margin: 0 0 6px;
+}
+
+.chart-header p {
+    margin: 0 0 20px;
+    color: #777;
+    font-size: 14px;
+}
+
+.chart-wrapper {
+    width: 100%;
+    overflow: hidden;
+}
+
+#experienceChart {
+    display: block;
+    width: 100%;
+}
+
+/* =========================
+   그래프 Tooltip
+========================= */
+
+.chart-wrapper {
+    position: relative;
+}
+
+.chart-tooltip {
+    display: none;
+    position: absolute;
+    z-index: 10;
+
+    min-width: 190px;
+    padding: 14px 16px;
+
+    background: rgba(30, 30, 45, 0.95);
+    color: #ffffff;
+
+    border-radius: 12px;
+
+    box-shadow:
+        0 8px 25px rgba(0, 0, 0, 0.18);
+
+    pointer-events: none;
+
+    font-size: 13px;
+}
+
+.tooltip-date {
+    margin-bottom: 10px;
+
+    font-size: 13px;
+    font-weight: 700;
+}
+
+.tooltip-row {
+    display: flex;
+    justify-content: space-between;
+    gap: 16px;
+
+    margin-top: 6px;
+}
+
+.tooltip-row span {
+    color: #c9c9d4;
+}
+
+.tooltip-row strong {
+    font-weight: 600;
+    text-align: right;
+}
