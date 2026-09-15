@@ -13,7 +13,6 @@
 
 </p>
 
-
 ---
 
 ## ✨ 프로젝트 소개
@@ -22,11 +21,13 @@
 
 조회한 데이터를 기반으로 최근 7일간의 성장 기록을 정리하고, 경험치와 랭킹 변화를 차트와 표로 확인할 수 있도록 구현했습니다.
 
-또한 Gemini API를 활용하여 수치 데이터에서 확인되는 성장 패턴을 자연어로 분석하도록 구성했습니다.
+또한 Gemini API를 활용하여 수치 데이터에서 확인되는 성장 패턴을 자연어로 분석합니다.
+
+전체적인 데이터 흐름은 다음과 같습니다.
 
 **데이터 수집 → 데이터 가공 → 시각화 → AI 분석**
 
-의 흐름으로 실제 데이터를 활용하는 것을 목표로 개발했습니다.
+단순히 API 데이터를 보여주는 것보다, 수집한 데이터를 사용자가 이해하기 쉬운 형태로 정리하고 해석하는 것에 중점을 두었습니다.
 
 ---
 
@@ -51,7 +52,7 @@
 
 ### 성장 분석
 
-최근 7일간의 데이터를 기반으로 다음 정보를 제공합니다.
+최근 7일간의 데이터를 기반으로 성장 흐름을 확인할 수 있습니다.
 
 * 일자별 레벨
 * 경험치 변화
@@ -62,7 +63,7 @@
 
 ### 성장 그래프
 
-Chart.js를 활용하여 성장 흐름을 시각화합니다.
+Chart.js를 활용하여 성장 데이터를 시각화합니다.
 
 * 경험치 누적 성장 그래프
 * 레벨업 시점 표시
@@ -74,6 +75,10 @@ Chart.js를 활용하여 성장 흐름을 시각화합니다.
 현재 경험치 진행률과 최근 성장 데이터를 기반으로 다음 레벨까지의 성장 정보를 제공합니다.
 
 레벨업 직후처럼 경험치 진행률이 매우 낮은 경우에는 부정확한 예측을 방지하기 위해 예측값을 표시하지 않습니다.
+
+### 이미지 / PDF 저장
+
+조회한 성장 분석 결과를 이미지 또는 PDF 형태로 저장할 수 있습니다.
 
 ---
 
@@ -88,7 +93,7 @@ AI는 다음 항목을 제공합니다.
 * 레벨업
 * AI 판단
 
-AI가 원본 데이터를 임의로 계산하거나 실제 데이터에 없는 플레이 방식을 추측하지 않도록 역할을 분리했습니다.
+AI가 실제 데이터에 없는 내용을 추측하지 않도록 **데이터 처리와 AI 분석의 역할을 분리**했습니다.
 
 ```text
 NEXON Open API
@@ -132,6 +137,7 @@ NEXON Open API
 | AI                 | Google Gemini API     |
 | Game Data          | NEXON Open API        |
 | Export             | html2canvas, jsPDF    |
+| Deployment         | Render                |
 | Environment        | Kali Linux, VS Code   |
 | Version Control    | Git, GitHub           |
 
@@ -143,29 +149,30 @@ NEXON Open API
 maple-growth-tracker/
 │
 ├── app.py
-├── .env
+├── requirements.txt
 ├── .gitignore
 ├── README.md
 │
 ├── templates/
 │   └── index.html
 │
-├── static/
-│   ├── app.js
-│   ├── style.css
-│   └── jobs.json
-│
-└── .venv/
+└── static/
+    ├── app.js
+    ├── style.css
+    └── jobs.json
 ```
+
+### 주요 파일
 
 | 파일                     | 역할                |
 | ---------------------- | ----------------- |
 | `app.py`               | Flask 서버 및 API 처리 |
+| `requirements.txt`     | Python 패키지 관리     |
 | `templates/index.html` | 웹 페이지 구조          |
 | `static/app.js`        | 사용자 동작 및 데이터 렌더링  |
 | `static/style.css`     | 웹 페이지 디자인         |
 | `static/jobs.json`     | 직업 그룹 및 직업 매핑     |
-| `.env`                 | API Key 등 환경변수 관리 |
+| `.gitignore`           | 환경변수 및 가상환경 제외    |
 
 ---
 
@@ -201,7 +208,7 @@ Windows:
 ### 4. 패키지 설치
 
 ```bash
-pip install flask requests python-dotenv google-genai
+pip install -r requirements.txt
 ```
 
 ### 5. 환경변수 설정
@@ -224,6 +231,29 @@ python app.py
 ```text
 http://127.0.0.1:5000
 ```
+
+---
+
+## 🌐 배포
+
+Render를 이용하여 Flask 애플리케이션을 배포했습니다.
+
+**서비스**
+
+https://maple-growth-tracker.onrender.com/
+
+**GitHub**
+
+https://github.com/mingming-01/maple-growth-tracker
+
+배포 환경에서는 `.env` 파일 대신 Render의 Environment Variables에 다음 값을 등록합니다.
+
+```text
+NEXON_API_KEY
+GEMINI_API_KEY
+```
+
+API Key는 GitHub 저장소에 직접 저장하지 않고 환경변수로 관리합니다.
 
 ---
 
@@ -262,17 +292,33 @@ AI는 제공된 성장 데이터를 해석하는 역할을 담당하고, 실제 
 
 ## 💡 개발 포인트
 
-단순히 외부 API와 AI API를 연결하는 것보다 **수집한 데이터를 어떻게 사용자에게 의미 있는 정보로 전달할 것인지**에 중점을 두었습니다.
+이 프로젝트에서는 외부 API와 AI API를 단순히 연결하는 것보다 **수집한 데이터를 어떻게 사용자에게 의미 있는 정보로 전달할 것인지**에 중점을 두었습니다.
 
-숫자를 그대로 보여주는 데서 끝내지 않고,
+특히 다음과 같은 역할을 명확하게 분리했습니다.
 
-> **데이터 수집 → 데이터 가공 → 시각화 → AI 해석**
+```text
+API
+↓
+원본 데이터 수집
 
-의 흐름으로 연결하여 사용자가 캐릭터의 최근 성장 상태를 직관적으로 확인할 수 있도록 구성했습니다.
+Python
+↓
+데이터 가공 및 판단
+
+Chart.js
+↓
+데이터 시각화
+
+Gemini
+↓
+성장 데이터 해석
+```
+
+이를 통해 데이터의 계산과 판단은 애플리케이션에서 처리하고, AI는 이미 정리된 데이터를 해석하는 역할에 집중하도록 구성했습니다.
 
 ---
 
-## 주의사항
+## ⚠️ 주의사항
 
 NEXON Open API에서 제공하는 데이터와 정책에 따라 조회 가능한 정보 및 기능이 달라질 수 있습니다.
 
