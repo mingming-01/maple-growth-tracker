@@ -6,7 +6,25 @@ const errorMessage = document.getElementById("errorMessage");
 const resultSection = document.getElementById("resultSection");
 
 const characterName = document.getElementById("characterNameResult");
+const characterImage = document.getElementById("characterImage");
 const worldName = document.getElementById("worldName");
+const worldLogo = document.getElementById("worldLogo");
+
+const worldLogoMap = {
+    "스카니아": "https://i.namu.wiki/i/KKOTR7Xte076Bgv4D6ChPKJI9D0QYpkkGgQRjUH4FLbixDtgtajTVI9oj0iOCYBwlnIitGrOnxL3CEpgHF7w7g.webp",
+    "베라": "https://i.namu.wiki/i/yhIxuR6TStGsDOHeqNG4hNifTqjhDuwVyxVSPlhHg6INLYDHdLhW200ZHtPFHkY4-Up48FcURhPsJ6EY1VNM3A.webp",
+    "루나": "https://i.namu.wiki/i/Uv7_9oLPDZDn4fBo9AdO-RqRretxvddokQIWO8oA583EoGt3D6FHYJ21Cr1uX2UcWLH3iOlGFW93Z3g1_jU9sw.png",
+    "제니스": "https://i.namu.wiki/i/Nq_asxVWbBmP8Qno-vB7LdYCntBN-KyjJhcRepzL-j0BBKqHjevwkhTg90WE62TTPsLKUgV0YdxU-JXAM1Hz-w.png",
+    "크로아": "https://i.namu.wiki/i/u62he1IN4_j6V29XuFLB9-YWmjh1p0hmJdPtbQ2FcchxJ-9Ctbx35MKSwxz0gYnaJAL_a8VcyVMKmqq5XkE0wQ.png",
+    "유니온": "https://i.namu.wiki/i/cisP4awkxibHV6_0psLUxymYzTpTQj4WxS3y1XEIAaeNQMLLtZ1DVRphtui3MAwTk_VpvJg4WFhL7OEfoKdXhQ.png",
+    "엘리시움": "https://i.namu.wiki/i/4Yf3L1PhNAqV579g7f2PH6RmWqVpWLhbXEenCO9E46AGROBX5DaHoikx8nC19_PFvv0Op_Px2069aabBgt2uSA.png",
+    "이노시스": "https://i.namu.wiki/i/c0qakY1T6luY7OXY4dKaxTLyPK82FolLcnEeeVlHuK09H8wMAQeK8TKoLz4Aa6n1H2pyrB4um1eQ7JIOQy1xSQ.png",
+    "레드": "https://i.namu.wiki/i/w6QZITsJVpNJJ-7PTbaDFJBtO2290DH1Wbmu-acB1XQNsqQHKqJpwNti8NHPpzxHVcEA7xShFVnb74wa_cwFFw.png",
+    "오로라": "https://i.namu.wiki/i/WpS4HdlV7Zf-WkS3QHUB7dHaHCn3WK75xFoDYw_u2V5vRoC-wLpSTAENYJU4uBpus40t7wcfCHiE1MgfUeq79Q.webp",
+    "아케인": "https://i.namu.wiki/i/Iy2id1ikp3Tt2RDJD5Rdnur6TXdQNNx1CTfUSTxMW1roFcXxHBr1kqJsxUfzZ_TVqH7r57ainNf0SC8VHUQFqQ.png",
+    "노바": "https://i.namu.wiki/i/byw8B6SN8meTLgQ5B0sb6dVTBvAT0NhEl3dPNdFawXf9lC9ZD1gTckcBHt-wyeV3mSxuePYDcKcxP9I5mOnv0Q.png"
+};
+
 const jobName = document.getElementById("jobName");
 const levelValue = document.getElementById("levelValue");
 const experienceRate = document.getElementById("experienceRate");
@@ -566,9 +584,33 @@ function renderCharacter(character, history) {
             character.characterName || "-";
     }
 
+    if (characterImage) {
+        if (character.character_image) {
+            characterImage.src =
+                character.character_image;
+
+            characterImage.hidden = false;
+        } else {
+            characterImage.removeAttribute("src");
+            characterImage.hidden = true;
+        }
+    }
+
     if (worldName) {
         worldName.textContent =
             character.worldName || "-";
+    }
+
+    if (worldLogo) {
+        const logoUrl = worldLogoMap[character.worldName];
+
+        if (logoUrl) {
+            worldLogo.src = logoUrl;
+            worldLogo.hidden = false;
+        } else {
+            worldLogo.removeAttribute("src");
+            worldLogo.hidden = true;
+        }
     }
 
     if (jobName) {
@@ -934,8 +976,15 @@ async function searchAIAnalysis(name) {
         await response.json();
 
     if (!response.ok) {
+
+        // Gemini API 요청 한도 초과
+        if (response.status === 429) {
+            throw new Error(
+                "현재 AI 분석을 사용할 수 없습니다. 잠시 후 다시 시도해주세요."
+            );
+        }
+
         throw new Error(
-            data.error ||
             "AI 분석을 불러오지 못했습니다."
         );
     }

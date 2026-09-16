@@ -275,16 +275,20 @@ button:disabled {
 
 
 /* =========================
-   캐릭터 카드
+   캐릭터 + 랭킹 통합 카드
 ========================= */
 
-.character-card {
+.character-ranking-card {
     display: grid;
-    grid-template-columns: 1fr auto;
 
-    gap: 25px;
+    grid-template-columns:
+        minmax(0, 1.15fr)
+        minmax(0, 0.85fr);
 
-    padding: 30px;
+    width: 100%;
+    max-width: 1000px;
+
+    margin: 0 auto;
 
     background: #ffffff;
 
@@ -293,49 +297,141 @@ button:disabled {
 
     box-shadow:
         0 15px 45px rgba(39, 35, 75, 0.07);
+
+    overflow: hidden;
 }
 
-.character-main {
-    min-width: 0;
+
+/* =========================
+   캐릭터 영역
+========================= */
+
+.character-panel {
+    padding: 32px;
 }
+
+.character-profile {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+
+    text-align: center;
+}
+
+
+/* =========================
+   캐릭터 액자
+========================= */
+
+.character-avatar-frame {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+
+    width: 220px;
+    height: 220px;
+
+    margin-bottom: 10px;
+
+    background: #faf9fd;
+
+    border: 1px solid #e6e3ef;
+    border-radius: 22px;
+
+    box-shadow:
+        inset 0 0 0 6px #ffffff,
+        0 8px 24px rgba(39, 35, 75, 0.06);
+
+    overflow: hidden;
+}
+
+.character-avatar {
+    width: 300px;
+    height: 300px;
+
+    object-fit: contain;
+
+    transform: scale(1.45);
+}
+
+
+/* =========================
+   닉네임
+========================= */
 
 .character-name {
-    margin: 0;
+    margin: 2px 0 12px;
 
-    font-size: 31px;
+    color: #25233a;
+
+    font-size: 28px;
     font-weight: 900;
 
     letter-spacing: -1px;
 }
 
+/* =========================
+   서버 / 레벨 / 직업 / 길드
+========================= */
+
 .character-meta {
     display: flex;
+    align-items: center;
+    justify-content: center;
     flex-wrap: wrap;
 
-    gap: 8px;
+    gap: 8px 14px;
 
-    margin-top: 11px;
+    color: #625e76;
 }
 
 .meta-item {
-    padding: 6px 10px;
+    display: inline-flex;
+    align-items: center;
 
-    border-radius: 999px;
+    gap: 5px;
+
+    padding: 0;
 
     color: #625e76;
-    background: #f4f3f9;
+    background: transparent;
 
-    font-size: 13px;
+    font-size: 14px;
     font-weight: 700;
 }
 
+.world-logo {
+    width: 22px;
+    height: 22px;
+
+    object-fit: contain;
+}
+
+
+/* =========================
+   성장 정보
+========================= */
+
 .character-stats {
     display: grid;
-    grid-template-columns: repeat(3, minmax(120px, 1fr));
 
-    gap: 20px;
+    grid-template-columns:
+        repeat(2, minmax(0, 1fr));
 
-    margin-top: 28px;
+    max-width: 500px;
+
+    margin: 30px auto 0;
+    padding-top: 24px;
+
+    border-top: 1px solid #eeeeF4;
+}
+
+.stat {
+    text-align: center;
+}
+
+.stat + .stat {
+    border-left: 1px solid #eeeeF4;
 }
 
 .stat-label {
@@ -359,39 +455,33 @@ button:disabled {
     letter-spacing: -0.3px;
 }
 
-.character-rate {
-    align-self: center;
 
-    min-width: 180px;
+/* =========================
+   랭킹 영역
+========================= */
 
-    padding: 24px;
+.ranking-panel {
+    padding: 32px;
 
-    border-radius: 20px;
-
-    text-align: center;
-
-    background:
-        linear-gradient(
-            145deg,
-            #f2efff,
-            #f7f5ff
-        );
+    border-left: 1px solid #eeeeF4;
 }
 
-.rate-label {
-    color: #7e7896;
+.panel-title {
+    margin-bottom: 10px;
 
-    font-size: 12px;
-    font-weight: 700;
+    color: #25233a;
+
+    font-size: 18px;
+    font-weight: 800;
 }
 
-.rate-value {
-    margin-top: 8px;
+.panel-description {
+    margin: 0 0 22px;
 
-    color: #6552d2;
+    color: #858198;
 
-    font-size: 30px;
-    font-weight: 900;
+    font-size: 13px;
+    line-height: 1.5;
 }
 
 
@@ -403,38 +493,81 @@ button:disabled {
     display: grid;
 
     grid-template-columns:
-        repeat(4, minmax(0, 1fr));
+        repeat(2, minmax(0, 1fr));
 
-    gap: 15px;
+    gap: 12px;
 }
 
 .ranking-card {
-    padding: 23px;
+    min-height: 104px;
 
-    background: #ffffff;
+    padding: 20px 12px;
 
-    border: 1px solid #e9e8f0;
-    border-radius: 20px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+
+    text-align: center;
+
+    background: #faf9fd;
+
+    border: 1px solid #eeeeF4;
+    border-radius: 16px;
 
     box-shadow:
-        0 10px 30px rgba(39, 35, 75, 0.045);
+        0 4px 14px rgba(39, 35, 75, 0.03);
 }
 
 .ranking-label {
-    color: #858294;
+    margin-bottom: 8px;
 
-    font-size: 13px;
+    color: #858198;
+
+    font-size: 12px;
     font-weight: 700;
 }
 
 .ranking-value {
-    margin-top: 9px;
-
     color: #302c49;
 
-    font-size: 27px;
+    font-size: 21px;
     font-weight: 900;
-    letter-spacing: -0.7px;
+
+    letter-spacing: -0.5px;
+}
+
+
+/* =========================
+   모바일
+========================= */
+
+@media (max-width: 768px) {
+
+    .character-ranking-card {
+        grid-template-columns: 1fr;
+    }
+
+    .ranking-panel {
+        border-left: none;
+        border-top: 1px solid #eeeeF4;
+    }
+
+    .character-panel,
+    .ranking-panel {
+        padding: 28px 22px;
+    }
+
+    .character-avatar-frame {
+        width: 200px;
+        height: 200px;
+    }
+
+    .character-avatar {
+        width: 175px;
+        height: 175px;
+    }
+
 }
 
 
