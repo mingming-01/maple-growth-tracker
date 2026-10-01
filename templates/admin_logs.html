@@ -1,0 +1,46 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>관리자 로그 | Maple Growth Tracker</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+    <main class="container admin-container">
+        <header class="header admin-header">
+            <div class="logo-area">
+                <h1 class="logo">관리자 로그</h1>
+                <p class="subtitle">최근 운영 행동 최대 500건을 표시합니다.</p>
+            </div>
+            <form method="post" action="{{ url_for('admin_logout') }}">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+                <button type="submit" class="export-button">로그아웃</button>
+            </form>
+        </header>
+        <section class="history-card">
+            <div class="history-table-wrapper">
+                <table class="history-table admin-log-table">
+                    <thead>
+                        <tr><th>시간</th><th>행동</th><th>캐릭터</th><th>비교 대상</th><th>결과</th></tr>
+                    </thead>
+                    <tbody>
+                        {% for item in logs %}
+                        <tr>
+                            <td>{{ item["created_at"] }}</td>
+                            <td>{{ item["action"] }}</td>
+                            <td>{{ item["character_name"] or "-" }}{% if item["world_name"] %} / {{ item["world_name"] }}{% endif %}</td>
+                            <td>{{ item["comparison_name"] or "-" }}</td>
+                            <td>{{ item["result"] }}</td>
+                        </tr>
+                        {% else %}
+                        <tr><td colspan="5" class="admin-empty">아직 기록된 로그가 없습니다.</td></tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </section>
+        <footer class="footer"><a href="{{ url_for('home') }}">서비스로 돌아가기</a></footer>
+    </main>
+</body>
+</html>

@@ -1,3 +1,9 @@
 .env
 .venv/
 __pycache__/
+
+
+instance/
+*.backup
+backup_before_ai_expansion/
+backup_after_workbench/
