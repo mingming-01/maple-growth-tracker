@@ -107,6 +107,40 @@ button:disabled { cursor: wait; opacity: 0.65; }
 .comparison-ai { margin-top: 18px; padding: 20px; border-radius: 16px; background: #f4f1ff; }
 .comparison-ai h3 { margin: 0 0 10px; color: #6552d2; font-size: 16px; }
 .comparison-ai-text { color: #302c42; font-size: 14px; line-height: 1.75; white-space: pre-wrap; }
+/* 사이트 헤더 (sticky) */
+.site-header { position: sticky; top: 0; z-index: 100; background: rgba(247,247,251,.9); border-bottom: 1px solid #e9e8f0; backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px); }
+.site-header-inner { display: flex; align-items: center; justify-content: space-between; gap: 16px; width: min(1180px, calc(100% - 40px)); height: 60px; margin: 0 auto; }
+.site-brand { display: inline-flex; align-items: center; gap: 10px; color: #25233a; font-size: 16px; font-weight: 900; letter-spacing: -.3px; text-decoration: none; }
+.site-brand-logo { display: block; flex: none; width: 28px; height: 28px; }
+.site-brand-text { white-space: nowrap; }
+.site-admin-link { padding: 8px 14px; border-radius: 10px; color: #625e76; font-size: 14px; font-weight: 700; text-decoration: none; transition: background .2s, color .2s; }
+.site-admin-link:hover { background: #f0edff; color: #5947c7; }
+.site-brand:focus-visible, .site-admin-link:focus-visible { outline: 3px solid rgba(140,120,255,.35); outline-offset: 2px; border-radius: 8px; }
+
+/* 메인 상단: 제목 / 소개 문구 */
+.hero { padding: 56px 0 28px; }
+.hero .logo { font-size: 40px; letter-spacing: -1.8px; line-height: 1.15; }
+.hero .subtitle { margin-top: 12px; font-size: 17px; }
+.hero-visual { display: block; flex: none; width: 220px; height: auto; }
+.container:has(#resultSection:not([hidden])) .hero-visual { display: none; }
+
+/* 검색 카드: 메인의 핵심 CTA */
+.search-card { padding: 26px; border-color: #ddd6fb; box-shadow: 0 18px 48px rgba(89,71,199,.12); }
+#characterName { height: 58px; padding-left: 50px; background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23a29bc4' stroke-width='2' stroke-linecap='round'%3E%3Ccircle cx='11' cy='11' r='7'/%3E%3Cpath d='M20 20l-3.5-3.5'/%3E%3C/svg%3E"); background-repeat: no-repeat; background-position: 18px 50%; background-size: 20px; }
+.search-form .search-button { min-height: 58px; padding: 0 30px; font-size: 16px; }
+.search-form .export-button { min-height: 58px; }
+.container:has(#resultSection[hidden]) .search-form { grid-template-columns: minmax(0,1fr) auto; }
+.container:has(#resultSection[hidden]) .export-button { display: none; }
+
+/* 메인 기능 소개 카드 */
+.feature-section { margin: 40px 0 72px; }
+.feature-grid { display: grid; grid-template-columns: repeat(3,minmax(0,1fr)); gap: 16px; }
+.feature-card { padding: 24px; background: #fff; border: 1px solid #e9e8f0; border-radius: 20px; }
+.feature-icon { display: inline-flex; align-items: center; justify-content: center; width: 40px; height: 40px; margin-bottom: 16px; border-radius: 12px; background: #f0edff; color: #6957d8; }
+.feature-icon svg { width: 20px; height: 20px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
+.feature-title { margin: 0; color: #302c49; font-size: 17px; font-weight: 850; letter-spacing: -.4px; }
+.feature-description { margin: 8px 0 0; color: #858394; font-size: 14px; line-height: 1.65; word-break: keep-all; }
+
 .footer { padding: 25px 0 50px; color: #9996a5; font-size: 12px; text-align: center; }
 .footer a { color: inherit; }
 
@@ -145,6 +179,10 @@ button:disabled { cursor: wait; opacity: 0.65; }
 }
 @media (max-width: 620px) {
     .container { width: min(100% - 24px,1180px); }
+    .site-header-inner { width: min(100% - 24px,1180px); }
+    .site-brand { gap: 8px; font-size: 15px; }
+    .site-brand-logo { width: 26px; height: 26px; }
+    .feature-grid { grid-template-columns: 1fr; }
     .header { padding-top: 35px; }
     .logo { font-size: 28px; }
     .search-card { padding: 16px; }
@@ -161,4 +199,15 @@ button:disabled { cursor: wait; opacity: 0.65; }
     .comparison-input-label { margin-bottom: -5px; }
     .admin-card { padding: 20px; }
     .admin-header { align-items: flex-start; }
+}
+
+@media (max-width: 900px) {
+    .hero-visual { display: none; }
+}
+@media (max-width: 620px) {
+    .hero .logo { font-size: 30px; letter-spacing: -1.2px; }
+    .hero .subtitle { font-size: 15px; }
+    .feature-section { margin: 28px 0 48px; }
+    .feature-card { padding: 20px; }
+    .container:has(#resultSection[hidden]) .search-form { grid-template-columns: 1fr; }
 }

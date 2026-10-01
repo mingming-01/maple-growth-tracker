@@ -72,10 +72,16 @@ let growthChart = null;
 let currentCharacter = null;
 let currentHistory = [];
 const STORAGE_KEY = "mapleGrowthTrackerState";
+const featureSection = document.getElementById("featureSection");
+
+// 결과 화면이 보이는 동안에는 메인 소개 카드를 숨긴다.
+function syncHomeView() {
+    if (featureSection) featureSection.hidden = !!(resultSection && !resultSection.hidden);
+}
 
 function getTrackerState() {
     try {
-        const saved = localStorage.getItem(STORAGE_KEY);
+        const saved = sessionStorage.getItem(STORAGE_KEY);
         return saved ? JSON.parse(saved) : null;
     } catch (error) {
         console.error("저장된 상태를 불러오지 못했습니다:", error);
@@ -91,7 +97,7 @@ function saveTrackerState(state) {
             ...state
         };
 
-        localStorage.setItem(STORAGE_KEY, JSON.stringify(nextState));
+        sessionStorage.setItem(STORAGE_KEY, JSON.stringify(nextState));
     } catch (error) {
         console.error("화면 상태 저장에 실패했습니다:", error);
     }
@@ -591,6 +597,7 @@ async function handleSearch(event) {
     }
     hideError();
     if (resultSection) resultSection.hidden = true;
+    syncHomeView();
     if (saveImageButton) saveImageButton.disabled = true;
     if (savePdfButton) savePdfButton.disabled = true;
     if (comparisonResult) comparisonResult.hidden = true;
@@ -602,7 +609,7 @@ async function handleSearch(event) {
         currentHistory = history;
         const prediction = calculatePrediction(character, history);
         const metrics = calculateGrowthMetrics(character, history, prediction);
-        localStorage.removeItem(STORAGE_KEY);
+        sessionStorage.removeItem(STORAGE_KEY);
         renderCharacter(character, history);
         renderRanking(character);
         renderGrowthSummary(character, history);
@@ -612,6 +619,7 @@ async function handleSearch(event) {
         if (saveImageButton) saveImageButton.disabled = false;
         if (savePdfButton) savePdfButton.disabled = false;
         if (resultSection) resultSection.hidden = false;
+        syncHomeView();
         setLoading(false);
         await runAIReport(name, character, history, metrics);
     } catch (error) {
@@ -761,6 +769,7 @@ function restoreTrackerState() {
     if (saveImageButton) saveImageButton.disabled = false;
     if (savePdfButton) savePdfButton.disabled = false;
     if (resultSection) resultSection.hidden = false;
+    syncHomeView();
 
     if (state.aiAnalysis) {
         renderAIAnalysis(state.aiAnalysis);
@@ -875,5 +884,19 @@ if (savePdfButton) {
 
 if (searchForm) searchForm.addEventListener("submit", handleSearch);
 if (comparisonForm) comparisonForm.addEventListener("submit", handleComparison);
+
+// 사이트 이름 클릭: 저장된 상태를 지우고 초기 메인 화면으로 이동
+const homeLink = document.getElementById("homeLink");
+if (homeLink) {
+    homeLink.addEventListener("click", function(event) {
+        event.preventDefault();
+        try {
+            sessionStorage.removeItem(STORAGE_KEY);
+        } catch (error) {
+            console.error("저장된 상태를 삭제하지 못했습니다:", error);
+        }
+        window.location.href = "/";
+    });
+}
 
 restoreTrackerState();

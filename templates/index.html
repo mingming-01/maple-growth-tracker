@@ -4,19 +4,40 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Maple Growth Tracker</title>
+    <link rel="icon" type="image/svg+xml" href="{{ url_for('static', filename='images/logo.svg') }}">
     <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js"></script>
 </head>
 <body>
+    <header class="site-header">
+        <div class="site-header-inner">
+            <a href="/" id="homeLink" class="site-brand">
+                <img src="{{ url_for('static', filename='images/logo.svg') }}" alt="" class="site-brand-logo" width="28" height="28">
+                <span class="site-brand-text">MAPLE GROWTH TRACKER</span>
+            </a>
+            <a href="/admin/login" class="site-admin-link">관리자</a>
+        </div>
+    </header>
+
     <main class="container">
-        <header class="header">
+        <header class="header hero">
             <div class="header-inner">
                 <div class="logo-area">
-                    <h1 class="logo">Maple Growth Tracker</h1>
-                    <p class="subtitle">메이플스토리 캐릭터의 성장 기록을 한눈에 확인하세요.</p>
+                    <h1 class="logo">MAPLE GROWTH TRACKER</h1>
+                    <p class="subtitle">캐릭터의 현재보다 성장 과정을 기록합니다.</p>
                 </div>
+                <svg class="hero-visual" viewBox="0 0 220 84" aria-hidden="true" focusable="false">
+                    <path d="M8 77h204" stroke="#e3e0f2" stroke-width="2" stroke-linecap="round" fill="none"/>
+                    <rect x="18" y="54" width="16" height="22" rx="4" fill="#ece8ff"/>
+                    <rect x="56" y="44" width="16" height="32" rx="4" fill="#ece8ff"/>
+                    <rect x="94" y="48" width="16" height="28" rx="4" fill="#ece8ff"/>
+                    <rect x="132" y="34" width="16" height="42" rx="4" fill="#ece8ff"/>
+                    <rect x="170" y="22" width="16" height="54" rx="4" fill="#ece8ff"/>
+                    <polyline points="26,40 64,30 102,34 140,20 178,8" fill="none" stroke="#9d8ff0" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/>
+                    <circle cx="178" cy="8" r="5" fill="#6957d8"/>
+                </svg>
             </div>
         </header>
 
@@ -30,6 +51,26 @@
                 </form>
                 <div id="loadingMessage" class="loading-message" hidden>캐릭터 정보를 조회하고 있습니다...</div>
                 <div id="errorMessage" class="error-message" hidden></div>
+            </div>
+        </section>
+
+        <section id="featureSection" class="feature-section">
+            <div class="feature-grid">
+                <article class="feature-card">
+                    <span class="feature-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><rect x="4" y="5" width="16" height="15" rx="3"/><path d="M4 10h16M9 3v4M15 3v4"/></svg></span>
+                    <h2 class="feature-title">성장 기록</h2>
+                    <p class="feature-description">날짜별 경험치 변화와 성장 흐름을 확인합니다.</p>
+                </article>
+                <article class="feature-card">
+                    <span class="feature-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M5 20v-8M12 20V5M19 20v-5"/></svg></span>
+                    <h2 class="feature-title">성장 분석</h2>
+                    <p class="feature-description">최근 성장량, 평균 성장량, 랭킹 변화 등을 확인합니다.</p>
+                </article>
+                <article class="feature-card">
+                    <span class="feature-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M11 4l1.9 5.1L18 11l-5.1 1.9L11 18l-1.9-5.1L4 11l5.1-1.9L11 4z"/><path d="M19 15v4M17 17h4"/></svg></span>
+                    <h2 class="feature-title">AI 성장 리포트</h2>
+                    <p class="feature-description">기록된 성장 데이터를 바탕으로 성장 흐름을 자연어로 분석합니다.</p>
+                </article>
             </div>
         </section>
 
