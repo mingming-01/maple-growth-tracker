@@ -71,7 +71,31 @@ const savePdfButton = document.getElementById("savePdfButton");
 let growthChart = null;
 let currentCharacter = null;
 let currentHistory = [];
+const STORAGE_KEY = "mapleGrowthTrackerState";
 
+function getTrackerState() {
+    try {
+        const saved = localStorage.getItem(STORAGE_KEY);
+        return saved ? JSON.parse(saved) : null;
+    } catch (error) {
+        console.error("저장된 상태를 불러오지 못했습니다:", error);
+        return null;
+    }
+}
+
+function saveTrackerState(state) {
+    try {
+        const previous = getTrackerState() || {};
+        const nextState = {
+            ...previous,
+            ...state
+        };
+
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(nextState));
+    } catch (error) {
+        console.error("화면 상태 저장에 실패했습니다:", error);
+    }
+}
 
 // 공통 표시 함수
 function formatNumber(value) {
@@ -534,13 +558,23 @@ async function runAIReport(name, character, history, sharedMetrics) {
     if (aiAnalysisLoading) aiAnalysisLoading.hidden = false;
     if (aiAnalysisError) aiAnalysisError.hidden = true;
     if (aiAnalysisResult) aiAnalysisResult.hidden = true;
+
     try {
         const metrics = sharedMetrics || calculateGrowthMetrics(character, history);
         const analysis = await searchAIAnalysis(name, metrics);
+
         renderAIAnalysis(analysis);
+
+        saveTrackerState({
+            character,
+            history,
+            metrics,
+            aiAnalysis: analysis
+        });
     } catch (error) {
         console.error("AI 분석 실패:", error);
         if (aiAnalysisLoading) aiAnalysisLoading.hidden = true;
+
         if (aiAnalysisError) {
             aiAnalysisError.textContent = error.message || "AI 분석을 불러오지 못했습니다.";
             aiAnalysisError.hidden = false;
@@ -568,6 +602,7 @@ async function handleSearch(event) {
         currentHistory = history;
         const prediction = calculatePrediction(character, history);
         const metrics = calculateGrowthMetrics(character, history, prediction);
+        localStorage.removeItem(STORAGE_KEY);
         renderCharacter(character, history);
         renderRanking(character);
         renderGrowthSummary(character, history);
@@ -667,8 +702,17 @@ async function handleComparison(event) {
             })
         });
         const data = await readApiResponse(response, "AI 성장 비교 분석을 불러오지 못했습니다.");
-        if (comparisonAIAnalysis) comparisonAIAnalysis.textContent = data.analysis || "분석 결과가 없습니다.";
+        const comparisonAnalysis = data.analysis || "분석 결과가 없습니다.";
+        if (comparisonAIAnalysis) comparisonAIAnalysis.textContent = comparisonAnalysis;
         if (comparisonResult) comparisonResult.hidden = false;
+        saveTrackerState({
+            comparison: {
+                character: otherCharacter,
+                history: otherHistory,
+                metrics: otherMetrics,
+                aiAnalysis: comparisonAnalysis
+            }
+        });
     } catch (error) {
         console.error("성장 비교 실패:", error);
         if (comparisonError) {
@@ -680,6 +724,83 @@ async function handleComparison(event) {
         if (comparisonButton) comparisonButton.disabled = false;
     }
 }
+
+function restoreTrackerState() {
+    const state = getTrackerState();
+
+    if (!state?.character || !Array.isArray(state.history)) {
+        return;
+    }
+
+    currentCharacter = state.character;
+    currentHistory = state.history;
+
+    const prediction = calculatePrediction(
+        currentCharacter,
+        currentHistory
+    );
+
+    const metrics = state.metrics ||
+        calculateGrowthMetrics(
+            currentCharacter,
+            currentHistory,
+            prediction
+        );
+
+    if (characterNameInput) {
+        characterNameInput.value = currentCharacter.characterName || "";
+    }
+
+    renderCharacter(currentCharacter, currentHistory);
+    renderRanking(currentCharacter);
+    renderGrowthSummary(currentCharacter, currentHistory);
+    renderPrediction(currentCharacter, currentHistory, prediction);
+    renderHistory(currentHistory);
+    renderChart(currentHistory);
+
+    if (saveImageButton) saveImageButton.disabled = false;
+    if (savePdfButton) savePdfButton.disabled = false;
+    if (resultSection) resultSection.hidden = false;
+
+    if (state.aiAnalysis) {
+        renderAIAnalysis(state.aiAnalysis);
+    }
+
+    const comparison = state.comparison;
+
+    if (
+        comparison?.character &&
+        Array.isArray(comparison.history) &&
+        comparison.metrics
+    ) {
+        renderComparisonCharacter(
+            "primary",
+            currentCharacter,
+            metrics
+        );
+
+        renderComparisonCharacter(
+            "secondary",
+            comparison.character,
+            comparison.metrics
+        );
+
+        if (comparisonNameInput) {
+            comparisonNameInput.value =
+                comparison.character.characterName || "";
+        }
+
+        if (comparisonAIAnalysis) {
+            comparisonAIAnalysis.textContent =
+                comparison.aiAnalysis || "분석 결과가 없습니다.";
+        }
+
+        if (comparisonResult) {
+            comparisonResult.hidden = false;
+        }
+    }
+}
+
 
 // 결과 화면 이미지 / PDF 저장
 async function captureResultSection() {
@@ -754,3 +875,5 @@ if (savePdfButton) {
 
 if (searchForm) searchForm.addEventListener("submit", handleSearch);
 if (comparisonForm) comparisonForm.addEventListener("submit", handleComparison);
+
+restoreTrackerState();

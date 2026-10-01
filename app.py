@@ -39,6 +39,11 @@ HEADERS = {"x-nxopen-api-key": API_KEY}
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
 gemini_client = genai.Client(api_key=GEMINI_API_KEY) if GEMINI_API_KEY else None
 
+# OpenRouter fallback
+OPENROUTER_API_KEY = os.getenv("OPENROUTER_API_KEY")
+OPENROUTER_MODEL = os.getenv("OPENROUTER_MODEL", "openrouter/free")
+OPENROUTER_URL = "https://openrouter.ai/api/v1/chat/completions"
+
 
 # 관리자 인증 및 감사 로그
 ADMIN_USERNAME = os.getenv("ADMIN_USERNAME", "")
@@ -286,6 +291,57 @@ def sanitize_ai_text(value, expected_date=None):
     text = re.sub(r"[ \t]+\n", "\n", text)
     text = re.sub(r"\n{3,}", "\n\n", text)
     return text.strip()
+
+def request_openrouter(prompt):
+    if not OPENROUTER_API_KEY:
+        return None
+
+    response = requests.post(
+        OPENROUTER_URL,
+        headers={
+            "Authorization": f"Bearer {OPENROUTER_API_KEY}",
+            "Content-Type": "application/json"
+        },
+        json={
+            "model": OPENROUTER_MODEL,
+            "messages": [
+                {
+                    "role": "user",
+                    "content": prompt
+                }
+            ]
+        },
+        timeout=60
+    )
+    response.raise_for_status()
+
+    data = response.json()
+    choices = data.get("choices", [])
+    if not choices:
+        raise ValueError("OpenRouter 응답에 choices가 없습니다.")
+
+    message = choices[0].get("message", {})
+    content = message.get("content")
+
+    if not content:
+        raise ValueError("OpenRouter 응답에 분석 내용이 없습니다.")
+
+    return content
+
+
+def should_use_openrouter(error):
+    error_text = str(error).upper()
+    return any(
+        keyword in error_text
+        for keyword in (
+            "429",
+            "RESOURCE_EXHAUSTED",
+            "QUOTA",
+            "503",
+            "504",
+            "TIMEOUT"
+        )
+    )
 
 
 # 메인 화면
@@ -553,8 +609,6 @@ def get_history():
 
 
 def generate_ai_analysis(character, history, computed_metrics=None):
-    if not gemini_client:
-        return {"error": "Gemini API 키가 설정되지 않았습니다."}
 
     growth_data = [
         {
@@ -632,20 +686,50 @@ def generate_ai_analysis(character, history, computed_metrics=None):
 {json.dumps(growth_data, ensure_ascii=False)}
 """
 
-    try:
-        response = gemini_client.models.generate_content(
-            model="gemini-3.6-flash",
-            contents=prompt
-        )
-        expected_date = None
-        if computed_metrics is not None:
-            prediction = computed_metrics.get("prediction")
-            if isinstance(prediction, dict):
-                expected_date = prediction.get("estimatedDate")
-        return {"analysis": sanitize_ai_text(response.text or "분석 결과가 비어 있습니다.", expected_date)}
-    except Exception as error:
-        print(f"Gemini 성장 분석 요청에 실패했습니다: {error}")
+    expected_date = None
+    if computed_metrics is not None:
+        prediction = computed_metrics.get("prediction")
+        if isinstance(prediction, dict):
+            expected_date = prediction.get("estimatedDate")
+
+    gemini_error = None
+
+    if gemini_client:
+        try:
+            response = gemini_client.models.generate_content(
+                model="gemini-3.6-flash",
+                contents=prompt
+            )
+            return {
+                "analysis": sanitize_ai_text(
+                    response.text or "분석 결과가 비어 있습니다.",
+                    expected_date
+                )
+            }
+        except Exception as error:
+            gemini_error = error
+            print(f"Gemini 성장 분석 요청에 실패했습니다: {error}")
+
+            if not should_use_openrouter(error):
+                return {"error": "AI 분석을 불러오지 못했습니다."}
+
+    if OPENROUTER_API_KEY:
+        try:
+            response_text = request_openrouter(prompt)
+            print("OpenRouter로 성장 분석을 처리했습니다.")
+            return {
+                "analysis": sanitize_ai_text(
+                    response_text or "분석 결과가 비어 있습니다.",
+                    expected_date
+                )
+            }
+        except Exception as error:
+            print(f"OpenRouter 성장 분석 요청에 실패했습니다: {error}")
+
+    if gemini_error:
         return {"error": "AI 분석을 불러오지 못했습니다."}
+
+    return {"error": "AI 분석을 사용할 수 없습니다."}
 
 
 @app.route("/api/ai-analysis", methods=["GET", "POST"])
@@ -682,8 +766,6 @@ def ai_analysis():
 
 
 def generate_ai_comparison(primary, comparison):
-    if not gemini_client:
-        return {"error": "Gemini API 키가 설정되지 않았습니다."}
 
     prompt_data = {"primary": primary, "comparison": comparison}
     prompt = f"""
@@ -697,15 +779,42 @@ def generate_ai_comparison(primary, comparison):
 비교 데이터:
 {json.dumps(prompt_data, ensure_ascii=False)}
 """
-    try:
-        response = gemini_client.models.generate_content(
-            model="gemini-3.6-flash",
-            contents=prompt
-        )
-        return {"analysis": sanitize_ai_text(response.text or "비교 분석 결과가 비어 있습니다.")}
-    except Exception as error:
-        print(f"Gemini 성장 분석 요청에 실패했습니다: {error}")
+    gemini_error = None
+
+    if gemini_client:
+        try:
+            response = gemini_client.models.generate_content(
+                model="gemini-3.6-flash",
+                contents=prompt
+            )
+            return {
+                "analysis": sanitize_ai_text(
+                    response.text or "비교 분석 결과가 비어 있습니다."
+                )
+            }
+        except Exception as error:
+            gemini_error = error
+            print(f"Gemini 성장 비교 분석 요청에 실패했습니다: {error}")
+
+            if not should_use_openrouter(error):
+                return {"error": "AI 성장 분석을 불러오지 못했습니다."}
+
+    if OPENROUTER_API_KEY:
+        try:
+            response_text = request_openrouter(prompt)
+            print("OpenRouter로 성장 비교 분석을 처리했습니다.")
+            return {
+                "analysis": sanitize_ai_text(
+                    response_text or "비교 분석 결과가 비어 있습니다."
+                )
+            }
+        except Exception as error:
+            print(f"OpenRouter 성장 비교 분석 요청에 실패했습니다: {error}")
+
+    if gemini_error:
         return {"error": "AI 성장 분석을 불러오지 못했습니다."}
+
+    return {"error": "AI 성장 분석을 사용할 수 없습니다."}
 
 
 @app.route("/api/ai-comparison", methods=["POST"])
