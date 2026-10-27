@@ -1802,6 +1802,18 @@ function restoreTrackerState() {
                 comparison.aiAnalysis || "분석 결과가 없습니다.";
         }
 
+        if (comparisonPeriodRangeSelect) {
+            comparisonPeriodRangeSelect.value = String(
+                [30, 90].includes(Number(comparison.periodDays)) ? Number(comparison.periodDays) : 30
+            );
+        }
+        renderComparisonPeriod(
+            comparison.periodSummary || null,
+            currentCharacter,
+            comparison.character,
+            comparison.periodError || "저장된 기간 비교 결과가 없습니다. 비교 기간을 선택해 다시 조회해주세요."
+        );
+
         if (comparisonResult) {
             comparisonResult.hidden = false;
         }
@@ -1882,6 +1894,7 @@ if (savePdfButton) {
 
 if (searchForm) searchForm.addEventListener("submit", handleSearch);
 if (comparisonForm) comparisonForm.addEventListener("submit", handleComparison);
+if (comparisonPeriodRangeSelect) comparisonPeriodRangeSelect.addEventListener("change", handleComparisonPeriodChange);
 if (favoriteCurrentButton) favoriteCurrentButton.addEventListener("click", toggleCurrentFavorite);
 if (refreshDataButton) refreshDataButton.addEventListener("click", () => refreshVisibleCharacter());
 if (historyRangeSelect) historyRangeSelect.addEventListener("change", handleHistoryRangeChange);
