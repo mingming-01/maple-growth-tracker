@@ -71,6 +71,13 @@ const comparisonResult = document.getElementById("comparisonResult");
 const comparisonAIAnalysis = document.getElementById("comparisonAIAnalysis");
 const saveImageButton = document.getElementById("saveImageButton");
 const savePdfButton = document.getElementById("savePdfButton");
+const favoriteList = document.getElementById("favoriteList");
+const favoriteEmpty = document.getElementById("favoriteEmpty");
+const favoriteCount = document.getElementById("favoriteCount");
+const favoriteFeedback = document.getElementById("favoriteFeedback");
+const favoriteCurrentButton = document.getElementById("favoriteCurrentButton");
+const favoriteCurrentButtonIcon = document.getElementById("favoriteCurrentButtonIcon");
+const favoriteCurrentButtonLabel = document.getElementById("favoriteCurrentButtonLabel");
 
 let growthChart = null;
 let currentCharacter = null;
@@ -79,6 +86,8 @@ let currentDisplayHistory = [];
 let currentHistoryRange = 7;
 let currentHistoryRangeStatus = null;
 const STORAGE_KEY = "mapleGrowthTrackerState";
+const FAVORITES_STORAGE_KEY = "mapleGrowthTrackerFavorites";
+const MAX_FAVORITES = 30;
 const featureSection = document.getElementById("featureSection");
 const dataStatusNotice = document.getElementById("dataStatusNotice");
 const AUTO_REFRESH_KEY = `${STORAGE_KEY}:lastAutoRefresh`;
@@ -111,6 +120,154 @@ function saveTrackerState(state) {
     } catch (error) {
         console.error("화면 상태 저장에 실패했습니다:", error);
     }
+}
+
+function readFavoriteCharacters() {
+    try {
+        const saved = JSON.parse(localStorage.getItem(FAVORITES_STORAGE_KEY) || "[]");
+        if (!Array.isArray(saved)) return [];
+        return saved
+            .filter(item => item && typeof item.name === "string" && item.name.trim())
+            .map(item => ({
+                ocid: typeof item.ocid === "string" ? item.ocid : "",
+                name: item.name.trim(),
+                worldName: typeof item.worldName === "string" ? item.worldName : ""
+            }))
+            .slice(0, MAX_FAVORITES);
+    } catch (error) {
+        return [];
+    }
+}
+
+function saveFavoriteCharacters(favorites) {
+    try {
+        localStorage.setItem(FAVORITES_STORAGE_KEY, JSON.stringify(favorites));
+        return true;
+    } catch (error) {
+        showFavoriteFeedback("브라우저 저장소를 사용할 수 없어 관심 캐릭터를 저장하지 못했습니다.", true);
+        return false;
+    }
+}
+
+function isSameFavorite(left, right) {
+    if (left.ocid && right.ocid) return left.ocid === right.ocid;
+    return left.name === right.name && left.worldName === right.worldName;
+}
+
+function showFavoriteFeedback(message, isError = false) {
+    if (!favoriteFeedback) return;
+    favoriteFeedback.textContent = message;
+    favoriteFeedback.classList.toggle("is-error", isError);
+    favoriteFeedback.hidden = !message;
+}
+
+function updateFavoriteCurrentButton() {
+    if (!favoriteCurrentButton || !currentCharacter?.characterName) {
+        if (favoriteCurrentButton) favoriteCurrentButton.hidden = true;
+        return;
+    }
+
+    const current = {
+        ocid: String(currentCharacter.ocid || ""),
+        name: currentCharacter.characterName,
+        worldName: currentCharacter.worldName || ""
+    };
+    const isSaved = readFavoriteCharacters().some(item => isSameFavorite(item, current));
+    favoriteCurrentButton.hidden = false;
+    favoriteCurrentButton.classList.toggle("is-saved", isSaved);
+    favoriteCurrentButton.setAttribute("aria-pressed", String(isSaved));
+    if (favoriteCurrentButtonIcon) favoriteCurrentButtonIcon.textContent = isSaved ? "★" : "☆";
+    if (favoriteCurrentButtonLabel) {
+        favoriteCurrentButtonLabel.textContent = isSaved ? "관심 캐릭터 해제" : "관심 캐릭터 등록";
+    }
+}
+
+function renderFavoriteList() {
+    if (!favoriteList) return;
+
+    const favorites = readFavoriteCharacters();
+    favoriteList.replaceChildren();
+    if (favoriteCount) favoriteCount.textContent = `${favorites.length} / ${MAX_FAVORITES}명`;
+    if (favoriteEmpty) favoriteEmpty.hidden = favorites.length > 0;
+
+    favorites.forEach(favorite => {
+        const item = document.createElement("div");
+        item.className = "favorite-item";
+
+        const openButton = document.createElement("button");
+        openButton.type = "button";
+        openButton.className = "favorite-character-button";
+        openButton.setAttribute("aria-label", `${favorite.name} 캐릭터 조회`);
+
+        const icon = document.createElement("span");
+        icon.className = "favorite-character-icon";
+        icon.setAttribute("aria-hidden", "true");
+        icon.textContent = "★";
+
+        const details = document.createElement("span");
+        details.className = "favorite-character-details";
+
+        const name = document.createElement("span");
+        name.className = "favorite-character-name";
+        name.textContent = favorite.name;
+
+        const world = document.createElement("span");
+        world.className = "favorite-character-world";
+        world.textContent = favorite.worldName || "월드 정보 없음";
+        details.append(name, world);
+        openButton.append(icon, details);
+        openButton.addEventListener("click", () => {
+            if (!characterNameInput || !searchForm) return;
+            characterNameInput.value = favorite.name;
+            searchForm.requestSubmit();
+        });
+
+        const removeButton = document.createElement("button");
+        removeButton.type = "button";
+        removeButton.className = "favorite-remove-button";
+        removeButton.textContent = "×";
+        removeButton.setAttribute("aria-label", `${favorite.name} 관심 목록에서 제거`);
+        removeButton.addEventListener("click", () => {
+            const nextFavorites = readFavoriteCharacters().filter(item => !isSameFavorite(item, favorite));
+            if (!saveFavoriteCharacters(nextFavorites)) return;
+            renderFavoriteList();
+            showFavoriteFeedback(`${favorite.name} 캐릭터를 관심 목록에서 제거했습니다.`);
+        });
+
+        item.append(openButton, removeButton);
+        favoriteList.append(item);
+    });
+
+    updateFavoriteCurrentButton();
+}
+
+function toggleCurrentFavorite() {
+    if (!currentCharacter?.characterName) return;
+
+    const current = {
+        ocid: String(currentCharacter.ocid || ""),
+        name: currentCharacter.characterName,
+        worldName: currentCharacter.worldName || ""
+    };
+    const favorites = readFavoriteCharacters();
+    const index = favorites.findIndex(item => isSameFavorite(item, current));
+    let message = "";
+
+    if (index >= 0) {
+        favorites.splice(index, 1);
+        message = `${current.name} 캐릭터를 관심 목록에서 제거했습니다.`;
+    } else {
+        if (favorites.length >= MAX_FAVORITES) {
+            showFavoriteFeedback(`관심 캐릭터는 최대 ${MAX_FAVORITES}명까지 저장할 수 있습니다.`, true);
+            return;
+        }
+        favorites.unshift(current);
+        message = `${current.name} 캐릭터를 관심 목록에 저장했습니다.`;
+    }
+
+    if (!saveFavoriteCharacters(favorites)) return;
+    renderFavoriteList();
+    showFavoriteFeedback(message);
 }
 
 // 공통 표시 함수
@@ -362,6 +519,7 @@ function renderCharacter(character, history) {
         const average = history?.length ? calculateAverageGrowth(history) : null;
         averageDailyExperience.textContent = average !== null ? formatTrillion(average) : "-";
     }
+    updateFavoriteCurrentButton();
 }
 
 function renderRanking(character) {
@@ -1204,6 +1362,7 @@ if (savePdfButton) {
 
 if (searchForm) searchForm.addEventListener("submit", handleSearch);
 if (comparisonForm) comparisonForm.addEventListener("submit", handleComparison);
+if (favoriteCurrentButton) favoriteCurrentButton.addEventListener("click", toggleCurrentFavorite);
 if (refreshDataButton) refreshDataButton.addEventListener("click", () => refreshVisibleCharacter());
 if (historyRangeSelect) historyRangeSelect.addEventListener("change", handleHistoryRangeChange);
 
@@ -1222,6 +1381,7 @@ if (homeLink) {
 }
 
 restoreTrackerState();
+renderFavoriteList();
 
 // A full browser reload first restores the visible session, then rechecks NEXON's latest public data.
 // A cooldown avoids making another multi-request refresh on every accidental rapid reload.
