@@ -12,6 +12,7 @@ import sqlite3
 import time
 from concurrent.futures import ThreadPoolExecutor
 from datetime import date, datetime, timedelta
+from threading import Lock
 from zoneinfo import ZoneInfo
 
 import psycopg
@@ -40,6 +41,10 @@ BASE_URL = "https://open.api.nexon.com/maplestory/v1"
 HEADERS = {"x-nxopen-api-key": API_KEY}
 NEXON_API_TIMEOUT = (3.05, 10)
 KOREA_TIMEZONE = ZoneInfo("Asia/Seoul")
+HISTORY_API_MIN_INTERVAL = 0.22
+HISTORY_BACKFILL_BATCH_SIZE = 10
+HISTORY_API_REQUEST_LOCK = Lock()
+_last_history_api_request_at = 0.0
 
 
 # Gemini
@@ -361,31 +366,44 @@ def stale_snapshot_response(cache_key, error_message):
     return jsonify({"error": error_message}), 503
 
 
-def get_ocid(character_name):
-    response = requests.get(
-        f"{BASE_URL}/id",
+def request_nexon_api(endpoint, params, historical=False):
+    """넥슨 API를 호출하며 과거 기록 수집 요청은 초당 호출 수를 제한한다."""
+    global _last_history_api_request_at
+
+    if historical:
+        with HISTORY_API_REQUEST_LOCK:
+            elapsed = time.monotonic() - _last_history_api_request_at
+            if elapsed < HISTORY_API_MIN_INTERVAL:
+                time.sleep(HISTORY_API_MIN_INTERVAL - elapsed)
+            _last_history_api_request_at = time.monotonic()
+
+    return requests.get(
+        f"{BASE_URL}/{endpoint}",
         headers=HEADERS,
-        params={"character_name": character_name},
+        params=params,
         timeout=NEXON_API_TIMEOUT
     )
+
+
+def get_ocid(character_name):
+    response = request_nexon_api("id", {"character_name": character_name})
     if response.status_code != 200:
         return None, response
     return response.json()["ocid"], response
 
 
-def get_basic_character(ocid):
-    response = requests.get(
-        f"{BASE_URL}/character/basic",
-        headers=HEADERS,
-        params={"ocid": ocid},
-        timeout=NEXON_API_TIMEOUT
-    )
+def get_basic_character(ocid, target_date=None, historical=False):
+    """캐릭터 기본 정보를 조회하며, 날짜를 지정하면 해당 날짜의 스냅샷을 요청한다."""
+    params = {"ocid": ocid}
+    if target_date:
+        params["date"] = target_date
+    response = request_nexon_api("character/basic", params, historical)
     if response.status_code != 200:
         return None, response
     return response.json(), response
 
 
-def get_ranking(target_date, world_name=None, ocid=None, character_class=None):
+def get_ranking(target_date, world_name=None, ocid=None, character_class=None, historical=False):
     params = {"date": target_date, "world_type": 0, "page": 1}
     if world_name:
         params["world_name"] = world_name
@@ -394,12 +412,7 @@ def get_ranking(target_date, world_name=None, ocid=None, character_class=None):
     if ocid:
         params["ocid"] = ocid
 
-    response = requests.get(
-        f"{BASE_URL}/ranking/overall",
-        headers=HEADERS,
-        params=params,
-        timeout=NEXON_API_TIMEOUT
-    )
+    response = request_nexon_api("ranking/overall", params, historical)
     if response.status_code != 200:
         return None, response
     ranking_list = response.json().get("ranking", [])
@@ -1112,6 +1125,63 @@ def get_history():
     return jsonify(with_data_status(result, "current", saved_at))
 
 
+def fetch_historical_record(ocid, character_name, world_name, target_date, today):
+    """랭킹 또는 날짜별 캐릭터 정보에서 과거 일일 스냅샷을 만든다."""
+    date_text = target_date.isoformat()
+    try:
+        ranking_data, ranking_response = get_ranking(
+            date_text, world_name=world_name, ocid=ocid, historical=True
+        )
+    except requests.RequestException:
+        ranking_data, ranking_response = None, None
+
+    if ranking_data:
+        level = ranking_data.get("character_level")
+        experience = ranking_data.get("character_exp")
+        if level is not None and experience is not None:
+            return {
+                "date": date_text,
+                "ranking": ranking_data.get("ranking"),
+                "level": level,
+                "experience": experience,
+                "recordStatus": "available",
+                "recordSource": "api"
+            }
+
+    try:
+        # 기본 정보 API는 오늘 날짜를 date로 받지 않으므로 오늘은 최신 응답을 사용한다.
+        basic_data, basic_response = get_basic_character(
+            ocid,
+            target_date=date_text if target_date < today else None,
+            historical=True
+        )
+    except requests.RequestException:
+        basic_data, basic_response = None, None
+
+    if basic_data:
+        level = basic_data.get("character_level")
+        experience = basic_data.get("character_exp")
+        if level is not None and experience is not None:
+            return {
+                "date": date_text,
+                "ranking": ranking_data.get("ranking") if ranking_data else None,
+                "level": level,
+                "experience": experience,
+                "recordStatus": "available",
+                "recordSource": "api"
+            }
+
+    # 두 API 모두 응답했지만 해당 날짜의 핵심 데이터가 비었다면 빈 기록만 저장한다.
+    if (
+        ranking_response is not None and ranking_response.status_code == 200
+        and basic_response is not None and basic_response.status_code == 200
+    ):
+        return {"date": date_text, "recordStatus": "not_ready"}
+
+    # API 오류는 미수집 상태로 남겨 다음 사용자의 요청 때 다시 확인할 수 있게 한다.
+    return None
+
+
 @app.route("/api/history/archive")
 def get_history_archive():
     ocid = request.args.get("ocid", "").strip()
@@ -1146,6 +1216,65 @@ def get_history_archive():
         return jsonify({"error": "저장된 성장 기록을 조회할 수 없습니다. 저장소 연결을 확인해주세요."}), 503
 
     stored_by_date = {item["date"]: item for item in stored_records}
+    collection = None
+
+    # 과거 데이터는 사용자가 30일·90일 기록을 요청한 경우에만 수집한다.
+    if request.args.get("collect") == "1":
+        character_name = request.args.get("character_name", "").strip()[:30]
+        world_name = request.args.get("world_name", "").strip()[:100] or None
+        try:
+            offset = int(request.args.get("offset", "0"))
+            limit = int(request.args.get("limit", str(HISTORY_BACKFILL_BATCH_SIZE)))
+        except (TypeError, ValueError):
+            return jsonify({"error": "수집 범위를 확인해주세요."}), 400
+
+        if not character_name:
+            return jsonify({"error": "캐릭터명을 확인해주세요."}), 400
+        if offset < 0 or offset >= days or limit < 1 or limit > HISTORY_BACKFILL_BATCH_SIZE:
+            return jsonify({"error": "수집 범위는 날짜 1~10개 안에서 선택해주세요."}), 400
+
+        batch_dates = [
+            start_date + timedelta(days=index)
+            for index in range(offset, min(offset + limit, days))
+        ]
+        missing_dates = [target_date for target_date in batch_dates if target_date.isoformat() not in stored_by_date]
+        fetched_records = []
+
+        def fetch_target_date(target_date):
+            return fetch_historical_record(
+                ocid, character_name, world_name, target_date, today
+            )
+
+        with ThreadPoolExecutor(max_workers=4) as executor:
+            fetched_records = [
+                item for item in executor.map(fetch_target_date, missing_dates)
+                if item is not None
+            ]
+
+        try:
+            saved_count = growth_history_store.save_records(
+                ocid, character_name, world_name, fetched_records
+            ) if fetched_records else 0
+        except Exception:
+            print("날짜별 과거 기록을 저장하지 못했습니다.")
+            return jsonify({"error": "과거 기록을 저장할 수 없습니다. 저장소 연결을 확인해주세요."}), 503
+
+        for item in fetched_records:
+            stored_by_date[item["date"]] = item
+
+        collection = {
+            "offset": offset,
+            "limit": limit,
+            "checkedDays": len(missing_dates),
+            "savedRecords": saved_count,
+            "availableRecords": sum(item.get("recordStatus") == "available" for item in fetched_records),
+            "noDataRecords": sum(item.get("recordStatus") == "not_ready" for item in fetched_records),
+            "remainingDays": sum(
+                (start_date + timedelta(days=index)).isoformat() not in stored_by_date
+                for index in range(days)
+            )
+        }
+
     history = []
     for offset in range(days):
         target_date = start_date + timedelta(days=offset)
@@ -1197,6 +1326,7 @@ def get_history_archive():
         "availableDays": available_days,
         "notReadyDays": not_ready_days,
         "notCollectedDays": not_collected_days,
+        "collection": collection,
         "storageBackend": growth_history_store.backend,
         "persistentStorage": growth_history_store.uses_postgres
     })
