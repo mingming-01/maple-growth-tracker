@@ -126,12 +126,66 @@ class GrowthHistoryApiTests(unittest.TestCase):
         self.assertEqual(saved_yesterday["experience"], 123456)
         self.assertEqual(body["history"][-1]["recordStatus"], "not_collected")
 
-    def test_archive_rejects_unsupported_ranges_and_empty_ocid(self):
+    def test_archive_keeps_each_characters_records_separate_for_comparison(self):
+        target_date = (self.today - timedelta(days=1)).isoformat()
+        self.store.save_records(
+            "comparison-ocid", "비교캐릭터", "테스트월드",
+            [{
+                "date": target_date,
+                "recordStatus": "available",
+                "level": 279,
+                "experience": 98765,
+                "ranking": 654
+            }]
+        )
+
+        primary_response = self.client.get("/api/history/archive?ocid=test-ocid&days=30")
+        comparison_response = self.client.get("/api/history/archive?ocid=comparison-ocid&days=30")
+
+        self.assertEqual(primary_response.status_code, 200)
+        self.assertEqual(comparison_response.status_code, 200)
+        primary_history = primary_response.get_json()["history"]
+        comparison_history = comparison_response.get_json()["history"]
+        self.assertEqual(primary_history[-2]["experience"], 123456)
+        self.assertEqual(comparison_history[-2]["experience"], 98765)
+        self.assertEqual(primary_history[-2]["ranking"], 321)
+        self.assertEqual(comparison_history[-2]["ranking"], 654)
+
+    def test_archive_accepts_custom_end_date_for_previous_period(self):
+        end_date = self.today - timedelta(days=1)
+        response = self.client.get(
+            f"/api/history/archive?ocid=test-ocid&days=30&end={end_date.isoformat()}"
+        )
+
+        self.assertEqual(response.status_code, 200)
+        body = response.get_json()
+        self.assertEqual(body["endDate"], end_date.isoformat())
+        self.assertEqual(
+            body["startDate"],
+            (end_date - timedelta(days=29)).isoformat(),
+        )
+        self.assertEqual(body["history"][-1]["recordStatus"], "available")
+        self.assertEqual(body["history"][-1]["experience"], 123456)
+
+    def test_archive_rejects_unsupported_ranges_empty_ocid_and_bad_end_dates(self):
+        today = datetime.now(tracker.KOREA_TIMEZONE).date()
         bad_range = self.client.get("/api/history/archive?ocid=test-ocid&days=365")
         missing_ocid = self.client.get("/api/history/archive?days=30")
+        malformed_end = self.client.get(
+            "/api/history/archive?ocid=test-ocid&days=30&end=tomorrow"
+        )
+        future_end = self.client.get(
+            f"/api/history/archive?ocid=test-ocid&days=30&end={(today + timedelta(days=1)).isoformat()}"
+        )
+        too_old_end = self.client.get(
+            f"/api/history/archive?ocid=test-ocid&days=30&end={(today - timedelta(days=61)).isoformat()}"
+        )
 
         self.assertEqual(bad_range.status_code, 400)
         self.assertEqual(missing_ocid.status_code, 400)
+        self.assertEqual(malformed_end.status_code, 400)
+        self.assertEqual(future_end.status_code, 400)
+        self.assertEqual(too_old_end.status_code, 400)
 
     def test_saved_past_dates_are_reused_and_only_today_is_requested(self):
         today = datetime.now(tracker.KOREA_TIMEZONE).date()

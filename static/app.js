@@ -4,6 +4,7 @@ const loadingMessage = document.getElementById("loadingMessage");
 const errorMessage = document.getElementById("errorMessage");
 const resultSection = document.getElementById("resultSection");
 const refreshDataButton = document.getElementById("refreshDataButton");
+const refreshDataButtonLabel = document.getElementById("refreshDataButtonLabel");
 
 // 캐릭터 기본 정보
 const characterName = document.getElementById("characterNameResult");
@@ -51,6 +52,20 @@ const predictionAverage = document.getElementById("predictionAverage");
 const historyBody = document.getElementById("historyBody");
 const historyRangeSelect = document.getElementById("historyRangeSelect");
 const historyRangeNotice = document.getElementById("historyRangeNotice");
+const periodSummarySection = document.getElementById("periodSummarySection");
+const periodSummaryRange = document.getElementById("periodSummaryRange");
+const periodSummaryCoverageBadge = document.getElementById("periodSummaryCoverageBadge");
+const periodGrowthValue = document.getElementById("periodGrowthValue");
+const periodGrowthDetail = document.getElementById("periodGrowthDetail");
+const periodAverageValue = document.getElementById("periodAverageValue");
+const periodAverageDetail = document.getElementById("periodAverageDetail");
+const periodRankingValue = document.getElementById("periodRankingValue");
+const periodRankingDetail = document.getElementById("periodRankingDetail");
+const periodComparisonValue = document.getElementById("periodComparisonValue");
+const periodComparisonDetail = document.getElementById("periodComparisonDetail");
+const periodCoverageValue = document.getElementById("periodCoverageValue");
+const periodCoverageDetail = document.getElementById("periodCoverageDetail");
+const periodSummaryFootnote = document.getElementById("periodSummaryFootnote");
 
 // AI 리포트 및 비교
 const aiAnalysisLoading = document.getElementById("aiAnalysisLoading");
@@ -67,9 +82,19 @@ const comparisonButton = document.getElementById("comparisonButton");
 const comparisonLoading = document.getElementById("comparisonLoading");
 const comparisonError = document.getElementById("comparisonError");
 const comparisonResult = document.getElementById("comparisonResult");
+const comparisonPeriodRangeSelect = document.getElementById("comparisonPeriodRangeSelect");
+const comparisonPeriodNotice = document.getElementById("comparisonPeriodNotice");
+const comparisonPeriodVerdict = document.getElementById("comparisonPeriodVerdict");
 const comparisonAIAnalysis = document.getElementById("comparisonAIAnalysis");
 const saveImageButton = document.getElementById("saveImageButton");
 const savePdfButton = document.getElementById("savePdfButton");
+const favoriteList = document.getElementById("favoriteList");
+const favoriteEmpty = document.getElementById("favoriteEmpty");
+const favoriteCount = document.getElementById("favoriteCount");
+const favoriteFeedback = document.getElementById("favoriteFeedback");
+const favoriteCurrentButton = document.getElementById("favoriteCurrentButton");
+const favoriteCurrentButtonIcon = document.getElementById("favoriteCurrentButtonIcon");
+const favoriteCurrentButtonLabel = document.getElementById("favoriteCurrentButtonLabel");
 
 let growthChart = null;
 let currentCharacter = null;
@@ -77,7 +102,15 @@ let currentHistory = [];
 let currentDisplayHistory = [];
 let currentHistoryRange = 7;
 let currentHistoryRangeStatus = null;
+let currentPeriodSummary = null;
 const STORAGE_KEY = "mapleGrowthTrackerState";
+const FAVORITES_STORAGE_KEY = "mapleGrowthTrackerFavorites";
+const MAX_FAVORITES = 30;
+const AI_CACHE_STORAGE_KEY = "mapleGrowthTrackerAIResponsesV1";
+const AI_CACHE_MAX_ENTRIES = 40;
+const AI_CACHE_TTL_MS = 30 * 24 * 60 * 60 * 1000;
+const aiAnalysisCacheNotice = document.getElementById("aiAnalysisCacheNotice");
+const comparisonAICacheNotice = document.getElementById("comparisonAICacheNotice");
 const featureSection = document.getElementById("featureSection");
 const dataStatusNotice = document.getElementById("dataStatusNotice");
 const AUTO_REFRESH_KEY = `${STORAGE_KEY}:lastAutoRefresh`;
@@ -110,6 +143,154 @@ function saveTrackerState(state) {
     } catch (error) {
         console.error("화면 상태 저장에 실패했습니다:", error);
     }
+}
+
+function readFavoriteCharacters() {
+    try {
+        const saved = JSON.parse(localStorage.getItem(FAVORITES_STORAGE_KEY) || "[]");
+        if (!Array.isArray(saved)) return [];
+        return saved
+            .filter(item => item && typeof item.name === "string" && item.name.trim())
+            .map(item => ({
+                ocid: typeof item.ocid === "string" ? item.ocid : "",
+                name: item.name.trim(),
+                worldName: typeof item.worldName === "string" ? item.worldName : ""
+            }))
+            .slice(0, MAX_FAVORITES);
+    } catch (error) {
+        return [];
+    }
+}
+
+function saveFavoriteCharacters(favorites) {
+    try {
+        localStorage.setItem(FAVORITES_STORAGE_KEY, JSON.stringify(favorites));
+        return true;
+    } catch (error) {
+        showFavoriteFeedback("브라우저 저장소를 사용할 수 없어 관심 캐릭터를 저장하지 못했습니다.", true);
+        return false;
+    }
+}
+
+function isSameFavorite(left, right) {
+    if (left.ocid && right.ocid) return left.ocid === right.ocid;
+    return left.name === right.name && left.worldName === right.worldName;
+}
+
+function showFavoriteFeedback(message, isError = false) {
+    if (!favoriteFeedback) return;
+    favoriteFeedback.textContent = message;
+    favoriteFeedback.classList.toggle("is-error", isError);
+    favoriteFeedback.hidden = !message;
+}
+
+function updateFavoriteCurrentButton() {
+    if (!favoriteCurrentButton || !currentCharacter?.characterName) {
+        if (favoriteCurrentButton) favoriteCurrentButton.hidden = true;
+        return;
+    }
+
+    const current = {
+        ocid: String(currentCharacter.ocid || ""),
+        name: currentCharacter.characterName,
+        worldName: currentCharacter.worldName || ""
+    };
+    const isSaved = readFavoriteCharacters().some(item => isSameFavorite(item, current));
+    favoriteCurrentButton.hidden = false;
+    favoriteCurrentButton.classList.toggle("is-saved", isSaved);
+    favoriteCurrentButton.setAttribute("aria-pressed", String(isSaved));
+    if (favoriteCurrentButtonIcon) favoriteCurrentButtonIcon.textContent = isSaved ? "★" : "☆";
+    if (favoriteCurrentButtonLabel) {
+        favoriteCurrentButtonLabel.textContent = isSaved ? "관심 캐릭터 해제" : "관심 캐릭터 등록";
+    }
+}
+
+function renderFavoriteList() {
+    if (!favoriteList) return;
+
+    const favorites = readFavoriteCharacters();
+    favoriteList.replaceChildren();
+    if (favoriteCount) favoriteCount.textContent = `${favorites.length} / ${MAX_FAVORITES}명`;
+    if (favoriteEmpty) favoriteEmpty.hidden = favorites.length > 0;
+
+    favorites.forEach(favorite => {
+        const item = document.createElement("div");
+        item.className = "favorite-item";
+
+        const openButton = document.createElement("button");
+        openButton.type = "button";
+        openButton.className = "favorite-character-button";
+        openButton.setAttribute("aria-label", `${favorite.name} 캐릭터 조회`);
+
+        const icon = document.createElement("span");
+        icon.className = "favorite-character-icon";
+        icon.setAttribute("aria-hidden", "true");
+        icon.textContent = "★";
+
+        const details = document.createElement("span");
+        details.className = "favorite-character-details";
+
+        const name = document.createElement("span");
+        name.className = "favorite-character-name";
+        name.textContent = favorite.name;
+
+        const world = document.createElement("span");
+        world.className = "favorite-character-world";
+        world.textContent = favorite.worldName || "월드 정보 없음";
+        details.append(name, world);
+        openButton.append(icon, details);
+        openButton.addEventListener("click", () => {
+            if (!characterNameInput || !searchForm) return;
+            characterNameInput.value = favorite.name;
+            searchForm.requestSubmit();
+        });
+
+        const removeButton = document.createElement("button");
+        removeButton.type = "button";
+        removeButton.className = "favorite-remove-button";
+        removeButton.textContent = "×";
+        removeButton.setAttribute("aria-label", `${favorite.name} 관심 목록에서 제거`);
+        removeButton.addEventListener("click", () => {
+            const nextFavorites = readFavoriteCharacters().filter(item => !isSameFavorite(item, favorite));
+            if (!saveFavoriteCharacters(nextFavorites)) return;
+            renderFavoriteList();
+            showFavoriteFeedback(`${favorite.name} 캐릭터를 관심 목록에서 제거했습니다.`);
+        });
+
+        item.append(openButton, removeButton);
+        favoriteList.append(item);
+    });
+
+    updateFavoriteCurrentButton();
+}
+
+function toggleCurrentFavorite() {
+    if (!currentCharacter?.characterName) return;
+
+    const current = {
+        ocid: String(currentCharacter.ocid || ""),
+        name: currentCharacter.characterName,
+        worldName: currentCharacter.worldName || ""
+    };
+    const favorites = readFavoriteCharacters();
+    const index = favorites.findIndex(item => isSameFavorite(item, current));
+    let message = "";
+
+    if (index >= 0) {
+        favorites.splice(index, 1);
+        message = `${current.name} 캐릭터를 관심 목록에서 제거했습니다.`;
+    } else {
+        if (favorites.length >= MAX_FAVORITES) {
+            showFavoriteFeedback(`관심 캐릭터는 최대 ${MAX_FAVORITES}명까지 저장할 수 있습니다.`, true);
+            return;
+        }
+        favorites.unshift(current);
+        message = `${current.name} 캐릭터를 관심 목록에 저장했습니다.`;
+    }
+
+    if (!saveFavoriteCharacters(favorites)) return;
+    renderFavoriteList();
+    showFavoriteFeedback(message);
 }
 
 // 공통 표시 함수
@@ -361,6 +542,7 @@ function renderCharacter(character, history) {
         const average = history?.length ? calculateAverageGrowth(history) : null;
         averageDailyExperience.textContent = average !== null ? formatTrillion(average) : "-";
     }
+    updateFavoriteCurrentButton();
 }
 
 function renderRanking(character) {
@@ -464,7 +646,142 @@ async function searchAIAnalysis(name, metrics) {
         if (response.status === 429) throw new Error("현재 AI 분석을 사용할 수 없습니다. 잠시 후 다시 시도해주세요.");
         throw new Error(data.error || "AI 분석을 불러오지 못했습니다.");
     }
-    return data.analysis;
+    return {
+        analysis: data.analysis,
+        cacheHit: data.cacheHit === true
+    };
+}
+
+function hashAIAnalysisSignature(signature) {
+    let hash = 2166136261;
+    for (let index = 0; index < signature.length; index += 1) {
+        hash ^= signature.charCodeAt(index);
+        hash = Math.imul(hash, 16777619);
+    }
+    return (hash >>> 0).toString(16);
+}
+
+function readAIResponseCache() {
+    try {
+        const saved = JSON.parse(localStorage.getItem(AI_CACHE_STORAGE_KEY) || "[]");
+        if (!Array.isArray(saved)) return [];
+        const now = Date.now();
+        return saved.filter(item =>
+            item &&
+            typeof item.signature === "string" &&
+            typeof item.analysis === "string" &&
+            Number.isFinite(item.savedAt) &&
+            now - item.savedAt <= AI_CACHE_TTL_MS
+        ).slice(0, AI_CACHE_MAX_ENTRIES);
+    } catch (error) {
+        return [];
+    }
+}
+
+function getCachedAIAnalysis(type, signature) {
+    const cache = readAIResponseCache();
+    const key = `${type}:${hashAIAnalysisSignature(signature)}`;
+    const entry = cache.find(item =>
+        item.type === type &&
+        item.key === key &&
+        item.signature === signature
+    );
+    if (!entry) return null;
+
+    entry.lastUsedAt = Date.now();
+    try {
+        localStorage.setItem(AI_CACHE_STORAGE_KEY, JSON.stringify(cache));
+    } catch (error) {
+        // 캐시를 저장할 수 없어도 이미 읽은 결과는 사용한다.
+    }
+    return entry.analysis;
+}
+
+function saveCachedAIAnalysis(type, signature, analysis) {
+    if (typeof analysis !== "string" || !analysis.trim()) return;
+    const cache = readAIResponseCache();
+    const key = `${type}:${hashAIAnalysisSignature(signature)}`;
+    const now = Date.now();
+    const nextCache = cache.filter(item => !(item.type === type && item.key === key));
+    nextCache.push({
+        type,
+        key,
+        signature,
+        analysis,
+        savedAt: now,
+        lastUsedAt: now
+    });
+    nextCache.sort((left, right) => (right.lastUsedAt || right.savedAt) - (left.lastUsedAt || left.savedAt));
+    try {
+        localStorage.setItem(AI_CACHE_STORAGE_KEY, JSON.stringify(nextCache.slice(0, AI_CACHE_MAX_ENTRIES)));
+    } catch (error) {
+        // 저장소가 꽉 찼거나 비활성화된 경우 서버 캐시가 계속 동작한다.
+    }
+}
+
+function reportHistorySignature(history) {
+    return (Array.isArray(history) ? history : []).map(item => ({
+        date: item.date ?? null,
+        level: item.level ?? null,
+        experienceChange: item.experienceChange ?? null,
+        ranking: item.ranking ?? null,
+        rankingChange: item.rankingChange ?? null,
+        levelUp: item.levelUp === true
+    }));
+}
+
+function buildGrowthReportSignature(name, character, history, metrics) {
+    return JSON.stringify({
+        version: 1,
+        type: "growth-report",
+        character: {
+            characterName: character.characterName || name,
+            worldName: character.worldName ?? null,
+            job: character.job ?? null,
+            level: character.level ?? null,
+            experienceRate: character.experienceRate ?? null
+        },
+        metrics,
+        history: reportHistorySignature(history)
+    });
+}
+
+function comparisonSubjectSignature(character, metrics, history) {
+    return {
+        character: {
+            characterName: character.characterName ?? null,
+            worldName: character.worldName ?? null,
+            job: character.job ?? null,
+            level: character.level ?? null,
+            experienceRate: character.experienceRate ?? null
+        },
+        metrics,
+        history: (Array.isArray(history) ? history : []).map(item => ({
+            date: item.date ?? null,
+            level: item.level ?? null,
+            experienceChange: item.experienceChange ?? null,
+            ranking: item.ranking ?? null,
+            rankingChange: item.rankingChange ?? null,
+            levelUp: item.levelUp ?? false,
+            recordStatus: item.recordStatus ?? null
+        }))
+    };
+}
+
+function buildComparisonSignature(primaryCharacter, primaryMetrics, primaryHistory, otherCharacter, otherMetrics, otherHistory) {
+    return JSON.stringify({
+        version: 1,
+        type: "growth-comparison",
+        primary: comparisonSubjectSignature(primaryCharacter, primaryMetrics, primaryHistory),
+        comparison: comparisonSubjectSignature(otherCharacter, otherMetrics, otherHistory)
+    });
+}
+
+function showAICacheNotice(element, message, type = "info") {
+    if (!element) return;
+    element.textContent = message;
+    element.classList.toggle("is-warning", type === "warning");
+    element.hidden = !message;
 }
 
 function buildCumulativeExperienceData(history) {
@@ -606,6 +923,193 @@ function renderHistoryRangeNotice(days, status = null) {
         `저장된 최근 ${days}일 기록: 정상 ${status.availableDays}일 · API 미제공 ${status.notReadyDays}일 · 미수집 ${status.notCollectedDays}일. 미수집 날짜는 이 사이트에 저장된 기록이 없는 날이며, 과거 데이터가 자동으로 복구된다는 뜻은 아닙니다.`;
 }
 
+function shiftSnapshotDate(dateString, offsetDays) {
+    const [year, month, day] = String(dateString || "").split("-").map(Number);
+    if (!year || !month || !day) return null;
+    const shifted = new Date(Date.UTC(year, month - 1, day + offsetDays));
+    return shifted.toISOString().slice(0, 10);
+}
+
+async function fetchArchiveRange(days, endDate = null, ocid = currentCharacter?.ocid) {
+    const params = new URLSearchParams({
+        ocid: ocid || "",
+        days: String(days)
+    });
+    if (endDate) params.set("end", endDate);
+
+    const response = await fetch(`/api/history/archive?${params.toString()}`, {
+        cache: "no-store"
+    });
+    return readApiResponse(response, "저장된 성장 기록을 불러오지 못했습니다.");
+}
+
+function summarizePeriod(history, days) {
+    const records = sortHistoryAscending(Array.isArray(history) ? history : []);
+    const available = records.filter(item =>
+        item.recordStatus === "available" &&
+        item.experience !== null &&
+        item.experience !== undefined &&
+        Number.isFinite(Number(item.experience))
+    );
+    const confirmedChanges = records.filter(item =>
+        item.recordStatus === "available" &&
+        item.experienceChange !== null &&
+        item.experienceChange !== undefined &&
+        Number.isFinite(Number(item.experienceChange))
+    );
+    const growth = confirmedChanges.length
+        ? confirmedChanges.reduce((sum, item) => sum + Number(item.experienceChange), 0)
+        : null;
+    const averageGrowth = growth !== null ? growth / confirmedChanges.length : null;
+
+    const ranked = records.filter(item =>
+        item.recordStatus === "available" &&
+        item.ranking !== null &&
+        item.ranking !== undefined &&
+        Number.isFinite(Number(item.ranking))
+    );
+    const rankingChange = ranked.length >= 2
+        ? Number(ranked[0].ranking) - Number(ranked[ranked.length - 1].ranking)
+        : null;
+
+    const availableDays = records.filter(item => item.recordStatus === "available").length;
+    const notReadyDays = records.filter(item => item.recordStatus === "not_ready").length;
+    const notCollectedDays = records.filter(item => item.recordStatus === "not_collected").length;
+
+    return {
+        days,
+        startDate: records[0]?.date || null,
+        endDate: records[records.length - 1]?.date || null,
+        firstObservedDate: available[0]?.date || null,
+        lastObservedDate: available[available.length - 1]?.date || null,
+        growth,
+        confirmedChangeDays: confirmedChanges.length,
+        averageGrowth,
+        rankingChange,
+        availableDays,
+        notReadyDays,
+        notCollectedDays,
+        coveragePercent: records.length ? (availableDays / records.length) * 100 : 0
+    };
+}
+
+function buildPeriodSummary(currentData, previousData, previousUnavailable = false) {
+    const summary = summarizePeriod(currentData.history, currentData.days);
+    summary.startDate = currentData.startDate || summary.startDate;
+    summary.endDate = currentData.endDate || summary.endDate;
+    summary.previousUnavailable = previousUnavailable;
+    summary.previousGrowth = null;
+    summary.previousGrowthSamples = 0;
+    summary.comparisonPercent = null;
+
+    if (previousData) {
+        const previous = summarizePeriod(previousData.history, previousData.days);
+        summary.previousGrowth = previous.growth;
+        summary.previousGrowthSamples = previous.confirmedChangeDays;
+        if (
+            summary.growth !== null &&
+            previous.growth !== null &&
+            previous.confirmedChangeDays > 0 &&
+            Math.abs(previous.growth) > 0
+        ) {
+            summary.comparisonPercent = (
+                (summary.growth - previous.growth) / Math.abs(previous.growth)
+            ) * 100;
+        }
+    }
+    return summary;
+}
+
+function renderPeriodSummary(summary) {
+    if (!periodSummarySection) return;
+    const visible = !!summary && [30, 90].includes(Number(summary.days));
+    periodSummarySection.hidden = !visible;
+    if (!visible) return;
+
+    const percent = summary.coveragePercent;
+    if (periodSummaryRange) {
+        periodSummaryRange.textContent =
+            `${formatDate(summary.startDate)} ~ ${formatDate(summary.endDate)} · 직전 ${summary.days}일 기록과 비교`;
+    }
+    if (periodSummaryCoverageBadge) {
+        periodSummaryCoverageBadge.textContent = `기록 ${percent.toFixed(0)}%`;
+        periodSummaryCoverageBadge.classList.toggle("is-warning", percent < 70);
+    }
+
+    if (periodGrowthValue) {
+        periodGrowthValue.textContent = summary.growth === null ? "자료 부족" : formatTrillion(summary.growth);
+        periodGrowthValue.classList.toggle("is-muted", summary.growth === null);
+    }
+    if (periodGrowthDetail) {
+        periodGrowthDetail.textContent = summary.confirmedChangeDays
+            ? `연속 기록 ${summary.confirmedChangeDays}일의 증가량 합계`
+            : "연속된 날짜의 증가량을 확인할 수 없습니다.";
+    }
+
+    if (periodAverageValue) {
+        periodAverageValue.textContent = summary.averageGrowth === null
+            ? "자료 부족"
+            : formatTrillion(summary.averageGrowth);
+        periodAverageValue.classList.toggle("is-muted", summary.averageGrowth === null);
+    }
+    if (periodAverageDetail) {
+        periodAverageDetail.textContent = summary.confirmedChangeDays
+            ? `증가량 확인 ${summary.confirmedChangeDays}일 기준`
+            : "비교 가능한 일일 변화 기록이 없습니다.";
+    }
+
+    if (periodRankingValue) {
+        let rankingText = "자료 부족";
+        if (summary.rankingChange !== null) {
+            if (summary.rankingChange > 0) rankingText = `▲ ${formatNumber(summary.rankingChange)}위 상승`;
+            else if (summary.rankingChange < 0) rankingText = `▼ ${formatNumber(Math.abs(summary.rankingChange))}위 하락`;
+            else rankingText = "변화 없음";
+        }
+        periodRankingValue.textContent = rankingText;
+        periodRankingValue.classList.toggle("is-positive", summary.rankingChange > 0);
+        periodRankingValue.classList.toggle("is-negative", summary.rankingChange < 0);
+        periodRankingValue.classList.toggle("is-muted", summary.rankingChange === null);
+    }
+    if (periodRankingDetail) {
+        periodRankingDetail.textContent = summary.firstObservedDate && summary.lastObservedDate
+            ? `${formatDate(summary.firstObservedDate)} → ${formatDate(summary.lastObservedDate)}`
+            : "랭킹 기록이 두 개 이상 필요합니다.";
+    }
+
+    if (periodComparisonValue) {
+        let comparisonText = "비교 자료 부족";
+        if (summary.comparisonPercent !== null) {
+            const sign = summary.comparisonPercent > 0 ? "+" : "";
+            comparisonText = `${sign}${summary.comparisonPercent.toFixed(1)}%`;
+        }
+        periodComparisonValue.textContent = comparisonText;
+        periodComparisonValue.classList.toggle("is-positive", summary.comparisonPercent > 0);
+        periodComparisonValue.classList.toggle("is-negative", summary.comparisonPercent < 0);
+        periodComparisonValue.classList.toggle("is-muted", summary.comparisonPercent === null);
+    }
+    if (periodComparisonDetail) {
+        if (summary.previousUnavailable) {
+            periodComparisonDetail.textContent = "직전 기간 기록을 불러오지 못했습니다.";
+        } else if (summary.previousGrowth !== null && summary.previousGrowthSamples > 0) {
+            periodComparisonDetail.textContent = `직전 확인 증가량 ${formatTrillion(summary.previousGrowth)}`;
+        } else {
+            periodComparisonDetail.textContent = "직전 기간의 연속 기록이 부족합니다.";
+        }
+    }
+
+    if (periodCoverageValue) {
+        periodCoverageValue.textContent = `${summary.availableDays} / ${summary.days}일`;
+    }
+    if (periodCoverageDetail) {
+        periodCoverageDetail.textContent =
+            `API 미제공 ${summary.notReadyDays}일 · 미수집 ${summary.notCollectedDays}일`;
+    }
+    if (periodSummaryFootnote) {
+        periodSummaryFootnote.textContent =
+            "증가량은 연속된 날짜에서 확인된 경험치 변화만 합산합니다. 미수집 날짜와 레벨업으로 경험치 기준이 바뀐 구간은 계산에서 제외되므로 실제 전체 성장량보다 작게 표시될 수 있습니다.";
+    }
+}
+
 async function loadHistoryRange(days) {
     const selectedDays = [7, 30, 90].includes(Number(days)) ? Number(days) : 7;
     if (!currentCharacter) return;
@@ -613,23 +1117,35 @@ async function loadHistoryRange(days) {
         currentDisplayHistory = currentHistory;
         currentHistoryRange = 7;
         currentHistoryRangeStatus = null;
+        currentPeriodSummary = null;
         if (historyRangeSelect) historyRangeSelect.value = "7";
         renderHistory(currentDisplayHistory);
         renderChart(currentDisplayHistory);
         renderHistoryRangeNotice(7);
+        renderPeriodSummary(null);
         saveTrackerState({
             historyRange: 7,
             displayHistory: currentDisplayHistory,
-            historyRangeStatus: null
+            historyRangeStatus: null,
+            periodSummary: null
         });
         return;
     }
 
-    const response = await fetch(
-        `/api/history/archive?ocid=${encodeURIComponent(currentCharacter.ocid || "")}&days=${selectedDays}`,
-        { cache: "no-store" }
-    );
-    const data = await readApiResponse(response, "저장된 성장 기록을 불러오지 못했습니다.");
+    const data = await fetchArchiveRange(selectedDays);
+    let previousData = null;
+    let previousUnavailable = false;
+    const previousEndDate = shiftSnapshotDate(data.startDate, -1);
+    if (previousEndDate) {
+        try {
+            previousData = await fetchArchiveRange(selectedDays, previousEndDate);
+        } catch (error) {
+            previousUnavailable = true;
+        }
+    } else {
+        previousUnavailable = true;
+    }
+
     currentDisplayHistory = data.history || [];
     currentHistoryRange = selectedDays;
     currentHistoryRangeStatus = {
@@ -639,15 +1155,18 @@ async function loadHistoryRange(days) {
         storageBackend: data.storageBackend || "unknown",
         persistentStorage: data.persistentStorage === true
     };
+    currentPeriodSummary = buildPeriodSummary(data, previousData, previousUnavailable);
 
     if (historyRangeSelect) historyRangeSelect.value = String(selectedDays);
     renderHistory(currentDisplayHistory);
     renderChart(currentDisplayHistory);
     renderHistoryRangeNotice(selectedDays, currentHistoryRangeStatus);
+    renderPeriodSummary(currentPeriodSummary);
     saveTrackerState({
         historyRange: selectedDays,
         displayHistory: currentDisplayHistory,
-        historyRangeStatus: currentHistoryRangeStatus
+        historyRangeStatus: currentHistoryRangeStatus,
+        periodSummary: currentPeriodSummary
     });
 }
 
@@ -737,13 +1256,28 @@ async function runAIReport(name, character, history, sharedMetrics) {
     if (aiAnalysisLoading) aiAnalysisLoading.hidden = false;
     if (aiAnalysisError) aiAnalysisError.hidden = true;
     if (aiAnalysisResult) aiAnalysisResult.hidden = true;
+    showAICacheNotice(aiAnalysisCacheNotice, "동일 데이터의 저장된 분석을 확인하고 있습니다.");
 
     try {
         const metrics = sharedMetrics || calculateGrowthMetrics(character, history);
-        const analysis = await searchAIAnalysis(name, metrics);
+        const signature = buildGrowthReportSignature(name, character, history, metrics);
+        const cachedAnalysis = getCachedAIAnalysis("growth-report-v1", signature);
+        if (cachedAnalysis) {
+            renderAIAnalysis(cachedAnalysis);
+            showAICacheNotice(aiAnalysisCacheNotice, "저장된 분석을 재사용했습니다. AI 모델을 다시 호출하지 않았습니다.");
+            saveTrackerState({ character, history, metrics, aiAnalysis: cachedAnalysis });
+            return;
+        }
 
+        const result = await searchAIAnalysis(name, metrics);
+        const analysis = result.analysis;
+        saveCachedAIAnalysis("growth-report-v1", signature, analysis);
         renderAIAnalysis(analysis);
 
+        const notice = result.cacheHit
+            ? "서버에 저장된 분석을 재사용했습니다. AI 모델을 다시 호출하지 않았습니다."
+            : "새 분석을 생성했습니다. 같은 데이터의 다음 조회에서는 저장된 결과를 재사용합니다.";
+        showAICacheNotice(aiAnalysisCacheNotice, notice);
         saveTrackerState({
             character,
             history,
@@ -753,6 +1287,7 @@ async function runAIReport(name, character, history, sharedMetrics) {
     } catch (error) {
         console.error("AI 분석 실패:", error);
         if (aiAnalysisLoading) aiAnalysisLoading.hidden = true;
+        showAICacheNotice(aiAnalysisCacheNotice, "이번 분석은 완료되지 않아 캐시에 저장하지 않았습니다.", "warning");
 
         if (aiAnalysisError) {
             aiAnalysisError.textContent = error.message || "AI 분석을 불러오지 못했습니다.";
@@ -796,8 +1331,10 @@ async function handleSearch(event) {
         currentDisplayHistory = history;
         currentHistoryRange = 7;
         currentHistoryRangeStatus = null;
+        currentPeriodSummary = null;
         if (historyRangeSelect) historyRangeSelect.value = "7";
         renderHistoryRangeNotice(7);
+        renderPeriodSummary(null);
         const prediction = calculatePrediction(character, history);
         const metrics = calculateGrowthMetrics(character, history, prediction);
         sessionStorage.removeItem(STORAGE_KEY);
@@ -840,7 +1377,10 @@ async function refreshVisibleCharacter({ automatic = false } = {}) {
     if (refreshDataButton) {
         refreshDataButton.disabled = true;
         refreshDataButton.classList.add("is-loading");
-        refreshDataButton.textContent = "최신 정보 확인 중...";
+        refreshDataButton.setAttribute("aria-busy", "true");
+    }
+    if (refreshDataButtonLabel) {
+        refreshDataButtonLabel.textContent = "최신 정보 확인 중";
     }
     if (dataStatusNotice) {
         dataStatusNotice.textContent = "넥슨 Open API에서 현재 제공하는 최신 정보를 확인하고 있습니다.";
@@ -923,7 +1463,10 @@ async function refreshVisibleCharacter({ automatic = false } = {}) {
         if (refreshDataButton) {
             refreshDataButton.disabled = false;
             refreshDataButton.classList.remove("is-loading");
-            refreshDataButton.textContent = "최신 정보 다시 조회";
+            refreshDataButton.setAttribute("aria-busy", "false");
+        }
+        if (refreshDataButtonLabel) {
+            refreshDataButtonLabel.textContent = "최신 정보 다시 조회";
         }
     }
 }
@@ -938,6 +1481,110 @@ function formatRankingChange(value) {
 function getPredictionLabel(metrics) {
     const days = metrics?.prediction?.estimatedDays;
     return Number.isFinite(days) ? `약 ${days.toFixed(1)}일` : "예측 자료 부족";
+}
+
+function renderComparisonPeriod(summary, primaryCharacter, otherCharacter, errorMessage = "") {
+    if (!comparisonPeriodVerdict || !comparisonPeriodNotice) return;
+    const primaryName = primaryCharacter?.characterName || "현재 캐릭터";
+    const otherName = otherCharacter?.characterName || "비교 캐릭터";
+    const days = Number(summary?.days || comparisonPeriodRangeSelect?.value || 30);
+    const setText = (id, value) => {
+        const element = document.getElementById(id);
+        if (element) element.textContent = value;
+    };
+
+    setText("comparisonPeriodPrimaryName", primaryName);
+    setText("comparisonPeriodSecondaryName", otherName);
+
+    const renderSubject = (prefix, subject) => {
+        const growth = subject?.growth;
+        const average = subject?.averageGrowth;
+        setText(`comparisonPeriod${prefix}Growth`, growth === null || growth === undefined ? "자료 부족" : formatTrillion(growth));
+        setText(`comparisonPeriod${prefix}Average`, average === null || average === undefined ? "자료 부족" : formatTrillion(average));
+        setText(`comparisonPeriod${prefix}Ranking`, subject ? formatRankingChange(subject.rankingChange) : "자료 부족");
+        setText(
+            `comparisonPeriod${prefix}Coverage`,
+            subject ? `${subject.availableDays} / ${subject.days}일 (${subject.coveragePercent.toFixed(0)}%)` : "-"
+        );
+        setText(
+            `comparisonPeriod${prefix}Detail`,
+            subject ? `변화 확인 ${subject.confirmedChangeDays}일 · API 미제공 ${subject.notReadyDays}일 · 미수집 ${subject.notCollectedDays}일` : ""
+        );
+    };
+
+    renderSubject("Primary", summary?.primary || null);
+    renderSubject("Secondary", summary?.secondary || null);
+
+    if (summary?.primary && summary?.secondary) {
+        const firstGrowth = summary.primary.growth;
+        const secondGrowth = summary.secondary.growth;
+        if (firstGrowth === null || firstGrowth === undefined || secondGrowth === null || secondGrowth === undefined) {
+            comparisonPeriodVerdict.textContent = "확인된 성장 기록이 부족해 증가량을 비교하기 어렵습니다.";
+        } else {
+            const difference = firstGrowth - secondGrowth;
+            if (difference > 0) {
+                comparisonPeriodVerdict.textContent = `${primaryName}의 확인된 증가량이 ${otherName}보다 ${formatTrillion(difference)} 많습니다.`;
+            } else if (difference < 0) {
+                comparisonPeriodVerdict.textContent = `${otherName}의 확인된 증가량이 ${primaryName}보다 ${formatTrillion(Math.abs(difference))} 많습니다.`;
+            } else {
+                comparisonPeriodVerdict.textContent = "두 캐릭터의 확인된 증가량이 같습니다.";
+            }
+        }
+        comparisonPeriodNotice.textContent = `최근 ${days}일의 동일한 날짜 범위입니다. 누락 날짜와 레벨업 전환 구간은 추정하지 않습니다.`;
+    } else {
+        comparisonPeriodVerdict.textContent = errorMessage || "기간별 비교 자료를 아직 불러오지 못했습니다.";
+        comparisonPeriodNotice.textContent = "캐릭터별 저장 기록이 있어야 장기 성장량과 랭킹 변화를 비교할 수 있습니다.";
+    }
+    comparisonPeriodNotice.classList.toggle("is-warning", !!errorMessage);
+}
+
+async function fetchComparisonPeriodSummary(otherCharacter, days) {
+    if (!currentCharacter?.ocid || !otherCharacter?.ocid) {
+        throw new Error("캐릭터 식별 정보를 확인할 수 없어 장기 기록을 비교할 수 없습니다.");
+    }
+    const [primaryData, secondaryData] = await Promise.all([
+        fetchArchiveRange(days, null, currentCharacter.ocid),
+        fetchArchiveRange(days, null, otherCharacter.ocid)
+    ]);
+    return {
+        days,
+        primary: summarizePeriod(primaryData.history, days),
+        secondary: summarizePeriod(secondaryData.history, days)
+    };
+}
+
+async function handleComparisonPeriodChange() {
+    const savedComparison = getTrackerState()?.comparison;
+    if (!currentCharacter || !savedComparison?.character) return;
+    const days = [30, 90].includes(Number(comparisonPeriodRangeSelect?.value))
+        ? Number(comparisonPeriodRangeSelect.value)
+        : 30;
+    if (comparisonPeriodRangeSelect) comparisonPeriodRangeSelect.disabled = true;
+    if (comparisonPeriodNotice) {
+        comparisonPeriodNotice.textContent = `최근 ${days}일 저장 기록을 불러오는 중입니다...`;
+        comparisonPeriodNotice.classList.remove("is-warning");
+    }
+
+    let periodSummary = null;
+    let periodError = "";
+    try {
+        periodSummary = await fetchComparisonPeriodSummary(savedComparison.character, days);
+        renderComparisonPeriod(periodSummary, currentCharacter, savedComparison.character);
+    } catch (error) {
+        periodError = error.message || "기간별 비교 기록을 불러오지 못했습니다.";
+        renderComparisonPeriod(null, currentCharacter, savedComparison.character, periodError);
+    } finally {
+        if (comparisonPeriodRangeSelect) comparisonPeriodRangeSelect.disabled = false;
+    }
+
+    saveTrackerState({
+        comparison: {
+            ...savedComparison,
+            periodDays: days,
+            periodSummary,
+            periodError
+        }
+    });
 }
 
 function renderComparisonCharacter(prefix, character, metrics) {
@@ -983,6 +1630,7 @@ async function handleComparison(event) {
     }
     if (comparisonError) comparisonError.hidden = true;
     if (comparisonResult) comparisonResult.hidden = true;
+    showAICacheNotice(comparisonAICacheNotice, "동일한 비교 데이터의 저장된 분석을 확인하고 있습니다.");
     if (comparisonLoading) comparisonLoading.hidden = false;
     if (comparisonButton) comparisonButton.disabled = true;
     try {
@@ -998,24 +1646,59 @@ async function handleComparison(event) {
         const otherMetrics = calculateGrowthMetrics(otherCharacter, otherHistory, otherPrediction);
         renderComparisonCharacter("primary", currentCharacter, primaryMetrics);
         renderComparisonCharacter("secondary", otherCharacter, otherMetrics);
-        const response = await fetch("/api/ai-comparison", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-                primary: { character: currentCharacter, metrics: primaryMetrics, history: currentHistory },
-                comparison: { character: otherCharacter, metrics: otherMetrics, history: otherHistory }
-            })
-        });
-        const data = await readApiResponse(response, "AI 성장 비교 분석을 불러오지 못했습니다.");
-        const comparisonAnalysis = data.analysis || "분석 결과가 없습니다.";
+
+        const periodDays = [30, 90].includes(Number(comparisonPeriodRangeSelect?.value))
+            ? Number(comparisonPeriodRangeSelect.value)
+            : 30;
+        let periodSummary = null;
+        let periodError = "";
+        try {
+            periodSummary = await fetchComparisonPeriodSummary(otherCharacter, periodDays);
+            renderComparisonPeriod(periodSummary, currentCharacter, otherCharacter);
+        } catch (error) {
+            periodError = error.message || "기간별 비교 기록을 불러오지 못했습니다.";
+            renderComparisonPeriod(null, currentCharacter, otherCharacter, periodError);
+        }
+
+        const signature = buildComparisonSignature(
+            currentCharacter,
+            primaryMetrics,
+            currentHistory,
+            otherCharacter,
+            otherMetrics,
+            otherHistory
+        );
+        let comparisonAnalysis = getCachedAIAnalysis("growth-comparison-v1", signature);
+        let comparisonCacheMessage = "저장된 비교 분석을 재사용했습니다. AI 모델을 다시 호출하지 않았습니다.";
+
+        if (!comparisonAnalysis) {
+            const response = await fetch("/api/ai-comparison", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                    primary: { character: currentCharacter, metrics: primaryMetrics, history: currentHistory },
+                    comparison: { character: otherCharacter, metrics: otherMetrics, history: otherHistory }
+                })
+            });
+            const data = await readApiResponse(response, "AI 성장 비교 분석을 불러오지 못했습니다.");
+            comparisonAnalysis = data.analysis || "분석 결과가 없습니다.";
+            saveCachedAIAnalysis("growth-comparison-v1", signature, comparisonAnalysis);
+            comparisonCacheMessage = data.cacheHit
+                ? "서버에 저장된 비교 분석을 재사용했습니다. AI 모델을 다시 호출하지 않았습니다."
+                : "새 비교 분석을 생성했습니다. 같은 데이터는 저장된 결과를 재사용합니다.";
+        }
         if (comparisonAIAnalysis) comparisonAIAnalysis.textContent = comparisonAnalysis;
+        showAICacheNotice(comparisonAICacheNotice, comparisonCacheMessage);
         if (comparisonResult) comparisonResult.hidden = false;
         saveTrackerState({
             comparison: {
                 character: otherCharacter,
                 history: otherHistory,
                 metrics: otherMetrics,
-                aiAnalysis: comparisonAnalysis
+                aiAnalysis: comparisonAnalysis,
+                periodDays,
+                periodSummary,
+                periodError
             }
         });
     } catch (error) {
@@ -1069,8 +1752,10 @@ function restoreTrackerState() {
         ? state.displayHistory
         : currentHistory;
     currentHistoryRangeStatus = state.historyRangeStatus || null;
+    currentPeriodSummary = state.periodSummary || null;
     if (historyRangeSelect) historyRangeSelect.value = String(currentHistoryRange);
     renderHistoryRangeNotice(currentHistoryRange, currentHistoryRangeStatus);
+    renderPeriodSummary(currentPeriodSummary);
 
     renderCharacter(currentCharacter, currentHistory);
     renderRanking(currentCharacter);
@@ -1116,6 +1801,18 @@ function restoreTrackerState() {
             comparisonAIAnalysis.textContent =
                 comparison.aiAnalysis || "분석 결과가 없습니다.";
         }
+
+        if (comparisonPeriodRangeSelect) {
+            comparisonPeriodRangeSelect.value = String(
+                [30, 90].includes(Number(comparison.periodDays)) ? Number(comparison.periodDays) : 30
+            );
+        }
+        renderComparisonPeriod(
+            comparison.periodSummary || null,
+            currentCharacter,
+            comparison.character,
+            comparison.periodError || "저장된 기간 비교 결과가 없습니다. 비교 기간을 선택해 다시 조회해주세요."
+        );
 
         if (comparisonResult) {
             comparisonResult.hidden = false;
@@ -1197,6 +1894,8 @@ if (savePdfButton) {
 
 if (searchForm) searchForm.addEventListener("submit", handleSearch);
 if (comparisonForm) comparisonForm.addEventListener("submit", handleComparison);
+if (comparisonPeriodRangeSelect) comparisonPeriodRangeSelect.addEventListener("change", handleComparisonPeriodChange);
+if (favoriteCurrentButton) favoriteCurrentButton.addEventListener("click", toggleCurrentFavorite);
 if (refreshDataButton) refreshDataButton.addEventListener("click", () => refreshVisibleCharacter());
 if (historyRangeSelect) historyRangeSelect.addEventListener("change", handleHistoryRangeChange);
 
@@ -1215,6 +1914,7 @@ if (homeLink) {
 }
 
 restoreTrackerState();
+renderFavoriteList();
 
 // A full browser reload first restores the visible session, then rechecks NEXON's latest public data.
 // A cooldown avoids making another multi-request refresh on every accidental rapid reload.

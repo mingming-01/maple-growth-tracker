@@ -54,6 +54,20 @@
             </div>
         </section>
 
+        <section class="favorites-section" aria-labelledby="favoritesTitle">
+            <div class="favorites-heading">
+                <div>
+                    <span class="favorites-kicker">QUICK ACCESS</span>
+                    <h2 id="favoritesTitle">관심 캐릭터</h2>
+                    <p>자주 조회하는 캐릭터를 저장해 다음에는 한 번에 열어보세요.</p>
+                </div>
+                <span id="favoriteCount" class="favorite-count">0 / 30명</span>
+            </div>
+            <div id="favoriteFeedback" class="favorite-feedback" role="status" aria-live="polite" hidden></div>
+            <div id="favoriteList" class="favorite-list"></div>
+            <p id="favoriteEmpty" class="favorite-empty">아직 등록한 캐릭터가 없습니다. 캐릭터를 조회한 뒤 별 버튼으로 등록하세요.</p>
+        </section>
+
         <section id="featureSection" class="feature-section">
             <div class="feature-grid">
                 <article class="feature-card">
@@ -77,9 +91,17 @@
         <section id="resultSection" class="result-section" hidden>
             <div class="data-status-actions">
                 <div id="dataStatusNotice" class="data-status-notice" role="status" aria-live="polite" hidden></div>
-                <button type="button" id="refreshDataButton" class="export-button refresh-data-button">최신 정보 다시 조회</button>
+                <button type="button" id="refreshDataButton" class="export-button refresh-data-button" aria-label="최신 공개 데이터 다시 조회" title="넥슨 Open API에서 최신 공개 데이터를 다시 확인합니다.">
+                    <svg class="refresh-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+                        <path d="M20 7v5h-5"></path>
+                        <path d="M4 17v-5h5"></path>
+                        <path d="M5.6 9A7 7 0 0 1 18 6.5L20 12"></path>
+                        <path d="M18.4 15A7 7 0 0 1 6 17.5L4 12"></path>
+                    </svg>
+                    <span id="refreshDataButtonLabel">최신 정보 다시 조회</span>
+                </button>
             </div>
-            <p class="data-freshness-hint">이 버튼은 넥슨 Open API에서 현재 제공하는 정보를 다시 조회합니다. 캐시샵 입장이나 캐릭터 재접속 후에도 API 반영까지 시간이 걸릴 수 있습니다.</p>
+            <p class="data-freshness-hint"><span aria-hidden="true">↻</span> 넥슨 Open API의 최신 공개 데이터를 다시 확인합니다. 게임 내 변경 사항은 API에 반영되기까지 시간이 걸릴 수 있습니다.</p>
             <section class="section">
                 <div class="character-ranking-card">
                     <div class="character-panel">
@@ -89,6 +111,10 @@
                                 <img id="characterImage" class="character-avatar" src="" alt="캐릭터 아바타">
                             </div>
                             <h2 id="characterNameResult" class="character-name">-</h2>
+                            <button type="button" id="favoriteCurrentButton" class="favorite-current-button" aria-pressed="false" hidden>
+                                <span id="favoriteCurrentButtonIcon" aria-hidden="true">☆</span>
+                                <span id="favoriteCurrentButtonLabel">관심 캐릭터 등록</span>
+                            </button>
                             <div class="character-meta">
                                 <span class="meta-item world-meta"><img id="worldLogo" class="world-logo" src="" alt=""><span id="worldName">-</span></span>
                                 <span id="levelValue" class="meta-item">Lv. -</span>
@@ -140,11 +166,49 @@
                     </div>
                 </div>
                 <p id="historyRangeNotice" class="history-range-notice" role="status" aria-live="polite">최근 7일 기록을 표시합니다.</p>
+                <section id="periodSummarySection" class="period-summary-section" aria-labelledby="periodSummaryTitle" hidden>
+                    <div class="period-summary-heading">
+                        <div>
+                            <h3 id="periodSummaryTitle">기간별 성장 요약</h3>
+                            <p id="periodSummaryRange">선택 기간의 기록을 분석합니다.</p>
+                        </div>
+                        <span id="periodSummaryCoverageBadge" class="period-summary-badge">기록 확인 중</span>
+                    </div>
+                    <div class="period-summary-grid">
+                        <article class="period-summary-card is-primary">
+                            <span class="period-summary-label">확인된 경험치 증가</span>
+                            <strong id="periodGrowthValue" class="period-summary-value">-</strong>
+                            <span id="periodGrowthDetail" class="period-summary-detail">연속 기록에서 확인된 증가량</span>
+                        </article>
+                        <article class="period-summary-card">
+                            <span class="period-summary-label">관측된 1일 평균</span>
+                            <strong id="periodAverageValue" class="period-summary-value">-</strong>
+                            <span id="periodAverageDetail" class="period-summary-detail">증가량을 확인한 날짜 기준</span>
+                        </article>
+                        <article class="period-summary-card">
+                            <span class="period-summary-label">랭킹 변화</span>
+                            <strong id="periodRankingValue" class="period-summary-value">-</strong>
+                            <span id="periodRankingDetail" class="period-summary-detail">첫 기록과 마지막 기록 비교</span>
+                        </article>
+                        <article class="period-summary-card">
+                            <span class="period-summary-label">직전 기간 대비</span>
+                            <strong id="periodComparisonValue" class="period-summary-value">-</strong>
+                            <span id="periodComparisonDetail" class="period-summary-detail">직전 동일 길이 기간과 비교</span>
+                        </article>
+                        <article class="period-summary-card">
+                            <span class="period-summary-label">기록 충실도</span>
+                            <strong id="periodCoverageValue" class="period-summary-value">-</strong>
+                            <span id="periodCoverageDetail" class="period-summary-detail">정상적으로 저장된 날짜</span>
+                        </article>
+                    </div>
+                    <p id="periodSummaryFootnote" class="period-summary-footnote" role="status" aria-live="polite"></p>
+                </section>
                 <div class="chart-card"><div class="chart-wrapper"><canvas id="growthChart"></canvas></div></div>
             </section>
 
             <section class="section">
                 <div class="section-header"><h2 class="section-title">AI 성장 리포트</h2><p class="section-description">계산된 성장 지표를 바탕으로 최근 성장 과정을 해석합니다.</p></div>
+                <p id="aiAnalysisCacheNotice" class="ai-cache-notice" role="status" aria-live="polite" hidden></p>
                 <div id="aiAnalysisCard" class="ai-analysis-card">
                     <div id="aiAnalysisLoading" class="ai-analysis-loading" hidden>성장 데이터를 분석하고 있습니다...</div>
                     <div id="aiAnalysisError" class="ai-analysis-error" hidden></div>
@@ -204,8 +268,44 @@
                                 <div class="comparison-stat"><span>예상 레벨업</span><strong id="secondaryComparePrediction">-</strong></div>
                             </article>
                         </div>
+                        <section class="comparison-period-section" aria-labelledby="comparisonPeriodTitle">
+                            <div class="comparison-period-heading">
+                                <div>
+                                    <h3 id="comparisonPeriodTitle">기간별 성장 비교</h3>
+                                    <p>두 캐릭터의 동일한 날짜 범위에서 확인된 기록을 비교합니다.</p>
+                                </div>
+                                <label class="comparison-period-control" for="comparisonPeriodRangeSelect">
+                                    비교 기간
+                                    <select id="comparisonPeriodRangeSelect" class="history-range-select">
+                                        <option value="30" selected>최근 30일</option>
+                                        <option value="90">최근 90일</option>
+                                    </select>
+                                </label>
+                            </div>
+                            <div class="comparison-period-grid">
+                                <article class="comparison-period-character-card">
+                                    <h4 id="comparisonPeriodPrimaryName" class="comparison-period-name">현재 캐릭터</h4>
+                                    <div class="comparison-period-stat"><span>확인된 경험치 증가</span><strong id="comparisonPeriodPrimaryGrowth">-</strong></div>
+                                    <div class="comparison-period-stat"><span>관측된 1일 평균</span><strong id="comparisonPeriodPrimaryAverage">-</strong></div>
+                                    <div class="comparison-period-stat"><span>랭킹 변화</span><strong id="comparisonPeriodPrimaryRanking">-</strong></div>
+                                    <div class="comparison-period-stat"><span>기록 충실도</span><strong id="comparisonPeriodPrimaryCoverage">-</strong></div>
+                                    <p id="comparisonPeriodPrimaryDetail" class="comparison-period-detail"></p>
+                                </article>
+                                <article class="comparison-period-character-card">
+                                    <h4 id="comparisonPeriodSecondaryName" class="comparison-period-name">비교 캐릭터</h4>
+                                    <div class="comparison-period-stat"><span>확인된 경험치 증가</span><strong id="comparisonPeriodSecondaryGrowth">-</strong></div>
+                                    <div class="comparison-period-stat"><span>관측된 1일 평균</span><strong id="comparisonPeriodSecondaryAverage">-</strong></div>
+                                    <div class="comparison-period-stat"><span>랭킹 변화</span><strong id="comparisonPeriodSecondaryRanking">-</strong></div>
+                                    <div class="comparison-period-stat"><span>기록 충실도</span><strong id="comparisonPeriodSecondaryCoverage">-</strong></div>
+                                    <p id="comparisonPeriodSecondaryDetail" class="comparison-period-detail"></p>
+                                </article>
+                            </div>
+                            <p id="comparisonPeriodVerdict" class="comparison-period-verdict" role="status" aria-live="polite">기간별 기록을 조회하면 결과가 표시됩니다.</p>
+                            <p id="comparisonPeriodNotice" class="comparison-period-notice" role="status" aria-live="polite"></p>
+                        </section>
                         <div class="comparison-ai">
                             <h3>AI 성장 비교 분석</h3>
+                            <p id="comparisonAICacheNotice" class="ai-cache-notice" role="status" aria-live="polite" hidden></p>
                             <div id="comparisonAIAnalysis" class="comparison-ai-text"></div>
                         </div>
                     </div>
