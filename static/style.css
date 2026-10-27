@@ -35,8 +35,15 @@ button:disabled { cursor: wait; opacity: 0.65; }
 .loading-message { color: #6558a9; background: #f0edff; }
 .error-message { color: #a23c55; background: #fff0f3; }
 .result-section { padding-bottom: 60px; }
+.data-status-actions {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    align-items: stretch;
+    gap: 12px;
+    margin-bottom: 20px;
+}
 .data-status-notice {
-    margin: 0 0 20px;
+    margin: 0;
     padding: 14px 17px;
     border: 1px solid #dcd7f4;
     border-radius: 14px;
@@ -56,6 +63,12 @@ button:disabled { cursor: wait; opacity: 0.65; }
     background: #f3f0ff;
 }
 .data-status-notice[hidden] { display: none; }
+.refresh-data-button { white-space: nowrap; }
+.refresh-data-button.is-loading { opacity: .7; cursor: wait; }
+@media (max-width: 700px) {
+    .data-status-actions { grid-template-columns: 1fr; }
+    .refresh-data-button { width: 100%; }
+}
 .section { margin-top: 26px; }
 .section-header { margin-bottom: 14px; }
 .section-title { margin: 0; font-size: 21px; font-weight: 850; letter-spacing: -.6px; }
