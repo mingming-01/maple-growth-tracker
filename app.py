@@ -1114,22 +1114,11 @@ def get_history():
 
 
 def is_historical_data_missing(response):
-    """정상 빈 응답이나 데이터가 없는 날짜의 오류인지 확인한다."""
-    if response is None:
-        return False
-    if response.status_code == 200:
-        return True
-    if response.status_code != 400:
-        return False
-
-    try:
-        error_name = response.json().get("error", {}).get("name")
-    except (ValueError, AttributeError):
-        return False
-    return error_name in ("OPENAPI00003", "OPENAPI00004")
+    """정상 응답에서 해당 날짜의 기록이 비어 있는지 확인한다."""
+    return response is not None and response.status_code == 200
 
 
-def fetch_historical_record(ocid, character_name, world_name, target_date, today):
+def fetch_historical_record(ocid, world_name, target_date, today):
     """랭킹 또는 날짜별 캐릭터 정보에서 과거 일일 스냅샷을 만든다."""
     date_text = target_date.isoformat()
     try:
@@ -1148,8 +1137,7 @@ def fetch_historical_record(ocid, character_name, world_name, target_date, today
                 "ranking": ranking_data.get("ranking"),
                 "level": level,
                 "experience": experience,
-                "recordStatus": "available",
-                "recordSource": "api"
+                "recordStatus": "available"
             }
 
     try:
@@ -1171,8 +1159,7 @@ def fetch_historical_record(ocid, character_name, world_name, target_date, today
                 "ranking": ranking_data.get("ranking") if ranking_data else None,
                 "level": level,
                 "experience": experience,
-                "recordStatus": "available",
-                "recordSource": "api"
+                "recordStatus": "available"
             }
 
     # 명확한 데이터 없음 응답만 저장해 다음 조회 때 같은 날짜를 반복 요청하지 않는다.
@@ -1249,7 +1236,7 @@ def get_history_archive():
 
         def fetch_target_date(target_date):
             return fetch_historical_record(
-                ocid, character_name, world_name, target_date, today
+                ocid, world_name, target_date, today
             )
 
         with ThreadPoolExecutor(max_workers=4) as executor:
