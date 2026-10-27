@@ -16,3 +16,8 @@ CREATE TABLE IF NOT EXISTS growth_daily_snapshots (
 
 CREATE INDEX IF NOT EXISTS idx_growth_daily_name_date
     ON growth_daily_snapshots (character_name, snapshot_date DESC);
+
+-- This table is accessed by the Flask server through its private PostgreSQL connection.
+-- Do not expose character snapshots through the public Supabase Data API.
+ALTER TABLE growth_daily_snapshots ENABLE ROW LEVEL SECURITY;
+REVOKE ALL ON TABLE growth_daily_snapshots FROM PUBLIC, anon, authenticated;
