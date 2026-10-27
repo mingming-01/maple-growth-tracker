@@ -503,7 +503,7 @@ def get_character_rankings(target_date, world_name, character_class, ocid):
     elif has_error:
         result["rankingDataStatus"] = "unavailable"
     else:
-        # HTTP 200 with an empty ranking list can mean the day's ranking is not ready.
+        # 빈 랭킹 목록은 해당 날짜의 랭킹이 아직 준비되지 않았다는 뜻일 수 있다.
         result["rankingDataStatus"] = "not_ready"
 
     return result
@@ -903,7 +903,7 @@ def get_character():
     data_status = "partial" if character_rankings["rankingDataStatus"] in ("partial", "unavailable") else "current"
     saved_at = datetime.now().astimezone().isoformat(timespec="seconds")
 
-    # Do not overwrite a previously complete ranking snapshot with a temporary empty result.
+    # 일시적으로 빈 응답이 와도 기존의 정상 랭킹 스냅샷은 덮어쓰지 않는다.
     previous_snapshot, _ = load_api_snapshot(cache_key)
     if character_rankings["rankingDataStatus"] == "available" or previous_snapshot is None:
         snapshot_saved_at = save_api_snapshot(cache_key, result)
@@ -995,7 +995,7 @@ def get_history():
                     "recordStatus": "available"
                 }
             if response is not None and response.status_code == 200:
-                # A blank response must not hide a good snapshot saved earlier in the day.
+                # 빈 응답으로 같은 날 앞서 저장한 정상 스냅샷을 덮어쓰지 않는다.
                 if saved and saved.get("recordStatus") == "available":
                     return {
                         "date": date_string,
@@ -1070,7 +1070,7 @@ def get_history():
         )
         storage_status = "saved" if saved_record_count else "no_new_records"
     except Exception:
-        # A database outage should not break the existing live character view.
+        # 저장소 장애가 있어도 현재 캐릭터 화면은 계속 표시한다.
         print("성장 기록을 장기 저장하지 못했습니다.")
         saved_record_count = 0
         storage_status = "unavailable"
@@ -1107,7 +1107,7 @@ def get_history():
         if snapshot_saved_at:
             saved_at = snapshot_saved_at
 
-    # If today's ranking is not ready, retry sooner rather than caching that state for 30 minutes.
+    # 오늘 랭킹이 준비되지 않았다면 30분 대신 5분 후 다시 확인한다.
     cache_ttl = HISTORY_CACHE_TTL if history_status == "complete" else 300
     set_cache(cache_key, result, cache_ttl)
     return jsonify(with_data_status(result, "current", saved_at))
@@ -1196,7 +1196,7 @@ def get_history_archive():
         except ValueError:
             return jsonify({"error": "조회 종료일은 YYYY-MM-DD 형식이어야 합니다."}), 400
 
-        # The comparison view only needs the immediately preceding matching period.
+        # 기간 비교에는 바로 앞의 동일 길이 기간만 필요하다.
         if end_date > today or end_date < today - timedelta(days=days * 2):
             return jsonify({"error": "조회 종료일은 최근 비교 가능한 기간 안에서 선택해주세요."}), 400
 
