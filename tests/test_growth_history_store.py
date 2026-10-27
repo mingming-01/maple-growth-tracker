@@ -174,7 +174,7 @@ class GrowthHistoryApiTests(unittest.TestCase):
             side_effect=[(None, ranking_response), (None, ranking_response)]
         ) as get_ranking, patch.object(
             tracker, "get_basic_character",
-            side_effect=[(basic, basic_response), (basic, basic_response)]
+            side_effect=[(basic, basic_response), (basic, basic_response), (basic, basic_response)]
         ) as get_basic:
             response = self.client.get(
                 "/api/history/archive?ocid=test-ocid&days=30&collect=1"
@@ -185,7 +185,7 @@ class GrowthHistoryApiTests(unittest.TestCase):
         self.assertEqual(response.status_code, 200)
         body = response.get_json()
         self.assertEqual(get_ranking.call_count, 2)
-        self.assertEqual(get_basic.call_count, 2)
+        self.assertEqual(get_basic.call_count, 3)
         self.assertTrue(all(call.kwargs["historical"] for call in get_ranking.call_args_list))
         self.assertTrue(all(call.kwargs["historical"] for call in get_basic.call_args_list))
         self.assertEqual(body["collection"]["checkedDays"], 2)
@@ -208,10 +208,16 @@ class GrowthHistoryApiTests(unittest.TestCase):
         ranking_response = Mock(status_code=200)
         ranking = {"ranking": 123, "character_level": 280, "character_exp": 654321}
 
+        current_basic = {
+            "character_name": "테스트캐릭터",
+            "world_name": "테스트월드",
+            "character_level": 280,
+            "character_exp": 123456
+        }
         with patch.object(
             tracker, "get_ranking", return_value=(ranking, ranking_response)
         ) as get_ranking, patch.object(
-            tracker, "get_basic_character"
+            tracker, "get_basic_character", return_value=(current_basic, Mock(status_code=200))
         ) as get_basic:
             response = self.client.get(
                 "/api/history/archive?ocid=test-ocid&days=30&collect=1"
@@ -222,7 +228,8 @@ class GrowthHistoryApiTests(unittest.TestCase):
         self.assertEqual(response.status_code, 200)
         get_ranking.assert_called_once()
         self.assertTrue(get_ranking.call_args.kwargs["historical"])
-        get_basic.assert_not_called()
+        get_basic.assert_called_once()
+        self.assertTrue(get_basic.call_args.kwargs["historical"])
         saved = self.store.get_records("test-ocid", target_date, target_date)
         self.assertEqual(saved[0]["recordStatus"], "available")
         self.assertEqual(saved[0]["experience"], 654321)
@@ -230,10 +237,17 @@ class GrowthHistoryApiTests(unittest.TestCase):
 
     def test_archive_does_not_save_api_parameter_errors_as_missing_data(self):
         invalid_response = Mock(status_code=400)
+        current_basic = {
+            "character_name": "테스트캐릭터",
+            "world_name": "테스트월드",
+            "character_level": 280,
+            "character_exp": 123456
+        }
         with patch.object(
             tracker, "get_ranking", return_value=(None, invalid_response)
         ), patch.object(
-            tracker, "get_basic_character", return_value=(None, invalid_response)
+            tracker, "get_basic_character",
+            side_effect=[(current_basic, Mock(status_code=200)), (None, invalid_response)]
         ):
             response = self.client.get(
                 "/api/history/archive?ocid=test-ocid&days=30&collect=1"
