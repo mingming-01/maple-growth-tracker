@@ -1036,6 +1036,7 @@ async function runAIReport(name, character, history, sharedMetrics) {
     if (aiAnalysisLoading) aiAnalysisLoading.hidden = false;
     if (aiAnalysisError) aiAnalysisError.hidden = true;
     if (aiAnalysisResult) aiAnalysisResult.hidden = true;
+    showAICacheNotice(aiAnalysisCacheNotice, "동일 데이터의 저장된 분석을 확인하고 있습니다.");
 
     try {
         const metrics = sharedMetrics || calculateGrowthMetrics(character, history);
@@ -1303,6 +1304,7 @@ async function handleComparison(event) {
     }
     if (comparisonError) comparisonError.hidden = true;
     if (comparisonResult) comparisonResult.hidden = true;
+    showAICacheNotice(comparisonAICacheNotice, "동일한 비교 데이터의 저장된 분석을 확인하고 있습니다.");
     if (comparisonLoading) comparisonLoading.hidden = false;
     if (comparisonButton) comparisonButton.disabled = true;
     try {
