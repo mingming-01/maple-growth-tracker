@@ -764,7 +764,11 @@ async function refreshVisibleCharacter({ automatic = false } = {}) {
             comparison: null
         });
 
-        sessionStorage.setItem(AUTO_REFRESH_KEY, String(Date.now()));
+        try {
+            sessionStorage.setItem(AUTO_REFRESH_KEY, String(Date.now()));
+        } catch (storageError) {
+            console.warn("자동 갱신 시각을 저장하지 못했습니다.");
+        }
 
         const usingPreviousData = character.dataStatus === "stale" || historyResult.dataStatus === "stale";
         if (dataStatusNotice) {
@@ -1074,7 +1078,12 @@ restoreTrackerState();
 
 // A full browser reload first restores the visible session, then rechecks NEXON's latest public data.
 // A cooldown avoids making another multi-request refresh on every accidental rapid reload.
-const lastAutoRefresh = Number(sessionStorage.getItem(AUTO_REFRESH_KEY) || 0);
+let lastAutoRefresh = 0;
+try {
+    lastAutoRefresh = Number(sessionStorage.getItem(AUTO_REFRESH_KEY) || 0);
+} catch (storageError) {
+    // If browser storage is unavailable, still allow the explicit refresh button to work.
+}
 if (currentCharacter && Date.now() - lastAutoRefresh >= AUTO_REFRESH_COOLDOWN_MS) {
     refreshVisibleCharacter({ automatic: true });
 } else if (currentCharacter && dataStatusNotice) {
