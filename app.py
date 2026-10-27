@@ -628,12 +628,14 @@ def should_use_openrouter(error):
 # 메인 화면
 @app.route("/")
 def home():
+    """메인 캐릭터 검색 화면을 표시한다."""
     return render_template("index.html")
 
 
 # 관리자 로그인 및 로그 조회
 @app.route("/admin/login", methods=["GET", "POST"])
 def admin_login():
+    """관리자 계정을 확인하고 인증 세션을 발급한다."""
     if session.get("admin_authenticated"):
         return redirect(url_for("admin_logs"))
 
@@ -839,6 +841,7 @@ def admin_logout():
 # 캐릭터 정보와 현재 랭킹 조회
 @app.route("/api/character")
 def get_character():
+    """캐릭터 기본 정보와 현재 공개 랭킹을 조회한다."""
     character_name = request.args.get("name", "").strip()
     if not character_name:
         return jsonify({"error": "캐릭터 이름을 입력해주세요."}), 400
@@ -916,6 +919,7 @@ def get_character():
 # 최근 7일 성장 기록 조회 및 변화량 계산
 @app.route("/api/history")
 def get_history():
+    """기본 검색에서 최근 7일의 성장 기록을 조회하고 저장한다."""
     character_name = request.args.get("name", "").strip()
     if not character_name:
         return jsonify({"error": "캐릭터 이름을 입력해주세요."}), 400
@@ -1462,6 +1466,7 @@ def generate_ai_analysis(character, history, computed_metrics=None):
 
 @app.route("/api/ai-analysis", methods=["GET", "POST"])
 def ai_analysis():
+    """캐릭터의 계산된 성장 지표를 바탕으로 AI 성장 리포트를 만든다."""
     character_name = request.args.get("name", "").strip()
     if not character_name:
         return jsonify({"error": "캐릭터명을 입력해주세요."}), 400
@@ -1581,6 +1586,7 @@ def generate_ai_comparison(primary, comparison):
 
 @app.route("/api/ai-comparison", methods=["POST"])
 def ai_comparison():
+    """두 캐릭터의 계산된 성장 지표를 바탕으로 비교 설명을 만든다."""
     payload = request.get_json(silent=True) or {}
     primary = payload.get("primary")
     comparison = payload.get("comparison")
