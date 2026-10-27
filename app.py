@@ -680,8 +680,6 @@ def admin_required(view):
     return wrapped_view
 
 
-@app.route("/admin/logs")
-@admin_required
 def format_admin_log_time(value):
     """관리자 로그 시간을 한국 시간 기준으로 읽기 쉬운 문자열로 만든다."""
     if isinstance(value, str):
@@ -701,6 +699,8 @@ def format_admin_log_time(value):
     return f"{value:%Y-%m-%d} ({weekdays[value.weekday()]}) {value:%H:%M:%S} KST"
 
 
+@app.route("/admin/logs")
+@admin_required
 def admin_logs():
     """검색 조건을 적용해 관리자 운영 로그를 시간 역순으로 표시한다."""
     search_text = request.args.get("q", "").strip()[:100]
