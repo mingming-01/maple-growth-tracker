@@ -1231,7 +1231,11 @@ def get_history_archive():
             start_date + timedelta(days=index)
             for index in range(offset, min(offset + limit, days))
         ]
-        missing_dates = [target_date for target_date in batch_dates if target_date.isoformat() not in stored_by_date]
+        missing_dates = [
+            target_date for target_date in batch_dates
+            if target_date.isoformat() not in stored_by_date
+            or stored_by_date[target_date.isoformat()].get("recordStatus") == "not_ready"
+        ]
         fetched_records = []
 
         def fetch_target_date(target_date):
@@ -1265,6 +1269,7 @@ def get_history_archive():
             "noDataRecords": sum(item.get("recordStatus") == "not_ready" for item in fetched_records),
             "remainingDays": sum(
                 (start_date + timedelta(days=index)).isoformat() not in stored_by_date
+                or stored_by_date[(start_date + timedelta(days=index)).isoformat()].get("recordStatus") != "available"
                 for index in range(days)
             )
         }
