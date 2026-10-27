@@ -1328,8 +1328,10 @@ async function handleSearch(event) {
         currentDisplayHistory = history;
         currentHistoryRange = 7;
         currentHistoryRangeStatus = null;
+        currentPeriodSummary = null;
         if (historyRangeSelect) historyRangeSelect.value = "7";
         renderHistoryRangeNotice(7);
+        renderPeriodSummary(null);
         const prediction = calculatePrediction(character, history);
         const metrics = calculateGrowthMetrics(character, history, prediction);
         sessionStorage.removeItem(STORAGE_KEY);
@@ -1626,8 +1628,10 @@ function restoreTrackerState() {
         ? state.displayHistory
         : currentHistory;
     currentHistoryRangeStatus = state.historyRangeStatus || null;
+    currentPeriodSummary = state.periodSummary || null;
     if (historyRangeSelect) historyRangeSelect.value = String(currentHistoryRange);
     renderHistoryRangeNotice(currentHistoryRange, currentHistoryRangeStatus);
+    renderPeriodSummary(currentPeriodSummary);
 
     renderCharacter(currentCharacter, currentHistory);
     renderRanking(currentCharacter);
