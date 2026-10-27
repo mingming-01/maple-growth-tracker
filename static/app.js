@@ -919,7 +919,7 @@ function renderHistoryRangeNotice(days, status = null) {
     }
     const collection = status.collection || {};
     const collectionText = collection.checkedDays
-        ? ` · 이번 조회에서 ${collection.savedRecords}건 저장${collection.remainingDays ? ` · 미수집 ${collection.remainingDays}일 남음` : ""}`
+        ? ` · 이번 조회에서 ${collection.savedRecords}건 저장${collection.remainingDays ? ` · 기록 미완성 ${collection.remainingDays}일` : ""}`
         : "";
     historyRangeNotice.textContent =
         `최근 ${days}일 기록: 정상 ${status.availableDays}일 · API 미제공 ${status.notReadyDays}일 · 미수집 ${status.notCollectedDays}일${collectionText}. API가 제공하지 않는 날짜는 빈 기록으로 남습니다.`;
