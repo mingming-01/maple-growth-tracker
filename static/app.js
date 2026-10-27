@@ -4,6 +4,7 @@ const loadingMessage = document.getElementById("loadingMessage");
 const errorMessage = document.getElementById("errorMessage");
 const resultSection = document.getElementById("resultSection");
 const refreshDataButton = document.getElementById("refreshDataButton");
+const refreshDataButtonLabel = document.getElementById("refreshDataButtonLabel");
 
 // 캐릭터 기본 정보
 const characterName = document.getElementById("characterNameResult");
@@ -840,7 +841,10 @@ async function refreshVisibleCharacter({ automatic = false } = {}) {
     if (refreshDataButton) {
         refreshDataButton.disabled = true;
         refreshDataButton.classList.add("is-loading");
-        refreshDataButton.textContent = "최신 정보 확인 중...";
+        refreshDataButton.setAttribute("aria-busy", "true");
+    }
+    if (refreshDataButtonLabel) {
+        refreshDataButtonLabel.textContent = "최신 정보 확인 중";
     }
     if (dataStatusNotice) {
         dataStatusNotice.textContent = "넥슨 Open API에서 현재 제공하는 최신 정보를 확인하고 있습니다.";
@@ -923,7 +927,10 @@ async function refreshVisibleCharacter({ automatic = false } = {}) {
         if (refreshDataButton) {
             refreshDataButton.disabled = false;
             refreshDataButton.classList.remove("is-loading");
-            refreshDataButton.textContent = "최신 정보 다시 조회";
+            refreshDataButton.setAttribute("aria-busy", "false");
+        }
+        if (refreshDataButtonLabel) {
+            refreshDataButtonLabel.textContent = "최신 정보 다시 조회";
         }
     }
 }
