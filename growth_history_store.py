@@ -207,7 +207,8 @@ class GrowthHistoryStore:
         connection = self._connect()
         try:
             with connection:
-                connection.executemany(query, rows)
+                with connection.cursor() as cursor:
+                    cursor.executemany(query, rows)
         finally:
             connection.close()
         return len(rows)
