@@ -32,8 +32,8 @@
             <div class="admin-storage-state {% if storage_backend == 'postgres' and not storage_warning %}is-persistent{% else %}is-warning{% endif %}">
                 <span class="admin-storage-dot" aria-hidden="true"></span>
                 <div>
-                    <strong>{% if storage_backend == 'postgres' and not storage_warning %}PostgreSQL 연결됨{% else %}저장 상태 확인 필요{% endif %}</strong>
-                    <span>{% if storage_backend == 'postgres' and not storage_warning %}로그 영구 저장{% else %}SQLite 또는 연결 오류{% endif %}</span>
+                    <strong>{% if storage_backend == 'postgres' and not storage_warning %}PostgreSQL 연결됨{% elif storage_backend == 'postgres' %}PostgreSQL 연결 오류{% else %}SQLite 임시 저장{% endif %}</strong>
+                    <span>{% if storage_backend == 'postgres' and not storage_warning %}로그 영구 저장{% else %}재배포 후 기록이 사라질 수 있음{% endif %}</span>
                 </div>
             </div>
         </section>
