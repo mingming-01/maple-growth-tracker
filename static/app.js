@@ -1483,6 +1483,61 @@ function getPredictionLabel(metrics) {
     return Number.isFinite(days) ? `약 ${days.toFixed(1)}일` : "예측 자료 부족";
 }
 
+function renderComparisonPeriod(summary, primaryCharacter, otherCharacter, errorMessage = "") {
+    if (!comparisonPeriodVerdict || !comparisonPeriodNotice) return;
+    const primaryName = primaryCharacter?.characterName || "현재 캐릭터";
+    const otherName = otherCharacter?.characterName || "비교 캐릭터";
+    const days = Number(summary?.days || comparisonPeriodRangeSelect?.value || 30);
+    const setText = (id, value) => {
+        const element = document.getElementById(id);
+        if (element) element.textContent = value;
+    };
+
+    setText("comparisonPeriodPrimaryName", primaryName);
+    setText("comparisonPeriodSecondaryName", otherName);
+
+    const renderSubject = (prefix, subject) => {
+        const growth = subject?.growth;
+        const average = subject?.averageGrowth;
+        setText(`comparisonPeriod${prefix}Growth`, growth === null || growth === undefined ? "자료 부족" : formatTrillion(growth));
+        setText(`comparisonPeriod${prefix}Average`, average === null || average === undefined ? "자료 부족" : formatTrillion(average));
+        setText(`comparisonPeriod${prefix}Ranking`, subject ? formatRankingChange(subject.rankingChange) : "자료 부족");
+        setText(
+            `comparisonPeriod${prefix}Coverage`,
+            subject ? `${subject.availableDays} / ${subject.days}일 (${subject.coveragePercent.toFixed(0)}%)` : "-"
+        );
+        setText(
+            `comparisonPeriod${prefix}Detail`,
+            subject ? `변화 확인 ${subject.confirmedChangeDays}일 · API 미제공 ${subject.notReadyDays}일 · 미수집 ${subject.notCollectedDays}일` : ""
+        );
+    };
+
+    renderSubject("Primary", summary?.primary || null);
+    renderSubject("Secondary", summary?.secondary || null);
+
+    if (summary?.primary && summary?.secondary) {
+        const firstGrowth = summary.primary.growth;
+        const secondGrowth = summary.secondary.growth;
+        if (firstGrowth === null || firstGrowth === undefined || secondGrowth === null || secondGrowth === undefined) {
+            comparisonPeriodVerdict.textContent = "확인된 성장 기록이 부족해 증가량을 비교하기 어렵습니다.";
+        } else {
+            const difference = firstGrowth - secondGrowth;
+            if (difference > 0) {
+                comparisonPeriodVerdict.textContent = `${primaryName}의 확인된 증가량이 ${otherName}보다 ${formatTrillion(difference)} 많습니다.`;
+            } else if (difference < 0) {
+                comparisonPeriodVerdict.textContent = `${otherName}의 확인된 증가량이 ${primaryName}보다 ${formatTrillion(Math.abs(difference))} 많습니다.`;
+            } else {
+                comparisonPeriodVerdict.textContent = "두 캐릭터의 확인된 증가량이 같습니다.";
+            }
+        }
+        comparisonPeriodNotice.textContent = `최근 ${days}일의 동일한 날짜 범위입니다. 누락 날짜와 레벨업 전환 구간은 추정하지 않습니다.`;
+    } else {
+        comparisonPeriodVerdict.textContent = errorMessage || "기간별 비교 자료를 아직 불러오지 못했습니다.";
+        comparisonPeriodNotice.textContent = "캐릭터별 저장 기록이 있어야 장기 성장량과 랭킹 변화를 비교할 수 있습니다.";
+    }
+    comparisonPeriodNotice.classList.toggle("is-warning", !!errorMessage);
+}
+
 function renderComparisonCharacter(prefix, character, metrics) {
     const values = {
         Name: character.characterName || "-",
