@@ -682,7 +682,27 @@ def admin_required(view):
 
 @app.route("/admin/logs")
 @admin_required
+def format_admin_log_time(value):
+    """관리자 로그 시간을 한국 시간 기준으로 읽기 쉬운 문자열로 만든다."""
+    if isinstance(value, str):
+        try:
+            value = datetime.fromisoformat(value)
+        except ValueError:
+            return value
+
+    if not isinstance(value, datetime):
+        return str(value or "-")
+    if value.tzinfo is None:
+        value = value.replace(tzinfo=KOREA_TIMEZONE)
+    else:
+        value = value.astimezone(KOREA_TIMEZONE)
+
+    weekdays = ("월", "화", "수", "목", "금", "토", "일")
+    return f"{value:%Y-%m-%d} ({weekdays[value.weekday()]}) {value:%H:%M:%S} KST"
+
+
 def admin_logs():
+    """검색 조건을 적용해 관리자 운영 로그를 시간 역순으로 표시한다."""
     search_text = request.args.get("q", "").strip()[:100]
     selected_action = request.args.get("action", "").strip()[:80]
     selected_result = request.args.get("result", "").strip()
@@ -782,9 +802,15 @@ def admin_logs():
             "Render 재배포 후 보존하려면 PostgreSQL 연결이 필요합니다."
         )
 
+    logs = []
+    for row in rows:
+        item = dict(row)
+        item["created_at_display"] = format_admin_log_time(item.get("created_at"))
+        logs.append(item)
+
     return render_template(
         "admin_logs.html",
-        logs=rows,
+        logs=logs,
         total_count=total_count,
         displayed_count=min(total_count, 500),
         search_text=search_text,
@@ -1220,6 +1246,8 @@ def get_history_archive():
 
     # 과거 데이터는 사용자가 30일·90일 기록을 요청한 경우에만 수집한다.
     if request.args.get("collect") == "1":
+        if end_date != today:
+            return jsonify({"error": "과거 기록 수집은 최근 30일·90일 범위에서만 가능합니다."}), 400
         character_name = request.args.get("character_name", "").strip()[:30]
         world_name = request.args.get("world_name", "").strip()[:100] or None
         try:
