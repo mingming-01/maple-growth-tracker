@@ -1126,9 +1126,21 @@ def get_history_archive():
         return jsonify({"error": "조회 기간은 30일 또는 90일이어야 합니다."}), 400
 
     today = datetime.now(KOREA_TIMEZONE).date()
-    start_date = today - timedelta(days=days - 1)
+    end_date_text = request.args.get("end", "").strip()
+    end_date = today
+    if end_date_text:
+        try:
+            end_date = date.fromisoformat(end_date_text)
+        except ValueError:
+            return jsonify({"error": "조회 종료일은 YYYY-MM-DD 형식이어야 합니다."}), 400
+
+        # The comparison view only needs the immediately preceding matching period.
+        if end_date > today or end_date < today - timedelta(days=days * 2):
+            return jsonify({"error": "조회 종료일은 최근 비교 가능한 기간 안에서 선택해주세요."}), 400
+
+    start_date = end_date - timedelta(days=days - 1)
     try:
-        stored_records = growth_history_store.get_records(ocid, start_date, today)
+        stored_records = growth_history_store.get_records(ocid, start_date, end_date)
     except Exception:
         print("날짜별 성장 기록을 조회하지 못했습니다.")
         return jsonify({"error": "저장된 성장 기록을 조회할 수 없습니다. 저장소 연결을 확인해주세요."}), 503
@@ -1179,6 +1191,8 @@ def get_history_archive():
     return jsonify({
         "ocid": ocid,
         "days": days,
+        "startDate": start_date.isoformat(),
+        "endDate": end_date.isoformat(),
         "history": history,
         "availableDays": available_days,
         "notReadyDays": not_ready_days,
