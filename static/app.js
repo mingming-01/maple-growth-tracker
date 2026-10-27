@@ -73,6 +73,7 @@ let currentCharacter = null;
 let currentHistory = [];
 const STORAGE_KEY = "mapleGrowthTrackerState";
 const featureSection = document.getElementById("featureSection");
+const dataStatusNotice = document.getElementById("dataStatusNotice");
 
 // 결과 화면이 보이는 동안에는 메인 소개 카드를 숨긴다.
 function syncHomeView() {
@@ -556,8 +557,57 @@ async function searchCharacter(name) {
 
 async function searchHistory(name) {
     const response = await fetch(`/api/history?name=${encodeURIComponent(name)}`);
-    const data = await readApiResponse(response, "성장 기록을 불러오지 못했습니다.");
-    return data.history || [];
+    return readApiResponse(response, "성장 기록을 불러오지 못했습니다.");
+}
+
+function formatStatusTime(value) {
+    if (!value) return "기준 시각을 확인할 수 없음";
+    const parsed = new Date(value);
+    if (Number.isNaN(parsed.getTime())) return "기준 시각을 확인할 수 없음";
+    return parsed.toLocaleString("ko-KR", { dateStyle: "medium", timeStyle: "short" });
+}
+
+function renderDataStatus(character, historyResult) {
+    if (!dataStatusNotice) return;
+
+    // Keep data provenance with the saved session so a refresh can restore the notice.
+    character.historyStatus = historyResult.historyStatus || null;
+    character.historyDataStatus = historyResult.dataStatus || null;
+    character.historyDataAsOf = historyResult.dataAsOf || null;
+
+    const messages = [];
+    let isWarning = false;
+    const characterTime = formatStatusTime(character.dataAsOf);
+    const historyTime = formatStatusTime(historyResult.dataAsOf);
+
+    if (character.dataStatus === "stale") {
+        messages.push(`캐릭터 정보는 마지막 정상 조회 결과입니다(${characterTime}). 최신 정보가 아닐 수 있습니다.`);
+        isWarning = true;
+    }
+    if (historyResult.dataStatus === "stale") {
+        messages.push(`성장 기록은 마지막 정상 조회 결과입니다(${historyTime}).`);
+        isWarning = true;
+    }
+    if (character.rankingDataStatus === "not_ready") {
+        messages.push("당일 랭킹 정보가 아직 제공되지 않았거나 해당 랭킹 기록이 없습니다.");
+        isWarning = true;
+    } else if (["partial", "unavailable"].includes(character.rankingDataStatus)) {
+        messages.push("랭킹 정보 일부를 가져오지 못했습니다. 표시된 순위가 불완전할 수 있습니다.");
+        isWarning = true;
+    }
+    if (historyResult.historyStatus === "today_not_ready") {
+        messages.push("오늘 날짜의 성장 기록이 아직 제공되지 않았습니다. 확인 가능한 기록만 표시합니다.");
+        isWarning = true;
+    }
+
+    if (!messages.length) {
+        messages.push(`조회 기준 시각 — 캐릭터: ${characterTime} · 성장 기록: ${historyTime}`);
+    }
+
+    dataStatusNotice.textContent = messages.join(" ");
+    dataStatusNotice.classList.toggle("is-warning", isWarning);
+    dataStatusNotice.classList.toggle("is-info", !isWarning);
+    dataStatusNotice.hidden = false;
 }
 
 async function runAIReport(name, character, history, sharedMetrics) {
@@ -604,7 +654,9 @@ async function handleSearch(event) {
     setLoading(true);
     try {
         const character = await searchCharacter(name);
-        const history = await searchHistory(name);
+        const historyResult = await searchHistory(name);
+        const history = historyResult.history || [];
+        renderDataStatus(character, historyResult);
         currentCharacter = character;
         currentHistory = history;
         const prediction = calculatePrediction(character, history);
@@ -688,10 +740,11 @@ async function handleComparison(event) {
     if (comparisonLoading) comparisonLoading.hidden = false;
     if (comparisonButton) comparisonButton.disabled = true;
     try {
-        const [otherCharacter, otherHistory] = await Promise.all([
+        const [otherCharacter, otherHistoryResult] = await Promise.all([
             searchCharacter(name),
             searchHistory(name)
         ]);
+        const otherHistory = otherHistoryResult.history || [];
         if (String(otherCharacter.characterName).toLocaleLowerCase() === String(currentCharacter.characterName).toLocaleLowerCase()) {
             throw new Error("같은 캐릭터는 비교할 수 없습니다.");
         }
@@ -742,6 +795,11 @@ function restoreTrackerState() {
 
     currentCharacter = state.character;
     currentHistory = state.history;
+    renderDataStatus(currentCharacter, {
+        historyStatus: currentCharacter.historyStatus,
+        dataStatus: currentCharacter.historyDataStatus || "cached",
+        dataAsOf: currentCharacter.historyDataAsOf
+    });
 
     const prediction = calculatePrediction(
         currentCharacter,
