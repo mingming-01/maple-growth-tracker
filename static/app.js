@@ -3,6 +3,7 @@ const characterNameInput = document.getElementById("characterName");
 const loadingMessage = document.getElementById("loadingMessage");
 const errorMessage = document.getElementById("errorMessage");
 const resultSection = document.getElementById("resultSection");
+const refreshDataButton = document.getElementById("refreshDataButton");
 
 // 캐릭터 기본 정보
 const characterName = document.getElementById("characterNameResult");
@@ -73,6 +74,9 @@ let currentCharacter = null;
 let currentHistory = [];
 const STORAGE_KEY = "mapleGrowthTrackerState";
 const featureSection = document.getElementById("featureSection");
+const dataStatusNotice = document.getElementById("dataStatusNotice");
+const AUTO_REFRESH_KEY = `${STORAGE_KEY}:lastAutoRefresh`;
+const AUTO_REFRESH_COOLDOWN_MS = 60_000;
 
 // 결과 화면이 보이는 동안에는 메인 소개 카드를 숨긴다.
 function syncHomeView() {
@@ -476,11 +480,11 @@ function renderChart(history) {
     const canvas = document.getElementById("growthChart");
     if (!canvas) return;
     const sorted = sortHistoryAscending(history);
-    if (!sorted.length) return;
     if (growthChart) {
         growthChart.destroy();
         growthChart = null;
     }
+    if (!sorted.length) return;
     const labels = sorted.map(item => formatShortDate(item.date));
     const experienceData = buildCumulativeExperienceData(sorted);
     const dailyGrowthData = sorted.map(item => {
@@ -549,15 +553,76 @@ async function readApiResponse(response, fallbackMessage) {
     return data;
 }
 
-async function searchCharacter(name) {
-    const response = await fetch(`/api/character?name=${encodeURIComponent(name)}`);
+async function searchCharacter(name, forceRefresh = false) {
+    const refreshParam = forceRefresh ? "&refresh=1" : "";
+    const response = await fetch(
+        `/api/character?name=${encodeURIComponent(name)}${refreshParam}`,
+        forceRefresh ? { cache: "no-store" } : {}
+    );
     return readApiResponse(response, "캐릭터 정보를 불러오지 못했습니다.");
 }
 
-async function searchHistory(name) {
-    const response = await fetch(`/api/history?name=${encodeURIComponent(name)}`);
-    const data = await readApiResponse(response, "성장 기록을 불러오지 못했습니다.");
-    return data.history || [];
+async function searchHistory(name, forceRefresh = false) {
+    const refreshParam = forceRefresh ? "&refresh=1" : "";
+    const response = await fetch(
+        `/api/history?name=${encodeURIComponent(name)}${refreshParam}`,
+        forceRefresh ? { cache: "no-store" } : {}
+    );
+    return readApiResponse(response, "성장 기록을 불러오지 못했습니다.");
+}
+
+function formatStatusTime(value) {
+    if (!value) return "기준 시각을 확인할 수 없음";
+    const parsed = new Date(value);
+    if (Number.isNaN(parsed.getTime())) return "기준 시각을 확인할 수 없음";
+    return parsed.toLocaleString("ko-KR", { dateStyle: "medium", timeStyle: "short" });
+}
+
+function renderDataStatus(character, historyResult) {
+    if (!dataStatusNotice) return;
+
+    // Keep data provenance with the saved session so a refresh can restore the notice.
+    character.historyStatus = historyResult.historyStatus || null;
+    character.historyDataStatus = historyResult.dataStatus || null;
+    character.historyDataAsOf = historyResult.dataAsOf || null;
+
+    const messages = [];
+    let isWarning = false;
+    const characterTime = formatStatusTime(character.dataAsOf);
+    const historyTime = formatStatusTime(historyResult.dataAsOf);
+
+    if (character.dataStatus === "stale") {
+        messages.push(`캐릭터 정보는 마지막 정상 조회 결과입니다(${characterTime}). 최신 정보가 아닐 수 있습니다.`);
+        isWarning = true;
+    }
+    if (historyResult.dataStatus === "stale") {
+        messages.push(`성장 기록은 마지막 정상 조회 결과입니다(${historyTime}).`);
+        isWarning = true;
+    }
+    if (historyResult.dataStatus === "unavailable") {
+        messages.push("성장 기록을 조회하지 못했습니다. 캐릭터 기본 정보는 계속 표시합니다.");
+        isWarning = true;
+    }
+    if (character.rankingDataStatus === "not_ready") {
+        messages.push("당일 랭킹 정보가 아직 제공되지 않았거나 해당 랭킹 기록이 없습니다.");
+        isWarning = true;
+    } else if (["partial", "unavailable"].includes(character.rankingDataStatus)) {
+        messages.push("랭킹 정보 일부를 가져오지 못했습니다. 표시된 순위가 불완전할 수 있습니다.");
+        isWarning = true;
+    }
+    if (historyResult.historyStatus === "today_not_ready") {
+        messages.push("오늘 날짜의 성장 기록이 아직 제공되지 않았습니다. 확인 가능한 기록만 표시합니다.");
+        isWarning = true;
+    }
+
+    if (!messages.length) {
+        messages.push(`조회 기준 시각 — 캐릭터: ${characterTime} · 성장 기록: ${historyTime}`);
+    }
+
+    dataStatusNotice.textContent = messages.join(" ");
+    dataStatusNotice.classList.toggle("is-warning", isWarning);
+    dataStatusNotice.classList.toggle("is-info", !isWarning);
+    dataStatusNotice.hidden = false;
 }
 
 async function runAIReport(name, character, history, sharedMetrics) {
@@ -603,8 +668,21 @@ async function handleSearch(event) {
     if (comparisonResult) comparisonResult.hidden = true;
     setLoading(true);
     try {
-        const character = await searchCharacter(name);
-        const history = await searchHistory(name);
+        const character = await searchCharacter(name, true);
+        let historyResult;
+        try {
+            historyResult = await searchHistory(name, true);
+        } catch (historyError) {
+            // Preserve the usable character panel when only history lookup fails.
+            historyResult = {
+                history: [],
+                dataStatus: "unavailable",
+                historyStatus: "unavailable",
+                dataAsOf: null
+            };
+        }
+        const history = historyResult.history || [];
+        renderDataStatus(character, historyResult);
         currentCharacter = character;
         currentHistory = history;
         const prediction = calculatePrediction(character, history);
@@ -620,6 +698,13 @@ async function handleSearch(event) {
         if (savePdfButton) savePdfButton.disabled = false;
         if (resultSection) resultSection.hidden = false;
         syncHomeView();
+        saveTrackerState({
+            character,
+            history,
+            metrics,
+            aiAnalysis: null,
+            comparison: null
+        });
         setLoading(false);
         await runAIReport(name, character, history, metrics);
     } catch (error) {
@@ -627,6 +712,91 @@ async function handleSearch(event) {
         showError(error.message || "조회 중 오류가 발생했습니다.");
     } finally {
         setLoading(false);
+    }
+}
+
+async function refreshVisibleCharacter({ automatic = false } = {}) {
+    if (!currentCharacter) return;
+
+    const name = currentCharacter.characterName || characterNameInput?.value.trim();
+    if (!name) return;
+
+    if (refreshDataButton) {
+        refreshDataButton.disabled = true;
+        refreshDataButton.classList.add("is-loading");
+        refreshDataButton.textContent = "최신 정보 확인 중...";
+    }
+    if (dataStatusNotice) {
+        dataStatusNotice.textContent = "넥슨 Open API에서 현재 제공하는 최신 정보를 확인하고 있습니다.";
+        dataStatusNotice.classList.add("is-info");
+        dataStatusNotice.classList.remove("is-warning");
+        dataStatusNotice.hidden = false;
+    }
+
+    try {
+        const character = await searchCharacter(name, true);
+        const historyResult = await searchHistory(name, true);
+        const history = historyResult.history || [];
+        currentCharacter = character;
+        currentHistory = history;
+
+        const prediction = calculatePrediction(character, history);
+        const metrics = calculateGrowthMetrics(character, history, prediction);
+
+        renderDataStatus(character, historyResult);
+        if (dataStatusNotice) {
+            dataStatusNotice.textContent += " 표시 시각은 웹 조회 시각이며, 인게임 변경 사항의 API 반영 시점과 다를 수 있습니다.";
+        }
+        renderCharacter(character, history);
+        renderRanking(character);
+        renderGrowthSummary(character, history);
+        renderPrediction(character, history, prediction);
+        renderHistory(history);
+        renderChart(history);
+
+        // The previous comparison refers to the old data, so hide it until compared again.
+        if (comparisonResult) comparisonResult.hidden = true;
+        saveTrackerState({
+            character,
+            history,
+            metrics,
+            aiAnalysis: null,
+            comparison: null
+        });
+
+        try {
+            sessionStorage.setItem(AUTO_REFRESH_KEY, String(Date.now()));
+        } catch (storageError) {
+            console.warn("자동 갱신 시각을 저장하지 못했습니다.");
+        }
+
+        const usingPreviousData = character.dataStatus === "stale" || historyResult.dataStatus === "stale";
+        if (dataStatusNotice) {
+            const prefix = usingPreviousData
+                ? "최신 조회에 실패해 마지막 정상 데이터를 표시합니다. "
+                : automatic
+                    ? "저장된 결과를 최신 공개 데이터로 다시 확인했습니다. "
+                    : "최신 공개 데이터 조회를 마쳤습니다. ";
+            dataStatusNotice.textContent = prefix + dataStatusNotice.textContent;
+        }
+
+        // Do not block the refreshed character screen while the AI report is generated.
+        runAIReport(name, character, history, metrics);
+    } catch (error) {
+        console.error("최신 정보 갱신 실패:", error);
+        if (dataStatusNotice) {
+            dataStatusNotice.textContent = "최신 정보 조회에 실패했습니다. 기존 화면 결과를 유지합니다. " +
+                "잠시 후 다시 시도하거나, 인게임 정보가 API에 반영된 뒤 다시 조회해주세요.";
+            dataStatusNotice.classList.add("is-warning");
+            dataStatusNotice.classList.remove("is-info");
+            dataStatusNotice.hidden = false;
+        }
+    } finally {
+        if (refreshDataButton) {
+            refreshDataButton.disabled = false;
+            refreshDataButton.classList.remove("is-loading");
+            refreshDataButton.textContent = "최신 정보 다시 조회";
+        }
     }
 }
 
@@ -688,10 +858,9 @@ async function handleComparison(event) {
     if (comparisonLoading) comparisonLoading.hidden = false;
     if (comparisonButton) comparisonButton.disabled = true;
     try {
-        const [otherCharacter, otherHistory] = await Promise.all([
-            searchCharacter(name),
-            searchHistory(name)
-        ]);
+        const otherCharacter = await searchCharacter(name, true);
+        const otherHistoryResult = await searchHistory(name, true);
+        const otherHistory = otherHistoryResult.history || [];
         if (String(otherCharacter.characterName).toLocaleLowerCase() === String(currentCharacter.characterName).toLocaleLowerCase()) {
             throw new Error("같은 캐릭터는 비교할 수 없습니다.");
         }
@@ -742,6 +911,11 @@ function restoreTrackerState() {
 
     currentCharacter = state.character;
     currentHistory = state.history;
+    renderDataStatus(currentCharacter, {
+        historyStatus: currentCharacter.historyStatus,
+        dataStatus: currentCharacter.historyDataStatus || "cached",
+        dataAsOf: currentCharacter.historyDataAsOf
+    });
 
     const prediction = calculatePrediction(
         currentCharacter,
@@ -884,6 +1058,7 @@ if (savePdfButton) {
 
 if (searchForm) searchForm.addEventListener("submit", handleSearch);
 if (comparisonForm) comparisonForm.addEventListener("submit", handleComparison);
+if (refreshDataButton) refreshDataButton.addEventListener("click", () => refreshVisibleCharacter());
 
 // 사이트 이름 클릭: 저장된 상태를 지우고 초기 메인 화면으로 이동
 const homeLink = document.getElementById("homeLink");
@@ -900,3 +1075,17 @@ if (homeLink) {
 }
 
 restoreTrackerState();
+
+// A full browser reload first restores the visible session, then rechecks NEXON's latest public data.
+// A cooldown avoids making another multi-request refresh on every accidental rapid reload.
+let lastAutoRefresh = 0;
+try {
+    lastAutoRefresh = Number(sessionStorage.getItem(AUTO_REFRESH_KEY) || 0);
+} catch (storageError) {
+    // If browser storage is unavailable, still allow the explicit refresh button to work.
+}
+if (currentCharacter && Date.now() - lastAutoRefresh >= AUTO_REFRESH_COOLDOWN_MS) {
+    refreshVisibleCharacter({ automatic: true });
+} else if (currentCharacter && dataStatusNotice) {
+    dataStatusNotice.textContent += " 최근 1분 이내에 조회한 결과라 자동 재조회는 생략했습니다. 최신 정보가 필요하면 '최신 정보 다시 조회'를 누르세요.";
+}
