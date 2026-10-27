@@ -151,6 +151,62 @@ class GrowthHistoryApiTests(unittest.TestCase):
         self.assertEqual(primary_history[-2]["ranking"], 321)
         self.assertEqual(comparison_history[-2]["ranking"], 654)
 
+    def test_archive_does_not_fetch_past_data_without_collection_request(self):
+        with patch.object(tracker, "get_ranking", side_effect=AssertionError("should not call Nexon")), patch.object(
+            tracker, "get_basic_character", side_effect=AssertionError("should not call Nexon")
+        ):
+            response = self.client.get("/api/history/archive?ocid=test-ocid&days=30")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertIsNone(response.get_json()["collection"])
+
+    def test_archive_collects_only_the_requested_missing_batch(self):
+        ranking_response = Mock(status_code=200)
+        basic_response = Mock(status_code=200)
+        basic = {
+            "character_name": "테스트캐릭터",
+            "world_name": "테스트월드",
+            "character_level": 280,
+            "character_exp": 123456
+        }
+        with patch.object(
+            tracker, "get_ranking",
+            side_effect=[(None, ranking_response), (None, ranking_response)]
+        ) as get_ranking, patch.object(
+            tracker, "get_basic_character",
+            side_effect=[(basic, basic_response), (basic, basic_response)]
+        ) as get_basic:
+            response = self.client.get(
+                "/api/history/archive?ocid=test-ocid&days=30&collect=1"
+                "&character_name=%ED%85%8C%EC%8A%A4%ED%8A%B8%EC%BA%90%EB%A6%AD%ED%84%B0"
+                "&world_name=%ED%85%8C%EC%8A%A4%ED%8A%B8%EC%9B%94%EB%93%9C&offset=0&limit=2"
+            )
+
+        self.assertEqual(response.status_code, 200)
+        body = response.get_json()
+        self.assertEqual(get_ranking.call_count, 2)
+        self.assertEqual(get_basic.call_count, 2)
+        self.assertTrue(all(call.kwargs["historical"] for call in get_ranking.call_args_list))
+        self.assertTrue(all(call.kwargs["historical"] for call in get_basic.call_args_list))
+        self.assertEqual(body["collection"]["checkedDays"], 2)
+        self.assertEqual(body["collection"]["savedRecords"], 2)
+        self.assertEqual(body["collection"]["availableRecords"], 2)
+        self.assertEqual(body["history"][0]["recordStatus"], "available")
+        self.assertEqual(body["history"][1]["experience"], 123456)
+
+        saved = self.store.get_records(
+            "test-ocid", self.today - timedelta(days=29), self.today
+        )
+        self.assertEqual(len(saved), 3)
+
+    def test_archive_rejects_collection_for_previous_period(self):
+        previous_end = self.today - timedelta(days=30)
+        response = self.client.get(
+            f"/api/history/archive?ocid=test-ocid&days=30&collect=1"
+            f"&character_name=test&end={previous_end.isoformat()}"
+        )
+        self.assertEqual(response.status_code, 400)
+
     def test_archive_accepts_custom_end_date_for_previous_period(self):
         end_date = self.today - timedelta(days=1)
         response = self.client.get(
