@@ -1,6 +1,6 @@
 import tempfile
 import unittest
-from datetime import date, timedelta
+from datetime import date, datetime, timedelta
 from pathlib import Path
 from unittest.mock import Mock, patch
 
@@ -92,10 +92,11 @@ class GrowthHistoryApiTests(unittest.TestCase):
             sqlite_path=str(Path(self.temp_dir.name) / "growth_history.sqlite3")
         )
         self.store.initialize()
+        self.today = datetime.now(tracker.KOREA_TIMEZONE).date()
         self.store.save_records(
             "test-ocid", "테스트캐릭터", "테스트월드",
             [{
-                "date": (date.today() - timedelta(days=1)).isoformat(),
+                "date": (self.today - timedelta(days=1)).isoformat(),
                 "recordStatus": "available",
                 "level": 280,
                 "experience": 123456,
@@ -132,6 +133,39 @@ class GrowthHistoryApiTests(unittest.TestCase):
         self.assertEqual(bad_range.status_code, 400)
         self.assertEqual(missing_ocid.status_code, 400)
 
+    def test_saved_past_dates_are_reused_and_only_today_is_requested(self):
+        today = datetime.now(tracker.KOREA_TIMEZONE).date()
+        past_records = [
+            {
+                "date": (today - timedelta(days=offset)).isoformat(),
+                "recordStatus": "available",
+                "level": 279,
+                "experience": 10000 + offset,
+                "ranking": 500 + offset
+            }
+            for offset in range(1, 7)
+        ]
+        self.store.save_records("test-ocid", "테스트캐릭터", "테스트월드", past_records)
+        response_stub = Mock(status_code=200)
+        basic = {
+            "character_name": "테스트캐릭터",
+            "world_name": "테스트월드",
+            "character_level": 280,
+            "character_exp": 20000
+        }
+        today_ranking = {"ranking": 400, "character_level": 280, "character_exp": 20000}
+
+        with patch.object(tracker, "get_ocid", return_value=("test-ocid", response_stub)), patch.object(
+            tracker, "get_basic_character", return_value=(basic, response_stub)
+        ), patch.object(tracker, "get_ranking", return_value=(today_ranking, response_stub)) as get_ranking:
+            response = self.client.get("/api/history?name=%ED%85%8C%EC%8A%A4%ED%8A%B8%EC%BA%90%EB%A6%AD%ED%84%B0&refresh=1")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(get_ranking.call_count, 1)
+        history = response.get_json()["history"]
+        self.assertEqual(history[-1]["experience"], 20000)
+        self.assertEqual(history[0]["experience"], 10006)
+
     def test_history_request_saves_successful_recent_records(self):
         response_stub = Mock(status_code=200)
         basic = {
@@ -154,7 +188,7 @@ class GrowthHistoryApiTests(unittest.TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.get_json()["historyStorage"]["status"], "saved")
         saved = self.store.get_records(
-            "test-ocid", date.today() - timedelta(days=6), date.today()
+            "test-ocid", self.today - timedelta(days=6), self.today
         )
         self.assertEqual(len(saved), 7)
         self.assertTrue(all(row["recordStatus"] == "available" for row in saved))
