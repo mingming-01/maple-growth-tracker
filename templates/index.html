@@ -54,6 +54,20 @@
             </div>
         </section>
 
+        <section class="favorites-section" aria-labelledby="favoritesTitle">
+            <div class="favorites-heading">
+                <div>
+                    <span class="favorites-kicker">QUICK ACCESS</span>
+                    <h2 id="favoritesTitle">관심 캐릭터</h2>
+                    <p>자주 조회하는 캐릭터를 저장해 다음에는 한 번에 열어보세요.</p>
+                </div>
+                <span id="favoriteCount" class="favorite-count">0 / 30명</span>
+            </div>
+            <div id="favoriteFeedback" class="favorite-feedback" role="status" aria-live="polite" hidden></div>
+            <div id="favoriteList" class="favorite-list"></div>
+            <p id="favoriteEmpty" class="favorite-empty">아직 등록한 캐릭터가 없습니다. 캐릭터를 조회한 뒤 별 버튼으로 등록하세요.</p>
+        </section>
+
         <section id="featureSection" class="feature-section">
             <div class="feature-grid">
                 <article class="feature-card">
@@ -97,6 +111,10 @@
                                 <img id="characterImage" class="character-avatar" src="" alt="캐릭터 아바타">
                             </div>
                             <h2 id="characterNameResult" class="character-name">-</h2>
+                            <button type="button" id="favoriteCurrentButton" class="favorite-current-button" aria-pressed="false" hidden>
+                                <span id="favoriteCurrentButtonIcon" aria-hidden="true">☆</span>
+                                <span id="favoriteCurrentButtonLabel">관심 캐릭터 등록</span>
+                            </button>
                             <div class="character-meta">
                                 <span class="meta-item world-meta"><img id="worldLogo" class="world-logo" src="" alt=""><span id="worldName">-</span></span>
                                 <span id="levelValue" class="meta-item">Lv. -</span>
