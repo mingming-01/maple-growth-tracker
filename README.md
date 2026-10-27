@@ -174,7 +174,7 @@ LLM은 숫자 계산이 틀리거나 없는 내용을 그럴듯하게 채워 넣
 | 이미지 / PDF 저장 | html2canvas, jsPDF |
 | AI | Google Gemini API, OpenRouter |
 | 게임 데이터 | NEXON Open API |
-| 관리자 로그 저장 | SQLite (`sqlite3`) |
+| 관리자 로그 저장 | Supabase PostgreSQL (배포) / SQLite (로컬 또는 연결 실패 시 임시 저장) |
 | 배포 | Render |
 | 개발 환경 | Kali Linux, VS Code, Git, GitHub |
 
@@ -193,7 +193,7 @@ maple-growth-tracker/
 ├── README.md
 │
 ├── instance/               # 실행 시 자동 생성
-│   └── admin_logs.sqlite3  # 관리자 사용 로그 (SQLite)
+│   └── admin_logs.sqlite3  # 로컬 개발용 관리자 로그 (SQLite)
 │
 ├── templates/
 │   ├── index.html          # 메인 화면 / 결과 화면
@@ -360,7 +360,7 @@ Render에 Flask 애플리케이션으로 배포했습니다.
 
 - 서비스: https://maple-growth-tracker.onrender.com/
 - `.env` 대신 Render의 Environment Variables에 위의 환경변수를 등록합니다. (`NEXON_API_KEY`, `GEMINI_API_KEY`, `OPENROUTER_API_KEY`, 관리자 계정 관련 값 등)
-- 관리자 로그는 instance/admin_logs.sqlite3에 SQLite로 저장합니다.
+- 관리자 로그는 `GROWTH_DATABASE_URL`이 설정된 경우 Supabase PostgreSQL의 `action_logs` 테이블에 저장합니다. 연결이 없으면 개발용 SQLite를 사용하며, 영구 저장 여부는 관리자 로그 화면의 저장 상태를 확인합니다.
 
 ---
 
