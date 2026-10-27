@@ -477,11 +477,11 @@ function renderChart(history) {
     const canvas = document.getElementById("growthChart");
     if (!canvas) return;
     const sorted = sortHistoryAscending(history);
-    if (!sorted.length) return;
     if (growthChart) {
         growthChart.destroy();
         growthChart = null;
     }
+    if (!sorted.length) return;
     const labels = sorted.map(item => formatShortDate(item.date));
     const experienceData = buildCumulativeExperienceData(sorted);
     const dailyGrowthData = sorted.map(item => {
