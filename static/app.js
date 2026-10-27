@@ -368,7 +368,6 @@ function sortHistoryDescending(history) {
     return [...(history || [])].sort((a, b) => String(b.date).localeCompare(String(a.date)));
 }
 
-
 // 기존 성장 계산 함수를 AI 리포트와 비교 카드에서도 공유한다.
 function getDailyGrowth(history) {
     if (!history || history.length < 2) return null;
@@ -589,7 +588,6 @@ function renderHistory(history) {
         historyBody.appendChild(row);
     });
 }
-
 
 // AI 성장 리포트
 function renderAIAnalysis(analysis) {
@@ -985,6 +983,7 @@ async function collectArchiveRange(days, character, progressElement = null, labe
         totals.availableRecords += Number(batch.availableRecords || 0);
         totals.noDataRecords += Number(batch.noDataRecords || 0);
         totals.remainingDays = Number(batch.remainingDays || 0);
+        if (totals.remainingDays === 0) break;
     }
 
     if (result) result.collectionSummary = totals;
@@ -1875,7 +1874,6 @@ function restoreTrackerState() {
         }
     }
 }
-
 
 // 결과 화면 이미지 / PDF 저장
 async function captureResultSection() {
