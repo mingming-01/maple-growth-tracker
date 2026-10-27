@@ -930,9 +930,9 @@ function shiftSnapshotDate(dateString, offsetDays) {
     return shifted.toISOString().slice(0, 10);
 }
 
-async function fetchArchiveRange(days, endDate = null) {
+async function fetchArchiveRange(days, endDate = null, ocid = currentCharacter?.ocid) {
     const params = new URLSearchParams({
-        ocid: currentCharacter?.ocid || "",
+        ocid: ocid || "",
         days: String(days)
     });
     if (endDate) params.set("end", endDate);
