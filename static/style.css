@@ -64,6 +64,13 @@ button:disabled { cursor: wait; opacity: 0.65; }
 }
 .data-status-notice[hidden] { display: none; }
 .refresh-data-button { white-space: nowrap; }
+.data-freshness-hint {
+    margin: -10px 0 0;
+    color: #858394;
+    font-size: 12px;
+    line-height: 1.6;
+}
+
 .refresh-data-button.is-loading { opacity: .7; cursor: wait; }
 @media (max-width: 700px) {
     .data-status-actions { grid-template-columns: 1fr; }
