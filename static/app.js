@@ -698,6 +698,13 @@ async function handleSearch(event) {
         if (savePdfButton) savePdfButton.disabled = false;
         if (resultSection) resultSection.hidden = false;
         syncHomeView();
+        saveTrackerState({
+            character,
+            history,
+            metrics,
+            aiAnalysis: null,
+            comparison: null
+        });
         setLoading(false);
         await runAIReport(name, character, history, metrics);
     } catch (error) {
@@ -727,10 +734,8 @@ async function refreshVisibleCharacter({ automatic = false } = {}) {
     }
 
     try {
-        const [character, historyResult] = await Promise.all([
-            searchCharacter(name, true),
-            searchHistory(name, true)
-        ]);
+        const character = await searchCharacter(name, true);
+        const historyResult = await searchHistory(name, true);
         const history = historyResult.history || [];
         currentCharacter = character;
         currentHistory = history;
@@ -849,10 +854,8 @@ async function handleComparison(event) {
     if (comparisonLoading) comparisonLoading.hidden = false;
     if (comparisonButton) comparisonButton.disabled = true;
     try {
-        const [otherCharacter, otherHistoryResult] = await Promise.all([
-            searchCharacter(name, true),
-            searchHistory(name, true)
-        ]);
+        const otherCharacter = await searchCharacter(name, true);
+        const otherHistoryResult = await searchHistory(name, true);
         const otherHistory = otherHistoryResult.history || [];
         if (String(otherCharacter.characterName).toLocaleLowerCase() === String(currentCharacter.characterName).toLocaleLowerCase()) {
             throw new Error("같은 캐릭터는 비교할 수 없습니다.");
@@ -1073,7 +1076,6 @@ restoreTrackerState();
 // A cooldown avoids making another multi-request refresh on every accidental rapid reload.
 const lastAutoRefresh = Number(sessionStorage.getItem(AUTO_REFRESH_KEY) || 0);
 if (currentCharacter && Date.now() - lastAutoRefresh >= AUTO_REFRESH_COOLDOWN_MS) {
-    sessionStorage.setItem(AUTO_REFRESH_KEY, String(Date.now()));
     refreshVisibleCharacter({ automatic: true });
 } else if (currentCharacter && dataStatusNotice) {
     dataStatusNotice.textContent += " 최근 1분 이내에 조회한 결과라 자동 재조회는 생략했습니다. 최신 정보가 필요하면 '최신 정보 다시 조회'를 누르세요.";
