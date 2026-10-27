@@ -1,5 +1,6 @@
 import tempfile
 import unittest
+from datetime import datetime, timezone
 from pathlib import Path
 from unittest.mock import patch
 
@@ -83,6 +84,26 @@ class AdminLogTests(unittest.TestCase):
         self.assertIn("http_5xx", page)
         self.assertNotIn("밍득", page)
         self.assertIn("검색 결과 1 / 1건", page)
+
+    def test_admin_log_time_uses_korean_timezone(self):
+        timestamp = datetime(2026, 10, 27, 7, 6, 22, tzinfo=timezone.utc)
+        self.assertEqual(
+            tracker.format_admin_log_time(timestamp),
+            "2026-10-27 (화) 16:06:22 KST",
+        )
+
+        tracker.log_action(
+            "캐릭터 조회",
+            character_name="밍득",
+            result="성공",
+            path="/api/character",
+            status_code=200,
+            duration_ms=25,
+        )
+        response = self.client.get("/admin/logs")
+        self.assertEqual(response.status_code, 200)
+        self.assertIn("KST", response.get_data(as_text=True))
+        self.assertIn("시간 (한국 시간)", response.get_data(as_text=True))
 
     def test_admin_logs_show_sqlite_storage_warning(self):
         response = self.client.get("/admin/logs")
