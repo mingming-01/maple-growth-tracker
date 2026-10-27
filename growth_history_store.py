@@ -31,6 +31,7 @@ class GrowthHistoryStore:
                 self.database_url,
                 connect_timeout=3,
                 sslmode="require",
+                prepare_threshold=None,
             )
 
         Path(self.sqlite_path).parent.mkdir(parents=True, exist_ok=True)
@@ -201,8 +202,8 @@ class GrowthHistoryStore:
 
     def get_records(self, ocid, start_date, end_date):
         self.initialize()
-        start = date.fromisoformat(str(start_date)).isoformat()
-        end = date.fromisoformat(str(end_date)).isoformat()
+        start = date.fromisoformat(str(start_date))
+        end = date.fromisoformat(str(end_date))
         placeholder = "%s" if self.uses_postgres else "?"
         query = f"""
             SELECT snapshot_date, character_name, world_name, level,
