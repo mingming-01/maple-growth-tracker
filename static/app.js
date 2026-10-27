@@ -1538,6 +1538,55 @@ function renderComparisonPeriod(summary, primaryCharacter, otherCharacter, error
     comparisonPeriodNotice.classList.toggle("is-warning", !!errorMessage);
 }
 
+async function fetchComparisonPeriodSummary(otherCharacter, days) {
+    if (!currentCharacter?.ocid || !otherCharacter?.ocid) {
+        throw new Error("캐릭터 식별 정보를 확인할 수 없어 장기 기록을 비교할 수 없습니다.");
+    }
+    const [primaryData, secondaryData] = await Promise.all([
+        fetchArchiveRange(days, null, currentCharacter.ocid),
+        fetchArchiveRange(days, null, otherCharacter.ocid)
+    ]);
+    return {
+        days,
+        primary: summarizePeriod(primaryData.history, days),
+        secondary: summarizePeriod(secondaryData.history, days)
+    };
+}
+
+async function handleComparisonPeriodChange() {
+    const savedComparison = getTrackerState()?.comparison;
+    if (!currentCharacter || !savedComparison?.character) return;
+    const days = [30, 90].includes(Number(comparisonPeriodRangeSelect?.value))
+        ? Number(comparisonPeriodRangeSelect.value)
+        : 30;
+    if (comparisonPeriodRangeSelect) comparisonPeriodRangeSelect.disabled = true;
+    if (comparisonPeriodNotice) {
+        comparisonPeriodNotice.textContent = `최근 ${days}일 저장 기록을 불러오는 중입니다...`;
+        comparisonPeriodNotice.classList.remove("is-warning");
+    }
+
+    let periodSummary = null;
+    let periodError = "";
+    try {
+        periodSummary = await fetchComparisonPeriodSummary(savedComparison.character, days);
+        renderComparisonPeriod(periodSummary, currentCharacter, savedComparison.character);
+    } catch (error) {
+        periodError = error.message || "기간별 비교 기록을 불러오지 못했습니다.";
+        renderComparisonPeriod(null, currentCharacter, savedComparison.character, periodError);
+    } finally {
+        if (comparisonPeriodRangeSelect) comparisonPeriodRangeSelect.disabled = false;
+    }
+
+    saveTrackerState({
+        comparison: {
+            ...savedComparison,
+            periodDays: days,
+            periodSummary,
+            periodError
+        }
+    });
+}
+
 function renderComparisonCharacter(prefix, character, metrics) {
     const values = {
         Name: character.characterName || "-",
