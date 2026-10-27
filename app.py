@@ -1231,6 +1231,22 @@ def get_history_archive():
         if offset < 0 or offset >= days or limit < 1 or limit > HISTORY_BACKFILL_BATCH_SIZE:
             return jsonify({"error": "수집 범위는 날짜 1~10개 안에서 선택해주세요."}), 400
 
+        # 브라우저에서 전달한 캐릭터명과 OCID를 확인해 다른 캐릭터 기록의 혼합 저장을 막는다.
+        try:
+            verified_basic, verify_response = get_basic_character(ocid, historical=True)
+        except requests.RequestException:
+            verified_basic, verify_response = None, None
+
+        if not verified_basic:
+            if is_temporary_nexon_failure(verify_response):
+                return jsonify({"error": "캐릭터 정보를 확인할 수 없습니다. 잠시 후 다시 시도해주세요."}), 503
+            return jsonify({"error": "캐릭터 식별 정보를 확인할 수 없습니다."}), 400
+
+        if verified_basic.get("character_name", "").casefold() != character_name.casefold():
+            return jsonify({"error": "캐릭터명과 식별 정보가 일치하지 않습니다."}), 400
+
+        character_name = verified_basic["character_name"]
+        world_name = verified_basic.get("world_name") or world_name
         batch_dates = [
             start_date + timedelta(days=index)
             for index in range(offset, min(offset + limit, days))
