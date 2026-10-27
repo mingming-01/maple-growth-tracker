@@ -4,6 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>관리자 로그 | Maple Growth Tracker</title>
+    <link rel="icon" type="image/svg+xml" href="{{ url_for('static', filename='favicon.svg') }}?v=2">
     <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
 </head>
 <body>
@@ -73,11 +74,11 @@
                     </select>
                 </label>
                 <label class="admin-filter-field">
-                    <span>시작일</span>
+                    <span>시작일 (한국 시간)</span>
                     <input type="date" name="date_from" value="{{ date_from_text }}">
                 </label>
                 <label class="admin-filter-field">
-                    <span>종료일</span>
+                    <span>종료일 (한국 시간)</span>
                     <input type="date" name="date_to" value="{{ date_to_text }}">
                 </label>
                 <div class="admin-filter-actions">
@@ -92,7 +93,7 @@
                 <table class="history-table admin-log-table">
                     <thead>
                         <tr>
-                            <th>시간</th>
+                            <th>시간 (한국 시간)</th>
                             <th>행동 / 경로</th>
                             <th>캐릭터</th>
                             <th>비교 대상</th>
@@ -104,7 +105,7 @@
                     <tbody>
                         {% for item in logs %}
                         <tr>
-                            <td class="admin-time-cell">{{ item["created_at"] }}</td>
+                            <td class="admin-time-cell"><time datetime="{{ item['created_at'] }}">{{ item["created_at_display"] }}</time></td>
                             <td>
                                 <div class="admin-action-cell">
                                     <strong>{{ item["action"] }}</strong>
