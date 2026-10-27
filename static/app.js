@@ -368,7 +368,6 @@ function sortHistoryDescending(history) {
     return [...(history || [])].sort((a, b) => String(b.date).localeCompare(String(a.date)));
 }
 
-
 // 기존 성장 계산 함수를 AI 리포트와 비교 카드에서도 공유한다.
 function getDailyGrowth(history) {
     if (!history || history.length < 2) return null;
@@ -589,7 +588,6 @@ function renderHistory(history) {
         historyBody.appendChild(row);
     });
 }
-
 
 // AI 성장 리포트
 function renderAIAnalysis(analysis) {
@@ -916,11 +914,15 @@ function renderHistoryRangeNotice(days, status = null) {
     }
     if (!status) {
         historyRangeNotice.textContent =
-            `저장된 최근 ${days}일 기록입니다. 저장된 값이 없는 날짜는 빈 기록으로 표시됩니다.`;
+            `저장된 최근 ${days}일 기록입니다. 선택한 기간에서 API가 제공하는 날짜별 데이터만 추가로 수집합니다.`;
         return;
     }
+    const collection = status.collection || {};
+    const collectionText = collection.checkedDays
+        ? ` · 이번 조회에서 ${collection.savedRecords}건 저장${collection.remainingDays ? ` · 기록 미완성 ${collection.remainingDays}일` : ""}`
+        : "";
     historyRangeNotice.textContent =
-        `저장된 최근 ${days}일 기록: 정상 ${status.availableDays}일 · API 미제공 ${status.notReadyDays}일 · 미수집 ${status.notCollectedDays}일. 미수집 날짜는 이 사이트에 저장된 기록이 없는 날이며, 과거 데이터가 자동으로 복구된다는 뜻은 아닙니다.`;
+        `최근 ${days}일 기록: 정상 ${status.availableDays}일 · API 미제공 ${status.notReadyDays}일 · 미수집 ${status.notCollectedDays}일${collectionText}. API가 제공하지 않는 날짜는 빈 기록으로 남습니다.`;
 }
 
 function shiftSnapshotDate(dateString, offsetDays) {
@@ -930,17 +932,62 @@ function shiftSnapshotDate(dateString, offsetDays) {
     return shifted.toISOString().slice(0, 10);
 }
 
-async function fetchArchiveRange(days, endDate = null, ocid = currentCharacter?.ocid) {
+async function fetchArchiveRange(days, endDate = null, ocid = currentCharacter?.ocid, options = {}) {
     const params = new URLSearchParams({
         ocid: ocid || "",
         days: String(days)
     });
     if (endDate) params.set("end", endDate);
+    if (options.collect) {
+        params.set("collect", "1");
+        params.set("character_name", options.characterName || "");
+        params.set("world_name", options.worldName || "");
+        params.set("offset", String(options.offset || 0));
+        params.set("limit", String(options.limit || 10));
+    }
 
     const response = await fetch(`/api/history/archive?${params.toString()}`, {
         cache: "no-store"
     });
     return readApiResponse(response, "저장된 성장 기록을 불러오지 못했습니다.");
+}
+
+// 30일·90일을 선택한 경우에만 누락된 날짜를 10일씩 확인해 과거 기록을 보충한다.
+async function collectArchiveRange(days, character, progressElement = null, label = "성장 기록") {
+    const batchSize = 10;
+    let result = null;
+    const totals = {
+        checkedDays: 0,
+        savedRecords: 0,
+        availableRecords: 0,
+        noDataRecords: 0,
+        remainingDays: 0
+    };
+
+    for (let offset = 0; offset < days; offset += batchSize) {
+        const limit = Math.min(batchSize, days - offset);
+        if (progressElement) {
+            progressElement.textContent = `${label} 보충 중 · ${Math.min(offset + limit, days)}/${days}일 확인`;
+        }
+
+        result = await fetchArchiveRange(days, null, character.ocid, {
+            collect: true,
+            characterName: character.characterName,
+            worldName: character.worldName,
+            offset,
+            limit
+        });
+        const batch = result.collection || {};
+        totals.checkedDays += Number(batch.checkedDays || 0);
+        totals.savedRecords += Number(batch.savedRecords || 0);
+        totals.availableRecords += Number(batch.availableRecords || 0);
+        totals.noDataRecords += Number(batch.noDataRecords || 0);
+        totals.remainingDays = Number(batch.remainingDays || 0);
+        if (totals.remainingDays === 0) break;
+    }
+
+    if (result) result.collectionSummary = totals;
+    return result;
 }
 
 function summarizePeriod(history, days) {
@@ -1132,7 +1179,12 @@ async function loadHistoryRange(days) {
         return;
     }
 
-    const data = await fetchArchiveRange(selectedDays);
+    const data = await collectArchiveRange(
+        selectedDays,
+        currentCharacter,
+        historyRangeNotice,
+        "과거 기록"
+    );
     let previousData = null;
     let previousUnavailable = false;
     const previousEndDate = shiftSnapshotDate(data.startDate, -1);
@@ -1153,7 +1205,8 @@ async function loadHistoryRange(days) {
         notReadyDays: data.notReadyDays || 0,
         notCollectedDays: data.notCollectedDays || 0,
         storageBackend: data.storageBackend || "unknown",
-        persistentStorage: data.persistentStorage === true
+        persistentStorage: data.persistentStorage === true,
+        collection: data.collectionSummary || null
     };
     currentPeriodSummary = buildPeriodSummary(data, previousData, previousUnavailable);
 
@@ -1200,7 +1253,7 @@ function formatStatusTime(value) {
 function renderDataStatus(character, historyResult) {
     if (!dataStatusNotice) return;
 
-    // Keep data provenance with the saved session so a refresh can restore the notice.
+    // 데이터 조회 시각과 상태를 세션에 저장해 새로고침 후에도 안내를 복원한다.
     character.historyStatus = historyResult.historyStatus || null;
     character.historyDataStatus = historyResult.dataStatus || null;
     character.historyDataAsOf = historyResult.dataAsOf || null;
@@ -1316,7 +1369,7 @@ async function handleSearch(event) {
         try {
             historyResult = await searchHistory(name, true);
         } catch (historyError) {
-            // Preserve the usable character panel when only history lookup fails.
+            // 성장 기록 조회만 실패하면 캐릭터 기본 정보는 계속 표시한다.
             historyResult = {
                 history: [],
                 dataStatus: "unavailable",
@@ -1419,7 +1472,7 @@ async function refreshVisibleCharacter({ automatic = false } = {}) {
         renderHistory(currentDisplayHistory);
         renderChart(currentDisplayHistory);
 
-        // The previous comparison refers to the old data, so hide it until compared again.
+        // 기준 캐릭터 정보가 갱신되면 기존 비교 결과는 오래된 데이터일 수 있어 다시 비교하기 전까지 숨긴다.
         if (comparisonResult) comparisonResult.hidden = true;
         saveTrackerState({
             character,
@@ -1448,7 +1501,7 @@ async function refreshVisibleCharacter({ automatic = false } = {}) {
             dataStatusNotice.textContent = prefix + dataStatusNotice.textContent;
         }
 
-        // Do not block the refreshed character screen while the AI report is generated.
+        // AI 리포트 생성 중에도 갱신된 캐릭터 화면을 먼저 표시한다.
         runAIReport(name, character, history, metrics);
     } catch (error) {
         console.error("최신 정보 갱신 실패:", error);
@@ -1542,10 +1595,12 @@ async function fetchComparisonPeriodSummary(otherCharacter, days) {
     if (!currentCharacter?.ocid || !otherCharacter?.ocid) {
         throw new Error("캐릭터 식별 정보를 확인할 수 없어 장기 기록을 비교할 수 없습니다.");
     }
-    const [primaryData, secondaryData] = await Promise.all([
-        fetchArchiveRange(days, null, currentCharacter.ocid),
-        fetchArchiveRange(days, null, otherCharacter.ocid)
-    ]);
+    const primaryData = await collectArchiveRange(
+        days, currentCharacter, comparisonPeriodNotice, "기준 캐릭터 기록"
+    );
+    const secondaryData = await collectArchiveRange(
+        days, otherCharacter, comparisonPeriodNotice, "비교 캐릭터 기록"
+    );
     return {
         days,
         primary: summarizePeriod(primaryData.history, days),
@@ -1820,7 +1875,6 @@ function restoreTrackerState() {
     }
 }
 
-
 // 결과 화면 이미지 / PDF 저장
 async function captureResultSection() {
     const section = document.getElementById("resultSection");
@@ -1916,13 +1970,13 @@ if (homeLink) {
 restoreTrackerState();
 renderFavoriteList();
 
-// A full browser reload first restores the visible session, then rechecks NEXON's latest public data.
-// A cooldown avoids making another multi-request refresh on every accidental rapid reload.
+// 브라우저 새로고침 시 저장된 화면을 먼저 복원한 다음 넥슨의 최신 공개 데이터를 다시 조회한다.
+// 짧은 시간 안에 반복 새로고침해도 외부 API 요청이 급증하지 않도록 대기 시간을 둔다.
 let lastAutoRefresh = 0;
 try {
     lastAutoRefresh = Number(sessionStorage.getItem(AUTO_REFRESH_KEY) || 0);
 } catch (storageError) {
-    // If browser storage is unavailable, still allow the explicit refresh button to work.
+    // 브라우저 저장소를 사용할 수 없어도 사용자가 직접 누르는 갱신 버튼은 동작하게 한다.
 }
 if (currentCharacter && Date.now() - lastAutoRefresh >= AUTO_REFRESH_COOLDOWN_MS) {
     refreshVisibleCharacter({ automatic: true });

@@ -12,6 +12,7 @@ import sqlite3
 import time
 from concurrent.futures import ThreadPoolExecutor
 from datetime import date, datetime, timedelta
+from threading import Lock
 from zoneinfo import ZoneInfo
 
 import psycopg
@@ -40,6 +41,10 @@ BASE_URL = "https://open.api.nexon.com/maplestory/v1"
 HEADERS = {"x-nxopen-api-key": API_KEY}
 NEXON_API_TIMEOUT = (3.05, 10)
 KOREA_TIMEZONE = ZoneInfo("Asia/Seoul")
+HISTORY_API_MIN_INTERVAL = 0.22
+HISTORY_BACKFILL_BATCH_SIZE = 10
+HISTORY_API_REQUEST_LOCK = Lock()
+_last_history_api_request_at = 0.0
 
 
 # Gemini
@@ -361,31 +366,44 @@ def stale_snapshot_response(cache_key, error_message):
     return jsonify({"error": error_message}), 503
 
 
-def get_ocid(character_name):
-    response = requests.get(
-        f"{BASE_URL}/id",
+def request_nexon_api(endpoint, params, historical=False):
+    """넥슨 API를 호출하며 과거 기록 수집 요청은 초당 호출 수를 제한한다."""
+    global _last_history_api_request_at
+
+    if historical:
+        with HISTORY_API_REQUEST_LOCK:
+            elapsed = time.monotonic() - _last_history_api_request_at
+            if elapsed < HISTORY_API_MIN_INTERVAL:
+                time.sleep(HISTORY_API_MIN_INTERVAL - elapsed)
+            _last_history_api_request_at = time.monotonic()
+
+    return requests.get(
+        f"{BASE_URL}/{endpoint}",
         headers=HEADERS,
-        params={"character_name": character_name},
+        params=params,
         timeout=NEXON_API_TIMEOUT
     )
+
+
+def get_ocid(character_name):
+    response = request_nexon_api("id", {"character_name": character_name})
     if response.status_code != 200:
         return None, response
     return response.json()["ocid"], response
 
 
-def get_basic_character(ocid):
-    response = requests.get(
-        f"{BASE_URL}/character/basic",
-        headers=HEADERS,
-        params={"ocid": ocid},
-        timeout=NEXON_API_TIMEOUT
-    )
+def get_basic_character(ocid, target_date=None, historical=False):
+    """캐릭터 기본 정보를 조회하며, 날짜를 지정하면 해당 날짜의 스냅샷을 요청한다."""
+    params = {"ocid": ocid}
+    if target_date:
+        params["date"] = target_date
+    response = request_nexon_api("character/basic", params, historical)
     if response.status_code != 200:
         return None, response
     return response.json(), response
 
 
-def get_ranking(target_date, world_name=None, ocid=None, character_class=None):
+def get_ranking(target_date, world_name=None, ocid=None, character_class=None, historical=False):
     params = {"date": target_date, "world_type": 0, "page": 1}
     if world_name:
         params["world_name"] = world_name
@@ -394,12 +412,7 @@ def get_ranking(target_date, world_name=None, ocid=None, character_class=None):
     if ocid:
         params["ocid"] = ocid
 
-    response = requests.get(
-        f"{BASE_URL}/ranking/overall",
-        headers=HEADERS,
-        params=params,
-        timeout=NEXON_API_TIMEOUT
-    )
+    response = request_nexon_api("ranking/overall", params, historical)
     if response.status_code != 200:
         return None, response
     ranking_list = response.json().get("ranking", [])
@@ -490,7 +503,7 @@ def get_character_rankings(target_date, world_name, character_class, ocid):
     elif has_error:
         result["rankingDataStatus"] = "unavailable"
     else:
-        # HTTP 200 with an empty ranking list can mean the day's ranking is not ready.
+        # 빈 랭킹 목록은 해당 날짜의 랭킹이 아직 준비되지 않았다는 뜻일 수 있다.
         result["rankingDataStatus"] = "not_ready"
 
     return result
@@ -615,12 +628,14 @@ def should_use_openrouter(error):
 # 메인 화면
 @app.route("/")
 def home():
+    """메인 캐릭터 검색 화면을 표시한다."""
     return render_template("index.html")
 
 
 # 관리자 로그인 및 로그 조회
 @app.route("/admin/login", methods=["GET", "POST"])
 def admin_login():
+    """관리자 계정을 확인하고 인증 세션을 발급한다."""
     if session.get("admin_authenticated"):
         return redirect(url_for("admin_logs"))
 
@@ -667,9 +682,29 @@ def admin_required(view):
     return wrapped_view
 
 
+def format_admin_log_time(value):
+    """관리자 로그 시간을 한국 시간 기준으로 읽기 쉬운 문자열로 만든다."""
+    if isinstance(value, str):
+        try:
+            value = datetime.fromisoformat(value)
+        except ValueError:
+            return value
+
+    if not isinstance(value, datetime):
+        return str(value or "-")
+    if value.tzinfo is None:
+        value = value.replace(tzinfo=KOREA_TIMEZONE)
+    else:
+        value = value.astimezone(KOREA_TIMEZONE)
+
+    weekdays = ("월", "화", "수", "목", "금", "토", "일")
+    return f"{value:%Y-%m-%d} ({weekdays[value.weekday()]}) {value:%H:%M:%S} KST"
+
+
 @app.route("/admin/logs")
 @admin_required
 def admin_logs():
+    """검색 조건을 적용해 관리자 운영 로그를 시간 역순으로 표시한다."""
     search_text = request.args.get("q", "").strip()[:100]
     selected_action = request.args.get("action", "").strip()[:80]
     selected_result = request.args.get("result", "").strip()
@@ -769,9 +804,15 @@ def admin_logs():
             "Render 재배포 후 보존하려면 PostgreSQL 연결이 필요합니다."
         )
 
+    logs = []
+    for row in rows:
+        item = dict(row)
+        item["created_at_display"] = format_admin_log_time(item.get("created_at"))
+        logs.append(item)
+
     return render_template(
         "admin_logs.html",
-        logs=rows,
+        logs=logs,
         total_count=total_count,
         displayed_count=min(total_count, 500),
         search_text=search_text,
@@ -797,47 +838,10 @@ def admin_logout():
     return redirect(url_for("admin_login"))
 
 
-# 월드와 직업 목록 조회
-@app.route("/api/options")
-def get_options():
-    today = datetime.now(KOREA_TIMEZONE).date().strftime("%Y-%m-%d")
-    try:
-        response = requests.get(
-            f"{BASE_URL}/ranking/overall",
-            headers=HEADERS,
-            params={"date": today, "world_type": 0, "page": 1},
-            timeout=NEXON_API_TIMEOUT
-        )
-    except requests.RequestException:
-        return jsonify({"error": "월드 및 직업 목록을 일시적으로 가져오지 못했습니다."}), 503
-
-    if response.status_code != 200:
-        try:
-            detail = response.json()
-        except ValueError:
-            detail = response.text
-        return jsonify({"error": "서버 및 직업 목록을 가져오지 못했습니다.", "detail": detail}), response.status_code
-
-    ranking_list = response.json().get("ranking", [])
-    worlds = set()
-    classes = {}
-    for character in ranking_list:
-        world_name = character.get("world_name")
-        class_name = character.get("class_name")
-        sub_class_name = character.get("sub_class_name")
-        if world_name:
-            worlds.add(world_name)
-        if class_name:
-            classes.setdefault(class_name, set())
-            if sub_class_name:
-                classes[class_name].add(sub_class_name)
-    class_data = {name: sorted(jobs) for name, jobs in classes.items()}
-    return jsonify({"worlds": sorted(worlds), "classes": dict(sorted(class_data.items()))})
-
-
 # 캐릭터 정보와 현재 랭킹 조회
 @app.route("/api/character")
 def get_character():
+    """캐릭터 기본 정보와 현재 공개 랭킹을 조회한다."""
     character_name = request.args.get("name", "").strip()
     if not character_name:
         return jsonify({"error": "캐릭터 이름을 입력해주세요."}), 400
@@ -902,7 +906,7 @@ def get_character():
     data_status = "partial" if character_rankings["rankingDataStatus"] in ("partial", "unavailable") else "current"
     saved_at = datetime.now().astimezone().isoformat(timespec="seconds")
 
-    # Do not overwrite a previously complete ranking snapshot with a temporary empty result.
+    # 일시적으로 빈 응답이 와도 기존의 정상 랭킹 스냅샷은 덮어쓰지 않는다.
     previous_snapshot, _ = load_api_snapshot(cache_key)
     if character_rankings["rankingDataStatus"] == "available" or previous_snapshot is None:
         snapshot_saved_at = save_api_snapshot(cache_key, result)
@@ -915,6 +919,7 @@ def get_character():
 # 최근 7일 성장 기록 조회 및 변화량 계산
 @app.route("/api/history")
 def get_history():
+    """기본 검색에서 최근 7일의 성장 기록을 조회하고 저장한다."""
     character_name = request.args.get("name", "").strip()
     if not character_name:
         return jsonify({"error": "캐릭터 이름을 입력해주세요."}), 400
@@ -994,7 +999,7 @@ def get_history():
                     "recordStatus": "available"
                 }
             if response is not None and response.status_code == 200:
-                # A blank response must not hide a good snapshot saved earlier in the day.
+                # 빈 응답으로 같은 날 앞서 저장한 정상 스냅샷을 덮어쓰지 않는다.
                 if saved and saved.get("recordStatus") == "available":
                     return {
                         "date": date_string,
@@ -1069,7 +1074,7 @@ def get_history():
         )
         storage_status = "saved" if saved_record_count else "no_new_records"
     except Exception:
-        # A database outage should not break the existing live character view.
+        # 저장소 장애가 있어도 현재 캐릭터 화면은 계속 표시한다.
         print("성장 기록을 장기 저장하지 못했습니다.")
         saved_record_count = 0
         storage_status = "unavailable"
@@ -1106,14 +1111,75 @@ def get_history():
         if snapshot_saved_at:
             saved_at = snapshot_saved_at
 
-    # If today's ranking is not ready, retry sooner rather than caching that state for 30 minutes.
+    # 오늘 랭킹이 준비되지 않았다면 30분 대신 5분 후 다시 확인한다.
     cache_ttl = HISTORY_CACHE_TTL if history_status == "complete" else 300
     set_cache(cache_key, result, cache_ttl)
     return jsonify(with_data_status(result, "current", saved_at))
 
 
+def is_historical_data_missing(response):
+    """정상 응답에서 해당 날짜의 기록이 비어 있는지 확인한다."""
+    return response is not None and response.status_code == 200
+
+
+def fetch_historical_record(ocid, world_name, target_date, today):
+    """랭킹 또는 날짜별 캐릭터 정보에서 과거 일일 스냅샷을 만든다."""
+    date_text = target_date.isoformat()
+    try:
+        ranking_data, ranking_response = get_ranking(
+            date_text, world_name=world_name, ocid=ocid, historical=True
+        )
+    except requests.RequestException:
+        ranking_data, ranking_response = None, None
+
+    if ranking_data:
+        level = ranking_data.get("character_level")
+        experience = ranking_data.get("character_exp")
+        if level is not None and experience is not None:
+            return {
+                "date": date_text,
+                "ranking": ranking_data.get("ranking"),
+                "level": level,
+                "experience": experience,
+                "recordStatus": "available"
+            }
+
+    try:
+        # 기본 정보 API는 오늘 날짜를 date로 받지 않으므로 오늘은 최신 응답을 사용한다.
+        basic_data, basic_response = get_basic_character(
+            ocid,
+            target_date=date_text if target_date < today else None,
+            historical=True
+        )
+    except requests.RequestException:
+        basic_data, basic_response = None, None
+
+    if basic_data:
+        level = basic_data.get("character_level")
+        experience = basic_data.get("character_exp")
+        if level is not None and experience is not None:
+            return {
+                "date": date_text,
+                "ranking": ranking_data.get("ranking") if ranking_data else None,
+                "level": level,
+                "experience": experience,
+                "recordStatus": "available"
+            }
+
+    # 명확한 데이터 없음 응답만 저장해 다음 조회 때 같은 날짜를 반복 요청하지 않는다.
+    if (
+        is_historical_data_missing(ranking_response)
+        and is_historical_data_missing(basic_response)
+    ):
+        return {"date": date_text, "recordStatus": "not_ready"}
+
+    # API 오류는 미수집 상태로 남겨 다음 사용자의 요청 때 다시 확인할 수 있게 한다.
+    return None
+
+
 @app.route("/api/history/archive")
 def get_history_archive():
+    """30일·90일 기록을 조회하고 사용자가 요청한 범위에서 누락 기록을 보충한다."""
     ocid = request.args.get("ocid", "").strip()
     try:
         days = int(request.args.get("days", "30"))
@@ -1134,7 +1200,7 @@ def get_history_archive():
         except ValueError:
             return jsonify({"error": "조회 종료일은 YYYY-MM-DD 형식이어야 합니다."}), 400
 
-        # The comparison view only needs the immediately preceding matching period.
+        # 기간 비교에는 바로 앞의 동일 길이 기간만 필요하다.
         if end_date > today or end_date < today - timedelta(days=days * 2):
             return jsonify({"error": "조회 종료일은 최근 비교 가능한 기간 안에서 선택해주세요."}), 400
 
@@ -1146,6 +1212,88 @@ def get_history_archive():
         return jsonify({"error": "저장된 성장 기록을 조회할 수 없습니다. 저장소 연결을 확인해주세요."}), 503
 
     stored_by_date = {item["date"]: item for item in stored_records}
+    collection = None
+
+    # 과거 데이터는 사용자가 30일·90일 기록을 요청한 경우에만 수집한다.
+    if request.args.get("collect") == "1":
+        if end_date != today:
+            return jsonify({"error": "과거 기록 수집은 최근 30일·90일 범위에서만 가능합니다."}), 400
+        character_name = request.args.get("character_name", "").strip()[:30]
+        world_name = request.args.get("world_name", "").strip()[:100] or None
+        try:
+            offset = int(request.args.get("offset", "0"))
+            limit = int(request.args.get("limit", str(HISTORY_BACKFILL_BATCH_SIZE)))
+        except (TypeError, ValueError):
+            return jsonify({"error": "수집 범위를 확인해주세요."}), 400
+
+        if not character_name:
+            return jsonify({"error": "캐릭터명을 확인해주세요."}), 400
+        if offset < 0 or offset >= days or limit < 1 or limit > HISTORY_BACKFILL_BATCH_SIZE:
+            return jsonify({"error": "수집 범위는 날짜 1~10개 안에서 선택해주세요."}), 400
+
+        # 브라우저에서 전달한 캐릭터명과 OCID를 확인해 다른 캐릭터 기록의 혼합 저장을 막는다.
+        try:
+            verified_basic, verify_response = get_basic_character(ocid, historical=True)
+        except requests.RequestException:
+            verified_basic, verify_response = None, None
+
+        if not verified_basic:
+            if is_temporary_nexon_failure(verify_response):
+                return jsonify({"error": "캐릭터 정보를 확인할 수 없습니다. 잠시 후 다시 시도해주세요."}), 503
+            return jsonify({"error": "캐릭터 식별 정보를 확인할 수 없습니다."}), 400
+
+        if verified_basic.get("character_name", "").casefold() != character_name.casefold():
+            return jsonify({"error": "캐릭터명과 식별 정보가 일치하지 않습니다."}), 400
+
+        character_name = verified_basic["character_name"]
+        world_name = verified_basic.get("world_name") or world_name
+        batch_dates = [
+            start_date + timedelta(days=index)
+            for index in range(offset, min(offset + limit, days))
+        ]
+        missing_dates = [
+            target_date for target_date in batch_dates
+            if target_date.isoformat() not in stored_by_date
+            or stored_by_date[target_date.isoformat()].get("recordStatus") == "not_ready"
+        ]
+        fetched_records = []
+
+        def fetch_target_date(target_date):
+            return fetch_historical_record(
+                ocid, world_name, target_date, today
+            )
+
+        with ThreadPoolExecutor(max_workers=4) as executor:
+            fetched_records = [
+                item for item in executor.map(fetch_target_date, missing_dates)
+                if item is not None
+            ]
+
+        try:
+            saved_count = growth_history_store.save_records(
+                ocid, character_name, world_name, fetched_records
+            ) if fetched_records else 0
+        except Exception:
+            print("날짜별 과거 기록을 저장하지 못했습니다.")
+            return jsonify({"error": "과거 기록을 저장할 수 없습니다. 저장소 연결을 확인해주세요."}), 503
+
+        for item in fetched_records:
+            stored_by_date[item["date"]] = item
+
+        collection = {
+            "offset": offset,
+            "limit": limit,
+            "checkedDays": len(missing_dates),
+            "savedRecords": saved_count,
+            "availableRecords": sum(item.get("recordStatus") == "available" for item in fetched_records),
+            "noDataRecords": sum(item.get("recordStatus") == "not_ready" for item in fetched_records),
+            "remainingDays": sum(
+                (start_date + timedelta(days=index)).isoformat() not in stored_by_date
+                or stored_by_date[(start_date + timedelta(days=index)).isoformat()].get("recordStatus") != "available"
+                for index in range(days)
+            )
+        }
+
     history = []
     for offset in range(days):
         target_date = start_date + timedelta(days=offset)
@@ -1197,6 +1345,7 @@ def get_history_archive():
         "availableDays": available_days,
         "notReadyDays": not_ready_days,
         "notCollectedDays": not_collected_days,
+        "collection": collection,
         "storageBackend": growth_history_store.backend,
         "persistentStorage": growth_history_store.uses_postgres
     })
@@ -1333,6 +1482,7 @@ def generate_ai_analysis(character, history, computed_metrics=None):
 
 @app.route("/api/ai-analysis", methods=["GET", "POST"])
 def ai_analysis():
+    """캐릭터의 계산된 성장 지표를 바탕으로 AI 성장 리포트를 만든다."""
     character_name = request.args.get("name", "").strip()
     if not character_name:
         return jsonify({"error": "캐릭터명을 입력해주세요."}), 400
@@ -1452,6 +1602,7 @@ def generate_ai_comparison(primary, comparison):
 
 @app.route("/api/ai-comparison", methods=["POST"])
 def ai_comparison():
+    """두 캐릭터의 계산된 성장 지표를 바탕으로 비교 설명을 만든다."""
     payload = request.get_json(silent=True) or {}
     primary = payload.get("primary")
     comparison = payload.get("comparison")
