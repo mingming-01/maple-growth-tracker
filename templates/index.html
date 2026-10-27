@@ -268,6 +268,41 @@
                                 <div class="comparison-stat"><span>예상 레벨업</span><strong id="secondaryComparePrediction">-</strong></div>
                             </article>
                         </div>
+                        <section class="comparison-period-section" aria-labelledby="comparisonPeriodTitle">
+                            <div class="comparison-period-heading">
+                                <div>
+                                    <h3 id="comparisonPeriodTitle">기간별 성장 비교</h3>
+                                    <p>두 캐릭터의 동일한 날짜 범위에서 확인된 기록을 비교합니다.</p>
+                                </div>
+                                <label class="comparison-period-control" for="comparisonPeriodRangeSelect">
+                                    비교 기간
+                                    <select id="comparisonPeriodRangeSelect" class="history-range-select">
+                                        <option value="30" selected>최근 30일</option>
+                                        <option value="90">최근 90일</option>
+                                    </select>
+                                </label>
+                            </div>
+                            <div class="comparison-period-grid">
+                                <article class="comparison-period-character-card">
+                                    <h4 id="comparisonPeriodPrimaryName" class="comparison-period-name">현재 캐릭터</h4>
+                                    <div class="comparison-period-stat"><span>확인된 경험치 증가</span><strong id="comparisonPeriodPrimaryGrowth">-</strong></div>
+                                    <div class="comparison-period-stat"><span>관측된 1일 평균</span><strong id="comparisonPeriodPrimaryAverage">-</strong></div>
+                                    <div class="comparison-period-stat"><span>랭킹 변화</span><strong id="comparisonPeriodPrimaryRanking">-</strong></div>
+                                    <div class="comparison-period-stat"><span>기록 충실도</span><strong id="comparisonPeriodPrimaryCoverage">-</strong></div>
+                                    <p id="comparisonPeriodPrimaryDetail" class="comparison-period-detail"></p>
+                                </article>
+                                <article class="comparison-period-character-card">
+                                    <h4 id="comparisonPeriodSecondaryName" class="comparison-period-name">비교 캐릭터</h4>
+                                    <div class="comparison-period-stat"><span>확인된 경험치 증가</span><strong id="comparisonPeriodSecondaryGrowth">-</strong></div>
+                                    <div class="comparison-period-stat"><span>관측된 1일 평균</span><strong id="comparisonPeriodSecondaryAverage">-</strong></div>
+                                    <div class="comparison-period-stat"><span>랭킹 변화</span><strong id="comparisonPeriodSecondaryRanking">-</strong></div>
+                                    <div class="comparison-period-stat"><span>기록 충실도</span><strong id="comparisonPeriodSecondaryCoverage">-</strong></div>
+                                    <p id="comparisonPeriodSecondaryDetail" class="comparison-period-detail"></p>
+                                </article>
+                            </div>
+                            <p id="comparisonPeriodVerdict" class="comparison-period-verdict" role="status" aria-live="polite">기간별 기록을 조회하면 결과가 표시됩니다.</p>
+                            <p id="comparisonPeriodNotice" class="comparison-period-notice" role="status" aria-live="polite"></p>
+                        </section>
                         <div class="comparison-ai">
                             <h3>AI 성장 비교 분석</h3>
                             <p id="comparisonAICacheNotice" class="ai-cache-notice" role="status" aria-live="polite" hidden></p>
