@@ -916,11 +916,15 @@ function renderHistoryRangeNotice(days, status = null) {
     }
     if (!status) {
         historyRangeNotice.textContent =
-            `저장된 최근 ${days}일 기록입니다. 저장된 값이 없는 날짜는 빈 기록으로 표시됩니다.`;
+            `저장된 최근 ${days}일 기록입니다. 선택한 기간에서 API가 제공하는 날짜별 데이터만 추가로 수집합니다.`;
         return;
     }
+    const collection = status.collection || {};
+    const collectionText = collection.checkedDays
+        ? ` · 이번 조회에서 ${collection.savedRecords}건 저장${collection.remainingDays ? ` · 미수집 ${collection.remainingDays}일 남음` : ""}`
+        : "";
     historyRangeNotice.textContent =
-        `저장된 최근 ${days}일 기록: 정상 ${status.availableDays}일 · API 미제공 ${status.notReadyDays}일 · 미수집 ${status.notCollectedDays}일. 미수집 날짜는 이 사이트에 저장된 기록이 없는 날이며, 과거 데이터가 자동으로 복구된다는 뜻은 아닙니다.`;
+        `최근 ${days}일 기록: 정상 ${status.availableDays}일 · API 미제공 ${status.notReadyDays}일 · 미수집 ${status.notCollectedDays}일${collectionText}. API가 제공하지 않는 날짜는 빈 기록으로 남습니다.`;
 }
 
 function shiftSnapshotDate(dateString, offsetDays) {
@@ -930,17 +934,61 @@ function shiftSnapshotDate(dateString, offsetDays) {
     return shifted.toISOString().slice(0, 10);
 }
 
-async function fetchArchiveRange(days, endDate = null, ocid = currentCharacter?.ocid) {
+async function fetchArchiveRange(days, endDate = null, ocid = currentCharacter?.ocid, options = {}) {
     const params = new URLSearchParams({
         ocid: ocid || "",
         days: String(days)
     });
     if (endDate) params.set("end", endDate);
+    if (options.collect) {
+        params.set("collect", "1");
+        params.set("character_name", options.characterName || "");
+        params.set("world_name", options.worldName || "");
+        params.set("offset", String(options.offset || 0));
+        params.set("limit", String(options.limit || 10));
+    }
 
     const response = await fetch(`/api/history/archive?${params.toString()}`, {
         cache: "no-store"
     });
     return readApiResponse(response, "저장된 성장 기록을 불러오지 못했습니다.");
+}
+
+// 30일·90일을 선택한 경우에만 누락된 날짜를 10일씩 확인해 과거 기록을 보충한다.
+async function collectArchiveRange(days, character, progressElement = null, label = "성장 기록") {
+    const batchSize = 10;
+    let result = null;
+    const totals = {
+        checkedDays: 0,
+        savedRecords: 0,
+        availableRecords: 0,
+        noDataRecords: 0,
+        remainingDays: 0
+    };
+
+    for (let offset = 0; offset < days; offset += batchSize) {
+        const limit = Math.min(batchSize, days - offset);
+        if (progressElement) {
+            progressElement.textContent = `${label} 보충 중 · ${Math.min(offset + limit, days)}/${days}일 확인`;
+        }
+
+        result = await fetchArchiveRange(days, null, character.ocid, {
+            collect: true,
+            characterName: character.characterName,
+            worldName: character.worldName,
+            offset,
+            limit
+        });
+        const batch = result.collection || {};
+        totals.checkedDays += Number(batch.checkedDays || 0);
+        totals.savedRecords += Number(batch.savedRecords || 0);
+        totals.availableRecords += Number(batch.availableRecords || 0);
+        totals.noDataRecords += Number(batch.noDataRecords || 0);
+        totals.remainingDays = Number(batch.remainingDays || 0);
+    }
+
+    if (result) result.collectionSummary = totals;
+    return result;
 }
 
 function summarizePeriod(history, days) {
@@ -1132,7 +1180,12 @@ async function loadHistoryRange(days) {
         return;
     }
 
-    const data = await fetchArchiveRange(selectedDays);
+    const data = await collectArchiveRange(
+        selectedDays,
+        currentCharacter,
+        historyRangeNotice,
+        "과거 기록"
+    );
     let previousData = null;
     let previousUnavailable = false;
     const previousEndDate = shiftSnapshotDate(data.startDate, -1);
@@ -1153,7 +1206,8 @@ async function loadHistoryRange(days) {
         notReadyDays: data.notReadyDays || 0,
         notCollectedDays: data.notCollectedDays || 0,
         storageBackend: data.storageBackend || "unknown",
-        persistentStorage: data.persistentStorage === true
+        persistentStorage: data.persistentStorage === true,
+        collection: data.collectionSummary || null
     };
     currentPeriodSummary = buildPeriodSummary(data, previousData, previousUnavailable);
 
@@ -1542,10 +1596,12 @@ async function fetchComparisonPeriodSummary(otherCharacter, days) {
     if (!currentCharacter?.ocid || !otherCharacter?.ocid) {
         throw new Error("캐릭터 식별 정보를 확인할 수 없어 장기 기록을 비교할 수 없습니다.");
     }
-    const [primaryData, secondaryData] = await Promise.all([
-        fetchArchiveRange(days, null, currentCharacter.ocid),
-        fetchArchiveRange(days, null, otherCharacter.ocid)
-    ]);
+    const primaryData = await collectArchiveRange(
+        days, currentCharacter, comparisonPeriodNotice, "기준 캐릭터 기록"
+    );
+    const secondaryData = await collectArchiveRange(
+        days, otherCharacter, comparisonPeriodNotice, "비교 캐릭터 기록"
+    );
     return {
         days,
         primary: summarizePeriod(primaryData.history, days),
