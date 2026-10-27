@@ -199,6 +199,33 @@ class GrowthHistoryApiTests(unittest.TestCase):
         )
         self.assertEqual(len(saved), 3)
 
+    def test_archive_does_not_save_api_parameter_errors_as_missing_data(self):
+        invalid_response = Mock(status_code=400)
+        with patch.object(
+            tracker, "get_ranking", return_value=(None, invalid_response)
+        ), patch.object(
+            tracker, "get_basic_character", return_value=(None, invalid_response)
+        ):
+            response = self.client.get(
+                "/api/history/archive?ocid=test-ocid&days=30&collect=1"
+                "&character_name=%ED%85%8C%EC%8A%A4%ED%8A%B8%EC%BA%90%EB%A6%AD%ED%84%B0"
+                "&offset=0&limit=1"
+            )
+
+        self.assertEqual(response.status_code, 200)
+        body = response.get_json()
+        self.assertEqual(body["collection"]["savedRecords"], 0)
+        self.assertEqual(body["collection"]["remainingDays"], 29)
+        self.assertEqual(body["history"][0]["recordStatus"], "not_collected")
+        self.assertEqual(
+            self.store.get_records("test-ocid", self.today - timedelta(days=29), self.today),
+            [{"date": (self.today - timedelta(days=1)).isoformat(), "characterName": "테스트캐릭터",
+              "worldName": "테스트월드", "level": 280, "experience": 123456, "ranking": 321,
+              "recordStatus": "available", "recordedAt": self.store.get_records(
+                  "test-ocid", self.today - timedelta(days=1), self.today
+              )[0]["recordedAt"]}],
+        )
+
     def test_archive_rejects_collection_for_previous_period(self):
         previous_end = self.today - timedelta(days=30)
         response = self.client.get(
