@@ -1646,6 +1646,20 @@ async function handleComparison(event) {
         const otherMetrics = calculateGrowthMetrics(otherCharacter, otherHistory, otherPrediction);
         renderComparisonCharacter("primary", currentCharacter, primaryMetrics);
         renderComparisonCharacter("secondary", otherCharacter, otherMetrics);
+
+        const periodDays = [30, 90].includes(Number(comparisonPeriodRangeSelect?.value))
+            ? Number(comparisonPeriodRangeSelect.value)
+            : 30;
+        let periodSummary = null;
+        let periodError = "";
+        try {
+            periodSummary = await fetchComparisonPeriodSummary(otherCharacter, periodDays);
+            renderComparisonPeriod(periodSummary, currentCharacter, otherCharacter);
+        } catch (error) {
+            periodError = error.message || "기간별 비교 기록을 불러오지 못했습니다.";
+            renderComparisonPeriod(null, currentCharacter, otherCharacter, periodError);
+        }
+
         const signature = buildComparisonSignature(
             currentCharacter,
             primaryMetrics,
@@ -1681,7 +1695,10 @@ async function handleComparison(event) {
                 character: otherCharacter,
                 history: otherHistory,
                 metrics: otherMetrics,
-                aiAnalysis: comparisonAnalysis
+                aiAnalysis: comparisonAnalysis,
+                periodDays,
+                periodSummary,
+                periodError
             }
         });
     } catch (error) {
