@@ -577,7 +577,8 @@ def get_character():
         return jsonify({"error": "캐릭터 이름이 너무 깁니다."}), 400
 
     cache_key = f"character:{character_name}"
-    cached_character = get_cache(cache_key)
+    force_refresh = request.args.get("refresh") == "1"
+    cached_character = None if force_refresh else get_cache(cache_key)
     if cached_character is not None:
         return jsonify(with_data_status(
             cached_character, "cached", get_cache_timestamp(cache_key)
@@ -653,7 +654,8 @@ def get_history():
         return jsonify({"error": "캐릭터 이름이 너무 깁니다."}), 400
 
     cache_key = f"history:{character_name}"
-    cached_history = get_cache(cache_key)
+    force_refresh = request.args.get("refresh") == "1"
+    cached_history = None if force_refresh else get_cache(cache_key)
     if cached_history is not None:
         return jsonify(with_data_status(
             cached_history, "cached", get_cache_timestamp(cache_key)
