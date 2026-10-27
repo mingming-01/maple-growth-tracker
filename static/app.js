@@ -474,7 +474,10 @@ function buildCumulativeExperienceData(history) {
         const currentExperience = item.experience === null || item.experience === undefined
             ? NaN
             : Number(item.experience);
-        if (!Number.isFinite(currentExperience)) return null;
+        if (!Number.isFinite(currentExperience)) {
+            cumulativeExperience = null;
+            return null;
+        }
         if (cumulativeExperience === null) {
             cumulativeExperience = currentExperience / 1_000_000_000_000;
             return cumulativeExperience;
