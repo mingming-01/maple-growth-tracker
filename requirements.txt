@@ -3,3 +3,4 @@ requests
 python-dotenv
 google-genai
 gunicorn
+psycopg[binary]>=3.2,<4
