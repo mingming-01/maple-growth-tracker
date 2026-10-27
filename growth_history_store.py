@@ -71,6 +71,15 @@ class GrowthHistoryStore:
                         ON growth_daily_snapshots (character_name, snapshot_date DESC)
                         """
                     )
+                    connection.execute(
+                        "ALTER TABLE growth_daily_snapshots ENABLE ROW LEVEL SECURITY"
+                    )
+                    connection.execute(
+                        """
+                        REVOKE ALL ON TABLE growth_daily_snapshots
+                        FROM PUBLIC, anon, authenticated
+                        """
+                    )
                 else:
                     connection.execute(
                         """
