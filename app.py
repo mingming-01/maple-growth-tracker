@@ -2,6 +2,7 @@ from flask import Flask, jsonify, request, render_template, redirect, url_for, s
 from functools import wraps
 from werkzeug.exceptions import HTTPException
 from werkzeug.security import check_password_hash
+import hashlib
 import hmac
 import json
 import os
@@ -240,6 +241,45 @@ initialize_snapshot_db()
 CACHE = {}
 CHARACTER_CACHE_TTL = 300
 HISTORY_CACHE_TTL = 1800
+AI_RESPONSE_CACHE = {}
+AI_RESPONSE_CACHE_TTL = 6 * 60 * 60
+AI_RESPONSE_CACHE_MAX_ENTRIES = 100
+
+
+def get_ai_response_cache(prompt):
+    """같은 프롬프트의 성공한 AI 결과를 일정 시간 재사용한다."""
+    cache_key = hashlib.sha256(prompt.encode("utf-8")).hexdigest()
+    item = AI_RESPONSE_CACHE.get(cache_key)
+    if not item:
+        return None
+
+    now = time.time()
+    if now - item["cached_at"] > AI_RESPONSE_CACHE_TTL:
+        AI_RESPONSE_CACHE.pop(cache_key, None)
+        return None
+
+    item["used_at"] = now
+    return item["analysis"]
+
+
+def set_ai_response_cache(prompt, analysis):
+    if not analysis:
+        return
+
+    now = time.time()
+    cache_key = hashlib.sha256(prompt.encode("utf-8")).hexdigest()
+    AI_RESPONSE_CACHE[cache_key] = {
+        "analysis": analysis,
+        "cached_at": now,
+        "used_at": now,
+    }
+
+    while len(AI_RESPONSE_CACHE) > AI_RESPONSE_CACHE_MAX_ENTRIES:
+        oldest_key = min(
+            AI_RESPONSE_CACHE,
+            key=lambda key: AI_RESPONSE_CACHE[key]["used_at"],
+        )
+        AI_RESPONSE_CACHE.pop(oldest_key, None)
 
 
 def get_cache(key):
@@ -1232,6 +1272,11 @@ def generate_ai_analysis(character, history, computed_metrics=None):
         if isinstance(prediction, dict):
             expected_date = prediction.get("estimatedDate")
 
+    cached_analysis = get_ai_response_cache(prompt)
+    if cached_analysis is not None:
+        print("저장된 AI 성장 리포트를 재사용했습니다.")
+        return {"analysis": cached_analysis, "cacheHit": True}
+
     gemini_error = None
 
     if gemini_client:
@@ -1240,12 +1285,12 @@ def generate_ai_analysis(character, history, computed_metrics=None):
                 model="gemini-3.6-flash",
                 contents=prompt
             )
-            return {
-                "analysis": sanitize_ai_text(
-                    response.text or "분석 결과가 비어 있습니다.",
-                    expected_date
-                )
-            }
+            analysis = sanitize_ai_text(
+                response.text or "분석 결과가 비어 있습니다.",
+                expected_date
+            )
+            set_ai_response_cache(prompt, analysis)
+            return {"analysis": analysis, "cacheHit": False}
         except Exception as error:
             gemini_error = error
             print(f"Gemini 성장 분석 요청에 실패했습니다: {error}")
@@ -1257,12 +1302,12 @@ def generate_ai_analysis(character, history, computed_metrics=None):
         try:
             response_text = request_openrouter(prompt)
             print("OpenRouter로 성장 분석을 처리했습니다.")
-            return {
-                "analysis": sanitize_ai_text(
-                    response_text or "분석 결과가 비어 있습니다.",
-                    expected_date
-                )
-            }
+            analysis = sanitize_ai_text(
+                response_text or "분석 결과가 비어 있습니다.",
+                expected_date
+            )
+            set_ai_response_cache(prompt, analysis)
+            return {"analysis": analysis, "cacheHit": False}
         except Exception as error:
             print(f"OpenRouter 성장 분석 요청에 실패했습니다: {error}")
 
@@ -1306,8 +1351,37 @@ def ai_analysis():
 
 
 def generate_ai_comparison(primary, comparison):
+    def prepare_subject(subject):
+        character = subject["character"]
+        metrics = subject["metrics"]
+        history = subject.get("history") or []
+        return {
+            "character": {
+                "characterName": character.get("characterName"),
+                "worldName": character.get("worldName"),
+                "job": character.get("job"),
+                "level": character.get("level"),
+                "experienceRate": character.get("experienceRate"),
+            },
+            "metrics": metrics,
+            "history": [
+                {
+                    "date": item.get("date"),
+                    "level": item.get("level"),
+                    "experienceChange": item.get("experienceChange"),
+                    "ranking": item.get("ranking"),
+                    "rankingChange": item.get("rankingChange"),
+                    "levelUp": item.get("levelUp", False),
+                    "recordStatus": item.get("recordStatus"),
+                }
+                for item in history
+            ],
+        }
 
-    prompt_data = {"primary": primary, "comparison": comparison}
+    prompt_data = {
+        "primary": prepare_subject(primary),
+        "comparison": prepare_subject(comparison),
+    }
     prompt = f"""
 너는 두 메이플스토리 캐릭터의 성장 흐름 차이를 설명하는 도우미야.
 아래 지표는 앱이 같은 기준으로 계산했어. 어떤 수도 직접 계산하거나 다시 예측하지 마.
@@ -1319,6 +1393,11 @@ def generate_ai_comparison(primary, comparison):
 비교 데이터:
 {json.dumps(prompt_data, ensure_ascii=False)}
 """
+    cached_analysis = get_ai_response_cache(prompt)
+    if cached_analysis is not None:
+        print("저장된 AI 성장 비교 분석을 재사용했습니다.")
+        return {"analysis": cached_analysis, "cacheHit": True}
+
     gemini_error = None
 
     if gemini_client:
@@ -1327,11 +1406,11 @@ def generate_ai_comparison(primary, comparison):
                 model="gemini-3.6-flash",
                 contents=prompt
             )
-            return {
-                "analysis": sanitize_ai_text(
-                    response.text or "비교 분석 결과가 비어 있습니다."
-                )
-            }
+            analysis = sanitize_ai_text(
+                response.text or "비교 분석 결과가 비어 있습니다."
+            )
+            set_ai_response_cache(prompt, analysis)
+            return {"analysis": analysis, "cacheHit": False}
         except Exception as error:
             gemini_error = error
             print(f"Gemini 성장 비교 분석 요청에 실패했습니다: {error}")
@@ -1343,11 +1422,11 @@ def generate_ai_comparison(primary, comparison):
         try:
             response_text = request_openrouter(prompt)
             print("OpenRouter로 성장 비교 분석을 처리했습니다.")
-            return {
-                "analysis": sanitize_ai_text(
-                    response_text or "비교 분석 결과가 비어 있습니다."
-                )
-            }
+            analysis = sanitize_ai_text(
+                response_text or "비교 분석 결과가 비어 있습니다."
+            )
+            set_ai_response_cache(prompt, analysis)
+            return {"analysis": analysis, "cacheHit": False}
         except Exception as error:
             print(f"OpenRouter 성장 비교 분석 요청에 실패했습니다: {error}")
 
