@@ -88,6 +88,11 @@ let currentHistoryRangeStatus = null;
 const STORAGE_KEY = "mapleGrowthTrackerState";
 const FAVORITES_STORAGE_KEY = "mapleGrowthTrackerFavorites";
 const MAX_FAVORITES = 30;
+const AI_CACHE_STORAGE_KEY = "mapleGrowthTrackerAIResponsesV1";
+const AI_CACHE_MAX_ENTRIES = 40;
+const AI_CACHE_TTL_MS = 30 * 24 * 60 * 60 * 1000;
+const aiAnalysisCacheNotice = document.getElementById("aiAnalysisCacheNotice");
+const comparisonAICacheNotice = document.getElementById("comparisonAICacheNotice");
 const featureSection = document.getElementById("featureSection");
 const dataStatusNotice = document.getElementById("dataStatusNotice");
 const AUTO_REFRESH_KEY = `${STORAGE_KEY}:lastAutoRefresh`;
@@ -623,7 +628,142 @@ async function searchAIAnalysis(name, metrics) {
         if (response.status === 429) throw new Error("현재 AI 분석을 사용할 수 없습니다. 잠시 후 다시 시도해주세요.");
         throw new Error(data.error || "AI 분석을 불러오지 못했습니다.");
     }
-    return data.analysis;
+    return {
+        analysis: data.analysis,
+        cacheHit: data.cacheHit === true
+    };
+}
+
+function hashAIAnalysisSignature(signature) {
+    let hash = 2166136261;
+    for (let index = 0; index < signature.length; index += 1) {
+        hash ^= signature.charCodeAt(index);
+        hash = Math.imul(hash, 16777619);
+    }
+    return (hash >>> 0).toString(16);
+}
+
+function readAIResponseCache() {
+    try {
+        const saved = JSON.parse(localStorage.getItem(AI_CACHE_STORAGE_KEY) || "[]");
+        if (!Array.isArray(saved)) return [];
+        const now = Date.now();
+        return saved.filter(item =>
+            item &&
+            typeof item.signature === "string" &&
+            typeof item.analysis === "string" &&
+            Number.isFinite(item.savedAt) &&
+            now - item.savedAt <= AI_CACHE_TTL_MS
+        ).slice(0, AI_CACHE_MAX_ENTRIES);
+    } catch (error) {
+        return [];
+    }
+}
+
+function getCachedAIAnalysis(type, signature) {
+    const cache = readAIResponseCache();
+    const key = `${type}:${hashAIAnalysisSignature(signature)}`;
+    const entry = cache.find(item =>
+        item.type === type &&
+        item.key === key &&
+        item.signature === signature
+    );
+    if (!entry) return null;
+
+    entry.lastUsedAt = Date.now();
+    try {
+        localStorage.setItem(AI_CACHE_STORAGE_KEY, JSON.stringify(cache));
+    } catch (error) {
+        // 캐시를 저장할 수 없어도 이미 읽은 결과는 사용한다.
+    }
+    return entry.analysis;
+}
+
+function saveCachedAIAnalysis(type, signature, analysis) {
+    if (typeof analysis !== "string" || !analysis.trim()) return;
+    const cache = readAIResponseCache();
+    const key = `${type}:${hashAIAnalysisSignature(signature)}`;
+    const now = Date.now();
+    const nextCache = cache.filter(item => !(item.type === type && item.key === key));
+    nextCache.push({
+        type,
+        key,
+        signature,
+        analysis,
+        savedAt: now,
+        lastUsedAt: now
+    });
+    nextCache.sort((left, right) => (right.lastUsedAt || right.savedAt) - (left.lastUsedAt || left.savedAt));
+    try {
+        localStorage.setItem(AI_CACHE_STORAGE_KEY, JSON.stringify(nextCache.slice(0, AI_CACHE_MAX_ENTRIES)));
+    } catch (error) {
+        // 저장소가 꽉 찼거나 비활성화된 경우 서버 캐시가 계속 동작한다.
+    }
+}
+
+function reportHistorySignature(history) {
+    return (Array.isArray(history) ? history : []).map(item => ({
+        date: item.date ?? null,
+        level: item.level ?? null,
+        experienceChange: item.experienceChange ?? null,
+        ranking: item.ranking ?? null,
+        rankingChange: item.rankingChange ?? null,
+        levelUp: item.levelUp === true
+    }));
+}
+
+function buildGrowthReportSignature(name, character, history, metrics) {
+    return JSON.stringify({
+        version: 1,
+        type: "growth-report",
+        character: {
+            characterName: character.characterName || name,
+            worldName: character.worldName ?? null,
+            job: character.job ?? null,
+            level: character.level ?? null,
+            experienceRate: character.experienceRate ?? null
+        },
+        metrics,
+        history: reportHistorySignature(history)
+    });
+}
+
+function comparisonSubjectSignature(character, metrics, history) {
+    return {
+        character: {
+            characterName: character.characterName ?? null,
+            worldName: character.worldName ?? null,
+            job: character.job ?? null,
+            level: character.level ?? null,
+            experienceRate: character.experienceRate ?? null
+        },
+        metrics,
+        history: (Array.isArray(history) ? history : []).map(item => ({
+            date: item.date ?? null,
+            level: item.level ?? null,
+            experienceChange: item.experienceChange ?? null,
+            ranking: item.ranking ?? null,
+            rankingChange: item.rankingChange ?? null,
+            levelUp: item.levelUp ?? false,
+            recordStatus: item.recordStatus ?? null
+        }))
+    };
+}
+
+function buildComparisonSignature(primaryCharacter, primaryMetrics, primaryHistory, otherCharacter, otherMetrics, otherHistory) {
+    return JSON.stringify({
+        version: 1,
+        type: "growth-comparison",
+        primary: comparisonSubjectSignature(primaryCharacter, primaryMetrics, primaryHistory),
+        comparison: comparisonSubjectSignature(otherCharacter, otherMetrics, otherHistory)
+    });
+}
+
+function showAICacheNotice(element, message, type = "info") {
+    if (!element) return;
+    element.textContent = message;
+    element.classList.toggle("is-warning", type === "warning");
+    element.hidden = !message;
 }
 
 function buildCumulativeExperienceData(history) {
@@ -899,10 +1039,24 @@ async function runAIReport(name, character, history, sharedMetrics) {
 
     try {
         const metrics = sharedMetrics || calculateGrowthMetrics(character, history);
-        const analysis = await searchAIAnalysis(name, metrics);
+        const signature = buildGrowthReportSignature(name, character, history, metrics);
+        const cachedAnalysis = getCachedAIAnalysis("growth-report-v1", signature);
+        if (cachedAnalysis) {
+            renderAIAnalysis(cachedAnalysis);
+            showAICacheNotice(aiAnalysisCacheNotice, "저장된 분석을 재사용했습니다. AI 모델을 다시 호출하지 않았습니다.");
+            saveTrackerState({ character, history, metrics, aiAnalysis: cachedAnalysis });
+            return;
+        }
 
+        const result = await searchAIAnalysis(name, metrics);
+        const analysis = result.analysis;
+        saveCachedAIAnalysis("growth-report-v1", signature, analysis);
         renderAIAnalysis(analysis);
 
+        const notice = result.cacheHit
+            ? "서버에 저장된 분석을 재사용했습니다. AI 모델을 다시 호출하지 않았습니다."
+            : "새 분석을 생성했습니다. 같은 데이터의 다음 조회에서는 저장된 결과를 재사용합니다.";
+        showAICacheNotice(aiAnalysisCacheNotice, notice);
         saveTrackerState({
             character,
             history,
@@ -912,6 +1066,7 @@ async function runAIReport(name, character, history, sharedMetrics) {
     } catch (error) {
         console.error("AI 분석 실패:", error);
         if (aiAnalysisLoading) aiAnalysisLoading.hidden = true;
+        showAICacheNotice(aiAnalysisCacheNotice, "이번 분석은 완료되지 않아 캐시에 저장하지 않았습니다.", "warning");
 
         if (aiAnalysisError) {
             aiAnalysisError.textContent = error.message || "AI 분석을 불러오지 못했습니다.";
@@ -1163,17 +1318,35 @@ async function handleComparison(event) {
         const otherMetrics = calculateGrowthMetrics(otherCharacter, otherHistory, otherPrediction);
         renderComparisonCharacter("primary", currentCharacter, primaryMetrics);
         renderComparisonCharacter("secondary", otherCharacter, otherMetrics);
-        const response = await fetch("/api/ai-comparison", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-                primary: { character: currentCharacter, metrics: primaryMetrics, history: currentHistory },
-                comparison: { character: otherCharacter, metrics: otherMetrics, history: otherHistory }
-            })
-        });
-        const data = await readApiResponse(response, "AI 성장 비교 분석을 불러오지 못했습니다.");
-        const comparisonAnalysis = data.analysis || "분석 결과가 없습니다.";
+        const signature = buildComparisonSignature(
+            currentCharacter,
+            primaryMetrics,
+            currentHistory,
+            otherCharacter,
+            otherMetrics,
+            otherHistory
+        );
+        let comparisonAnalysis = getCachedAIAnalysis("growth-comparison-v1", signature);
+        let comparisonCacheMessage = "저장된 비교 분석을 재사용했습니다. AI 모델을 다시 호출하지 않았습니다.";
+
+        if (!comparisonAnalysis) {
+            const response = await fetch("/api/ai-comparison", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                    primary: { character: currentCharacter, metrics: primaryMetrics, history: currentHistory },
+                    comparison: { character: otherCharacter, metrics: otherMetrics, history: otherHistory }
+                })
+            });
+            const data = await readApiResponse(response, "AI 성장 비교 분석을 불러오지 못했습니다.");
+            comparisonAnalysis = data.analysis || "분석 결과가 없습니다.";
+            saveCachedAIAnalysis("growth-comparison-v1", signature, comparisonAnalysis);
+            comparisonCacheMessage = data.cacheHit
+                ? "서버에 저장된 비교 분석을 재사용했습니다. AI 모델을 다시 호출하지 않았습니다."
+                : "새 비교 분석을 생성했습니다. 같은 데이터는 저장된 결과를 재사용합니다.";
+        }
         if (comparisonAIAnalysis) comparisonAIAnalysis.textContent = comparisonAnalysis;
+        showAICacheNotice(comparisonAICacheNotice, comparisonCacheMessage);
         if (comparisonResult) comparisonResult.hidden = false;
         saveTrackerState({
             comparison: {
