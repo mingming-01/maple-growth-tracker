@@ -157,7 +157,7 @@ def initialize_log_db():
                 )
             """)
             existing_columns = {
-                row["name"] for row in connection.execute("PRAGMA table_info(action_logs)")
+                row[1] for row in connection.execute("PRAGMA table_info(action_logs)")
             }
             for column, definition in (
                 ("path", "TEXT"),
