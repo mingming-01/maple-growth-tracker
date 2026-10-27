@@ -920,6 +920,193 @@ function renderHistoryRangeNotice(days, status = null) {
         `저장된 최근 ${days}일 기록: 정상 ${status.availableDays}일 · API 미제공 ${status.notReadyDays}일 · 미수집 ${status.notCollectedDays}일. 미수집 날짜는 이 사이트에 저장된 기록이 없는 날이며, 과거 데이터가 자동으로 복구된다는 뜻은 아닙니다.`;
 }
 
+function shiftSnapshotDate(dateString, offsetDays) {
+    const [year, month, day] = String(dateString || "").split("-").map(Number);
+    if (!year || !month || !day) return null;
+    const shifted = new Date(Date.UTC(year, month - 1, day + offsetDays));
+    return shifted.toISOString().slice(0, 10);
+}
+
+async function fetchArchiveRange(days, endDate = null) {
+    const params = new URLSearchParams({
+        ocid: currentCharacter?.ocid || "",
+        days: String(days)
+    });
+    if (endDate) params.set("end", endDate);
+
+    const response = await fetch(`/api/history/archive?${params.toString()}`, {
+        cache: "no-store"
+    });
+    return readApiResponse(response, "저장된 성장 기록을 불러오지 못했습니다.");
+}
+
+function summarizePeriod(history, days) {
+    const records = sortHistoryAscending(Array.isArray(history) ? history : []);
+    const available = records.filter(item =>
+        item.recordStatus === "available" &&
+        item.experience !== null &&
+        item.experience !== undefined &&
+        Number.isFinite(Number(item.experience))
+    );
+    const confirmedChanges = records.filter(item =>
+        item.recordStatus === "available" &&
+        item.experienceChange !== null &&
+        item.experienceChange !== undefined &&
+        Number.isFinite(Number(item.experienceChange))
+    );
+    const growth = confirmedChanges.length
+        ? confirmedChanges.reduce((sum, item) => sum + Number(item.experienceChange), 0)
+        : null;
+    const averageGrowth = growth !== null ? growth / confirmedChanges.length : null;
+
+    const ranked = records.filter(item =>
+        item.recordStatus === "available" &&
+        item.ranking !== null &&
+        item.ranking !== undefined &&
+        Number.isFinite(Number(item.ranking))
+    );
+    const rankingChange = ranked.length >= 2
+        ? Number(ranked[0].ranking) - Number(ranked[ranked.length - 1].ranking)
+        : null;
+
+    const availableDays = records.filter(item => item.recordStatus === "available").length;
+    const notReadyDays = records.filter(item => item.recordStatus === "not_ready").length;
+    const notCollectedDays = records.filter(item => item.recordStatus === "not_collected").length;
+
+    return {
+        days,
+        startDate: records[0]?.date || null,
+        endDate: records[records.length - 1]?.date || null,
+        firstObservedDate: available[0]?.date || null,
+        lastObservedDate: available[available.length - 1]?.date || null,
+        growth,
+        confirmedChangeDays: confirmedChanges.length,
+        averageGrowth,
+        rankingChange,
+        availableDays,
+        notReadyDays,
+        notCollectedDays,
+        coveragePercent: records.length ? (availableDays / records.length) * 100 : 0
+    };
+}
+
+function buildPeriodSummary(currentData, previousData, previousUnavailable = false) {
+    const summary = summarizePeriod(currentData.history, currentData.days);
+    summary.startDate = currentData.startDate || summary.startDate;
+    summary.endDate = currentData.endDate || summary.endDate;
+    summary.previousUnavailable = previousUnavailable;
+    summary.previousGrowth = null;
+    summary.previousGrowthSamples = 0;
+    summary.comparisonPercent = null;
+
+    if (previousData) {
+        const previous = summarizePeriod(previousData.history, previousData.days);
+        summary.previousGrowth = previous.growth;
+        summary.previousGrowthSamples = previous.confirmedChangeDays;
+        if (
+            summary.growth !== null &&
+            previous.growth !== null &&
+            previous.confirmedChangeDays > 0 &&
+            Math.abs(previous.growth) > 0
+        ) {
+            summary.comparisonPercent = (
+                (summary.growth - previous.growth) / Math.abs(previous.growth)
+            ) * 100;
+        }
+    }
+    return summary;
+}
+
+function renderPeriodSummary(summary) {
+    if (!periodSummarySection) return;
+    const visible = !!summary && [30, 90].includes(Number(summary.days));
+    periodSummarySection.hidden = !visible;
+    if (!visible) return;
+
+    const percent = summary.coveragePercent;
+    if (periodSummaryRange) {
+        periodSummaryRange.textContent =
+            `${formatDate(summary.startDate)} ~ ${formatDate(summary.endDate)} · 직전 ${summary.days}일 기록과 비교`;
+    }
+    if (periodSummaryCoverageBadge) {
+        periodSummaryCoverageBadge.textContent = `기록 ${percent.toFixed(0)}%`;
+        periodSummaryCoverageBadge.classList.toggle("is-warning", percent < 70);
+    }
+
+    if (periodGrowthValue) {
+        periodGrowthValue.textContent = summary.growth === null ? "자료 부족" : formatTrillion(summary.growth);
+        periodGrowthValue.classList.toggle("is-muted", summary.growth === null);
+    }
+    if (periodGrowthDetail) {
+        periodGrowthDetail.textContent = summary.confirmedChangeDays
+            ? `연속 기록 ${summary.confirmedChangeDays}일의 증가량 합계`
+            : "연속된 날짜의 증가량을 확인할 수 없습니다.";
+    }
+
+    if (periodAverageValue) {
+        periodAverageValue.textContent = summary.averageGrowth === null
+            ? "자료 부족"
+            : formatTrillion(summary.averageGrowth);
+        periodAverageValue.classList.toggle("is-muted", summary.averageGrowth === null);
+    }
+    if (periodAverageDetail) {
+        periodAverageDetail.textContent = summary.confirmedChangeDays
+            ? `증가량 확인 ${summary.confirmedChangeDays}일 기준`
+            : "비교 가능한 일일 변화 기록이 없습니다.";
+    }
+
+    if (periodRankingValue) {
+        let rankingText = "자료 부족";
+        if (summary.rankingChange !== null) {
+            if (summary.rankingChange > 0) rankingText = `▲ ${formatNumber(summary.rankingChange)}위 상승`;
+            else if (summary.rankingChange < 0) rankingText = `▼ ${formatNumber(Math.abs(summary.rankingChange))}위 하락`;
+            else rankingText = "변화 없음";
+        }
+        periodRankingValue.textContent = rankingText;
+        periodRankingValue.classList.toggle("is-positive", summary.rankingChange > 0);
+        periodRankingValue.classList.toggle("is-negative", summary.rankingChange < 0);
+        periodRankingValue.classList.toggle("is-muted", summary.rankingChange === null);
+    }
+    if (periodRankingDetail) {
+        periodRankingDetail.textContent = summary.firstObservedDate && summary.lastObservedDate
+            ? `${formatDate(summary.firstObservedDate)} → ${formatDate(summary.lastObservedDate)}`
+            : "랭킹 기록이 두 개 이상 필요합니다.";
+    }
+
+    if (periodComparisonValue) {
+        let comparisonText = "비교 자료 부족";
+        if (summary.comparisonPercent !== null) {
+            const sign = summary.comparisonPercent > 0 ? "+" : "";
+            comparisonText = `${sign}${summary.comparisonPercent.toFixed(1)}%`;
+        }
+        periodComparisonValue.textContent = comparisonText;
+        periodComparisonValue.classList.toggle("is-positive", summary.comparisonPercent > 0);
+        periodComparisonValue.classList.toggle("is-negative", summary.comparisonPercent < 0);
+        periodComparisonValue.classList.toggle("is-muted", summary.comparisonPercent === null);
+    }
+    if (periodComparisonDetail) {
+        if (summary.previousUnavailable) {
+            periodComparisonDetail.textContent = "직전 기간 기록을 불러오지 못했습니다.";
+        } else if (summary.previousGrowth !== null && summary.previousGrowthSamples > 0) {
+            periodComparisonDetail.textContent = `직전 확인 증가량 ${formatTrillion(summary.previousGrowth)}`;
+        } else {
+            periodComparisonDetail.textContent = "직전 기간의 연속 기록이 부족합니다.";
+        }
+    }
+
+    if (periodCoverageValue) {
+        periodCoverageValue.textContent = `${summary.availableDays} / ${summary.days}일`;
+    }
+    if (periodCoverageDetail) {
+        periodCoverageDetail.textContent =
+            `API 미제공 ${summary.notReadyDays}일 · 미수집 ${summary.notCollectedDays}일`;
+    }
+    if (periodSummaryFootnote) {
+        periodSummaryFootnote.textContent =
+            "증가량은 연속된 날짜에서 확인된 경험치 변화만 합산합니다. 미수집 날짜와 레벨업으로 경험치 기준이 바뀐 구간은 계산에서 제외되므로 실제 전체 성장량보다 작게 표시될 수 있습니다.";
+    }
+}
+
 async function loadHistoryRange(days) {
     const selectedDays = [7, 30, 90].includes(Number(days)) ? Number(days) : 7;
     if (!currentCharacter) return;
@@ -927,23 +1114,35 @@ async function loadHistoryRange(days) {
         currentDisplayHistory = currentHistory;
         currentHistoryRange = 7;
         currentHistoryRangeStatus = null;
+        currentPeriodSummary = null;
         if (historyRangeSelect) historyRangeSelect.value = "7";
         renderHistory(currentDisplayHistory);
         renderChart(currentDisplayHistory);
         renderHistoryRangeNotice(7);
+        renderPeriodSummary(null);
         saveTrackerState({
             historyRange: 7,
             displayHistory: currentDisplayHistory,
-            historyRangeStatus: null
+            historyRangeStatus: null,
+            periodSummary: null
         });
         return;
     }
 
-    const response = await fetch(
-        `/api/history/archive?ocid=${encodeURIComponent(currentCharacter.ocid || "")}&days=${selectedDays}`,
-        { cache: "no-store" }
-    );
-    const data = await readApiResponse(response, "저장된 성장 기록을 불러오지 못했습니다.");
+    const data = await fetchArchiveRange(selectedDays);
+    let previousData = null;
+    let previousUnavailable = false;
+    const previousEndDate = shiftSnapshotDate(data.startDate, -1);
+    if (previousEndDate) {
+        try {
+            previousData = await fetchArchiveRange(selectedDays, previousEndDate);
+        } catch (error) {
+            previousUnavailable = true;
+        }
+    } else {
+        previousUnavailable = true;
+    }
+
     currentDisplayHistory = data.history || [];
     currentHistoryRange = selectedDays;
     currentHistoryRangeStatus = {
@@ -953,15 +1152,18 @@ async function loadHistoryRange(days) {
         storageBackend: data.storageBackend || "unknown",
         persistentStorage: data.persistentStorage === true
     };
+    currentPeriodSummary = buildPeriodSummary(data, previousData, previousUnavailable);
 
     if (historyRangeSelect) historyRangeSelect.value = String(selectedDays);
     renderHistory(currentDisplayHistory);
     renderChart(currentDisplayHistory);
     renderHistoryRangeNotice(selectedDays, currentHistoryRangeStatus);
+    renderPeriodSummary(currentPeriodSummary);
     saveTrackerState({
         historyRange: selectedDays,
         displayHistory: currentDisplayHistory,
-        historyRangeStatus: currentHistoryRangeStatus
+        historyRangeStatus: currentHistoryRangeStatus,
+        periodSummary: currentPeriodSummary
     });
 }
 
