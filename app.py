@@ -11,6 +11,7 @@ import sqlite3
 import time
 from concurrent.futures import ThreadPoolExecutor
 from datetime import date, datetime, timedelta
+from zoneinfo import ZoneInfo
 
 import requests
 from dotenv import load_dotenv
@@ -34,6 +35,7 @@ API_KEY = os.getenv("NEXON_API_KEY")
 BASE_URL = "https://open.api.nexon.com/maplestory/v1"
 HEADERS = {"x-nxopen-api-key": API_KEY}
 NEXON_API_TIMEOUT = (3.05, 10)
+KOREA_TIMEZONE = ZoneInfo("Asia/Seoul")
 
 
 # Gemini
@@ -530,7 +532,7 @@ def admin_logout():
 # 월드와 직업 목록 조회
 @app.route("/api/options")
 def get_options():
-    today = date.today().strftime("%Y-%m-%d")
+    today = datetime.now(KOREA_TIMEZONE).date().strftime("%Y-%m-%d")
     try:
         response = requests.get(
             f"{BASE_URL}/ranking/overall",
@@ -600,7 +602,7 @@ def get_character():
 
         character_class = basic["character_class"]
         character_rankings = get_character_rankings(
-            target_date=datetime.now().strftime("%Y-%m-%d"),
+            target_date=datetime.now(KOREA_TIMEZONE).strftime("%Y-%m-%d"),
             world_name=basic["world_name"],
             character_class=character_class,
             ocid=ocid
@@ -675,7 +677,7 @@ def get_history():
             return jsonify({"error": "캐릭터 정보를 확인할 수 없습니다."}), response.status_code
 
         world_name = basic["world_name"]
-        today = date.today()
+        today = datetime.now(KOREA_TIMEZONE).date()
 
         def fetch_history(target_date):
             date_string = target_date.strftime("%Y-%m-%d")
