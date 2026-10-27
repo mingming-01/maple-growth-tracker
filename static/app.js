@@ -1253,7 +1253,7 @@ function formatStatusTime(value) {
 function renderDataStatus(character, historyResult) {
     if (!dataStatusNotice) return;
 
-    // Keep data provenance with the saved session so a refresh can restore the notice.
+    // 데이터 조회 시각과 상태를 세션에 저장해 새로고침 후에도 안내를 복원한다.
     character.historyStatus = historyResult.historyStatus || null;
     character.historyDataStatus = historyResult.dataStatus || null;
     character.historyDataAsOf = historyResult.dataAsOf || null;
@@ -1369,7 +1369,7 @@ async function handleSearch(event) {
         try {
             historyResult = await searchHistory(name, true);
         } catch (historyError) {
-            // Preserve the usable character panel when only history lookup fails.
+            // 성장 기록 조회만 실패하면 캐릭터 기본 정보는 계속 표시한다.
             historyResult = {
                 history: [],
                 dataStatus: "unavailable",
@@ -1472,7 +1472,7 @@ async function refreshVisibleCharacter({ automatic = false } = {}) {
         renderHistory(currentDisplayHistory);
         renderChart(currentDisplayHistory);
 
-        // The previous comparison refers to the old data, so hide it until compared again.
+        // 기준 캐릭터 정보가 갱신되면 기존 비교 결과는 오래된 데이터일 수 있어 다시 비교하기 전까지 숨긴다.
         if (comparisonResult) comparisonResult.hidden = true;
         saveTrackerState({
             character,
@@ -1501,7 +1501,7 @@ async function refreshVisibleCharacter({ automatic = false } = {}) {
             dataStatusNotice.textContent = prefix + dataStatusNotice.textContent;
         }
 
-        // Do not block the refreshed character screen while the AI report is generated.
+        // AI 리포트 생성 중에도 갱신된 캐릭터 화면을 먼저 표시한다.
         runAIReport(name, character, history, metrics);
     } catch (error) {
         console.error("최신 정보 갱신 실패:", error);
@@ -1970,13 +1970,13 @@ if (homeLink) {
 restoreTrackerState();
 renderFavoriteList();
 
-// A full browser reload first restores the visible session, then rechecks NEXON's latest public data.
-// A cooldown avoids making another multi-request refresh on every accidental rapid reload.
+// 브라우저 새로고침 시 저장된 화면을 먼저 복원한 다음 넥슨의 최신 공개 데이터를 다시 조회한다.
+// 짧은 시간 안에 반복 새로고침해도 외부 API 요청이 급증하지 않도록 대기 시간을 둔다.
 let lastAutoRefresh = 0;
 try {
     lastAutoRefresh = Number(sessionStorage.getItem(AUTO_REFRESH_KEY) || 0);
 } catch (storageError) {
-    // If browser storage is unavailable, still allow the explicit refresh button to work.
+    // 브라우저 저장소를 사용할 수 없어도 사용자가 직접 누르는 갱신 버튼은 동작하게 한다.
 }
 if (currentCharacter && Date.now() - lastAutoRefresh >= AUTO_REFRESH_COOLDOWN_MS) {
     refreshVisibleCharacter({ automatic: true });
