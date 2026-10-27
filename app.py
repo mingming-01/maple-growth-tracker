@@ -33,6 +33,7 @@ app.config.update(
 API_KEY = os.getenv("NEXON_API_KEY")
 BASE_URL = "https://open.api.nexon.com/maplestory/v1"
 HEADERS = {"x-nxopen-api-key": API_KEY}
+NEXON_API_TIMEOUT = (3.05, 10)
 
 
 # Gemini
@@ -50,6 +51,7 @@ ADMIN_USERNAME = os.getenv("ADMIN_USERNAME", "")
 ADMIN_PASSWORD_HASH = os.getenv("ADMIN_PASSWORD_HASH", "")
 ADMIN_PASSWORD = os.getenv("ADMIN_PASSWORD", "")
 LOG_DB_PATH = os.path.join(app.instance_path, "admin_logs.sqlite3")
+SNAPSHOT_DB_PATH = os.path.join(app.instance_path, "growth_snapshots.sqlite3")
 os.makedirs(app.instance_path, exist_ok=True)
 
 
@@ -92,7 +94,19 @@ def log_action(action, character_name=None, world_name=None, result="성공", co
         print("관리자 로그 저장에 실패했습니다.")
 
 
+def initialize_snapshot_db():
+    with sqlite3.connect(SNAPSHOT_DB_PATH, timeout=5) as connection:
+        connection.execute("""
+            CREATE TABLE IF NOT EXISTS api_snapshots (
+                cache_key TEXT PRIMARY KEY,
+                payload TEXT NOT NULL,
+                saved_at TEXT NOT NULL
+            )
+        """)
+
+
 initialize_log_db()
+initialize_snapshot_db()
 
 
 # 간단한 메모리 캐시
@@ -112,14 +126,80 @@ def get_cache(key):
 
 
 def set_cache(key, data, ttl):
-    CACHE[key] = {"time": time.time(), "data": data, "ttl": ttl}
+    CACHE[key] = {
+        "time": time.time(),
+        "data": data,
+        "ttl": ttl,
+        "saved_at": datetime.now().astimezone().isoformat(timespec="seconds")
+    }
+
+
+def get_cache_timestamp(key):
+    item = CACHE.get(key)
+    return item.get("saved_at") if item else None
+
+
+def save_api_snapshot(cache_key, data):
+    saved_at = datetime.now().astimezone().isoformat(timespec="seconds")
+    try:
+        with sqlite3.connect(SNAPSHOT_DB_PATH, timeout=5) as connection:
+            connection.execute(
+                """
+                INSERT INTO api_snapshots (cache_key, payload, saved_at)
+                VALUES (?, ?, ?)
+                ON CONFLICT(cache_key) DO UPDATE SET
+                    payload = excluded.payload,
+                    saved_at = excluded.saved_at
+                """,
+                (cache_key, json.dumps(data, ensure_ascii=False), saved_at)
+            )
+        return saved_at
+    except sqlite3.Error:
+        print("성장 데이터 스냅샷 저장에 실패했습니다.")
+        return None
+
+
+def load_api_snapshot(cache_key):
+    try:
+        with sqlite3.connect(SNAPSHOT_DB_PATH, timeout=5) as connection:
+            row = connection.execute(
+                "SELECT payload, saved_at FROM api_snapshots WHERE cache_key = ?",
+                (cache_key,)
+            ).fetchone()
+        if not row:
+            return None, None
+        return json.loads(row[0]), row[1]
+    except (sqlite3.Error, ValueError, TypeError):
+        print("성장 데이터 스냅샷을 불러오지 못했습니다.")
+        return None, None
+
+
+def with_data_status(data, status, saved_at=None):
+    result = dict(data)
+    result["dataStatus"] = status
+    result["dataAsOf"] = saved_at
+    return result
+
+
+def is_temporary_nexon_failure(response):
+    if response is None:
+        return True
+    return response.status_code in (408, 425, 429) or response.status_code >= 500
+
+
+def stale_snapshot_response(cache_key, error_message):
+    snapshot, saved_at = load_api_snapshot(cache_key)
+    if snapshot is not None:
+        return jsonify(with_data_status(snapshot, "stale", saved_at)), 200
+    return jsonify({"error": error_message}), 503
 
 
 def get_ocid(character_name):
     response = requests.get(
         f"{BASE_URL}/id",
         headers=HEADERS,
-        params={"character_name": character_name}
+        params={"character_name": character_name},
+        timeout=NEXON_API_TIMEOUT
     )
     if response.status_code != 200:
         return None, response
@@ -130,7 +210,8 @@ def get_basic_character(ocid):
     response = requests.get(
         f"{BASE_URL}/character/basic",
         headers=HEADERS,
-        params={"ocid": ocid}
+        params={"ocid": ocid},
+        timeout=NEXON_API_TIMEOUT
     )
     if response.status_code != 200:
         return None, response
@@ -149,7 +230,8 @@ def get_ranking(target_date, world_name=None, ocid=None, character_class=None):
     response = requests.get(
         f"{BASE_URL}/ranking/overall",
         headers=HEADERS,
-        params=params
+        params=params,
+        timeout=NEXON_API_TIMEOUT
     )
     if response.status_code != 200:
         return None, response
@@ -175,7 +257,8 @@ def get_character_rankings(target_date, world_name, character_class, ocid):
         "ranking": None,
         "worldRanking": None,
         "jobWorldRanking": None,
-        "jobRanking": None
+        "jobRanking": None,
+        "rankingDataStatus": "not_ready"
     }
     api_class = get_api_class(character_class)
 
@@ -211,10 +294,10 @@ def get_character_rankings(target_date, world_name, character_class, ocid):
             executor.submit(fetch_job_world),
             executor.submit(fetch_job)
         ]
-        overall_data, _ = futures[0].result()
-        world_data, _ = futures[1].result()
-        job_world_data, _ = futures[2].result()
-        job_data, _ = futures[3].result()
+        overall_data, overall_response = futures[0].result()
+        world_data, world_response = futures[1].result()
+        job_world_data, job_world_response = futures[2].result()
+        job_data, job_response = futures[3].result()
 
     if overall_data:
         result["ranking"] = overall_data.get("ranking")
@@ -224,8 +307,26 @@ def get_character_rankings(target_date, world_name, character_class, ocid):
         result["jobWorldRanking"] = job_world_data.get("ranking")
     if job_data:
         result["jobRanking"] = job_data.get("ranking")
-    return result
 
+    responses = [
+        response for response in (
+            overall_response, world_response, job_world_response, job_response
+        ) if response is not None
+    ]
+    has_data = any((overall_data, world_data, job_world_data, job_data))
+    has_error = any(response.status_code != 200 for response in responses)
+
+    if has_data and has_error:
+        result["rankingDataStatus"] = "partial"
+    elif has_data:
+        result["rankingDataStatus"] = "available"
+    elif has_error:
+        result["rankingDataStatus"] = "unavailable"
+    else:
+        # HTTP 200 with an empty ranking list can mean the day's ranking is not ready.
+        result["rankingDataStatus"] = "not_ready"
+
+    return result
 
 def sanitize_ai_text(value, expected_date=None):
     """모델 응답의 마크다운과 내부 표현을 정리해 일반 문장만 화면에 전달한다."""
@@ -430,11 +531,16 @@ def admin_logout():
 @app.route("/api/options")
 def get_options():
     today = date.today().strftime("%Y-%m-%d")
-    response = requests.get(
-        f"{BASE_URL}/ranking/overall",
-        headers=HEADERS,
-        params={"date": today, "world_type": 0, "page": 1}
-    )
+    try:
+        response = requests.get(
+            f"{BASE_URL}/ranking/overall",
+            headers=HEADERS,
+            params={"date": today, "world_type": 0, "page": 1},
+            timeout=NEXON_API_TIMEOUT
+        )
+    except requests.RequestException:
+        return jsonify({"error": "월드 및 직업 목록을 일시적으로 가져오지 못했습니다."}), 503
+
     if response.status_code != 200:
         try:
             detail = response.json()
@@ -465,35 +571,45 @@ def get_character():
     character_name = request.args.get("name", "").strip()
     if not character_name:
         return jsonify({"error": "캐릭터 이름을 입력해주세요."}), 400
+    if len(character_name) > 30:
+        return jsonify({"error": "캐릭터 이름이 너무 깁니다."}), 400
 
     cache_key = f"character:{character_name}"
     cached_character = get_cache(cache_key)
     if cached_character is not None:
-        return jsonify(cached_character)
+        return jsonify(with_data_status(
+            cached_character, "cached", get_cache_timestamp(cache_key)
+        ))
 
-    ocid, response = get_ocid(character_name)
-    if not ocid:
-        try:
-            detail = response.json()
-        except ValueError:
-            detail = response.text
-        return jsonify({"error": "캐릭터 정보를 찾을 수 없습니다.", "detail": detail}), response.status_code
+    try:
+        ocid, response = get_ocid(character_name)
+        if not ocid:
+            if is_temporary_nexon_failure(response):
+                return stale_snapshot_response(
+                    cache_key, "넥슨 API가 일시적으로 응답하지 않습니다. 잠시 후 다시 시도해주세요."
+                )
+            return jsonify({"error": "캐릭터 정보를 찾을 수 없거나 조회할 수 없습니다."}), response.status_code
 
-    basic, response = get_basic_character(ocid)
-    if not basic:
-        try:
-            detail = response.json()
-        except ValueError:
-            detail = response.text
-        return jsonify({"error": "캐릭터 기본 정보를 가져오지 못했습니다.", "detail": detail}), response.status_code
+        basic, response = get_basic_character(ocid)
+        if not basic:
+            if is_temporary_nexon_failure(response):
+                return stale_snapshot_response(
+                    cache_key, "캐릭터 정보를 일시적으로 조회할 수 없습니다. 잠시 후 다시 시도해주세요."
+                )
+            return jsonify({"error": "캐릭터 정보를 확인할 수 없습니다."}), response.status_code
 
-    character_class = basic["character_class"]
-    character_rankings = get_character_rankings(
-        target_date=datetime.now().strftime("%Y-%m-%d"),
-        world_name=basic["world_name"],
-        character_class=character_class,
-        ocid=ocid
-    )
+        character_class = basic["character_class"]
+        character_rankings = get_character_rankings(
+            target_date=datetime.now().strftime("%Y-%m-%d"),
+            world_name=basic["world_name"],
+            character_class=character_class,
+            ocid=ocid
+        )
+    except requests.RequestException:
+        return stale_snapshot_response(
+            cache_key, "넥슨 API 연결에 실패했습니다. 잠시 후 다시 시도해주세요."
+        )
+
     result = {
         "characterName": basic["character_name"],
         "character_image": basic.get("character_image"),
@@ -508,11 +624,22 @@ def get_character():
         "jobWorldRanking": character_rankings["jobWorldRanking"],
         "jobRanking": character_rankings["jobRanking"],
         "rankingExperience": basic["character_exp"],
-        "ocid": ocid
+        "ocid": ocid,
+        "rankingDataStatus": character_rankings["rankingDataStatus"]
     }
-    set_cache(cache_key, result, CHARACTER_CACHE_TTL)
-    return jsonify(result)
 
+    data_status = "partial" if character_rankings["rankingDataStatus"] in ("partial", "unavailable") else "current"
+    saved_at = datetime.now().astimezone().isoformat(timespec="seconds")
+
+    # Do not overwrite a previously complete ranking snapshot with a temporary empty result.
+    previous_snapshot, _ = load_api_snapshot(cache_key)
+    if character_rankings["rankingDataStatus"] == "available" or previous_snapshot is None:
+        snapshot_saved_at = save_api_snapshot(cache_key, result)
+        if snapshot_saved_at:
+            saved_at = snapshot_saved_at
+
+    set_cache(cache_key, result, CHARACTER_CACHE_TTL)
+    return jsonify(with_data_status(result, data_status, saved_at))
 
 # 최근 7일 성장 기록 조회 및 변화량 계산
 @app.route("/api/history")
@@ -520,51 +647,84 @@ def get_history():
     character_name = request.args.get("name", "").strip()
     if not character_name:
         return jsonify({"error": "캐릭터 이름을 입력해주세요."}), 400
+    if len(character_name) > 30:
+        return jsonify({"error": "캐릭터 이름이 너무 깁니다."}), 400
 
     cache_key = f"history:{character_name}"
     cached_history = get_cache(cache_key)
     if cached_history is not None:
-        return jsonify(cached_history)
+        return jsonify(with_data_status(
+            cached_history, "cached", get_cache_timestamp(cache_key)
+        ))
 
-    ocid, response = get_ocid(character_name)
-    if not ocid:
-        try:
-            detail = response.json()
-        except ValueError:
-            detail = response.text
-        return jsonify({"error": "캐릭터 정보를 찾을 수 없습니다.", "detail": detail}), response.status_code
+    try:
+        ocid, response = get_ocid(character_name)
+        if not ocid:
+            if is_temporary_nexon_failure(response):
+                return stale_snapshot_response(
+                    cache_key, "넥슨 API가 일시적으로 응답하지 않습니다. 잠시 후 다시 시도해주세요."
+                )
+            return jsonify({"error": "캐릭터 정보를 찾을 수 없거나 조회할 수 없습니다."}), response.status_code
 
-    basic, response = get_basic_character(ocid)
-    if not basic:
-        try:
-            detail = response.json()
-        except ValueError:
-            detail = response.text
-        return jsonify({"error": "캐릭터 정보를 가져오지 못했습니다.", "detail": detail}), response.status_code
+        basic, response = get_basic_character(ocid)
+        if not basic:
+            if is_temporary_nexon_failure(response):
+                return stale_snapshot_response(
+                    cache_key, "캐릭터 정보를 일시적으로 조회할 수 없습니다. 잠시 후 다시 시도해주세요."
+                )
+            return jsonify({"error": "캐릭터 정보를 확인할 수 없습니다."}), response.status_code
 
-    world_name = basic["world_name"]
-    today = date.today()
+        world_name = basic["world_name"]
+        today = date.today()
 
-    def fetch_history(target_date):
-        date_string = target_date.strftime("%Y-%m-%d")
-        ranking_data, _ = get_ranking(
-            target_date=date_string,
-            world_name=world_name,
-            ocid=ocid
-        )
-        if ranking_data:
+        def fetch_history(target_date):
+            date_string = target_date.strftime("%Y-%m-%d")
+            ranking_data, response = get_ranking(
+                target_date=date_string,
+                world_name=world_name,
+                ocid=ocid
+            )
+            if ranking_data:
+                return {
+                    "date": date_string,
+                    "ranking": ranking_data.get("ranking"),
+                    "level": ranking_data.get("character_level"),
+                    "experience": ranking_data.get("character_exp"),
+                    "recordStatus": "available"
+                }
+            if response is not None and response.status_code == 200:
+                return {
+                    "date": date_string,
+                    "ranking": None,
+                    "level": None,
+                    "experience": None,
+                    "recordStatus": "not_ready"
+                }
             return {
                 "date": date_string,
-                "ranking": ranking_data.get("ranking"),
-                "level": ranking_data.get("character_level"),
-                "experience": ranking_data.get("character_exp")
+                "ranking": None,
+                "level": None,
+                "experience": None,
+                "recordStatus": "unavailable",
+                "retryable": is_temporary_nexon_failure(response)
             }
-        return {"date": date_string, "ranking": None, "level": None, "experience": None}
 
-    dates = [today - timedelta(days=i) for i in range(7)]
-    with ThreadPoolExecutor(max_workers=7) as executor:
-        history = list(executor.map(fetch_history, dates))
-    history.reverse()
+        dates = [today - timedelta(days=i) for i in range(7)]
+        with ThreadPoolExecutor(max_workers=7) as executor:
+            history = list(executor.map(fetch_history, dates))
+        history.reverse()
+    except requests.RequestException:
+        return stale_snapshot_response(
+            cache_key, "성장 기록 조회 중 넥슨 API 연결에 실패했습니다. 잠시 후 다시 시도해주세요."
+        )
+
+    failed_records = [item for item in history if item.get("recordStatus") == "unavailable"]
+    if failed_records:
+        if all(item.get("retryable") for item in failed_records):
+            return stale_snapshot_response(
+                cache_key, "성장 기록 조회가 일시적으로 지연되고 있습니다. 잠시 후 다시 시도해주세요."
+            )
+        return jsonify({"error": "성장 기록을 정상적으로 가져오지 못했습니다."}), 502
 
     for index, current in enumerate(history):
         if index == 0:
@@ -597,16 +757,28 @@ def get_history():
         if item.get("experienceChange") is not None
     ]
     average_experience = sum(experience_changes) / len(experience_changes) if experience_changes else None
+    latest_record = history[-1] if history else None
+    history_status = "today_not_ready" if latest_record and latest_record.get("recordStatus") == "not_ready" else "complete"
     result = {
         "characterName": basic["character_name"],
         "worldName": world_name,
         "level": basic["character_level"],
         "history": history,
-        "averageDailyExperience": average_experience
+        "averageDailyExperience": average_experience,
+        "historyStatus": history_status
     }
-    set_cache(cache_key, result, HISTORY_CACHE_TTL)
-    return jsonify(result)
 
+    saved_at = datetime.now().astimezone().isoformat(timespec="seconds")
+    previous_snapshot, _ = load_api_snapshot(cache_key)
+    if history_status == "complete" or previous_snapshot is None:
+        snapshot_saved_at = save_api_snapshot(cache_key, result)
+        if snapshot_saved_at:
+            saved_at = snapshot_saved_at
+
+    # If today's ranking is not ready, retry sooner rather than caching that state for 30 minutes.
+    cache_ttl = HISTORY_CACHE_TTL if history_status == "complete" else 300
+    set_cache(cache_key, result, cache_ttl)
+    return jsonify(with_data_status(result, "current", saved_at))
 
 def generate_ai_analysis(character, history, computed_metrics=None):
 
