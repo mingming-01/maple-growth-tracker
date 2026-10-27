@@ -125,7 +125,21 @@
             </section>
 
             <section class="section">
-                <div class="section-header"><h2 class="section-title">최근 성장 추이</h2><p class="section-description">최근 7일 동안의 누적 성장과 일일 획득량입니다.</p></div>
+                <div class="section-header history-chart-header">
+                    <div>
+                        <h2 class="section-title">성장 추이</h2>
+                        <p class="section-description">선택한 기간의 누적 성장과 일일 획득량입니다.</p>
+                    </div>
+                    <div class="history-range-control">
+                        <label for="historyRangeSelect">기록 범위</label>
+                        <select id="historyRangeSelect" class="history-range-select">
+                            <option value="7">최근 7일</option>
+                            <option value="30">저장 기록 30일</option>
+                            <option value="90">저장 기록 90일</option>
+                        </select>
+                    </div>
+                </div>
+                <p id="historyRangeNotice" class="history-range-notice" role="status" aria-live="polite">최근 7일 기록을 표시합니다.</p>
                 <div class="chart-card"><div class="chart-wrapper"><canvas id="growthChart"></canvas></div></div>
             </section>
 
@@ -199,7 +213,7 @@
             </section>
 
             <section class="section">
-                <div class="section-header"><h2 class="section-title">최근 성장 기록</h2><p class="section-description">최근 7일간의 경험치와 랭킹 변화입니다.</p></div>
+                <div class="section-header"><h2 class="section-title">날짜별 성장 기록</h2><p class="section-description">위에서 선택한 기간의 경험치와 랭킹 변화입니다. 기록을 수집하지 않은 날짜는 계산에 포함되지 않습니다.</p></div>
                 <div class="history-card"><div class="history-table-wrapper"><table class="history-table"><thead><tr><th>날짜</th><th>랭킹</th><th>경험치</th></tr></thead><tbody id="historyBody"></tbody></table></div></div>
             </section>
         </section>

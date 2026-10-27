@@ -14,6 +14,7 @@ from datetime import date, datetime, timedelta
 from zoneinfo import ZoneInfo
 
 import requests
+from growth_history_store import GrowthHistoryStore
 from dotenv import load_dotenv
 from google import genai
 
@@ -54,7 +55,12 @@ ADMIN_PASSWORD_HASH = os.getenv("ADMIN_PASSWORD_HASH", "")
 ADMIN_PASSWORD = os.getenv("ADMIN_PASSWORD", "")
 LOG_DB_PATH = os.path.join(app.instance_path, "admin_logs.sqlite3")
 SNAPSHOT_DB_PATH = os.path.join(app.instance_path, "growth_snapshots.sqlite3")
+GROWTH_DATABASE_URL = os.getenv("GROWTH_DATABASE_URL")
 os.makedirs(app.instance_path, exist_ok=True)
+growth_history_store = GrowthHistoryStore(
+    database_url=GROWTH_DATABASE_URL,
+    sqlite_path=os.path.join(app.instance_path, "growth_history.sqlite3")
+)
 
 
 def initialize_log_db():
@@ -680,9 +686,38 @@ def get_history():
 
         world_name = basic["world_name"]
         today = datetime.now(KOREA_TIMEZONE).date()
+        stored_recent = {}
+        try:
+            stored_records = growth_history_store.get_records(
+                ocid, today - timedelta(days=6), today
+            )
+            stored_recent = {item["date"]: item for item in stored_records}
+        except Exception:
+            # DB 연결 문제는 실시간 API 조회를 막지 않는다.
+            print("저장된 성장 기록을 불러오지 못했습니다.")
 
         def fetch_history(target_date):
             date_string = target_date.strftime("%Y-%m-%d")
+            saved = stored_recent.get(date_string)
+            should_check_api = (
+                target_date == today
+                or (
+                    target_date == today - timedelta(days=1)
+                    and saved
+                    and saved.get("recordStatus") == "not_ready"
+                )
+            )
+
+            if saved and not should_check_api:
+                return {
+                    "date": date_string,
+                    "ranking": saved.get("ranking"),
+                    "level": saved.get("level"),
+                    "experience": saved.get("experience"),
+                    "recordStatus": saved.get("recordStatus"),
+                    "_fromStore": True
+                }
+
             ranking_data, response = get_ranking(
                 target_date=date_string,
                 world_name=world_name,
@@ -697,6 +732,16 @@ def get_history():
                     "recordStatus": "available"
                 }
             if response is not None and response.status_code == 200:
+                # A blank response must not hide a good snapshot saved earlier in the day.
+                if saved and saved.get("recordStatus") == "available":
+                    return {
+                        "date": date_string,
+                        "ranking": saved.get("ranking"),
+                        "level": saved.get("level"),
+                        "experience": saved.get("experience"),
+                        "recordStatus": "available",
+                        "_fromStore": True
+                    }
                 return {
                     "date": date_string,
                     "ranking": None,
@@ -755,6 +800,21 @@ def get_history():
         else:
             current["rankingChange"] = None
 
+    records_to_save = [item for item in history if not item.get("_fromStore")]
+    try:
+        saved_record_count = growth_history_store.save_records(
+            ocid, basic["character_name"], world_name, records_to_save
+        )
+        storage_status = "saved" if saved_record_count else "no_new_records"
+    except Exception:
+        # A database outage should not break the existing live character view.
+        print("성장 기록을 장기 저장하지 못했습니다.")
+        saved_record_count = 0
+        storage_status = "unavailable"
+
+    for item in history:
+        item.pop("_fromStore", None)
+
     experience_changes = [
         item["experienceChange"]
         for item in history
@@ -769,7 +829,12 @@ def get_history():
         "level": basic["character_level"],
         "history": history,
         "averageDailyExperience": average_experience,
-        "historyStatus": history_status
+        "historyStatus": history_status,
+        "historyStorage": {
+            "backend": growth_history_store.backend,
+            "status": storage_status,
+            "savedRecords": saved_record_count
+        }
     }
 
     saved_at = datetime.now().astimezone().isoformat(timespec="seconds")
@@ -783,6 +848,83 @@ def get_history():
     cache_ttl = HISTORY_CACHE_TTL if history_status == "complete" else 300
     set_cache(cache_key, result, cache_ttl)
     return jsonify(with_data_status(result, "current", saved_at))
+
+
+@app.route("/api/history/archive")
+def get_history_archive():
+    ocid = request.args.get("ocid", "").strip()
+    try:
+        days = int(request.args.get("days", "30"))
+    except (TypeError, ValueError):
+        return jsonify({"error": "조회 기간은 30일 또는 90일이어야 합니다."}), 400
+
+    if not ocid or len(ocid) > 128:
+        return jsonify({"error": "캐릭터 식별자를 확인해주세요."}), 400
+    if days not in (30, 90):
+        return jsonify({"error": "조회 기간은 30일 또는 90일이어야 합니다."}), 400
+
+    today = datetime.now(KOREA_TIMEZONE).date()
+    start_date = today - timedelta(days=days - 1)
+    try:
+        stored_records = growth_history_store.get_records(ocid, start_date, today)
+    except Exception:
+        print("날짜별 성장 기록을 조회하지 못했습니다.")
+        return jsonify({"error": "저장된 성장 기록을 조회할 수 없습니다. 저장소 연결을 확인해주세요."}), 503
+
+    stored_by_date = {item["date"]: item for item in stored_records}
+    history = []
+    for offset in range(days):
+        target_date = start_date + timedelta(days=offset)
+        date_string = target_date.isoformat()
+        saved = stored_by_date.get(date_string)
+        if saved:
+            history.append({
+                "date": date_string,
+                "ranking": saved.get("ranking"),
+                "level": saved.get("level"),
+                "experience": saved.get("experience"),
+                "recordStatus": saved.get("recordStatus"),
+                "recordSource": "stored"
+            })
+        else:
+            history.append({
+                "date": date_string,
+                "ranking": None,
+                "level": None,
+                "experience": None,
+                "recordStatus": "not_collected",
+                "recordSource": None
+            })
+
+    for index, current in enumerate(history):
+        current["experienceChange"] = None
+        current["rankingChange"] = None
+        current["levelUp"] = False
+        if index == 0:
+            continue
+        previous = history[index - 1]
+        if current["recordStatus"] == "available" and previous["recordStatus"] == "available":
+            if current["level"] is not None and previous["level"] is not None and current["level"] > previous["level"]:
+                current["levelUp"] = True
+            elif current["experience"] is not None and previous["experience"] is not None:
+                current["experienceChange"] = current["experience"] - previous["experience"]
+            if current["ranking"] is not None and previous["ranking"] is not None:
+                current["rankingChange"] = previous["ranking"] - current["ranking"]
+
+    available_days = sum(item["recordStatus"] == "available" for item in history)
+    not_ready_days = sum(item["recordStatus"] == "not_ready" for item in history)
+    not_collected_days = sum(item["recordStatus"] == "not_collected" for item in history)
+    return jsonify({
+        "ocid": ocid,
+        "days": days,
+        "history": history,
+        "availableDays": available_days,
+        "notReadyDays": not_ready_days,
+        "notCollectedDays": not_collected_days,
+        "storageBackend": growth_history_store.backend,
+        "persistentStorage": growth_history_store.uses_postgres
+    })
+
 
 def generate_ai_analysis(character, history, computed_metrics=None):
 

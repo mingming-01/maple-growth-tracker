@@ -49,6 +49,8 @@ const predictionDays = document.getElementById("predictionDays");
 const predictionDate = document.getElementById("predictionDate");
 const predictionAverage = document.getElementById("predictionAverage");
 const historyBody = document.getElementById("historyBody");
+const historyRangeSelect = document.getElementById("historyRangeSelect");
+const historyRangeNotice = document.getElementById("historyRangeNotice");
 
 // AI 리포트 및 비교
 const aiAnalysisLoading = document.getElementById("aiAnalysisLoading");
@@ -72,6 +74,9 @@ const savePdfButton = document.getElementById("savePdfButton");
 let growthChart = null;
 let currentCharacter = null;
 let currentHistory = [];
+let currentDisplayHistory = [];
+let currentHistoryRange = 7;
+let currentHistoryRangeStatus = null;
 const STORAGE_KEY = "mapleGrowthTrackerState";
 const featureSection = document.getElementById("featureSection");
 const dataStatusNotice = document.getElementById("dataStatusNotice");
@@ -382,9 +387,14 @@ function renderHistory(history) {
     if (!historyBody) return;
     historyBody.innerHTML = "";
     sortHistoryDescending(history).forEach(item => {
-        const experience = Number(item.experience);
+        const experience = item.experience === null || item.experience === undefined
+            ? NaN
+            : Number(item.experience);
         const gainValue = Number(item.experienceChange);
         const gain = Number.isFinite(gainValue) && gainValue > 0 ? gainValue : null;
+        const statusLabel = item.recordStatus === "not_collected"
+            ? "미수집"
+            : item.recordStatus === "not_ready" ? "API 미제공" : "";
         const row = document.createElement("tr");
         row.innerHTML = `
             <td>${escapeHTML(formatDate(item.date))}</td>
@@ -392,6 +402,7 @@ function renderHistory(history) {
             <td class="experience-cell">
                 <span class="experience-value">${Number.isFinite(experience) ? escapeHTML(formatNumber(experience)) : "-"}</span>
                 ${gain !== null ? `<span class="experience-gain">↑${escapeHTML(formatTrillion(gain))}</span>` : ""}
+                ${statusLabel ? `<span class="history-record-status">${escapeHTML(statusLabel)}</span>` : ""}
             </td>`;
         historyBody.appendChild(row);
     });
@@ -460,14 +471,21 @@ function buildCumulativeExperienceData(history) {
     const sorted = sortHistoryAscending(history);
     let cumulativeExperience = null;
     return sorted.map((item, index) => {
-        const currentExperience = Number(item.experience);
-        if (!Number.isFinite(currentExperience)) return cumulativeExperience;
+        const currentExperience = item.experience === null || item.experience === undefined
+            ? NaN
+            : Number(item.experience);
+        if (!Number.isFinite(currentExperience)) {
+            cumulativeExperience = null;
+            return null;
+        }
         if (cumulativeExperience === null) {
             cumulativeExperience = currentExperience / 1_000_000_000_000;
             return cumulativeExperience;
         }
         const previous = sorted[index - 1];
-        const previousExperience = Number(previous?.experience);
+        const previousExperience = previous?.experience === null || previous?.experience === undefined
+            ? NaN
+            : Number(previous.experience);
         if (!Number.isFinite(previousExperience)) return cumulativeExperience;
         if (item.levelUp === true || (Number.isFinite(Number(item.level)) && Number.isFinite(Number(previous?.level)) && Number(item.level) > Number(previous.level))) return cumulativeExperience;
         const difference = currentExperience - previousExperience;
@@ -571,6 +589,88 @@ async function searchHistory(name, forceRefresh = false) {
     return readApiResponse(response, "성장 기록을 불러오지 못했습니다.");
 }
 
+function renderHistoryRangeNotice(days, status = null) {
+    if (!historyRangeNotice) return;
+    if (days === 7) {
+        const available = currentHistory.filter(item => item.recordStatus === "available").length;
+        historyRangeNotice.textContent =
+            `최근 7일 기록을 표시합니다. API에서 확인한 날짜별 정상 기록은 ${available}일입니다.`;
+        return;
+    }
+    if (!status) {
+        historyRangeNotice.textContent =
+            `저장된 최근 ${days}일 기록입니다. 저장된 값이 없는 날짜는 빈 기록으로 표시됩니다.`;
+        return;
+    }
+    historyRangeNotice.textContent =
+        `저장된 최근 ${days}일 기록: 정상 ${status.availableDays}일 · API 미제공 ${status.notReadyDays}일 · 미수집 ${status.notCollectedDays}일. 미수집 날짜는 이 사이트에 저장된 기록이 없는 날이며, 과거 데이터가 자동으로 복구된다는 뜻은 아닙니다.`;
+}
+
+async function loadHistoryRange(days) {
+    const selectedDays = [7, 30, 90].includes(Number(days)) ? Number(days) : 7;
+    if (!currentCharacter) return;
+    if (selectedDays === 7) {
+        currentDisplayHistory = currentHistory;
+        currentHistoryRange = 7;
+        currentHistoryRangeStatus = null;
+        if (historyRangeSelect) historyRangeSelect.value = "7";
+        renderHistory(currentDisplayHistory);
+        renderChart(currentDisplayHistory);
+        renderHistoryRangeNotice(7);
+        saveTrackerState({
+            historyRange: 7,
+            displayHistory: currentDisplayHistory,
+            historyRangeStatus: null
+        });
+        return;
+    }
+
+    const response = await fetch(
+        `/api/history/archive?ocid=${encodeURIComponent(currentCharacter.ocid || "")}&days=${selectedDays}`,
+        { cache: "no-store" }
+    );
+    const data = await readApiResponse(response, "저장된 성장 기록을 불러오지 못했습니다.");
+    currentDisplayHistory = data.history || [];
+    currentHistoryRange = selectedDays;
+    currentHistoryRangeStatus = {
+        availableDays: data.availableDays || 0,
+        notReadyDays: data.notReadyDays || 0,
+        notCollectedDays: data.notCollectedDays || 0,
+        storageBackend: data.storageBackend || "unknown",
+        persistentStorage: data.persistentStorage === true
+    };
+
+    if (historyRangeSelect) historyRangeSelect.value = String(selectedDays);
+    renderHistory(currentDisplayHistory);
+    renderChart(currentDisplayHistory);
+    renderHistoryRangeNotice(selectedDays, currentHistoryRangeStatus);
+    saveTrackerState({
+        historyRange: selectedDays,
+        displayHistory: currentDisplayHistory,
+        historyRangeStatus: currentHistoryRangeStatus
+    });
+}
+
+async function handleHistoryRangeChange() {
+    const selectedDays = Number(historyRangeSelect?.value || 7);
+    if (!currentCharacter) return;
+    if (historyRangeSelect) historyRangeSelect.disabled = true;
+    if (historyRangeNotice && selectedDays !== 7) {
+        historyRangeNotice.textContent = `저장된 최근 ${selectedDays}일 기록을 불러오고 있습니다...`;
+    }
+    try {
+        await loadHistoryRange(selectedDays);
+    } catch (error) {
+        if (historyRangeSelect) historyRangeSelect.value = String(currentHistoryRange);
+        if (historyRangeNotice) {
+            historyRangeNotice.textContent =
+                `저장 기록을 불러오지 못했습니다. ${error.message || "저장소 연결을 확인해주세요."}`;
+        }
+    } finally {
+        if (historyRangeSelect) historyRangeSelect.disabled = false;
+    }
+}
+
 function formatStatusTime(value) {
     if (!value) return "기준 시각을 확인할 수 없음";
     const parsed = new Date(value);
@@ -612,6 +712,14 @@ function renderDataStatus(character, historyResult) {
     }
     if (historyResult.historyStatus === "today_not_ready") {
         messages.push("오늘 날짜의 성장 기록이 아직 제공되지 않았습니다. 확인 가능한 기록만 표시합니다.");
+        isWarning = true;
+    }
+    character.historyStorage = historyResult.historyStorage || character.historyStorage || null;
+    if (historyResult.historyStorage?.status === "unavailable") {
+        messages.push("장기 성장 기록 저장소에 연결하지 못했습니다. 현재 조회 결과는 표시하지만 기록은 저장되지 않았을 수 있습니다.");
+        isWarning = true;
+    } else if (historyResult.historyStorage?.backend === "sqlite") {
+        messages.push("현재는 SQLite 저장소를 사용합니다. Render에서 기록을 장기 보존하려면 PostgreSQL 연결 설정이 필요합니다.");
         isWarning = true;
     }
 
@@ -685,6 +793,11 @@ async function handleSearch(event) {
         renderDataStatus(character, historyResult);
         currentCharacter = character;
         currentHistory = history;
+        currentDisplayHistory = history;
+        currentHistoryRange = 7;
+        currentHistoryRangeStatus = null;
+        if (historyRangeSelect) historyRangeSelect.value = "7";
+        renderHistoryRangeNotice(7);
         const prediction = calculatePrediction(character, history);
         const metrics = calculateGrowthMetrics(character, history, prediction);
         sessionStorage.removeItem(STORAGE_KEY);
@@ -692,8 +805,8 @@ async function handleSearch(event) {
         renderRanking(character);
         renderGrowthSummary(character, history);
         renderPrediction(character, history, prediction);
-        renderHistory(history);
-        renderChart(history);
+        renderHistory(currentDisplayHistory);
+        renderChart(currentDisplayHistory);
         if (saveImageButton) saveImageButton.disabled = false;
         if (savePdfButton) savePdfButton.disabled = false;
         if (resultSection) resultSection.hidden = false;
@@ -703,7 +816,10 @@ async function handleSearch(event) {
             history,
             metrics,
             aiAnalysis: null,
-            comparison: null
+            comparison: null,
+            historyRange: 7,
+            displayHistory: currentDisplayHistory,
+            historyRangeStatus: null
         });
         setLoading(false);
         await runAIReport(name, character, history, metrics);
@@ -739,6 +855,15 @@ async function refreshVisibleCharacter({ automatic = false } = {}) {
         const history = historyResult.history || [];
         currentCharacter = character;
         currentHistory = history;
+        try {
+            await loadHistoryRange(Number(historyRangeSelect?.value || currentHistoryRange));
+        } catch (rangeError) {
+            currentDisplayHistory = history;
+            currentHistoryRange = 7;
+            currentHistoryRangeStatus = null;
+            if (historyRangeSelect) historyRangeSelect.value = "7";
+            renderHistoryRangeNotice(7);
+        }
 
         const prediction = calculatePrediction(character, history);
         const metrics = calculateGrowthMetrics(character, history, prediction);
@@ -751,8 +876,8 @@ async function refreshVisibleCharacter({ automatic = false } = {}) {
         renderRanking(character);
         renderGrowthSummary(character, history);
         renderPrediction(character, history, prediction);
-        renderHistory(history);
-        renderChart(history);
+        renderHistory(currentDisplayHistory);
+        renderChart(currentDisplayHistory);
 
         // The previous comparison refers to the old data, so hide it until compared again.
         if (comparisonResult) comparisonResult.hidden = true;
@@ -761,7 +886,10 @@ async function refreshVisibleCharacter({ automatic = false } = {}) {
             history,
             metrics,
             aiAnalysis: null,
-            comparison: null
+            comparison: null,
+            historyRange: currentHistoryRange,
+            displayHistory: currentDisplayHistory,
+            historyRangeStatus: currentHistoryRangeStatus
         });
 
         try {
@@ -914,7 +1042,8 @@ function restoreTrackerState() {
     renderDataStatus(currentCharacter, {
         historyStatus: currentCharacter.historyStatus,
         dataStatus: currentCharacter.historyDataStatus || "cached",
-        dataAsOf: currentCharacter.historyDataAsOf
+        dataAsOf: currentCharacter.historyDataAsOf,
+        historyStorage: currentCharacter.historyStorage
     });
 
     const prediction = calculatePrediction(
@@ -933,12 +1062,22 @@ function restoreTrackerState() {
         characterNameInput.value = currentCharacter.characterName || "";
     }
 
+    currentHistoryRange = [7, 30, 90].includes(Number(state.historyRange))
+        ? Number(state.historyRange)
+        : 7;
+    currentDisplayHistory = Array.isArray(state.displayHistory)
+        ? state.displayHistory
+        : currentHistory;
+    currentHistoryRangeStatus = state.historyRangeStatus || null;
+    if (historyRangeSelect) historyRangeSelect.value = String(currentHistoryRange);
+    renderHistoryRangeNotice(currentHistoryRange, currentHistoryRangeStatus);
+
     renderCharacter(currentCharacter, currentHistory);
     renderRanking(currentCharacter);
     renderGrowthSummary(currentCharacter, currentHistory);
     renderPrediction(currentCharacter, currentHistory, prediction);
-    renderHistory(currentHistory);
-    renderChart(currentHistory);
+    renderHistory(currentDisplayHistory);
+    renderChart(currentDisplayHistory);
 
     if (saveImageButton) saveImageButton.disabled = false;
     if (savePdfButton) savePdfButton.disabled = false;
@@ -1059,6 +1198,7 @@ if (savePdfButton) {
 if (searchForm) searchForm.addEventListener("submit", handleSearch);
 if (comparisonForm) comparisonForm.addEventListener("submit", handleComparison);
 if (refreshDataButton) refreshDataButton.addEventListener("click", () => refreshVisibleCharacter());
+if (historyRangeSelect) historyRangeSelect.addEventListener("change", handleHistoryRangeChange);
 
 // 사이트 이름 클릭: 저장된 상태를 지우고 초기 메인 화면으로 이동
 const homeLink = document.getElementById("homeLink");
