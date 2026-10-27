@@ -73,6 +73,40 @@ class ApiResilienceTests(unittest.TestCase):
         self.assertNotIn("private timeout detail", response.get_data(as_text=True))
         self.assertIn("넥슨 API", response.get_data(as_text=True))
 
+    def test_force_refresh_bypasses_character_memory_cache(self):
+        tracker.set_cache(
+            "character:테스트캐릭터",
+            {"characterName": "오래된이름", "level": 250},
+            tracker.CHARACTER_CACHE_TTL
+        )
+
+        with patch.object(tracker, "get_ocid", side_effect=requests.Timeout("timeout")):
+            response = self.client.get(
+                "/api/character?name=%ED%85%8C%EC%8A%A4%ED%8A%B8%EC%BA%90%EB%A6%AD%ED%84%B0&refresh=1"
+            )
+
+        self.assertEqual(response.status_code, 503)
+        self.assertIn("넥슨 API", response.get_data(as_text=True))
+
+    def test_force_refresh_bypasses_history_memory_cache(self):
+        tracker.set_cache(
+            "history:테스트캐릭터",
+            {
+                "characterName": "테스트캐릭터",
+                "history": [{"date": "2026-10-26", "experience": 123}],
+                "historyStatus": "complete"
+            },
+            tracker.HISTORY_CACHE_TTL
+        )
+
+        with patch.object(tracker, "get_ocid", side_effect=requests.Timeout("timeout")):
+            response = self.client.get(
+                "/api/history?name=%ED%85%8C%EC%8A%A4%ED%8A%B8%EC%BA%90%EB%A6%AD%ED%84%B0&refresh=1"
+            )
+
+        self.assertEqual(response.status_code, 503)
+        self.assertIn("넥슨 API", response.get_data(as_text=True))
+
     def test_empty_ranking_response_is_marked_not_ready(self):
         empty_response = Mock(status_code=200)
         with patch.object(tracker, "get_api_class", return_value="테스트직업"), patch.object(
