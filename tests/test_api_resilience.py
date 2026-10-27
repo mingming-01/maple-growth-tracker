@@ -49,13 +49,29 @@ class ApiResilienceTests(unittest.TestCase):
         self.assertIn("dataAsOf", body)
         self.assertEqual(body["characterName"], "테스트캐릭터")
 
+    def test_temporary_history_failure_returns_saved_history_as_stale(self):
+        snapshot = {
+            "characterName": "테스트캐릭터",
+            "history": [{"date": "2026-10-26", "experience": 123}],
+            "historyStatus": "complete"
+        }
+        tracker.save_api_snapshot("history:테스트캐릭터", snapshot)
+
+        with patch.object(tracker, "get_ocid", side_effect=requests.Timeout("internal timeout")):
+            response = self.client.get("/api/history?name=%ED%85%8C%EC%8A%A4%ED%8A%B8%EC%BA%90%EB%A6%AD%ED%84%B0")
+
+        self.assertEqual(response.status_code, 200)
+        body = response.get_json()
+        self.assertEqual(body["dataStatus"], "stale")
+        self.assertEqual(body["history"][0]["experience"], 123)
+
     def test_temporary_failure_without_snapshot_returns_safe_error(self):
         with patch.object(tracker, "get_ocid", side_effect=requests.Timeout("private timeout detail")):
             response = self.client.get("/api/character?name=%ED%85%8C%EC%8A%A4%ED%8A%B8%EC%BA%90%EB%A6%AD%ED%84%B0")
 
         self.assertEqual(response.status_code, 503)
         self.assertNotIn("private timeout detail", response.get_data(as_text=True))
-        self.assertIn("오류", response.get_data(as_text=True)) if False else None
+        self.assertIn("넥슨 API", response.get_data(as_text=True))
 
     def test_empty_ranking_response_is_marked_not_ready(self):
         empty_response = Mock(status_code=200)
