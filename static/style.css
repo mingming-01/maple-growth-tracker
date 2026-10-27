@@ -163,6 +163,14 @@ button:disabled { cursor: wait; opacity: 0.65; }
 .experience-cell { white-space: nowrap; }
 .experience-value { font-weight: 700; }
 .experience-gain { display: inline-block; margin-left: 10px; color: #5474c8; font-size: 12px; font-weight: 800; }
+.ai-cache-notice {
+    margin: -4px 0 12px;
+    color: #6f6895;
+    font-size: 12px;
+    line-height: 1.6;
+}
+.ai-cache-notice[hidden] { display: none; }
+.ai-cache-notice.is-warning { color: #a05e25; }
 .ai-analysis-card { position: relative; padding: 30px; border: 1px solid #e6e2f2; border-radius: 24px; background: linear-gradient(135deg,#fff 0%,#faf9ff 100%); box-shadow: 0 16px 40px rgba(63,52,105,.08); }
 .ai-analysis-card::before { content: ""; position: absolute; top: 0; left: 0; right: 0; height: 4px; border-radius: 24px 24px 0 0; background: linear-gradient(90deg,#8d7cf0,#b59cff); }
 .ai-analysis-loading { padding: 18px 4px; color: #77718a; font-size: 14px; font-weight: 700; text-align: center; }
