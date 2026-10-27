@@ -14,9 +14,12 @@ class GrowthHistoryStore:
     def __init__(self, database_url=None, sqlite_path="instance/growth_history.sqlite3"):
         self.database_url = (database_url or "").strip()
         self.sqlite_path = str(sqlite_path)
-        self.backend = "postgres" if self.database_url.startswith(
-            ("postgres://", "postgresql://")
-        ) else "sqlite"
+        if not self.database_url:
+            self.backend = "sqlite"
+        elif self.database_url.startswith(("postgres://", "postgresql://")):
+            self.backend = "postgres"
+        else:
+            self.backend = "invalid"
         self._initialized = False
 
     @property
@@ -24,15 +27,15 @@ class GrowthHistoryStore:
         return self.backend == "postgres"
 
     def _connect(self):
-        if self.uses_postgres:
-            if not self.database_url.startswith(("postgres://", "postgresql://")):
-                raise ValueError("GROWTH_DATABASE_URL must be a PostgreSQL connection string.")
+        if self.backend == "postgres":
             return psycopg.connect(
                 self.database_url,
                 connect_timeout=3,
                 sslmode="require",
                 prepare_threshold=None,
             )
+        if self.backend != "sqlite":
+            raise ValueError("GROWTH_DATABASE_URL must be a PostgreSQL connection string.")
 
         Path(self.sqlite_path).parent.mkdir(parents=True, exist_ok=True)
         return sqlite3.connect(self.sqlite_path, timeout=5)
