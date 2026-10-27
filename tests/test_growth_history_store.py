@@ -1,0 +1,164 @@
+import tempfile
+import unittest
+from datetime import date, timedelta
+from pathlib import Path
+from unittest.mock import Mock, patch
+
+import app as tracker
+from growth_history_store import GrowthHistoryStore
+
+
+class GrowthHistoryStoreTests(unittest.TestCase):
+    def setUp(self):
+        self.temp_dir = tempfile.TemporaryDirectory()
+        self.store = GrowthHistoryStore(
+            sqlite_path=str(Path(self.temp_dir.name) / "growth_history.sqlite3")
+        )
+        self.today = date.today()
+
+    def tearDown(self):
+        self.temp_dir.cleanup()
+
+    def test_only_valid_available_and_not_ready_records_are_saved(self):
+        records = [
+            {"date": self.today.isoformat(), "recordStatus": "available", "level": 280, "experience": 12345, "ranking": 100},
+            {"date": (self.today - timedelta(days=1)).isoformat(), "recordStatus": "not_ready"},
+            {"date": (self.today - timedelta(days=2)).isoformat(), "recordStatus": "unavailable"},
+            {"date": "not-a-date", "recordStatus": "available", "level": 280, "experience": 12345},
+        ]
+
+        saved = self.store.save_records("test-ocid", "테스트캐릭터", "테스트월드", records)
+        result = self.store.get_records(
+            "test-ocid", self.today - timedelta(days=3), self.today
+        )
+
+        self.assertEqual(saved, 2)
+        self.assertEqual(len(result), 2)
+        self.assertEqual(result[0]["recordStatus"], "not_ready")
+        self.assertEqual(result[1]["recordStatus"], "available")
+        self.assertEqual(result[1]["experience"], 12345)
+
+    def test_same_character_and_date_is_upserted_instead_of_duplicated(self):
+        record_date = self.today.isoformat()
+        first = [{"date": record_date, "recordStatus": "available", "level": 280, "experience": 100, "ranking": 20}]
+        updated = [{"date": record_date, "recordStatus": "available", "level": 281, "experience": 200, "ranking": 18}]
+
+        self.store.save_records("test-ocid", "테스트캐릭터", "테스트월드", first)
+        self.store.save_records("test-ocid", "테스트캐릭터", "테스트월드", updated)
+        result = self.store.get_records("test-ocid", self.today, self.today)
+
+        self.assertEqual(len(result), 1)
+        self.assertEqual(result[0]["level"], 281)
+        self.assertEqual(result[0]["experience"], 200)
+        self.assertEqual(result[0]["ranking"], 18)
+
+    def test_not_ready_does_not_overwrite_a_valid_record(self):
+        record_date = self.today.isoformat()
+        self.store.save_records(
+            "test-ocid", "테스트캐릭터", "테스트월드",
+            [{"date": record_date, "recordStatus": "available", "level": 280, "experience": 100, "ranking": 20}]
+        )
+        self.store.save_records(
+            "test-ocid", "테스트캐릭터", "테스트월드",
+            [{"date": record_date, "recordStatus": "not_ready"}]
+        )
+        result = self.store.get_records("test-ocid", self.today, self.today)
+
+        self.assertEqual(result[0]["recordStatus"], "available")
+        self.assertEqual(result[0]["experience"], 100)
+
+    def test_date_range_is_inclusive_and_sorted(self):
+        dates = [self.today - timedelta(days=2), self.today, self.today - timedelta(days=1)]
+        records = [
+            {"date": item.isoformat(), "recordStatus": "available", "level": 280, "experience": index + 1, "ranking": 50}
+            for index, item in enumerate(dates)
+        ]
+        self.store.save_records("test-ocid", "테스트캐릭터", "테스트월드", records)
+
+        result = self.store.get_records(
+            "test-ocid", self.today - timedelta(days=1), self.today
+        )
+
+        self.assertEqual([item["date"] for item in result], [
+            (self.today - timedelta(days=1)).isoformat(),
+            self.today.isoformat()
+        ])
+
+
+class GrowthHistoryApiTests(unittest.TestCase):
+    def setUp(self):
+        self.temp_dir = tempfile.TemporaryDirectory()
+        self.store = GrowthHistoryStore(
+            sqlite_path=str(Path(self.temp_dir.name) / "growth_history.sqlite3")
+        )
+        self.store.initialize()
+        self.store.save_records(
+            "test-ocid", "테스트캐릭터", "테스트월드",
+            [{
+                "date": (date.today() - timedelta(days=1)).isoformat(),
+                "recordStatus": "available",
+                "level": 280,
+                "experience": 123456,
+                "ranking": 321
+            }]
+        )
+        self.store_patch = patch.object(tracker, "growth_history_store", self.store)
+        self.store_patch.start()
+        tracker.CACHE.clear()
+        self.client = tracker.app.test_client()
+
+    def tearDown(self):
+        tracker.CACHE.clear()
+        self.store_patch.stop()
+        self.temp_dir.cleanup()
+
+    def test_archive_returns_calendar_days_and_marks_missing_days(self):
+        response = self.client.get("/api/history/archive?ocid=test-ocid&days=30")
+
+        self.assertEqual(response.status_code, 200)
+        body = response.get_json()
+        self.assertEqual(len(body["history"]), 30)
+        self.assertEqual(body["availableDays"], 1)
+        self.assertEqual(body["notCollectedDays"], 29)
+        saved_yesterday = body["history"][-2]
+        self.assertEqual(saved_yesterday["recordStatus"], "available")
+        self.assertEqual(saved_yesterday["experience"], 123456)
+        self.assertEqual(body["history"][-1]["recordStatus"], "not_collected")
+
+    def test_archive_rejects_unsupported_ranges_and_empty_ocid(self):
+        bad_range = self.client.get("/api/history/archive?ocid=test-ocid&days=365")
+        missing_ocid = self.client.get("/api/history/archive?days=30")
+
+        self.assertEqual(bad_range.status_code, 400)
+        self.assertEqual(missing_ocid.status_code, 400)
+
+    def test_history_request_saves_successful_recent_records(self):
+        response_stub = Mock(status_code=200)
+        basic = {
+            "character_name": "테스트캐릭터",
+            "world_name": "테스트월드",
+            "character_level": 280,
+            "character_exp": 100000
+        }
+        ranking = {
+            "ranking": 100,
+            "character_level": 280,
+            "character_exp": 100000
+        }
+
+        with patch.object(tracker, "get_ocid", return_value=("test-ocid", response_stub)), patch.object(
+            tracker, "get_basic_character", return_value=(basic, response_stub)
+        ), patch.object(tracker, "get_ranking", return_value=(ranking, response_stub)):
+            response = self.client.get("/api/history?name=%ED%85%8C%EC%8A%A4%ED%8A%B8%EC%BA%90%EB%A6%AD%ED%84%B0&refresh=1")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.get_json()["historyStorage"]["status"], "saved")
+        saved = self.store.get_records(
+            "test-ocid", date.today() - timedelta(days=6), date.today()
+        )
+        self.assertEqual(len(saved), 7)
+        self.assertTrue(all(row["recordStatus"] == "available" for row in saved))
+
+
+if __name__ == "__main__":
+    unittest.main()
