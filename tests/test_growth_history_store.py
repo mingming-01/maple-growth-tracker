@@ -126,6 +126,31 @@ class GrowthHistoryApiTests(unittest.TestCase):
         self.assertEqual(saved_yesterday["experience"], 123456)
         self.assertEqual(body["history"][-1]["recordStatus"], "not_collected")
 
+    def test_archive_keeps_each_characters_records_separate_for_comparison(self):
+        target_date = (self.today - timedelta(days=1)).isoformat()
+        self.store.save_records(
+            "comparison-ocid", "비교캐릭터", "테스트월드",
+            [{
+                "date": target_date,
+                "recordStatus": "available",
+                "level": 279,
+                "experience": 98765,
+                "ranking": 654
+            }]
+        )
+
+        primary_response = self.client.get("/api/history/archive?ocid=test-ocid&days=30")
+        comparison_response = self.client.get("/api/history/archive?ocid=comparison-ocid&days=30")
+
+        self.assertEqual(primary_response.status_code, 200)
+        self.assertEqual(comparison_response.status_code, 200)
+        primary_history = primary_response.get_json()["history"]
+        comparison_history = comparison_response.get_json()["history"]
+        self.assertEqual(primary_history[-2]["experience"], 123456)
+        self.assertEqual(comparison_history[-2]["experience"], 98765)
+        self.assertEqual(primary_history[-2]["ranking"], 321)
+        self.assertEqual(comparison_history[-2]["ranking"], 654)
+
     def test_archive_accepts_custom_end_date_for_previous_period(self):
         end_date = self.today - timedelta(days=1)
         response = self.client.get(
