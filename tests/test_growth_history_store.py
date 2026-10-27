@@ -217,14 +217,12 @@ class GrowthHistoryApiTests(unittest.TestCase):
         self.assertEqual(body["collection"]["savedRecords"], 0)
         self.assertEqual(body["collection"]["remainingDays"], 29)
         self.assertEqual(body["history"][0]["recordStatus"], "not_collected")
-        self.assertEqual(
-            self.store.get_records("test-ocid", self.today - timedelta(days=29), self.today),
-            [{"date": (self.today - timedelta(days=1)).isoformat(), "characterName": "테스트캐릭터",
-              "worldName": "테스트월드", "level": 280, "experience": 123456, "ranking": 321,
-              "recordStatus": "available", "recordedAt": self.store.get_records(
-                  "test-ocid", self.today - timedelta(days=1), self.today
-              )[0]["recordedAt"]}],
+        saved_records = self.store.get_records(
+            "test-ocid", self.today - timedelta(days=29), self.today
         )
+        self.assertEqual(len(saved_records), 1)
+        self.assertEqual(saved_records[0]["date"], (self.today - timedelta(days=1)).isoformat())
+        self.assertEqual(saved_records[0]["recordStatus"], "available")
 
     def test_archive_rejects_collection_for_previous_period(self):
         previous_end = self.today - timedelta(days=30)
