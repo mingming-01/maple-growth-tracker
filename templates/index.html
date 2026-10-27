@@ -166,6 +166,43 @@
                     </div>
                 </div>
                 <p id="historyRangeNotice" class="history-range-notice" role="status" aria-live="polite">최근 7일 기록을 표시합니다.</p>
+                <section id="periodSummarySection" class="period-summary-section" aria-labelledby="periodSummaryTitle" hidden>
+                    <div class="period-summary-heading">
+                        <div>
+                            <h3 id="periodSummaryTitle">기간별 성장 요약</h3>
+                            <p id="periodSummaryRange">선택 기간의 기록을 분석합니다.</p>
+                        </div>
+                        <span id="periodSummaryCoverageBadge" class="period-summary-badge">기록 확인 중</span>
+                    </div>
+                    <div class="period-summary-grid">
+                        <article class="period-summary-card is-primary">
+                            <span class="period-summary-label">확인된 경험치 증가</span>
+                            <strong id="periodGrowthValue" class="period-summary-value">-</strong>
+                            <span id="periodGrowthDetail" class="period-summary-detail">연속 기록에서 확인된 증가량</span>
+                        </article>
+                        <article class="period-summary-card">
+                            <span class="period-summary-label">관측된 1일 평균</span>
+                            <strong id="periodAverageValue" class="period-summary-value">-</strong>
+                            <span id="periodAverageDetail" class="period-summary-detail">증가량을 확인한 날짜 기준</span>
+                        </article>
+                        <article class="period-summary-card">
+                            <span class="period-summary-label">랭킹 변화</span>
+                            <strong id="periodRankingValue" class="period-summary-value">-</strong>
+                            <span id="periodRankingDetail" class="period-summary-detail">첫 기록과 마지막 기록 비교</span>
+                        </article>
+                        <article class="period-summary-card">
+                            <span class="period-summary-label">직전 기간 대비</span>
+                            <strong id="periodComparisonValue" class="period-summary-value">-</strong>
+                            <span id="periodComparisonDetail" class="period-summary-detail">직전 동일 길이 기간과 비교</span>
+                        </article>
+                        <article class="period-summary-card">
+                            <span class="period-summary-label">기록 충실도</span>
+                            <strong id="periodCoverageValue" class="period-summary-value">-</strong>
+                            <span id="periodCoverageDetail" class="period-summary-detail">정상적으로 저장된 날짜</span>
+                        </article>
+                    </div>
+                    <p id="periodSummaryFootnote" class="period-summary-footnote" role="status" aria-live="polite"></p>
+                </section>
                 <div class="chart-card"><div class="chart-wrapper"><canvas id="growthChart"></canvas></div></div>
             </section>
 
