@@ -588,6 +588,10 @@ function renderDataStatus(character, historyResult) {
         messages.push(`성장 기록은 마지막 정상 조회 결과입니다(${historyTime}).`);
         isWarning = true;
     }
+    if (historyResult.dataStatus === "unavailable") {
+        messages.push("성장 기록을 조회하지 못했습니다. 캐릭터 기본 정보는 계속 표시합니다.");
+        isWarning = true;
+    }
     if (character.rankingDataStatus === "not_ready") {
         messages.push("당일 랭킹 정보가 아직 제공되지 않았거나 해당 랭킹 기록이 없습니다.");
         isWarning = true;
@@ -654,7 +658,18 @@ async function handleSearch(event) {
     setLoading(true);
     try {
         const character = await searchCharacter(name);
-        const historyResult = await searchHistory(name);
+        let historyResult;
+        try {
+            historyResult = await searchHistory(name);
+        } catch (historyError) {
+            // Preserve the usable character panel when only history lookup fails.
+            historyResult = {
+                history: [],
+                dataStatus: "unavailable",
+                historyStatus: "unavailable",
+                dataAsOf: null
+            };
+        }
         const history = historyResult.history || [];
         renderDataStatus(character, historyResult);
         currentCharacter = character;
