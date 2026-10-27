@@ -1151,6 +1151,22 @@ def get_history():
     return jsonify(with_data_status(result, "current", saved_at))
 
 
+def is_historical_data_missing(response):
+    """정상 빈 응답이나 데이터가 없는 날짜의 오류인지 확인한다."""
+    if response is None:
+        return False
+    if response.status_code == 200:
+        return True
+    if response.status_code != 400:
+        return False
+
+    try:
+        error_name = response.json().get("error", {}).get("name")
+    except (ValueError, AttributeError):
+        return False
+    return error_name in ("OPENAPI00003", "OPENAPI00004")
+
+
 def fetch_historical_record(ocid, character_name, world_name, target_date, today):
     """랭킹 또는 날짜별 캐릭터 정보에서 과거 일일 스냅샷을 만든다."""
     date_text = target_date.isoformat()
@@ -1197,10 +1213,10 @@ def fetch_historical_record(ocid, character_name, world_name, target_date, today
                 "recordSource": "api"
             }
 
-    # 두 API 모두 응답했지만 해당 날짜의 핵심 데이터가 비었다면 빈 기록만 저장한다.
+    # 명확한 데이터 없음 응답만 저장해 다음 조회 때 같은 날짜를 반복 요청하지 않는다.
     if (
-        ranking_response is not None and ranking_response.status_code == 200
-        and basic_response is not None and basic_response.status_code == 200
+        is_historical_data_missing(ranking_response)
+        and is_historical_data_missing(basic_response)
     ):
         return {"date": date_text, "recordStatus": "not_ready"}
 
