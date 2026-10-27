@@ -761,10 +761,14 @@ async function refreshVisibleCharacter({ automatic = false } = {}) {
 
         sessionStorage.setItem(AUTO_REFRESH_KEY, String(Date.now()));
 
-        if (automatic && dataStatusNotice) {
-            dataStatusNotice.textContent = "저장된 결과를 최신 공개 데이터로 다시 확인했습니다. " + dataStatusNotice.textContent;
-        } else if (dataStatusNotice) {
-            dataStatusNotice.textContent = "최신 공개 데이터 조회를 마쳤습니다. " + dataStatusNotice.textContent;
+        const usingPreviousData = character.dataStatus === "stale" || historyResult.dataStatus === "stale";
+        if (dataStatusNotice) {
+            const prefix = usingPreviousData
+                ? "최신 조회에 실패해 마지막 정상 데이터를 표시합니다. "
+                : automatic
+                    ? "저장된 결과를 최신 공개 데이터로 다시 확인했습니다. "
+                    : "최신 공개 데이터 조회를 마쳤습니다. ";
+            dataStatusNotice.textContent = prefix + dataStatusNotice.textContent;
         }
 
         // Do not block the refreshed character screen while the AI report is generated.
