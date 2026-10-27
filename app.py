@@ -836,44 +836,6 @@ def admin_logout():
     return redirect(url_for("admin_login"))
 
 
-# 월드와 직업 목록 조회
-@app.route("/api/options")
-def get_options():
-    today = datetime.now(KOREA_TIMEZONE).date().strftime("%Y-%m-%d")
-    try:
-        response = requests.get(
-            f"{BASE_URL}/ranking/overall",
-            headers=HEADERS,
-            params={"date": today, "world_type": 0, "page": 1},
-            timeout=NEXON_API_TIMEOUT
-        )
-    except requests.RequestException:
-        return jsonify({"error": "월드 및 직업 목록을 일시적으로 가져오지 못했습니다."}), 503
-
-    if response.status_code != 200:
-        try:
-            detail = response.json()
-        except ValueError:
-            detail = response.text
-        return jsonify({"error": "서버 및 직업 목록을 가져오지 못했습니다.", "detail": detail}), response.status_code
-
-    ranking_list = response.json().get("ranking", [])
-    worlds = set()
-    classes = {}
-    for character in ranking_list:
-        world_name = character.get("world_name")
-        class_name = character.get("class_name")
-        sub_class_name = character.get("sub_class_name")
-        if world_name:
-            worlds.add(world_name)
-        if class_name:
-            classes.setdefault(class_name, set())
-            if sub_class_name:
-                classes[class_name].add(sub_class_name)
-    class_data = {name: sorted(jobs) for name, jobs in classes.items()}
-    return jsonify({"worlds": sorted(worlds), "classes": dict(sorted(class_data.items()))})
-
-
 # 캐릭터 정보와 현재 랭킹 조회
 @app.route("/api/character")
 def get_character():
@@ -1226,6 +1188,7 @@ def fetch_historical_record(ocid, character_name, world_name, target_date, today
 
 @app.route("/api/history/archive")
 def get_history_archive():
+    """30일·90일 기록을 조회하고 사용자가 요청한 범위에서 누락 기록을 보충한다."""
     ocid = request.args.get("ocid", "").strip()
     try:
         days = int(request.args.get("days", "30"))
