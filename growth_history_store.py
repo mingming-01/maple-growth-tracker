@@ -207,8 +207,11 @@ class GrowthHistoryStore:
         connection = self._connect()
         try:
             with connection:
-                with connection.cursor() as cursor:
-                    cursor.executemany(query, rows)
+                if self.uses_postgres:
+                    with connection.cursor() as cursor:
+                        cursor.executemany(query, rows)
+                else:
+                    connection.executemany(query, rows)
         finally:
             connection.close()
         return len(rows)
