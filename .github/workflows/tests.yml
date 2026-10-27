@@ -5,6 +5,7 @@ on:
     branches:
       - main
       - "improve/**"
+      - "feature/**"
   pull_request:
     branches:
       - main
