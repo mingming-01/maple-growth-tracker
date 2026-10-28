@@ -228,14 +228,18 @@ def log_action(
 
 
 def initialize_snapshot_db():
-    with sqlite3.connect(SNAPSHOT_DB_PATH, timeout=5) as connection:
-        connection.execute("""
-            CREATE TABLE IF NOT EXISTS api_snapshots (
-                cache_key TEXT PRIMARY KEY,
-                payload TEXT NOT NULL,
-                saved_at TEXT NOT NULL
-            )
-        """)
+    connection = sqlite3.connect(SNAPSHOT_DB_PATH, timeout=5)
+    try:
+        with connection:
+            connection.execute("""
+                CREATE TABLE IF NOT EXISTS api_snapshots (
+                    cache_key TEXT PRIMARY KEY,
+                    payload TEXT NOT NULL,
+                    saved_at TEXT NOT NULL
+                )
+            """)
+    finally:
+        connection.close()
 
 
 initialize_log_db()
@@ -314,17 +318,21 @@ def get_cache_timestamp(key):
 def save_api_snapshot(cache_key, data):
     saved_at = datetime.now().astimezone().isoformat(timespec="seconds")
     try:
-        with sqlite3.connect(SNAPSHOT_DB_PATH, timeout=5) as connection:
-            connection.execute(
-                """
-                INSERT INTO api_snapshots (cache_key, payload, saved_at)
-                VALUES (?, ?, ?)
-                ON CONFLICT(cache_key) DO UPDATE SET
-                    payload = excluded.payload,
-                    saved_at = excluded.saved_at
-                """,
-                (cache_key, json.dumps(data, ensure_ascii=False), saved_at)
-            )
+        connection = sqlite3.connect(SNAPSHOT_DB_PATH, timeout=5)
+        try:
+            with connection:
+                connection.execute(
+                    """
+                    INSERT INTO api_snapshots (cache_key, payload, saved_at)
+                    VALUES (?, ?, ?)
+                    ON CONFLICT(cache_key) DO UPDATE SET
+                        payload = excluded.payload,
+                        saved_at = excluded.saved_at
+                    """,
+                    (cache_key, json.dumps(data, ensure_ascii=False), saved_at)
+                )
+        finally:
+            connection.close()
         return saved_at
     except sqlite3.Error:
         print("성장 데이터 스냅샷 저장에 실패했습니다.")
@@ -333,11 +341,15 @@ def save_api_snapshot(cache_key, data):
 
 def load_api_snapshot(cache_key):
     try:
-        with sqlite3.connect(SNAPSHOT_DB_PATH, timeout=5) as connection:
-            row = connection.execute(
-                "SELECT payload, saved_at FROM api_snapshots WHERE cache_key = ?",
-                (cache_key,)
-            ).fetchone()
+        connection = sqlite3.connect(SNAPSHOT_DB_PATH, timeout=5)
+        try:
+            with connection:
+                row = connection.execute(
+                    "SELECT payload, saved_at FROM api_snapshots WHERE cache_key = ?",
+                    (cache_key,)
+                ).fetchone()
+        finally:
+            connection.close()
         if not row:
             return None, None
         return json.loads(row[0]), row[1]
