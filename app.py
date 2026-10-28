@@ -18,6 +18,10 @@ from zoneinfo import ZoneInfo
 import psycopg
 from psycopg.rows import dict_row
 import requests
+from domain.growth_calculations import (
+    calculate_archive_history_changes,
+    calculate_recent_history_changes,
+)
 from growth_history_store import GrowthHistoryStore
 from dotenv import load_dotenv
 from google import genai
@@ -1054,30 +1058,7 @@ def get_history():
             )
         return jsonify({"error": "성장 기록을 정상적으로 가져오지 못했습니다."}), 502
 
-    for index, current in enumerate(history):
-        if index == 0:
-            current["experienceChange"] = None
-            current["rankingChange"] = None
-            continue
-        previous = history[index - 1]
-        current["levelUp"] = False
-        if current["experience"] is not None and previous["experience"] is not None:
-            if (
-                current["level"] is not None
-                and previous["level"] is not None
-                and current["level"] > previous["level"]
-            ):
-                current["experienceChange"] = None
-                current["levelUp"] = True
-            else:
-                current["experienceChange"] = current["experience"] - previous["experience"]
-        else:
-            current["experienceChange"] = None
-
-        if current["ranking"] is not None and previous["ranking"] is not None:
-            current["rankingChange"] = previous["ranking"] - current["ranking"]
-        else:
-            current["rankingChange"] = None
+    calculate_recent_history_changes(history)
 
     records_to_save = [item for item in history if not item.get("_fromStore")]
     try:
@@ -1330,20 +1311,7 @@ def get_history_archive():
                 "recordSource": None
             })
 
-    for index, current in enumerate(history):
-        current["experienceChange"] = None
-        current["rankingChange"] = None
-        current["levelUp"] = False
-        if index == 0:
-            continue
-        previous = history[index - 1]
-        if current["recordStatus"] == "available" and previous["recordStatus"] == "available":
-            if current["level"] is not None and previous["level"] is not None and current["level"] > previous["level"]:
-                current["levelUp"] = True
-            elif current["experience"] is not None and previous["experience"] is not None:
-                current["experienceChange"] = current["experience"] - previous["experience"]
-            if current["ranking"] is not None and previous["ranking"] is not None:
-                current["rankingChange"] = previous["ranking"] - current["ranking"]
+    calculate_archive_history_changes(history)
 
     available_days = sum(item["recordStatus"] == "available" for item in history)
     not_ready_days = sum(item["recordStatus"] == "not_ready" for item in history)
