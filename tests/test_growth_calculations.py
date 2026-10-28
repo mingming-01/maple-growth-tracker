@@ -5,6 +5,7 @@ from pathlib import Path
 from unittest.mock import Mock, patch
 
 import app as tracker
+from tracker.controller import history_controller
 from growth_history_store import GrowthHistoryStore
 
 
@@ -20,6 +21,7 @@ class GrowthCalculationBehaviorTests(unittest.TestCase):
         self.store.initialize()
 
         self.store_patch = patch.object(tracker, "growth_history_store", self.store)
+        self.controller_store_patch = patch.object(history_controller, "growth_history_store", self.store)
         self.snapshot_patch = patch.object(
             tracker,
             "SNAPSHOT_DB_PATH",
@@ -27,6 +29,7 @@ class GrowthCalculationBehaviorTests(unittest.TestCase):
         )
         self.log_patch = patch.object(tracker, "log_action")
         self.store_patch.start()
+        self.controller_store_patch.start()
         self.snapshot_patch.start()
         self.log_patch.start()
         tracker.initialize_snapshot_db()
@@ -37,6 +40,7 @@ class GrowthCalculationBehaviorTests(unittest.TestCase):
         tracker.CACHE.clear()
         self.log_patch.stop()
         self.snapshot_patch.stop()
+        self.controller_store_patch.stop()
         self.store_patch.stop()
         self.temp_dir.cleanup()
 
@@ -64,11 +68,11 @@ class GrowthCalculationBehaviorTests(unittest.TestCase):
             )
 
         with patch.object(
-            tracker, "get_ocid", return_value=("test-ocid", response_stub)
+            history_controller, "get_ocid", return_value=("test-ocid", response_stub)
         ), patch.object(
-            tracker, "get_basic_character", return_value=(basic, response_stub)
+            history_controller, "get_basic_character", return_value=(basic, response_stub)
         ), patch.object(
-            tracker, "get_ranking", side_effect=get_ranking
+            history_controller, "get_ranking", side_effect=get_ranking
         ):
             response = self.client.get(
                 "/api/history?name=%ED%85%8C%EC%8A%A4%ED%8A%B8%EC%BA%90%EB%A6%AD%ED%84%B0&refresh=1"

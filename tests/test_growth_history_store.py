@@ -5,6 +5,7 @@ from pathlib import Path
 from unittest.mock import Mock, patch
 
 import app as tracker
+from tracker.controller import history_controller
 from growth_history_store import GrowthHistoryStore
 
 
@@ -104,12 +105,15 @@ class GrowthHistoryApiTests(unittest.TestCase):
             }]
         )
         self.store_patch = patch.object(tracker, "growth_history_store", self.store)
+        self.controller_store_patch = patch.object(history_controller, "growth_history_store", self.store)
         self.store_patch.start()
+        self.controller_store_patch.start()
         tracker.CACHE.clear()
         self.client = tracker.app.test_client()
 
     def tearDown(self):
         tracker.CACHE.clear()
+        self.controller_store_patch.stop()
         self.store_patch.stop()
         self.temp_dir.cleanup()
 
@@ -333,9 +337,9 @@ class GrowthHistoryApiTests(unittest.TestCase):
         }
         today_ranking = {"ranking": 400, "character_level": 280, "character_exp": 20000}
 
-        with patch.object(tracker, "get_ocid", return_value=("test-ocid", response_stub)), patch.object(
-            tracker, "get_basic_character", return_value=(basic, response_stub)
-        ), patch.object(tracker, "get_ranking", return_value=(today_ranking, response_stub)) as get_ranking:
+        with patch.object(history_controller, "get_ocid", return_value=("test-ocid", response_stub)), patch.object(
+            history_controller, "get_basic_character", return_value=(basic, response_stub)
+        ), patch.object(history_controller, "get_ranking", return_value=(today_ranking, response_stub)) as get_ranking:
             response = self.client.get("/api/history?name=%ED%85%8C%EC%8A%A4%ED%8A%B8%EC%BA%90%EB%A6%AD%ED%84%B0&refresh=1")
 
         self.assertEqual(response.status_code, 200)
@@ -358,9 +362,9 @@ class GrowthHistoryApiTests(unittest.TestCase):
             "character_exp": 100000
         }
 
-        with patch.object(tracker, "get_ocid", return_value=("test-ocid", response_stub)), patch.object(
-            tracker, "get_basic_character", return_value=(basic, response_stub)
-        ), patch.object(tracker, "get_ranking", return_value=(ranking, response_stub)):
+        with patch.object(history_controller, "get_ocid", return_value=("test-ocid", response_stub)), patch.object(
+            history_controller, "get_basic_character", return_value=(basic, response_stub)
+        ), patch.object(history_controller, "get_ranking", return_value=(ranking, response_stub)):
             response = self.client.get("/api/history?name=%ED%85%8C%EC%8A%A4%ED%8A%B8%EC%BA%90%EB%A6%AD%ED%84%B0&refresh=1")
 
         self.assertEqual(response.status_code, 200)
