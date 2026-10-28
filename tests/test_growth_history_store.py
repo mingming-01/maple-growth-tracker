@@ -156,8 +156,8 @@ class GrowthHistoryApiTests(unittest.TestCase):
         self.assertEqual(comparison_history[-2]["ranking"], 654)
 
     def test_archive_does_not_fetch_past_data_without_collection_request(self):
-        with patch.object(tracker, "get_ranking", side_effect=AssertionError("should not call Nexon")), patch.object(
-            tracker, "get_basic_character", side_effect=AssertionError("should not call Nexon")
+        with patch.object(history_controller, "get_ranking", side_effect=AssertionError("should not call Nexon")), patch.object(
+            history_controller, "get_basic_character", side_effect=AssertionError("should not call Nexon")
         ):
             response = self.client.get("/api/history/archive?ocid=test-ocid&days=30")
 
@@ -174,10 +174,10 @@ class GrowthHistoryApiTests(unittest.TestCase):
             "character_exp": 123456
         }
         with patch.object(
-            tracker, "get_ranking",
+            history_controller, "get_ranking",
             side_effect=[(None, ranking_response), (None, ranking_response)]
         ) as get_ranking, patch.object(
-            tracker, "get_basic_character",
+            history_controller, "get_basic_character",
             side_effect=[(basic, basic_response), (basic, basic_response), (basic, basic_response)]
         ) as get_basic:
             response = self.client.get(
@@ -219,9 +219,9 @@ class GrowthHistoryApiTests(unittest.TestCase):
             "character_exp": 123456
         }
         with patch.object(
-            tracker, "get_ranking", return_value=(ranking, ranking_response)
+            history_controller, "get_ranking", return_value=(ranking, ranking_response)
         ) as get_ranking, patch.object(
-            tracker, "get_basic_character", return_value=(current_basic, Mock(status_code=200))
+            history_controller, "get_basic_character", return_value=(current_basic, Mock(status_code=200))
         ) as get_basic:
             response = self.client.get(
                 "/api/history/archive?ocid=test-ocid&days=30&collect=1"
@@ -248,9 +248,9 @@ class GrowthHistoryApiTests(unittest.TestCase):
             "character_exp": 123456
         }
         with patch.object(
-            tracker, "get_ranking", return_value=(None, invalid_response)
+            history_controller, "get_ranking", return_value=(None, invalid_response)
         ), patch.object(
-            tracker, "get_basic_character",
+            history_controller, "get_basic_character",
             side_effect=[(current_basic, Mock(status_code=200)), (None, invalid_response)]
         ):
             response = self.client.get(
