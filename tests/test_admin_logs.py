@@ -5,6 +5,7 @@ from pathlib import Path
 from unittest.mock import patch
 
 import app as tracker
+from tracker.controller import admin_controller
 
 
 class AdminLogTests(unittest.TestCase):
@@ -14,9 +15,13 @@ class AdminLogTests(unittest.TestCase):
         self.path_patch = patch.object(tracker, "LOG_DB_PATH", str(self.log_path))
         self.backend_patch = patch.object(tracker, "LOG_DB_BACKEND", "sqlite")
         self.warning_patch = patch.object(tracker, "LOG_STORAGE_WARNING", "")
+        self.controller_backend_patch = patch.object(admin_controller, "LOG_DB_BACKEND", "sqlite")
+        self.controller_warning_patch = patch.object(admin_controller, "LOG_STORAGE_WARNING", "")
         self.path_patch.start()
         self.backend_patch.start()
         self.warning_patch.start()
+        self.controller_backend_patch.start()
+        self.controller_warning_patch.start()
         tracker.initialize_log_db()
 
         self.client = tracker.app.test_client()
@@ -25,6 +30,8 @@ class AdminLogTests(unittest.TestCase):
             session["csrf_token"] = "test-token"
 
     def tearDown(self):
+        self.controller_warning_patch.stop()
+        self.controller_backend_patch.stop()
         self.warning_patch.stop()
         self.backend_patch.stop()
         self.path_patch.stop()

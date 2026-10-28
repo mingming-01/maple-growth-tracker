@@ -2,6 +2,7 @@ import unittest
 from unittest.mock import Mock, patch
 
 import app as tracker
+from tracker.services import ai_analysis_service
 
 
 class AIResponseCacheTests(unittest.TestCase):
@@ -63,7 +64,7 @@ class AIResponseCacheTests(unittest.TestCase):
             "prediction": {"estimatedDate": "2026-11-01"},
         }
 
-        with patch.object(tracker, "gemini_client", client), patch.object(
+        with patch.object(ai_analysis_service, "gemini_client", client), patch.object(
             tracker, "OPENROUTER_API_KEY", ""
         ):
             first = tracker.generate_ai_analysis(character, history, metrics)
@@ -120,7 +121,7 @@ class AIResponseCacheTests(unittest.TestCase):
             }],
         }
 
-        with patch.object(tracker, "gemini_client", client), patch.object(
+        with patch.object(ai_analysis_service, "gemini_client", client), patch.object(
             tracker, "OPENROUTER_API_KEY", ""
         ):
             first = tracker.generate_ai_comparison(primary, comparison)
@@ -160,7 +161,7 @@ class AIResponseCacheTests(unittest.TestCase):
             "history": [],
         }
 
-        with patch.object(tracker, "gemini_client", client), patch.object(
+        with patch.object(ai_analysis_service, "gemini_client", client), patch.object(
             tracker, "OPENROUTER_API_KEY", ""
         ):
             first = tracker.generate_ai_comparison(primary, comparison)
