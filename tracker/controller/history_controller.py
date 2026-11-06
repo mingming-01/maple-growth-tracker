@@ -18,7 +18,7 @@ from tracker.runtime import (
     HISTORY_BACKFILL_BATCH_SIZE,
     HISTORY_CACHE_TTL,
     KOREA_TIMEZONE,
-    get_growth_history_store,
+    get_growth_history_service,
     is_temporary_nexon_failure,
     load_api_snapshot,
     save_api_snapshot,
@@ -72,7 +72,7 @@ def get_history():
         today = datetime.now(KOREA_TIMEZONE).date()
         stored_recent = {}
         try:
-            stored_records = growth_history_store.get_records(
+            stored_records = growth_history_service.get_records(
                 ocid, today - timedelta(days=6), today
             )
             stored_recent = {item["date"]: item for item in stored_records}
@@ -163,7 +163,7 @@ def get_history():
 
     records_to_save = [item for item in history if not item.get("_fromStore")]
     try:
-        saved_record_count = growth_history_store.save_records(
+        saved_record_count = growth_history_service.save_records(
             ocid, basic["character_name"], world_name, records_to_save
         )
         storage_status = "saved" if saved_record_count else "no_new_records"
@@ -192,7 +192,7 @@ def get_history():
         "averageDailyExperience": average_experience,
         "historyStatus": history_status,
         "historyStorage": {
-            "backend": growth_history_store.backend,
+            "backend": growth_history_service.backend,
             "status": storage_status,
             "savedRecords": saved_record_count
         }
@@ -301,7 +301,7 @@ def get_history_archive():
 
     start_date = end_date - timedelta(days=days - 1)
     try:
-        stored_records = growth_history_store.get_records(ocid, start_date, end_date)
+        stored_records = growth_history_service.get_records(ocid, start_date, end_date)
     except Exception:
         print("날짜별 성장 기록을 조회하지 못했습니다.")
         return jsonify({"error": "저장된 성장 기록을 조회할 수 없습니다. 저장소 연결을 확인해주세요."}), 503
@@ -365,7 +365,7 @@ def get_history_archive():
             ]
 
         try:
-            saved_count = growth_history_store.save_records(
+            saved_count = growth_history_service.save_records(
                 ocid, character_name, world_name, fetched_records
             ) if fetched_records else 0
         except Exception:
@@ -428,6 +428,6 @@ def get_history_archive():
         "notReadyDays": not_ready_days,
         "notCollectedDays": not_collected_days,
         "collection": collection,
-        "storageBackend": growth_history_store.backend,
-        "persistentStorage": growth_history_store.uses_postgres
+        "storageBackend": growth_history_service.backend,
+        "persistentStorage": growth_history_service.uses_postgres
     })
