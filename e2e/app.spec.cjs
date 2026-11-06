@@ -211,6 +211,7 @@ test("character details automatically open the game-style stat window", async ({
   await expect(page.locator("#characterDetailsContent")).toContainText("테스트캐릭터");
   await expect(page.locator("#characterDetailsContent")).toContainText("SSS");
   await expect(page.locator("#characterDetailsContent .game-union-crystal-monster")).toHaveCount(1);
+  await expect(page.locator("#characterDetailsContent .game-union-crystal-order")).toHaveText("01");
   const unionPreset = page.locator("#characterDetailsContent .game-union-state-panel .game-preset-select");
   const unionOptionLabels = await unionPreset.locator("option").allTextContents();
   expect(unionOptionLabels.every(label => !/보스|사냥/.test(label))).toBe(true);
