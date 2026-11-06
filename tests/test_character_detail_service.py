@@ -179,6 +179,68 @@ class CharacterDetailServiceTests(unittest.TestCase):
         self.assertEqual(result["presets"][0]["data"]["item_equipment"][0]["item_name"], "테스트 모자")
         self.assertEqual(result["presets"][1]["data"]["item_equipment"][0]["item_name"], "테스트 무기")
 
+    def test_ability_presets_normalize_nested_ability_info_and_grade(self):
+        spec = SECTION_SOURCES["stats"][2]
+        result = _normalize_source(
+            {
+                "ability_grade": "레전드리",
+                "preset_no": 2,
+                "ability_info": [{"ability_value": "보스 데미지 +20%"}],
+                "ability_preset_1": {
+                    "ability_preset_grade": "유니크",
+                    "ability_info": [{"ability_no": "1", "ability_grade": "유니크", "ability_value": "메소 획득량 +10%"}],
+                },
+                "ability_preset_2": {
+                    "ability_preset_grade": "레전드리",
+                    "ability_info": [{"ability_no": "1", "ability_grade": "레전드리", "ability_value": "재사용 대기시간 미적용 +7.5%"}],
+                },
+            },
+            spec,
+        )
+        self.assertEqual(result["activePresetNo"], 2)
+        self.assertEqual(result["presets"][0]["data"]["ability_grade"], "유니크")
+        self.assertEqual(
+            result["presets"][0]["data"]["ability_info"][0]["ability_value"],
+            "메소 획득량 +10%",
+        )
+        self.assertEqual(
+            result["presets"][1]["data"]["ability_info"][0]["ability_value"],
+            "재사용 대기시간 미적용 +7.5%",
+        )
+
+    def test_hyper_stat_classifier_uses_invested_levels_for_hunting_and_boss(self):
+        from tracker.services.character_detail_service import _classify_preset
+
+        hunting = _classify_preset("hyperStat", {"hyper_stat": [
+            {"stat_type": "일반 몬스터 데미지", "stat_level": 10},
+            {"stat_type": "경험치 획득량", "stat_level": 10},
+            {"stat_type": "크리티컬 데미지", "stat_level": 2},
+        ]})
+        boss = _classify_preset("hyperStat", {"hyper_stat": [
+            {"stat_type": "보스 데미지", "stat_level": 10},
+            {"stat_type": "몬스터 방어율 무시", "stat_level": 10},
+            {"stat_type": "데미지", "stat_level": 5},
+        ]})
+        generic = _classify_preset("hyperStat", {"hyper_stat": [
+            {"stat_type": "데미지", "stat_level": 10},
+            {"stat_type": "공격력", "stat_level": 10},
+        ]})
+        self.assertEqual(hunting["purpose"], "hunting")
+        self.assertEqual(boss["purpose"], "boss")
+        self.assertEqual(generic["purpose"], "unknown")
+        self.assertIn("일반 몬스터 데미지 Lv.10", hunting["signals"])
+
+    def test_union_stat_presets_are_not_classified_as_boss_or_hunting(self):
+        from tracker.services.character_detail_service import _classify_preset
+
+        result = _classify_preset(
+            "unionStateStat",
+            {"union_state_stat": ["보스 몬스터 공격 시 데미지 20% 증가"]},
+        )
+        self.assertEqual(result["purpose"], "unknown")
+        self.assertEqual(result["bossScore"], 0)
+        self.assertEqual(result["huntingScore"], 0)
+
     def test_link_preset_combines_equipped_and_owned_link_skills(self):
         spec = SECTION_SOURCES["stats"][4]
         result = _normalize_source({
