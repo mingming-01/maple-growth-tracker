@@ -651,6 +651,7 @@ button:disabled { cursor: wait; opacity: 0.65; }
 }
 .game-stat-name { color:#919db8; font-size:9px; font-weight:800; }
 .game-stat-number { color:#e4e7f1; font-size:12px; font-weight:900; overflow-wrap:anywhere; }
+.game-stat-source-note { margin:10px 0 0; color:#9da8be; font-size:10px; line-height:1.55; }
 .game-selected-build-window>.game-window-title { margin-bottom:12px; }
 .game-selected-build-grid { display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); gap:8px; }
 .game-preset-summary { min-width:0; padding:10px; border:1px solid #3e4862; border-radius:8px; background:#1a2234; }
