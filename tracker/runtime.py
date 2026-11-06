@@ -51,6 +51,8 @@ class RuntimeState:
         self.admin_username = config.get("ADMIN_USERNAME", "")
         self.admin_password_hash = config.get("ADMIN_PASSWORD_HASH", "")
         self.admin_password = config.get("ADMIN_PASSWORD", "")
+        self.ai_api_retries = config.get("AI_API_RETRIES", 1)
+        self.ai_api_retry_backoff = config.get("AI_API_RETRY_BACKOFF", 0.5)
         self.growth_database_url = config.get("GROWTH_DATABASE_URL", "").strip()
         self.log_db_backend = (
             "postgres"
