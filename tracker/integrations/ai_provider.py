@@ -1,4 +1,6 @@
 """AI 제공자(OpenRouter)와 통신한다."""
+import requests
+
 from flask import current_app, has_app_context
 
 from tracker.config import Config
@@ -61,6 +63,8 @@ def request_openrouter(prompt):
 
 
 def should_use_openrouter(error):
+    if isinstance(error, (requests.Timeout, requests.ConnectionError)):
+        return True
     status_code = getattr(getattr(error, "response", None), "status_code", None)
     if status_code in (408, 425, 429, 500, 502, 503, 504):
         return True
