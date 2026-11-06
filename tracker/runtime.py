@@ -28,7 +28,6 @@ from tracker.repositories.api_snapshot_repository import (
     save_api_snapshot as save_api_snapshot_for_path,
     load_api_snapshot as load_api_snapshot_for_path,
 )
-from dotenv import load_dotenv
 from google import genai
 from tracker.integrations.nexon_api import get_ocid, get_basic_character, get_ranking
 
