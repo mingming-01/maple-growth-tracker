@@ -356,6 +356,13 @@ ADMIN_PASSWORD_HASH=YOUR_PASSWORD_HASH
 # 선택
 FLASK_SECRET_KEY=RANDOM_SECRET
 FLASK_COOKIE_SECURE=false
+
+# 외부 API 재시도 정책 (기본값 사용 시 생략 가능)
+NEXON_API_RETRIES=2
+NEXON_API_RETRY_BACKOFF=0.35
+AI_API_TIMEOUT=30
+AI_API_RETRIES=1
+AI_API_RETRY_BACKOFF=0.5
 ```
 
 | 변수 | 설명 |
@@ -366,6 +373,12 @@ FLASK_COOKIE_SECURE=false
 | `ADMIN_USERNAME` / `ADMIN_PASSWORD_HASH` | 관리자 계정. 해시 대신 `ADMIN_PASSWORD`(평문)도 코드상 지원하지만 해시를 권장 |
 | `FLASK_SECRET_KEY` | 세션 서명 키. 없으면 실행할 때마다 임의로 생성되어 재시작 시 로그인 세션이 풀림 |
 | `FLASK_COOKIE_SECURE` | `true`면 세션 쿠키에 Secure 속성 적용 (HTTPS 환경) |
+| `NEXON_API_CONNECT_TIMEOUT` / `NEXON_API_READ_TIMEOUT` | Nexon API 연결·응답 제한 시간 (초, 기본값 3.05 / 10) |
+| `NEXON_API_RETRIES` / `NEXON_API_RETRY_BACKOFF` | Nexon API 추가 재시도 횟수와 최초 대기 시간 (기본값 2회 / 0.35초) |
+| `AI_API_TIMEOUT` / `AI_API_RETRIES` / `AI_API_RETRY_BACKOFF` | OpenRouter 요청 제한 시간, 추가 재시도 횟수, 최초 대기 시간 (기본값 30초 / 1회 / 0.5초) |
+
+- Nexon/OpenRouter 호출은 연결 오류, 시간 초과, 429 및 일시적인 5xx 응답만 제한적으로 재시도합니다. 인증·요청 오류 등 일반 4xx 응답은 반복하지 않습니다.
+- `*_RETRIES` 값은 최초 호출을 제외한 추가 재시도 횟수이며, 과도한 요청을 막기 위해 실제 전체 시도 횟수는 최대 4회로 제한됩니다.
 
 - NEXON Open API는 NEXON_API_KEY가 필요합니다.
 - AI 분석은 GEMINI_API_KEY 또는 OPENROUTER_API_KEY 중 하나 이상을 사용할 수 있습니다.
