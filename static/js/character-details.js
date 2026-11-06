@@ -245,7 +245,14 @@ function findEquipmentForSlot(items,slotName,slotKey) {
         const explicit=rings.find(item=>new RegExp("반지\\s*"+ringNo+"(?:$|[^0-9])").test(String(item?.item_equipment_slot||"")));
         return explicit||rings[ringNo-1]||null;
     }
-    const aliases={"pendant1":["펜던트"],"pendant2":["펜던트2","펜던트(슬롯2)"],"android":["안드로이드"],"heart":["기계 심장","하트"],"pocket":["포켓 아이템","포켓"]};
+    if(slotKey==="pendant1"||slotKey==="pendant2") {
+        const pendants=items.filter(item=>/펜던트/.test(String(item?.item_equipment_slot||item?.item_equipment_part||"")));
+        const explicit=pendants.find(item=>slotKey==="pendant2"
+            ? /펜던트\s*2|슬롯\s*2/.test(String(item?.item_equipment_slot||""))
+            : /펜던트\s*1/.test(String(item?.item_equipment_slot||"")));
+        return explicit||pendants[slotKey==="pendant1"?0:1]||null;
+    }
+    const aliases={"android":["안드로이드"],"heart":["기계 심장","하트"],"pocket":["포켓 아이템","포켓"]};
     const candidates=aliases[slotKey]||[slotName];
     return items.find(item=>candidates.some(name=>matchesSlot(item,name)))||null;
 }
@@ -465,7 +472,7 @@ function renderSymbolsSection(data) {
         if(present(symbol.symbol_force)) tile.appendChild(el("span","game-symbol-force","포스 "+symbol.symbol_force));
         const growth=Number(symbol.symbol_growth_count||0);
         const required=Number(symbol.symbol_require_growth_count||0);
-        const isMax=required<=0 || growth>=required;
+        const isMax=present(symbol.symbol_require_growth_count) && (required<=0 || growth>=required);
         const growthLines=[
             symbol.symbol_description,
             isMax?"성장량 MAX":"성장량 "+fmt(growth)+" / "+fmt(required),
