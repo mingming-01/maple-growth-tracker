@@ -58,6 +58,11 @@ def generate_ai_analysis(character, history, computed_metrics=None):
 
     if computed_metrics is not None:
         # 프런트엔드에서 이미 계산한 지표를 Gemini에 전달하고 숫자 계산은 맡기지 않는다.
+        # 선택 기간이 7일을 넘으면 서버가 별도로 읽은 최근 7일 기록을 섞지 않는다.
+        analysis_insights = computed_metrics.get("analysisInsights")
+        analysis_period = analysis_insights.get("analysisPeriod", {}) if isinstance(analysis_insights, dict) else {}
+        analysis_period_days = analysis_period.get("days", 7)
+        prompt_history = growth_data if isinstance(analysis_period_days, int) and analysis_period_days <= 7 else []
         prediction = computed_metrics.get("prediction")
         prediction_date = prediction.get("estimatedDate") if isinstance(prediction, dict) else None
         prediction_date_label = None
@@ -78,7 +83,7 @@ def generate_ai_analysis(character, history, computed_metrics=None):
             },
             "metrics": computed_metrics,
             "predictionDisplayDate": prediction_date_label,
-            "history": growth_data
+            "history": prompt_history
         }
         prompt = f"""
 너는 메이플스토리 캐릭터의 성장 과정을 해석하는 도우미야.
@@ -87,6 +92,11 @@ def generate_ai_analysis(character, history, computed_metrics=None):
 성장 전망에서 날짜를 언급할 때는 predictionDisplayDate 값을 그대로 사용해. 그 날짜를 다시 계산하거나 다른 날짜로 바꾸지 마. 날짜 값이 없으면 날짜를 만들어내지 마.
 기록이 부족하거나 값이 확인되지 않으면 판단하기 어렵다고 자연스럽게 말해. 데이터 부족을 감추거나 없는 사실을 채워 넣지 마.
 성장 흐름은 기록이 충분히 뒷받침할 때만 해석하고, 레벨업은 기록에서 확인될 때만 언급해. 플레이 방식이나 시간은 추측하지 마.
+metrics.analysisInsights는 브라우저가 실제 기록으로 계산한 분석 근거야. analysisPeriod의 시작일·종료일과 dataQuality의 기록 충실도를 분석 기준으로 삼아.
+growthTrend는 방향이 insufficient_data가 아닐 때만 해석하고, weekdayWeekend는 sufficientSamples가 true일 때만 평일·주말 차이를 설명해.
+periodComparison은 status가 available일 때만 직전 동일 기간과 비교해. unavailable 또는 insufficient_data면 변화율이나 우열을 만들어내지 마.
+analysisInsights의 평균, 변화율, 표본 수를 직접 다시 계산하거나 반올림해 바꾸지 마. 새 숫자나 날짜를 만들지 말고, 근거에 없는 요일별 플레이 습관을 추측하지 마.
+분석 기간이 7일보다 길면 history가 비어 있을 수 있어. 이 경우 최근 7일 기록을 선택 기간 전체의 기록인 것처럼 해석하지 말고, 계산된 analysisInsights만 근거로 사용해.
 개발용 키 이름, 영어 상태값, null, undefined를 답변에 쓰지 마.
 마크다운 없이 일반 문장만 작성해. 제목 기호, 굵게·기울임 표시, 글머리표, 번호 목록, 수평선, 백틱, 코드 블록은 쓰지 마.
 아래 다섯 구분 표시는 정확히 그대로 사용하고, 각 항목은 최대 두 개의 짧은 문장으로 작성해. 구분 표시 이외의 제목이나 목록은 추가하지 마.
