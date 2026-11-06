@@ -7,6 +7,9 @@ on:
       - main
     paths:
       - ".github/workflows/e2e.yml"
+      - "frontend/**"
+      - "tracker/controller/page_controller.py"
+      - "templates/react_preview_unavailable.html"
       - "static/js/character-details.js"
       - "static/style.css"
       - "e2e/**"
@@ -36,6 +39,12 @@ jobs:
 
       - name: Install Python dependencies
         run: python -m pip install --upgrade pip && pip install -r requirements.txt
+
+      - name: Install frontend dependencies
+        run: npm --prefix frontend install --no-audit --no-fund
+
+      - name: Build React preview
+        run: npm --prefix frontend run build
 
       - name: Install Playwright
         run: npm install --no-audit --no-fund
