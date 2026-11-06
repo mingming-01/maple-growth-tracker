@@ -185,11 +185,24 @@ test("character details automatically open the game-style stat window", async ({
   await expect(page.locator("#characterDetailsContent")).toContainText("현재 적용 중인 실제 전투력");
   expect(detailRequests.stats).toBe(1);
 
-  await expect(page.locator("#characterDetailsContent .game-preset-select")).toHaveCount(3);\n  const hyperPreset = page.locator("#characterDetailsContent .game-preset-select").first();
+  await expect(page.locator("#characterDetailsContent .game-preset-select")).toHaveCount(3); 
+  const hyperPreset = page.locator("#characterDetailsContent .game-preset-select").first();
   await expect(hyperPreset).toHaveValue("2");
   await hyperPreset.selectOption("1");
   await expect(page.locator("#characterDetailsContent")).toContainText("크리티컬 데미지");
 
   await page.locator('[data-detail-tab="stats"]').click();
-  expect(detailRequests).toBe(1);
+  expect(detailRequests.stats).toBe(1);
+
+  await page.locator('[data-detail-tab="union"]').click();
+  await expect(page.locator("#characterDetailsContent")).toContainText("유니온 스탯 투자");
+  await expect(page.locator("#characterDetailsContent")).toContainText("주황버섯");
+  await expect(page.locator("#characterDetailsContent")).toContainText("테스트캐릭터");
+  await expect(page.locator("#characterDetailsContent")).toContainText("SSS");
+  const unionPreset = page.locator("#characterDetailsContent .game-union-state-panel .game-preset-select");
+  await expect(unionPreset).toHaveValue("2");
+  await unionPreset.selectOption("1");
+  await expect(page.locator("#characterDetailsContent")).toContainText("경험치 획득량");
+  await expect(page.locator("#characterDetailsContent")).not.toContainText("보스 몬스터 공격 시 데미지 +20% 증가");
+  expect(detailRequests.union).toBe(1);
 });
