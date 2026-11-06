@@ -1430,3 +1430,16 @@ button:disabled { cursor: wait; opacity: 0.65; }
     }
     .game-champion-tooltip-image { width:210px !important; height:210px !important; }
 }
+
+
+/* Union champion detail tooltips are portaled to body to escape clipped panels. */
+.game-champion-hover-tooltip.is-open {
+    position:fixed !important;
+    z-index:2000 !important;
+    display:block !important;
+    bottom:auto !important;
+    transform:none !important;
+    max-height:72vh;
+    overflow-y:auto;
+    overscroll-behavior:contain;
+}

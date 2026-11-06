@@ -782,6 +782,87 @@ function renderUnionArtifact(artifact,content) {
     content.appendChild(panel);
 }
 
+function attachViewportTooltip(trigger,tooltip,id) {
+    if(!tooltip) return;
+
+    trigger.tabIndex=0;
+    trigger.setAttribute("aria-describedby",id);
+    tooltip.id=id;
+    tooltip.setAttribute("role","tooltip");
+
+    let hovered=false,focused=false,listenersAttached=false;
+
+    const positionTooltip=()=>{
+        if(!tooltip.isConnected||!trigger.isConnected) return;
+        const padding=12;
+        const width=Math.max(180,Math.min(290,window.innerWidth-padding*2));
+        tooltip.style.position="fixed";
+        tooltip.style.bottom="auto";
+        tooltip.style.width=width+"px";
+        tooltip.style.maxWidth=width+"px";
+        tooltip.style.left="0px";
+        tooltip.style.top="0px";
+        tooltip.style.transform="none";
+        tooltip.style.maxHeight=Math.max(160,window.innerHeight-padding*2)+"px";
+        tooltip.style.overflowY="auto";
+        tooltip.style.visibility="hidden";
+
+        const triggerRect=trigger.getBoundingClientRect();
+        const tooltipHeight=tooltip.getBoundingClientRect().height;
+        const maxLeft=window.innerWidth-width-padding;
+        const left=Math.max(padding,Math.min(
+            triggerRect.left+(triggerRect.width-width)/2,
+            maxLeft
+        ));
+        let top=triggerRect.bottom+8;
+        if(top+tooltipHeight>window.innerHeight-padding) {
+            top=triggerRect.top-tooltipHeight-8;
+        }
+        top=Math.max(padding,Math.min(top,window.innerHeight-tooltipHeight-padding));
+        tooltip.style.left=left+"px";
+        tooltip.style.top=top+"px";
+        tooltip.style.visibility="visible";
+    };
+
+    const hide=()=>{
+        tooltip.classList.remove("is-open");
+        if(tooltip.parentElement===document.body) trigger.appendChild(tooltip);
+        tooltip.style.visibility="";
+        if(listenersAttached) {
+            window.removeEventListener("scroll",positionTooltip,true);
+            window.removeEventListener("resize",positionTooltip);
+            listenersAttached=false;
+        }
+    };
+    const show=()=>{
+        if(tooltip.parentElement!==document.body) document.body.appendChild(tooltip);
+        tooltip.classList.add("is-open");
+        positionTooltip();
+        if(!listenersAttached) {
+            window.addEventListener("scroll",positionTooltip,true);
+            window.addEventListener("resize",positionTooltip);
+            listenersAttached=true;
+        }
+    };
+    const sync=()=> {
+        if(hovered||focused) show();
+        else hide();
+    };
+
+    trigger.addEventListener("mouseover",event=>{
+        if(event.relatedTarget&&trigger.contains(event.relatedTarget)) return;
+        hovered=true;
+        sync();
+    });
+    trigger.addEventListener("mouseout",event=>{
+        if(event.relatedTarget&&trigger.contains(event.relatedTarget)) return;
+        hovered=false;
+        sync();
+    });
+    trigger.addEventListener("focusin",()=>{focused=true;sync();});
+    trigger.addEventListener("focusout",()=>{focused=false;sync();});
+}
+
 function renderUnionChampions(championSource,content) {
     const panel=el("section","game-union-champion-panel");
     const heading=el("div","game-union-section-heading");
@@ -842,6 +923,11 @@ function renderUnionChampions(championSource,content) {
             const preview=image(champion.character_image,champion.champion_name||"챔피언 이미지","game-champion-tooltip-image");
             if(preview) championTip.prepend(preview);
         }
+        attachViewportTooltip(
+            card,
+            championTip,
+            "union-champion-tooltip-"+String(champion?.champion_slot??list.childElementCount+1)
+        );
         list.appendChild(card);
     });
     if(list.childElementCount) panel.appendChild(list);
