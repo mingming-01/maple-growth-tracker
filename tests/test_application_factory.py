@@ -30,7 +30,8 @@ class ApplicationFactoryTests(unittest.TestCase):
         self.assertIsNot(first_state, second_state)
         self.assertIsNot(first_state.cache, second_state.cache)
         self.assertIsNot(first_state.ai_response_cache, second_state.ai_response_cache)
-        self.assertIsNot(first_state.growth_history_store, second_state.growth_history_store)
+        self.assertIsNot(first_state.growth_history_service, second_state.growth_history_service)
+        self.assertIsNot(first_state.growth_history_repository, second_state.growth_history_repository)
         self.assertEqual(first_state.nexon_api_key, "first-app-key")
         self.assertEqual(second_state.nexon_api_key, "second-app-key")
 
