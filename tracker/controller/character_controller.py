@@ -96,7 +96,7 @@ def get_character():
     result["bestPresetCombination"] = None
 
 
-    data_status = "partial" if character_rankings["rankingDataStatus"] in ("partial", "unavailable", "empty") else "current"
+    data_status = "partial" if character_rankings["rankingDataStatus"] in ("partial", "unavailable", "empty", "not_ready") else "current"
     saved_at = datetime.now().astimezone().isoformat(timespec="seconds")
 
     # 일시적으로 빈 응답이 와도 기존의 정상 랭킹 스냅샷은 덮어쓰지 않는다.
