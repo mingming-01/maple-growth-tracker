@@ -10,7 +10,9 @@ import time
 import requests
 
 
-RETRYABLE_STATUS_CODES = {408, 425, 429, 500, 502, 503, 504}
+# 429 is returned immediately so the API route can serve a saved snapshot.
+# Waiting through Retry-After inside a fan-out request can freeze the whole dashboard.
+RETRYABLE_STATUS_CODES = {408, 425, 500, 502, 503, 504}
 
 
 def _retry_after_seconds(value):
