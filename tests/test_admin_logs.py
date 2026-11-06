@@ -4,21 +4,29 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 import app as tracker
+from tracker import create_app
 from tracker.runtime import get_runtime_state
 
 
 class AdminLogTests(unittest.TestCase):
     def setUp(self):
+        self.app = create_app({
+            "TESTING": True,
+            "GROWTH_DATABASE_URL": "",
+            "NEXON_API_KEY": "",
+            "GEMINI_API_KEY": "",
+            "OPENROUTER_API_KEY": "",
+        })
         self.temp_dir = tempfile.TemporaryDirectory()
         self.log_path = Path(self.temp_dir.name) / "admin_logs.sqlite3"
-        with tracker.app.app_context():
+        with self.app.app_context():
             self.state = get_runtime_state()
             self.state.log_db_path = str(self.log_path)
             self.state.log_db_backend = "sqlite"
             self.state.log_storage_warning = ""
             tracker.initialize_log_db()
 
-        self.client = tracker.app.test_client()
+        self.client = self.app.test_client()
         with self.client.session_transaction() as session:
             session["admin_authenticated"] = True
             session["csrf_token"] = "test-token"
@@ -27,7 +35,7 @@ class AdminLogTests(unittest.TestCase):
         self.temp_dir.cleanup()
 
     def log(self, *args, **kwargs):
-        with tracker.app.app_context():
+        with self.app.app_context():
             tracker.log_action(*args, **kwargs)
 
     def test_log_action_saves_request_details(self):
@@ -41,7 +49,7 @@ class AdminLogTests(unittest.TestCase):
             duration_ms=42,
         )
 
-        with tracker.app.app_context():
+        with self.app.app_context():
             connection = tracker.connect_log_db()
             try:
                 row = connection.execute(
