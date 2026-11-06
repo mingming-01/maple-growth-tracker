@@ -302,10 +302,10 @@ def _normalize_source(payload, spec):
         active_number = None
         current_values = current_data.get(value_field)
         if isinstance(current_values, list):
-            current_signature = json.dumps(current_values, ensure_ascii=False, separators=(",", ":"))
+            current_signature = json.dumps(sorted(str(value) for value in current_values), ensure_ascii=False, separators=(",", ":"))
             for preset in presets:
                 preset_values = preset["data"].get(value_field, [])
-                preset_signature = json.dumps(preset_values, ensure_ascii=False, separators=(",", ":"))
+                preset_signature = json.dumps(sorted(str(value) for value in preset_values), ensure_ascii=False, separators=(",", ":"))
                 if current_signature == preset_signature:
                     active_number = preset["number"]
                     break
