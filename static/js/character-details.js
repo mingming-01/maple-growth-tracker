@@ -622,6 +622,7 @@ function renderUnionArtifact(artifact,content) {
         const tile=el("article","game-union-crystal");
         const top=el("div","game-union-crystal-top");
         const order=el("span","game-union-crystal-order",String(index+1).padStart(2,"0"));
+        top.appendChild(order);
         const mobUrl=crystal?.mob_icon||crystal?.monster_icon||crystal?.monster_image||crystal?.image_url||null;
         if(mobUrl) {
             const mobIcon=image(mobUrl,crystal?.name||"몬스터","game-union-crystal-monster");
@@ -632,7 +633,7 @@ function renderUnionArtifact(artifact,content) {
                 top.appendChild(imageFrame);
             }
         }
-        top.append(order,el("strong","game-union-crystal-name",crystal?.name||"크리스탈"),
+        top.append(el("strong","game-union-crystal-name",crystal?.name||"크리스탈"),
             el("span","game-union-crystal-level",present(crystal?.level)?"Lv. "+fmt(crystal.level):""));
         tile.appendChild(top);
 
