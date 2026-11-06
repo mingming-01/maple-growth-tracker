@@ -1412,7 +1412,7 @@ button:disabled { cursor: wait; opacity: 0.65; }
     gap:9px;
 }
 .game-union-champion-card { min-width:0; }
-.game-champion-tooltip-image { width:248px !important; height:248px !important; }
+.game-champion-tooltip-image { width:224px !important; height:224px !important; }
 @media (max-width:760px) {
     .game-union-crystal-grid,
     .game-union-champion-grid {
@@ -1421,12 +1421,12 @@ button:disabled { cursor: wait; opacity: 0.65; }
     }
     .game-union-crystal { min-width:0; padding:7px 5px; }
     .game-union-crystal-name,.game-union-champion-name { overflow-wrap:anywhere; }
-    .game-champion-tooltip-image { width:210px !important; height:210px !important; }
+    .game-champion-tooltip-image { width:190px !important; height:190px !important; }
 }
 @media (max-width:420px) {
     .game-union-crystal-grid,
     .game-union-champion-grid {
         grid-template-columns:repeat(3,minmax(0,1fr)) !important;
     }
-    .game-champion-tooltip-image { width:210px !important; height:210px !important; }
+    .game-champion-tooltip-image { width:190px !important; height:190px !important; }
 }

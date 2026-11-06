@@ -307,7 +307,7 @@ test("character details automatically open the game-style stat window", async ({
   await expect(page.locator("#characterDetailsContent .game-stat-detail-card-header .game-preset-select").nth(1)).toHaveValue("1");
 
   await page.locator('[data-detail-tab="symbols"]').click();
-  await expect(page.locator("#characterDetailsContent")).toContainText("테스트 아케인심볼");
+  await expect(page.locator("#characterDetailsContent")).toContainText("테스트 그랜드 어센틱심볼");
   const maxSymbol = page.locator("#characterDetailsContent .game-symbol-tile");
   await maxSymbol.hover();
   await expect(maxSymbol.locator(".game-hover-tooltip")).toContainText("성장량 MAX");
