@@ -56,7 +56,7 @@ export function getRankingChange(history) {
         .map(item => toFiniteNumber(item?.ranking))
         .filter(value => value !== null);
     if (ranked.length < 2) return null;
-    return ranked[0] - ranked[ranked.length - 1];
+    return ranked[ranked.length - 2] - ranked[ranked.length - 1];
 }
 
 export function calculateLevelProgress(character, averageDailyGrowth = null) {
