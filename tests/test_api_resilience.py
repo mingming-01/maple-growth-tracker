@@ -52,8 +52,8 @@ class ApiResilienceTests(unittest.TestCase):
         self.assertEqual(
             request.call_args.kwargs["timeout"],
             (
-                tracker.app.config["NEXON_API_CONNECT_TIMEOUT"],
-                tracker.app.config["NEXON_API_READ_TIMEOUT"],
+                self.app.config["NEXON_API_CONNECT_TIMEOUT"],
+                self.app.config["NEXON_API_READ_TIMEOUT"],
             ),
         )
 
