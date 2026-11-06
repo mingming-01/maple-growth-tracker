@@ -16,7 +16,7 @@ import {
   calculateGrowthMetrics,
   buildGrowthTimeline
 } from "../../lib/growth.js";
-import { readGrowthGoals, saveGrowthGoals } from "../../lib/storage.js";
+import { readGrowthGoals, saveGrowthGoals, readTrackerState } from "../../lib/storage.js";
 
 function fmt(value) {
   if (value === null || value === undefined || !Number.isFinite(Number(value))) return "자료 부족";
@@ -360,23 +360,31 @@ function PeriodSummary({ summary, previous, label }) {
 }
 
 export default function GrowthDashboard({ character, history, onHistoryChange, onPersist }) {
-  const [range, setRange] = useState(7);
-  const [displayHistory, setDisplayHistory] = useState(history || []);
-  const [rangeStatus, setRangeStatus] = useState(null);
-  const [periodSummary, setPeriodSummary] = useState(null);
+  const initialState = readTrackerState() || {};
+  const initialRange = [7,30,90].includes(Number(initialState.historyRange)) ? Number(initialState.historyRange) : 7;
+  const [range, setRange] = useState(initialRange);
+  const [displayHistory, setDisplayHistory] = useState(
+    initialRange === 7 || !Array.isArray(initialState.displayHistory) ? history || [] : initialState.displayHistory
+  );
+  const [rangeStatus, setRangeStatus] = useState(initialState.historyRangeStatus || null);
+  const [periodSummary, setPeriodSummary] = useState(initialState.periodSummary || null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
+  const [progressText, setProgressText] = useState("");
   const [chartVersion, setChartVersion] = useState(0);
   const canvasRef = useRef(null);
   const chartRef = useRef(null);
 
   useEffect(() => {
-    setRange(7);
-    setDisplayHistory(history || []);
-    setRangeStatus(null);
-    setPeriodSummary(null);
+    const saved = readTrackerState() || {};
+    const savedRange = [7,30,90].includes(Number(saved.historyRange)) ? Number(saved.historyRange) : 7;
+    setRange(savedRange);
+    setDisplayHistory(savedRange === 7 || !Array.isArray(saved.displayHistory) ? history || [] : saved.displayHistory);
+    setRangeStatus(saved.historyRangeStatus || null);
+    setPeriodSummary(saved.periodSummary || null);
     setError("");
-  }, [character.ocid, history]);
+    setProgressText("");
+  }, [character.ocid]);
 
   const prediction = useMemo(() => calculatePrediction(character, history || []), [character, history]);
   const metrics = useMemo(() => calculateGrowthMetrics(character, history || [], prediction), [character, history, prediction]);
@@ -451,7 +459,7 @@ export default function GrowthDashboard({ character, history, onHistoryChange, o
       } else {
         const current = await fetchArchive(days,character,{
           collect:true,
-          onProgress:setError
+          onProgress:setProgressText
         });
         let previous = null;
         const previousEnd = shiftDate(current.startDate,-1);
@@ -484,8 +492,10 @@ export default function GrowthDashboard({ character, history, onHistoryChange, o
         setPeriodSummary({ ...summary, previousSummary:priorSummary });
       }
       setChartVersion(value => value + 1);
+      setProgressText("");
     } catch (requestError) {
       setError(requestError.message || "성장 기록을 불러오지 못했습니다.");
+      setProgressText("");
     } finally {
       setBusy(false);
     }
@@ -523,7 +533,7 @@ export default function GrowthDashboard({ character, history, onHistoryChange, o
           </label>
         </div>
         <p className="history-range-notice" role="status">
-          {busy ? error || "기록을 불러오고 있습니다..." : range === 7
+          {busy ? progressText || "기록을 불러오고 있습니다..." : range === 7
             ? `최근 7일 API 정상 기록 ${(history || []).filter(item=>item.recordStatus==="available").length}일`
             : `최근 ${range}일 · 정상 ${rangeStatus?.availableDays ?? 0}일 · API 미제공 ${rangeStatus?.notReadyDays ?? 0}일 · 미수집 ${rangeStatus?.notCollectedDays ?? 0}일`}
         </p>
