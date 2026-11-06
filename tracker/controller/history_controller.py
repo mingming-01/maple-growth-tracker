@@ -9,10 +9,10 @@ from tracker.domain.growth_calculations import (
     calculate_archive_history_changes,
     calculate_recent_history_changes,
 )
-from tracker.integrations.nexon_api import (
-    get_basic_character,
-    get_ocid,
-    get_ranking,
+from tracker.services.nexon_service import (
+    get_basic_character_snapshot,
+    get_ranking_snapshot,
+    resolve_character,
 )
 from tracker.runtime import (
     HISTORY_BACKFILL_BATCH_SIZE,
@@ -52,7 +52,7 @@ def get_history():
         ))
 
     try:
-        ocid, response = get_ocid(character_name)
+        ocid, basic, response = resolve_character(character_name)
         if not ocid:
             if is_temporary_nexon_failure(response):
                 return stale_snapshot_response(
@@ -60,7 +60,6 @@ def get_history():
                 )
             return jsonify({"error": "캐릭터 정보를 찾을 수 없거나 조회할 수 없습니다."}), response.status_code
 
-        basic, response = get_basic_character(ocid)
         if not basic:
             if is_temporary_nexon_failure(response):
                 return stale_snapshot_response(
@@ -102,7 +101,7 @@ def get_history():
                     "_fromStore": True
                 }
 
-            ranking_data, response = get_ranking(
+            ranking_data, response = get_ranking_snapshot(
                 target_date=date_string,
                 world_name=world_name,
                 ocid=ocid
@@ -220,7 +219,7 @@ def fetch_historical_record(ocid, world_name, target_date, today):
     """랭킹 또는 날짜별 캐릭터 정보에서 과거 일일 스냅샷을 만든다."""
     date_text = target_date.isoformat()
     try:
-        ranking_data, ranking_response = get_ranking(
+        ranking_data, ranking_response = get_ranking_snapshot(
             date_text, world_name=world_name, ocid=ocid, historical=True
         )
     except requests.RequestException:
@@ -240,7 +239,7 @@ def fetch_historical_record(ocid, world_name, target_date, today):
 
     try:
         # 기본 정보 API는 오늘 날짜를 date로 받지 않으므로 오늘은 최신 응답을 사용한다.
-        basic_data, basic_response = get_basic_character(
+        basic_data, basic_response = get_basic_character_snapshot(
             ocid,
             target_date=date_text if target_date < today else None,
             historical=True
@@ -328,7 +327,7 @@ def get_history_archive():
 
         # 브라우저에서 전달한 캐릭터명과 OCID를 확인해 다른 캐릭터 기록의 혼합 저장을 막는다.
         try:
-            verified_basic, verify_response = get_basic_character(ocid, historical=True)
+            verified_basic, verify_response = get_basic_character_snapshot(ocid, historical=True)
         except requests.RequestException:
             verified_basic, verify_response = None, None
 
