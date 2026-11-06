@@ -76,7 +76,6 @@ function renderObject(container, value, depth = 0) {
 
     Object.entries(value).forEach(([key, item]) => {
         if (item === null || item === undefined || item === "") return;
-        if (/^(preset_no|use_preset_no|.*_preset_[1-5])$/.test(key)) return;
         if (key.endsWith("_icon") && typeof item === "string" && /^https:\/\//i.test(item)) {
             const row = createElement("div", "detail-data-row detail-image-row");
             row.appendChild(createElement("span", "detail-data-label", humanizeKey(key)));
