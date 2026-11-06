@@ -1,3 +1,16 @@
+import { apiFetch, readApiResponse } from "./js/api.js";
+import {
+    sortHistoryAscending,
+    sortHistoryDescending,
+    getDailyGrowth,
+    calculateAverageGrowth,
+    calculateWeeklyGrowth,
+    getRankingChange,
+    calculatePrediction,
+    formatLocalISODate,
+    calculateGrowthMetrics
+} from "./js/growth.js";
+
 const searchForm = document.getElementById("searchForm");
 const characterNameInput = document.getElementById("characterName");
 const loadingMessage = document.getElementById("loadingMessage");
@@ -360,128 +373,6 @@ function hideError() {
     errorMessage.textContent = "";
 }
 
-function sortHistoryAscending(history) {
-    return [...(history || [])].sort((a, b) => String(a.date).localeCompare(String(b.date)));
-}
-
-function sortHistoryDescending(history) {
-    return [...(history || [])].sort((a, b) => String(b.date).localeCompare(String(a.date)));
-}
-
-// 기존 성장 계산 함수를 AI 리포트와 비교 카드에서도 공유한다.
-function getDailyGrowth(history) {
-    if (!history || history.length < 2) return null;
-    const sorted = sortHistoryAscending(history);
-    const latest = sorted[sorted.length - 1];
-    if (!latest || latest.levelUp === true) return null;
-    const growth = Number(latest.experienceChange);
-    return Number.isFinite(growth) && growth > 0 ? growth : null;
-}
-
-function calculateAverageGrowth(history) {
-    if (!history || history.length < 2) return null;
-    const gains = history
-        .map(item => Number(item.experienceChange))
-        .filter(value => Number.isFinite(value) && value > 0);
-    if (!gains.length) return null;
-    return gains.reduce((sum, value) => sum + value, 0) / gains.length;
-}
-
-function calculateWeeklyGrowth(history) {
-    if (!history || !history.length) return null;
-    const gains = history
-        .map(item => Number(item.experienceChange))
-        .filter(value => Number.isFinite(value) && value > 0);
-    return gains.length ? gains.reduce((sum, value) => sum + value, 0) : null;
-}
-
-function getRankingChange(history) {
-    const sorted = sortHistoryAscending(history);
-    if (sorted.length < 2) return null;
-    const latest = sorted[sorted.length - 1];
-    const previous = sorted[sorted.length - 2];
-    const change = Number(previous.ranking) - Number(latest.ranking);
-    return Number.isFinite(change) ? change : null;
-}
-
-function calculatePrediction(character, history) {
-    if (!character || !history?.length) return null;
-    const currentExp = Number(character.experience);
-    const currentLevel = Number(character.level);
-    const currentRate = Number(String(character.experienceRate || "").replace("%", ""));
-    const averageGrowth = calculateAverageGrowth(history);
-    if (!Number.isFinite(currentExp) || !Number.isFinite(currentLevel) || averageGrowth === null || averageGrowth <= 0) return null;
-
-    if (Number.isFinite(currentRate) && currentRate > 0 && currentRate < 100) {
-        const estimatedTotalExp = currentExp / (currentRate / 100);
-        const requiredExp = estimatedTotalExp - currentExp;
-        const days = requiredExp / averageGrowth;
-        const targetDate = new Date();
-        targetDate.setDate(targetDate.getDate() + Math.ceil(days));
-        return { currentLevel, nextLevel: currentLevel + 1, currentRate, averageGrowth, requiredExp, days, date: targetDate };
-    }
-
-    return { currentLevel, nextLevel: currentLevel + 1, currentRate, averageGrowth, requiredExp: null, days: null, date: null };
-}
-
-function formatLocalISODate(value) {
-    if (!(value instanceof Date) || Number.isNaN(value.getTime())) return null;
-    const year = value.getFullYear();
-    const month = String(value.getMonth() + 1).padStart(2, "0");
-    const day = String(value.getDate()).padStart(2, "0");
-    return `${year}-${month}-${day}`;
-}
-
-function calculateGrowthMetrics(character, history, sharedPrediction) {
-    const sorted = sortHistoryAscending(history);
-    const gains = sorted
-        .map(item => Number(item.experienceChange))
-        .filter(value => Number.isFinite(value) && value > 0);
-    const rankingDelta = getRankingChange(sorted);
-    const prediction = sharedPrediction || calculatePrediction(character, sorted);
-    const midpoint = Math.floor(gains.length / 2);
-    const firstHalf = midpoint > 0 ? gains.slice(0, midpoint) : [];
-    const secondHalf = gains.length - midpoint > 0 ? gains.slice(midpoint) : [];
-    const firstAverage = firstHalf.length ? firstHalf.reduce((sum, value) => sum + value, 0) / firstHalf.length : null;
-    const recentAverage = secondHalf.length ? secondHalf.reduce((sum, value) => sum + value, 0) / secondHalf.length : null;
-    const levelUps = sorted
-        .filter(item => item.levelUp === true)
-        .map(item => {
-            const index = sorted.indexOf(item);
-            return {
-                date: item.date,
-                previousLevel: index > 0 ? sorted[index - 1].level : null,
-                currentLevel: item.level
-            };
-        });
-
-    return {
-        validGrowthDays: gains.length,
-        recordedDays: sorted.filter(item => item.experience !== null && item.experience !== undefined).length,
-        latestDailyGrowth: getDailyGrowth(sorted),
-        averageDailyGrowth: calculateAverageGrowth(sorted),
-        highestDailyGrowth: gains.length ? Math.max(...gains) : null,
-        lowestDailyGrowth: gains.length ? Math.min(...gains) : null,
-        sevenDayGrowth: calculateWeeklyGrowth(sorted),
-        rankingChange: rankingDelta,
-        growthComparison: {
-            earlierAverage: firstAverage,
-            recentAverage,
-            direction: firstAverage === null || recentAverage === null
-                ? "insufficient_data"
-                : recentAverage > firstAverage ? "increased" : recentAverage < firstAverage ? "decreased" : "stable"
-        },
-        levelUps,
-        prediction: prediction ? {
-            nextLevel: prediction.nextLevel,
-            requiredExperience: prediction.requiredExp,
-            averageDailyGrowth: prediction.averageGrowth,
-            estimatedDays: prediction.days,
-            estimatedDate: formatLocalISODate(prediction.date)
-        } : null
-    };
-}
-
 function renderPrediction(character, history, sharedPrediction) {
     const prediction = sharedPrediction || calculatePrediction(character, history);
     if (!prediction) {
@@ -634,7 +525,7 @@ function renderAIAnalysis(analysis) {
 }
 
 async function searchAIAnalysis(name, metrics) {
-    const response = await fetch(`/api/ai-analysis?name=${encodeURIComponent(name)}`, {
+    const response = await apiFetch(`/api/ai-analysis?name=${encodeURIComponent(name)}`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ metrics })
@@ -879,16 +770,10 @@ function renderChart(history) {
     });
 }
 
-async function readApiResponse(response, fallbackMessage) {
-    let data = {};
-    try { data = await response.json(); } catch (error) { /* JSON이 없으면 기본 오류 메시지를 사용한다. */ }
-    if (!response.ok) throw new Error(data.error || fallbackMessage);
-    return data;
-}
 
 async function searchCharacter(name, forceRefresh = false) {
     const refreshParam = forceRefresh ? "&refresh=1" : "";
-    const response = await fetch(
+    const response = await apiFetch(
         `/api/character?name=${encodeURIComponent(name)}${refreshParam}`,
         forceRefresh ? { cache: "no-store" } : {}
     );
@@ -897,7 +782,7 @@ async function searchCharacter(name, forceRefresh = false) {
 
 async function searchHistory(name, forceRefresh = false) {
     const refreshParam = forceRefresh ? "&refresh=1" : "";
-    const response = await fetch(
+    const response = await apiFetch(
         `/api/history?name=${encodeURIComponent(name)}${refreshParam}`,
         forceRefresh ? { cache: "no-store" } : {}
     );
@@ -946,7 +831,7 @@ async function fetchArchiveRange(days, endDate = null, ocid = currentCharacter?.
         params.set("limit", String(options.limit || 10));
     }
 
-    const response = await fetch(`/api/history/archive?${params.toString()}`, {
+    const response = await apiFetch(`/api/history/archive?${params.toString()}`, {
         cache: "no-store"
     });
     return readApiResponse(response, "저장된 성장 기록을 불러오지 못했습니다.");
@@ -1727,7 +1612,7 @@ async function handleComparison(event) {
         let comparisonCacheMessage = "저장된 비교 분석을 재사용했습니다. AI 모델을 다시 호출하지 않았습니다.";
 
         if (!comparisonAnalysis) {
-            const response = await fetch("/api/ai-comparison", {
+            const response = await apiFetch("/api/ai-comparison", {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({
