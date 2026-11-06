@@ -1,8 +1,8 @@
 """AI 제공자(OpenRouter)와 통신한다."""
-import requests
 from flask import current_app, has_app_context
 
 from tracker.config import Config
+from tracker.integrations.http_client import request_with_retries
 
 OPENROUTER_URL = "https://openrouter.ai/api/v1/chat/completions"
 
@@ -18,7 +18,20 @@ def request_openrouter(prompt):
     if not api_key:
         return None
 
-    response = requests.post(
+    timeout = _setting("AI_API_TIMEOUT", 30)
+    retries = _setting("AI_API_RETRIES", 1)
+    backoff = _setting("AI_API_RETRY_BACKOFF", 0.5)
+    try:
+        retries = int(retries)
+    except (TypeError, ValueError):
+        retries = 1
+    try:
+        backoff = float(backoff)
+    except (TypeError, ValueError):
+        backoff = 0.5
+
+    response = request_with_retries(
+        "post",
         OPENROUTER_URL,
         headers={
             "Authorization": f"Bearer {api_key}",
@@ -28,7 +41,9 @@ def request_openrouter(prompt):
             "model": _setting("OPENROUTER_MODEL", "openrouter/free"),
             "messages": [{"role": "user", "content": prompt}],
         },
-        timeout=60,
+        timeout=timeout,
+        max_attempts=max(1, retries + 1),
+        backoff_factor=max(0.0, backoff),
     )
     response.raise_for_status()
 
@@ -46,6 +61,9 @@ def request_openrouter(prompt):
 
 
 def should_use_openrouter(error):
+    status_code = getattr(getattr(error, "response", None), "status_code", None)
+    if status_code in (408, 425, 429, 500, 502, 503, 504):
+        return True
     error_text = str(error).upper()
     return any(
         keyword in error_text
