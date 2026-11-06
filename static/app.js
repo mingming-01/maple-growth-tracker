@@ -116,7 +116,23 @@ const favoriteCurrentButton = document.getElementById("favoriteCurrentButton");
 const favoriteCurrentButtonIcon = document.getElementById("favoriteCurrentButtonIcon");
 const favoriteCurrentButtonLabel = document.getElementById("favoriteCurrentButtonLabel");
 
-const characterDetails = initCharacterDetails({ apiFetch, readApiResponse });
+const characterDetails = initCharacterDetails({
+    apiFetch,
+    readApiResponse,
+    onStatsLoaded: data => {
+        if (!currentCharacter) return;
+        currentCharacter.bestCombatPower = data.bestCombatPower ?? currentCharacter.bestCombatPower ?? null;
+        currentCharacter.bestCombatPowerObservedAt = data.bestCombatPowerObservedAt ?? currentCharacter.bestCombatPowerObservedAt ?? null;
+        currentCharacter.bestPresetCombination = data.bestPresetCombination ?? currentCharacter.bestPresetCombination ?? null;
+        if (bestCombatPower) bestCombatPower.textContent = currentCharacter.bestCombatPower !== null
+            ? formatNumber(currentCharacter.bestCombatPower) : "-";
+        if (bestCombatPowerDate) {
+            bestCombatPowerDate.textContent = currentCharacter.bestCombatPowerObservedAt
+                ? "조회 기록 중 최고 · " + new Date(currentCharacter.bestCombatPowerObservedAt).toLocaleDateString("ko-KR")
+                : "스탯 API 조회 기록이 쌓이면 표시합니다.";
+        }
+    }
+});
 
 let growthChart = null;
 let currentCharacter = null;

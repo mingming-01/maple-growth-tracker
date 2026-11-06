@@ -1,11 +1,14 @@
 """캐릭터 상세 정보 탭의 지연 조회 API."""
 from flask import Blueprint, jsonify, request
 from datetime import datetime
+import hashlib
+import json
 
 from tracker.runtime import get_cache, set_cache, record_best_combat_power, KOREA_TIMEZONE
 from tracker.services.character_detail_service import (
     VALID_SECTIONS,
     get_character_detail_section,
+    recommend_preset_profiles,
 )
 
 character_detail_bp = Blueprint(
@@ -38,23 +41,88 @@ def get_character_details():
         sources = result.get("sources", [])
         stat_source = next((source for source in sources if source.get("id") == "stat"), {})
         preset_keys = {
-            "itemEquipment": "equipment", "hyperStat": "hyperStat",
-            "ability": "ability", "linkSkill": "link", "unionRaider": "union",
+            "itemEquipment": "equipment",
+            "hyperStat": "hyperStat",
+            "ability": "ability",
+            "linkSkill": "link",
+            "unionRaider": "union",
         }
-        preset_numbers = {
+        required_keys = set(preset_keys.values())
+        actual_numbers = {
             preset_keys[source.get("id")]: source.get("activePresetNo")
             for source in sources
             if source.get("id") in preset_keys and source.get("activePresetNo") is not None
         }
+
+        signatures = {}
+        if required_keys.issubset(actual_numbers):
+            for source in sources:
+                category = preset_keys.get(source.get("id"))
+                if not category:
+                    continue
+                preset = next(
+                    (item for item in source.get("presets", [])
+                     if item.get("number") == actual_numbers.get(category)),
+                    None,
+                )
+                if not preset or not isinstance(preset.get("data"), dict):
+                    signatures = {}
+                    break
+                serialized = json.dumps(
+                    preset["data"], ensure_ascii=False, sort_keys=True, separators=(",", ":")
+                )
+                signatures[category] = hashlib.sha256(serialized.encode("utf-8")).hexdigest()
+
+        signatures_complete = required_keys.issubset(signatures)
+        combination_complete = required_keys.issubset(actual_numbers)
         best = record_best_combat_power(
-            ocid, stat_source.get("combatPower"),
-            preset_numbers=preset_numbers or None,
+            ocid,
+            stat_source.get("combatPower"),
+            preset_numbers=actual_numbers if combination_complete else None,
             observed_at=datetime.now(KOREA_TIMEZONE).isoformat(timespec="seconds"),
+            preset_signatures=signatures if signatures_complete else None,
         )
+
+        result["actualPresetNumbers"] = actual_numbers
+        result["actualPresetCombinationComplete"] = combination_complete
+        result["profileRecommendations"] = recommend_preset_profiles(sources)
+
+        boss = result["profileRecommendations"]["boss"]
+        hunting = result["profileRecommendations"]["hunting"]
+        if boss["confidence"] == "low" and hunting["confidence"] == "low":
+            result["defaultProfile"] = "current"
+        else:
+            result["defaultProfile"] = "boss" if boss["score"] >= hunting["score"] else "hunting"
+
         if best:
             result["bestCombatPower"] = best.get("value")
             result["bestCombatPowerObservedAt"] = best.get("observedAt")
-            result["bestPresetCombination"] = best.get("presetNumbers")
+            saved_numbers = best.get("presetNumbers")
+            saved_signatures = best.get("presetSignatures") or {}
+            current_signatures = {}
+            if isinstance(saved_numbers, dict):
+                for source in sources:
+                    category = preset_keys.get(source.get("id"))
+                    if not category:
+                        continue
+                    preset = next(
+                        (item for item in source.get("presets", [])
+                         if item.get("number") == saved_numbers.get(category)),
+                        None,
+                    )
+                    if preset and isinstance(preset.get("data"), dict):
+                        serialized = json.dumps(
+                            preset["data"], ensure_ascii=False, sort_keys=True, separators=(",", ":")
+                        )
+                        current_signatures[category] = hashlib.sha256(serialized.encode("utf-8")).hexdigest()
+            signatures_match = (
+                required_keys.issubset(saved_signatures)
+                and all(saved_signatures[key] == current_signatures.get(key) for key in required_keys)
+            )
+            result["bestPresetCombination"] = saved_numbers if signatures_match else None
+            result["bestPresetCombinationStatus"] = (
+                "valid" if signatures_match else "unavailable_or_changed"
+            )
     result["dataStatus"] = "current"
     set_cache(cache_key, result, DETAIL_CACHE_TTL)
     return jsonify(result)
