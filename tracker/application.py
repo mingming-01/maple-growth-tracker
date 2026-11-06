@@ -55,5 +55,4 @@ def create_app(test_config=None):
     app.before_request(runtime.start_request_timer)
     app.after_request(runtime.record_user_action)
     app.register_error_handler(Exception, runtime.handle_unexpected_error)
-    runtime.app = app
     return app
