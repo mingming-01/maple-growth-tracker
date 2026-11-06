@@ -1,13 +1,18 @@
 const { test, expect } = require("@playwright/test");
 
-test("React preview is isolated from the existing Flask homepage", async ({ page }) => {
+test("React dashboard is served at root while the legacy Flask homepage remains available", async ({ page }) => {
   await page.goto("/");
+  await expect(page.locator('[data-testid="react-preview-ready"]')).toBeVisible();
+  await expect(page.locator('[data-testid="react-character-search"]')).toBeVisible();
+  await expect(page.getByRole("heading", { name: "모험가 찾기" })).toBeVisible();
+  const moduleScript = await page.locator('script[type="module"]').getAttribute("src");
+  expect(moduleScript).toContain("/static/react-preview/assets/");
+
+  await page.goto("/legacy/");
   await expect(page.locator("#searchForm")).toBeVisible();
 
   await page.goto("/preview/");
   await expect(page.locator('[data-testid="react-preview-ready"]')).toBeVisible();
-  await expect(page.locator('[data-testid="react-character-search"]')).toBeVisible();
-  await expect(page.getByRole("heading", { name: "모험가 찾기" })).toBeVisible();
   await expect(page.locator('.mgt-nav a[href="#growth"]')).toBeVisible();
 });
 
