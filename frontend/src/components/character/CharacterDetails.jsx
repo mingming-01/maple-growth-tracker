@@ -608,7 +608,15 @@ function UnionTab({ data, selected, onSelect }) {
                 <span className={"game-union-grade-badge grade-"+String(item.champion_grade||"").toLowerCase()}>{item.champion_grade || "—"}</span>
                 <span className="game-union-champion-slot">SLOT {item.champion_slot ?? "—"}</span>
               </div>
-              {apiImage(item.character_image,item.champion_name,"game-union-champion-avatar-wrap")}
+              {item.character_image && (
+                <details className="react-detail-tooltip game-union-champion-avatar-tooltip">
+                  <summary>아바타 보기</summary>
+                  <div className="react-detail-tooltip-body">
+                    {apiImage(item.character_image,item.champion_name,"game-union-champion-tooltip-avatar")}
+                    <strong>{item.champion_name || "캐릭터 아바타"}</strong>
+                  </div>
+                </details>
+              )}
               <strong className="game-union-champion-name">{item.champion_name || "캐릭터 정보 없음"}</strong>
               <span className="game-union-champion-class">{item.champion_class || "직업 정보 없음"}</span>
               <div className="game-union-champion-badges">
