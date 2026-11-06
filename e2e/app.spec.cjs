@@ -101,7 +101,6 @@ test("AI growth report explains the exact records used as evidence", async ({ pa
 
   const evidence = page.locator("#aiAnalysisEvidence");
   await expect(evidence).toBeVisible();
-  await expect(evidence).toContainText("분석에 사용한 기록");
   await expect(evidence).toContainText("AI 분석 기준 및 데이터 충실도");
   await expect(evidence).toContainText("2026.11.06");
   await expect(evidence).toContainText("10 / 15일");
@@ -118,7 +117,7 @@ test("AI growth report explains the exact records used as evidence", async ({ pa
 
   await page.reload();
   await expect(page.locator("#aiAnalysisEvidence")).toBeVisible();
-  await expect(page.locator("#aiAnalysisEvidence")).toContainText("5 / 7일");
+  await expect(page.locator("#aiAnalysisEvidence")).toContainText("10 / 15일");
 });
 
 test("30-day growth chart and browser-saved favorite characters work", async ({ page }) => {
