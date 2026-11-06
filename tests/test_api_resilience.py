@@ -6,43 +6,64 @@ from unittest.mock import Mock, patch
 import requests
 import app as tracker
 from tracker.controller import character_controller, history_controller
+from tracker.integrations import nexon_api
+from tracker.runtime import get_runtime_state
+from tracker.services import nexon_service
 
 
 class ApiResilienceTests(unittest.TestCase):
     def setUp(self):
         self.temp_dir = tempfile.TemporaryDirectory()
         self.snapshot_path = Path(self.temp_dir.name) / "snapshots.sqlite3"
-        self.path_patch = patch.object(tracker, "SNAPSHOT_DB_PATH", str(self.snapshot_path))
-        self.path_patch.start()
-        tracker.initialize_snapshot_db()
-        tracker.CACHE.clear()
+        with tracker.app.app_context():
+            self.state = get_runtime_state()
+            self.state.snapshot_db_path = str(self.snapshot_path)
+            self.state.cache.clear()
+            tracker.initialize_snapshot_db()
         self.client = tracker.app.test_client()
 
     def tearDown(self):
-        tracker.CACHE.clear()
-        self.path_patch.stop()
+        with tracker.app.app_context():
+            self.state.cache.clear()
         self.temp_dir.cleanup()
+
+    def save_snapshot(self, key, value):
+        with tracker.app.app_context():
+            tracker.save_api_snapshot(key, value)
 
     def test_nexon_request_has_timeout(self):
         response = Mock(status_code=200)
         response.json.return_value = {"ocid": "test-ocid"}
 
-        with patch.object(tracker.requests, "get", return_value=response) as get:
-            ocid, _ = tracker.get_ocid("테스트캐릭터")
+        with tracker.app.app_context(), patch.object(
+            nexon_api, "request_with_retries", return_value=response
+        ) as request:
+            ocid, _ = nexon_api.get_ocid("테스트캐릭터")
 
         self.assertEqual(ocid, "test-ocid")
-        self.assertEqual(get.call_args.kwargs["timeout"], tracker.NEXON_API_TIMEOUT)
+        self.assertEqual(
+            request.call_args.kwargs["timeout"],
+            (
+                tracker.app.config["NEXON_API_CONNECT_TIMEOUT"],
+                tracker.app.config["NEXON_API_READ_TIMEOUT"],
+            ),
+        )
 
     def test_temporary_failure_returns_saved_character_as_stale(self):
-        snapshot = {
+        self.save_snapshot("character:테스트캐릭터", {
             "characterName": "테스트캐릭터",
             "level": 280,
             "rankingDataStatus": "available"
-        }
-        tracker.save_api_snapshot("character:테스트캐릭터", snapshot)
+        })
 
-        with patch.object(character_controller, "get_ocid", side_effect=requests.Timeout("internal timeout")):
-            response = self.client.get("/api/character?name=%ED%85%8C%EC%8A%A4%ED%8A%B8%EC%BA%90%EB%A6%AD%ED%84%B0")
+        with patch.object(
+            character_controller,
+            "resolve_character",
+            side_effect=requests.Timeout("internal timeout"),
+        ):
+            response = self.client.get(
+                "/api/character", query_string={"name": "테스트캐릭터"}
+            )
 
         self.assertEqual(response.status_code, 200)
         body = response.get_json()
@@ -51,15 +72,20 @@ class ApiResilienceTests(unittest.TestCase):
         self.assertEqual(body["characterName"], "테스트캐릭터")
 
     def test_temporary_history_failure_returns_saved_history_as_stale(self):
-        snapshot = {
+        self.save_snapshot("history:테스트캐릭터", {
             "characterName": "테스트캐릭터",
             "history": [{"date": "2026-10-26", "experience": 123}],
             "historyStatus": "complete"
-        }
-        tracker.save_api_snapshot("history:테스트캐릭터", snapshot)
+        })
 
-        with patch.object(history_controller, "get_ocid", side_effect=requests.Timeout("internal timeout")):
-            response = self.client.get("/api/history?name=%ED%85%8C%EC%8A%A4%ED%8A%B8%EC%BA%90%EB%A6%AD%ED%84%B0")
+        with patch.object(
+            history_controller,
+            "resolve_character",
+            side_effect=requests.Timeout("internal timeout"),
+        ):
+            response = self.client.get(
+                "/api/history", query_string={"name": "테스트캐릭터"}
+            )
 
         self.assertEqual(response.status_code, 200)
         body = response.get_json()
@@ -67,42 +93,60 @@ class ApiResilienceTests(unittest.TestCase):
         self.assertEqual(body["history"][0]["experience"], 123)
 
     def test_temporary_failure_without_snapshot_returns_safe_error(self):
-        with patch.object(character_controller, "get_ocid", side_effect=requests.Timeout("private timeout detail")):
-            response = self.client.get("/api/character?name=%ED%85%8C%EC%8A%A4%ED%8A%B8%EC%BA%90%EB%A6%AD%ED%84%B0")
+        with patch.object(
+            character_controller,
+            "resolve_character",
+            side_effect=requests.Timeout("private timeout detail"),
+        ):
+            response = self.client.get(
+                "/api/character", query_string={"name": "테스트캐릭터"}
+            )
 
         self.assertEqual(response.status_code, 503)
         self.assertNotIn("private timeout detail", response.get_data(as_text=True))
         self.assertIn("넥슨 API", response.get_data(as_text=True))
 
     def test_force_refresh_bypasses_character_memory_cache(self):
-        tracker.set_cache(
-            "character:테스트캐릭터",
-            {"characterName": "오래된이름", "level": 250},
-            tracker.CHARACTER_CACHE_TTL
-        )
+        with tracker.app.app_context():
+            tracker.set_cache(
+                "character:테스트캐릭터",
+                {"characterName": "오래된이름", "level": 250},
+                tracker.CHARACTER_CACHE_TTL,
+            )
 
-        with patch.object(character_controller, "get_ocid", side_effect=requests.Timeout("timeout")):
+        with patch.object(
+            character_controller,
+            "resolve_character",
+            side_effect=requests.Timeout("timeout"),
+        ):
             response = self.client.get(
-                "/api/character?name=%ED%85%8C%EC%8A%A4%ED%8A%B8%EC%BA%90%EB%A6%AD%ED%84%B0&refresh=1"
+                "/api/character",
+                query_string={"name": "테스트캐릭터", "refresh": "1"},
             )
 
         self.assertEqual(response.status_code, 503)
         self.assertIn("넥슨 API", response.get_data(as_text=True))
 
     def test_force_refresh_bypasses_history_memory_cache(self):
-        tracker.set_cache(
-            "history:테스트캐릭터",
-            {
-                "characterName": "테스트캐릭터",
-                "history": [{"date": "2026-10-26", "experience": 123}],
-                "historyStatus": "complete"
-            },
-            tracker.HISTORY_CACHE_TTL
-        )
+        with tracker.app.app_context():
+            tracker.set_cache(
+                "history:테스트캐릭터",
+                {
+                    "characterName": "테스트캐릭터",
+                    "history": [{"date": "2026-10-26", "experience": 123}],
+                    "historyStatus": "complete"
+                },
+                tracker.HISTORY_CACHE_TTL,
+            )
 
-        with patch.object(history_controller, "get_ocid", side_effect=requests.Timeout("timeout")):
+        with patch.object(
+            history_controller,
+            "resolve_character",
+            side_effect=requests.Timeout("timeout"),
+        ):
             response = self.client.get(
-                "/api/history?name=%ED%85%8C%EC%8A%A4%ED%8A%B8%EC%BA%90%EB%A6%AD%ED%84%B0&refresh=1"
+                "/api/history",
+                query_string={"name": "테스트캐릭터", "refresh": "1"},
             )
 
         self.assertEqual(response.status_code, 503)
@@ -110,15 +154,16 @@ class ApiResilienceTests(unittest.TestCase):
 
     def test_empty_ranking_response_is_marked_not_ready(self):
         empty_response = Mock(status_code=200)
-        with patch.object(tracker, "get_api_class", return_value="테스트직업"), patch.object(
-            tracker, "get_ranking", return_value=(None, empty_response)
+        with patch.object(nexon_service, "get_api_class", return_value="테스트직업"), patch.object(
+            nexon_service, "get_ranking_snapshot", return_value=(None, empty_response)
         ):
-            result = tracker.get_character_rankings(
-                target_date="2026-10-27",
-                world_name="테스트월드",
-                character_class="테스트직업",
-                ocid="test-ocid"
-            )
+            with tracker.app.app_context():
+                result = nexon_service.get_character_rankings(
+                    target_date="2026-10-27",
+                    world_name="테스트월드",
+                    character_class="테스트직업",
+                    ocid="test-ocid"
+                )
 
         self.assertEqual(result["rankingDataStatus"], "not_ready")
 
