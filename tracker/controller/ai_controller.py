@@ -34,6 +34,12 @@ def ai_analysis():
         return jsonify({"error": "캐릭터명을 입력해주세요."}), 400
     if len(character_name) > 30:
         return jsonify({"error": "캐릭터 이름이 너무 깁니다."}), 400
+    metrics = None
+    if request.method == "POST":
+        payload = request.get_json(silent=True) or {}
+        metrics = payload.get("metrics")
+        if not isinstance(metrics, dict):
+            return jsonify({"error": "계산된 성장 지표가 필요합니다."}), 400
     rate_limit_response = _ai_rate_limit_response()
     if rate_limit_response:
         return rate_limit_response
@@ -49,13 +55,6 @@ def ai_analysis():
         if history_response.status_code != 200:
             return jsonify({"error": "성장 기록을 불러오지 못했습니다."}), history_response.status_code
         history_data = history_response.get_json()
-        metrics = None
-        if request.method == "POST":
-            payload = request.get_json(silent=True) or {}
-            metrics = payload.get("metrics")
-            if not isinstance(metrics, dict):
-                return jsonify({"error": "계산된 성장 지표가 필요합니다."}), 400
-
         result = generate_ai_analysis(character, history_data.get("history", []), metrics)
         if "error" in result:
             return jsonify(result), 500
