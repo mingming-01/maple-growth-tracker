@@ -69,7 +69,7 @@ test("character details automatically open the game-style stat window", async ({
         id: "symbolEquipment", label: "심볼", status: "available",
         currentData: { symbol: [{
           symbol_name: "테스트 아케인심볼", symbol_level: 20,
-          symbol_growth_count: 0, symbol_require_growth_count: 0,
+          symbol_growth_count: 0, symbol_require_growth_count: null,
           symbol_description: "최대 레벨에 도달한 심볼"
         }] },
         data: {}
@@ -272,21 +272,25 @@ test("character details automatically open the game-style stat window", async ({
   await expect(page.locator("#characterDetailsContent")).toContainText("현재 적용 중인 실제 전투력");
   expect(detailRequests.stats).toBe(1);
 
-  await expect(page.locator("#characterDetailsContent .game-preset-select")).toHaveCount(3);
+  await expect(page.locator("#characterDetailsContent .game-preset-select")).toHaveCount(2);
+  await expect(page.locator("#characterDetailsContent .game-profile-window")).toHaveCount(0);
+  await expect(page.locator("#characterDetailsContent .game-stat-detail-card-header .game-preset-select")).toHaveCount(2);
   await expect(page.locator("#characterDetailsContent .game-stat-grid")).toContainText("STR");
   await expect(page.locator("#characterDetailsContent")).toContainText("어빌리티");
   await expect(page.locator("#characterDetailsContent")).toContainText("하이퍼 스탯");
   await expect(page.locator("#characterDetailsContent .game-selected-build-window")).toHaveCount(0);
   await expect(page.locator("#characterDetailsContent")).not.toContainText("보스 프리셋 장비");
 
-  const equipmentPreset = page.locator("#characterDetailsContent .game-preset-select").nth(1);
-  await expect(equipmentPreset).toHaveValue("1");
-  await equipmentPreset.selectOption("2");
-  await expect(equipmentPreset).toHaveValue("2");
-
+  const abilityPreset = page.locator("#characterDetailsContent .game-stat-detail-card-header .game-preset-select").nth(0);
+  await expect(abilityPreset).toHaveValue("1");
+  await abilityPreset.selectOption("2");
+  const hyperPreset = page.locator("#characterDetailsContent .game-stat-detail-card-header .game-preset-select").nth(1);
+  await expect(hyperPreset).toHaveValue("2");
+  await hyperPreset.selectOption("1");
   await page.locator('[data-detail-tab="stats"]').click();
   expect(detailRequests.stats).toBe(1);
-  await expect(page.locator("#characterDetailsContent .game-preset-select").nth(2)).toHaveValue("2");
+  await expect(page.locator("#characterDetailsContent .game-stat-detail-card-header .game-preset-select").nth(0)).toHaveValue("2");
+  await expect(page.locator("#characterDetailsContent .game-stat-detail-card-header .game-preset-select").nth(1)).toHaveValue("1");
 
   await page.locator('[data-detail-tab="symbols"]').click();
   await expect(page.locator("#characterDetailsContent")).toContainText("테스트 아케인심볼");
@@ -299,6 +303,17 @@ test("character details automatically open the game-style stat window", async ({
   await expect(page.locator("#characterDetailsContent")).toContainText("테스트 성형");
   await expect(page.locator("#characterDetailsContent")).toContainText("뽀송 피부");
   await expect(page.locator("#characterDetailsContent")).toContainText("테스트 안드로이드");
+  const expectedSlots = {
+    ring4: ["4", "1"], pendant1: ["4", "2"], hair: ["4", "3"],
+    faceStyle: ["4", "4"], skin: ["4", "5"], shoulder: ["4", "6"], medal: ["4", "7"],
+    belt: ["5", "1"], pendant2: ["5", "2"], weapon: ["5", "3"],
+    subweapon: ["5", "4"], emblem: ["5", "5"], android: ["5", "6"], heart: ["5", "7"]
+  };
+  for (const [slot, [row, column]] of Object.entries(expectedSlots)) {
+    const element = page.locator(`#characterDetailsContent [data-slot="${slot}"]`);
+    await expect(element).toHaveCSS("grid-row-start", row);
+    await expect(element).toHaveCSS("grid-column-start", column);
+  }
 
   await page.locator('[data-detail-tab="skills"]').click();
   await expect(page.locator("#characterDetailsContent")).toContainText("테스트 6차 스킬");
@@ -306,7 +321,11 @@ test("character details automatically open the game-style stat window", async ({
   await expect(page.locator("#characterDetailsContent .game-hexa-stat-columns")).toHaveCount(1);
   await expect(page.locator("#characterDetailsContent .game-hexa-stat-column")).toHaveCount(3);
   await expect(page.locator("#characterDetailsContent .game-hexa-stat-column-title")).toHaveText(["HEXA 1", "HEXA 2", "HEXA 3"]);
-  await expect(page.locator("#characterDetailsContent .game-hexa-stat-entry .game-hover-tooltip")).toHaveCount(3);
+  await expect(page.locator("#characterDetailsContent .game-hexa-stat-entry .game-hover-tooltip")).toHaveCount(0);
+  await expect(page.locator("#characterDetailsContent .game-hexa-stat-columns")).toContainText("크리티컬 데미지");
+  await expect(page.locator("#characterDetailsContent .game-hexa-stat-columns")).toContainText("보스 데미지");
+  await expect(page.locator("#characterDetailsContent .game-hexa-stat-columns")).toContainText("방어율 무시");
+  await expect(page.locator("#characterDetailsContent .game-hexa-stat-entry")).not.toContainText("슬롯 1");
 
   await page.locator('[data-detail-tab="union"]').click();
   await expect(page.locator("#characterDetailsContent")).toContainText("유니온 스탯 투자");
@@ -318,7 +337,9 @@ test("character details automatically open the game-style stat window", async ({
   const championCard = page.locator("#characterDetailsContent .game-union-champion-card");
   await championCard.hover();
   await expect(championCard.locator(".game-champion-hover-tooltip")).toBeVisible();
-  await expect(championCard.locator(".game-champion-hover-tooltip img")).toHaveCSS("width", "164px");
+  await expect(championCard.locator(".game-champion-hover-tooltip img")).toHaveCSS("width", "224px");
+  await expect(page.locator("#characterDetailsContent .game-union-crystal-grid")).toHaveCSS("grid-template-columns", /repeat\(3,/);
+  await expect(page.locator("#characterDetailsContent .game-union-champion-grid")).toHaveCSS("grid-template-columns", /repeat\(3,/);
   await expect(page.locator("#characterDetailsContent .game-union-crystal-monster")).toHaveCount(0);
   await expect(page.locator("#characterDetailsContent .game-union-crystal-order")).toHaveText("01");
   const unionPreset = page.locator("#characterDetailsContent .game-union-state-panel .game-preset-select");

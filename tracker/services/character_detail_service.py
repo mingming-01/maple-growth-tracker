@@ -468,8 +468,12 @@ def _enrich_champion_images(source):
 
 def _fetch_source(ocid, spec, force_refresh=False):
     params = {"ocid": ocid, **spec.get("params", {})}
-    cache_key = "nexon-source:{}:{}:{}".format(
-        ocid, spec["endpoint"], json.dumps(params, sort_keys=True, ensure_ascii=False)
+    # The same Nexon endpoint may be normalized differently by multiple tabs.
+    # Include the complete source specification to avoid leaking a partial
+    # stats-tab item-equipment payload into the equipment tab's Android data.
+    cache_key = "nexon-source:{}:{}:{}:{}".format(
+        ocid, spec["endpoint"], json.dumps(params, sort_keys=True, ensure_ascii=False),
+        json.dumps(spec, sort_keys=True, ensure_ascii=False)
     )
     now = time.monotonic()
     if not force_refresh:
