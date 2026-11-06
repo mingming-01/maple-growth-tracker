@@ -1,13 +1,33 @@
-"""Flask HTTP 컨트롤러."""
+"""관리자 인증과 운영 로그 HTTP 라우트."""
+from datetime import date, datetime, timedelta
+import hmac
+import secrets
+import sqlite3
 
-from app import *
+import psycopg
+from flask import Blueprint, redirect, render_template, request, session, url_for
+from werkzeug.security import check_password_hash
+
+from tracker.runtime import (
+    ADMIN_PASSWORD,
+    ADMIN_PASSWORD_HASH,
+    ADMIN_USERNAME,
+    KOREA_TIMEZONE,
+    LOG_DB_BACKEND,
+    LOG_STORAGE_WARNING,
+    admin_required,
+    connect_log_db,
+    format_admin_log_time,
+)
+
+admin_bp = Blueprint("admin", __name__, url_prefix="/admin")
 
 
-@app.route("/admin/login", methods=["GET", "POST"])
+@admin_bp.route("/login", methods=["GET", "POST"])
 def admin_login():
     """관리자 계정을 확인하고 인증 세션을 발급한다."""
     if session.get("admin_authenticated"):
-        return redirect(url_for("admin_logs"))
+        return redirect(url_for("admin.admin_logs"))
 
     csrf_token = session.setdefault("csrf_token", secrets.token_urlsafe(32))
     error = None
@@ -42,7 +62,7 @@ def admin_login():
         configured=bool(ADMIN_USERNAME and (ADMIN_PASSWORD_HASH or ADMIN_PASSWORD))
     )
 
-@app.route("/admin/logs")
+@admin_bp.route("/logs")
 @admin_required
 def admin_logs():
     """검색 조건을 적용해 관리자 운영 로그를 시간 역순으로 표시한다."""
@@ -168,7 +188,7 @@ def admin_logs():
     )
 
 
-@app.route("/admin/logout", methods=["POST"])
+@admin_bp.route("/logout", methods=["POST"])
 @admin_required
 def admin_logout():
     submitted_token = request.form.get("csrf_token", "")
@@ -176,4 +196,4 @@ def admin_logout():
     if not hmac.compare_digest(str(expected_token), str(submitted_token)):
         return "잘못된 요청입니다.", 400
     session.clear()
-    return redirect(url_for("admin_login"))
+    return redirect(url_for("admin.admin_login"))
