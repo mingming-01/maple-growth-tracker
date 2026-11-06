@@ -568,13 +568,15 @@ function renderUnionArtifact(artifact,content) {
     crystals.forEach((crystal,index)=>{
         const tile=el("article","game-union-crystal");
         const top=el("div","game-union-crystal-top");
-        const gem=el("span","game-union-crystal-gem",String(index+1).padStart(2,"0"));
+        const order=el("span","game-union-crystal-order",String(index+1).padStart(2,"0"));
+        const gem=el("span","game-union-crystal-gem");
         const mobId=ARTIFACT_MOB_IDS[crystal?.name];
         if(mobId) {
             const mobIcon=image("https://maplestory.io/api/KMS/latest/mob/"+mobId+"/icon",crystal?.name||"몬스터","game-union-crystal-monster");
-            if(mobIcon) gem.replaceChildren(mobIcon);
+            if(mobIcon) gem.appendChild(mobIcon);
         }
-        top.append(gem,el("strong","game-union-crystal-name",crystal?.name||"크리스탈"),
+        if(!gem.childElementCount) gem.appendChild(el("span","game-union-crystal-fallback","✦"));
+        top.append(order,gem,el("strong","game-union-crystal-name",crystal?.name||"크리스탈"),
             el("span","game-union-crystal-level",present(crystal?.level)?"Lv. "+fmt(crystal.level):""));
         tile.appendChild(top);
 
