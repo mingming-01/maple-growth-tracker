@@ -76,8 +76,11 @@ class CharacterDetailServiceTests(unittest.TestCase):
         self.assertEqual(result["data"]["union_max_point"], 9000)
         self.assertNotIn("union_block", result["data"])
         self.assertNotIn("union_inner_stat", result["data"])
-        self.assertEqual(result["presets"][0]["purpose"], "hunting")
-        self.assertEqual(result["presets"][1]["purpose"], "boss")
+        # 유니온 프리셋은 사용자가 번호로 직접 구분하므로 자동 목적 판정을 하지 않는다.
+        self.assertEqual(result["presets"][0]["purpose"], "unknown")
+        self.assertEqual(result["presets"][1]["purpose"], "unknown")
+        self.assertEqual(result["presets"][0]["bossScore"], 0)
+        self.assertEqual(result["presets"][0]["huntingScore"], 0)
 
     def test_union_state_stat_keeps_unknown_active_preset_unconfirmed(self):
         spec = SECTION_SOURCES["union"][1]
