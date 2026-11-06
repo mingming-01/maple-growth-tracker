@@ -12,6 +12,7 @@ from tracker.domain.growth_calculations import (
 from tracker.services.nexon_service import (
     get_basic_character_snapshot,
     get_ranking_snapshot,
+    is_temporary_nexon_failure,
     resolve_character,
 )
 from tracker.runtime import (
@@ -19,7 +20,6 @@ from tracker.runtime import (
     HISTORY_CACHE_TTL,
     KOREA_TIMEZONE,
     get_growth_history_service,
-    is_temporary_nexon_failure,
     load_api_snapshot,
     save_api_snapshot,
     set_cache,
