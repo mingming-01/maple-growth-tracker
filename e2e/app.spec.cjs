@@ -365,8 +365,26 @@ test("character details automatically open the game-style stat window", async ({
   await expect(page.locator("#characterDetailsContent .game-champion-hover-tooltip img")).toHaveCount(1);
   const championCard = page.locator("#characterDetailsContent .game-union-champion-card");
   await championCard.hover();
-  await expect(championCard.locator(".game-champion-hover-tooltip")).toBeVisible();
-  await expect(championCard.locator(".game-champion-hover-tooltip img")).toHaveCSS("width", "248px");
+  const championTooltip = page.locator("body > .game-champion-hover-tooltip");
+  await expect(championTooltip).toBeVisible();
+  await expect(championTooltip).toHaveCSS("position", "fixed");
+  await expect(championTooltip.locator("img")).toHaveCSS("width", "248px");
+  const tooltipBounds = await championTooltip.evaluate(element => {
+    const rect = element.getBoundingClientRect();
+    return {
+      left: rect.left,
+      top: rect.top,
+      right: rect.right,
+      bottom: rect.bottom,
+      viewportWidth: window.innerWidth,
+      viewportHeight: window.innerHeight
+    };
+  });
+  expect(tooltipBounds.left).toBeGreaterThanOrEqual(0);
+  expect(tooltipBounds.top).toBeGreaterThanOrEqual(0);
+  expect(tooltipBounds.right).toBeLessThanOrEqual(tooltipBounds.viewportWidth);
+  expect(tooltipBounds.bottom).toBeLessThanOrEqual(tooltipBounds.viewportHeight);
+  await expect(championTooltip).toHaveText(/테스트캐릭터/);
   await expect(page.locator("#characterDetailsContent .game-union-crystal-grid")).toHaveCSS("grid-template-columns", /repeat\(3,/);
   await expect(page.locator("#characterDetailsContent .game-union-champion-grid")).toHaveCSS("grid-template-columns", /repeat\(3,/);
   await expect(page.locator("#characterDetailsContent .game-union-crystal-monster")).toHaveCount(0);

@@ -2,6 +2,14 @@ name: Browser E2E
 
 on:
   workflow_dispatch:
+  pull_request:
+    branches:
+      - main
+    paths:
+      - "static/js/character-details.js"
+      - "static/style.css"
+      - "e2e/**"
+      - "playwright.config.cjs"
 
 jobs:
   browser-e2e:
