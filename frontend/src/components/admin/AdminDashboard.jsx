@@ -54,10 +54,7 @@ async function loginAdmin(username, password) {
     redirect: "follow"
   });
   const resultHtml = await response.text();
-  if (!response.ok) {
-    throw new Error(responseMessage(resultHtml, "관리자 로그인을 처리하지 못했습니다."));
-  }
-  if (response.redirected && !response.url.endsWith("/admin/logs")) {
+  if (!response.ok || !response.redirected || !response.url.endsWith("/admin/logs")) {
     throw new Error(responseMessage(resultHtml, "아이디 또는 비밀번호를 확인해주세요."));
   }
 
