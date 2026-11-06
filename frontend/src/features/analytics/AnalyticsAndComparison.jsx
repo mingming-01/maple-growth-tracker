@@ -80,40 +80,11 @@ function buildReportSignature(character, history, metrics) {
   });
 }
 
-function Evidence({ insights }) {
-  if (!insights || typeof insights !== "object") return null;
-  const entries = Object.entries(insights).filter(([,value]) =>
-    value !== null && value !== undefined && typeof value !== "object"
-  );
-  const nested = Object.entries(insights).filter(([,value]) => value && typeof value === "object");
-  return (
-    <section className="ai-analysis-evidence">
-      <strong>AI 분석 근거</strong>
-      {entries.length > 0 && <div className="ai-analysis-evidence-grid">
-        {entries.map(([label,value]) => (
-          <div className="ai-analysis-evidence-item" key={label}>
-            <span>{label}</span><strong>{String(value)}</strong>
-          </div>
-        ))}
-      </div>}
-      {nested.map(([label,value]) => (
-        <details className="react-evidence-details" key={label}>
-          <summary>{label}</summary>
-          <pre>{JSON.stringify(value,null,2)}</pre>
-        </details>
-      ))}
-      <p className="ai-analysis-evidence-note">AI가 계산한 수치가 아니라 애플리케이션이 계산해 전달한 분석 근거입니다. 실제 API 기록이 없는 날짜는 임의로 채우지 않습니다.</p>
-    </section>
-  );
-}
 
 export function AIReport({ character, history }) {
   const [analysis,setAnalysis] = useState("");
-  const [insights,setInsights] = useState(null);
   const [loading,setLoading] = useState(false);
   const [error,setError] = useState("");
-  const [notice,setNotice] = useState("");
-  const [updatedAt,setUpdatedAt] = useState("");
 
   const metrics = useMemo(() => {
     const prediction = calculatePrediction(character,history || []);
@@ -125,12 +96,9 @@ export function AIReport({ character, history }) {
     setLoading(true);
     setError("");
     const signature = buildReportSignature(character,history,metrics);
-    const cached = !force ? getCachedAI("growth-report-v2",signature) : null;
+    const cached = !force ? getCachedAI("growth-report-v3",signature) : null;
     if (cached?.analysis) {
       setAnalysis(cached.analysis);
-      setInsights(cached.growthInsights);
-      setNotice("저장된 분석과 분석 근거를 재사용했습니다. AI 모델을 다시 호출하지 않았습니다.");
-      setUpdatedAt(new Date().toLocaleString("ko-KR"));
       setLoading(false);
       return;
     }
@@ -138,15 +106,9 @@ export function AIReport({ character, history }) {
       const result = await postAiAnalysis(character.characterName,metrics,history);
       if (!result.analysis) throw new Error("AI 분석 결과가 비어 있습니다.");
       setAnalysis(result.analysis);
-      setInsights(result.growthInsights || null);
-      saveCachedAI("growth-report-v2",signature,result.analysis,result.growthInsights || null);
-      setNotice(result.cacheHit
-        ? "서버에 저장된 분석을 재사용했습니다. AI 모델을 다시 호출하지 않았습니다."
-        : "새 분석을 생성했습니다. 동일 데이터는 브라우저와 서버의 캐시를 재사용합니다.");
-      setUpdatedAt(new Date().toLocaleString("ko-KR"));
+      saveCachedAI("growth-report-v3",signature,result.analysis,result.growthInsights || null);
     } catch (requestError) {
       setError(requestError.message || "AI 성장 분석을 불러오지 못했습니다.");
-      setNotice("이번 분석은 완료되지 않아 캐시에 저장하지 않았습니다.");
     } finally {
       setLoading(false);
     }
@@ -154,9 +116,7 @@ export function AIReport({ character, history }) {
 
   useEffect(() => {
     setAnalysis("");
-    setInsights(null);
     setError("");
-    setNotice("");
     run();
   },[run]);
 
@@ -166,20 +126,18 @@ export function AIReport({ character, history }) {
     <section className="section">
       <div className="section-header">
         <h2 className="section-title">AI 성장 리포트</h2>
-        <p className="section-description">Python에서 계산한 성장 지표와 실제 저장 기록을 Gemini 또는 OpenRouter가 해석합니다.</p>
+        <p className="section-description">최근 성장 기록을 바탕으로 변화와 흐름을 정리했습니다.</p>
       </div>
       <div className="ai-analysis-card">
         <div className="ai-analysis-actions">
-          <span className="ai-analysis-cache-note">{notice || "현재 캐릭터의 성장 데이터를 분석합니다."}</span>
           <button className="export-button" type="button" onClick={() => run({force:true})} disabled={loading}>
             {loading ? "분석 중..." : "AI 다시 분석"}
           </button>
         </div>
-        {loading && <div className="ai-analysis-loading" role="status">성장 데이터와 분석 근거를 정리하고 있습니다...</div>}
+        {loading && <div className="ai-analysis-loading" role="status">성장 기록을 살펴보고 있습니다...</div>}
         {error && <div className="ai-analysis-error" role="alert">{error}</div>}
         {analysis && !loading && (
           <div className="ai-analysis-result">
-            <Evidence insights={insights} />
             {[
               ["성장 패턴",sections.growthPattern],
               ["성장 변화",sections.growthChange],
@@ -192,7 +150,7 @@ export function AIReport({ character, history }) {
                 <div className="ai-analysis-text">{value || "이 항목에 해당하는 설명이 없습니다."}</div>
               </div>
             ))}
-            {updatedAt && <p className="ai-analysis-evidence-note">분석 표시 시각 · {updatedAt}</p>}
+
           </div>
         )}
         {!analysis && !loading && !error && <p className="ai-analysis-text">분석할 캐릭터 정보가 없습니다.</p>}

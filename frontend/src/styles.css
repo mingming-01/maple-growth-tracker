@@ -179,9 +179,9 @@ button:focus-visible,input:focus-visible,select:focus-visible,a:focus-visible { 
 .mgt-result-content .growth-timeline-item { border-color:rgba(169,149,255,.18); }
 .mgt-result-content .growth-timeline-title { color:#e9e5fb; }
 .mgt-result-content .growth-timeline-description,.mgt-result-content .growth-timeline-date { color:#9690a7; }
-.mgt-result-content .history-table { color:#e6e2f8; }
-.mgt-result-content .history-table th { color:#bcb6cf; background:#201e31; }
-.mgt-result-content .history-table td { border-color:rgba(255,255,255,.06); }
+.mgt-result-content .history-table { color:#38354a; }
+.mgt-result-content .history-table th { color:#5f5b6d; background:#f4f3f8; }
+.mgt-result-content .history-table td { border-color:#e9e7ef; color:#38354a; background:#fff; }
 .mgt-result-content .comparison-card { padding:19px; }
 .mgt-result-content .comparison-form { grid-template-columns:minmax(0,1fr) auto; }
 .mgt-result-content .comparison-input-label { color:#b3adc8; }
@@ -195,13 +195,13 @@ button:focus-visible,input:focus-visible,select:focus-visible,a:focus-visible { 
 .mgt-result-content .comparison-ai { border-color:var(--mgt-line); background:#171624; }
 .mgt-result-content .comparison-ai h3 { color:#eeeaff; }
 .mgt-result-content .comparison-ai-text { color:#c5bfd7; }
-.mgt-result-content .ai-analysis-card { padding:18px; }
-.mgt-result-content .ai-analysis-item { border-color:rgba(169,149,255,.12); background:#1a1928; }
-.mgt-result-content .ai-analysis-label { color:#c8bcff; }
-.mgt-result-content .ai-analysis-text { color:#d4cfe0; }
-.mgt-result-content .ai-analysis-loading,.mgt-result-content .ai-analysis-error { color:#cfc8e5; }
-.mgt-result-content .ai-analysis-evidence { border-color:rgba(169,149,255,.15); background:#1d1b2e; }
-.mgt-result-content .ai-analysis-evidence-note,.mgt-result-content .ai-cache-notice { color:#928ca4; }
+.mgt-result-content .ai-analysis-card { padding:22px; border-color:#e6e2f2; color:#302c49; background:#fff; box-shadow:0 10px 30px rgba(39,35,75,.045); }
+.mgt-result-content .ai-analysis-item { border-color:#ece9f3; background:#fff; }
+.mgt-result-content .ai-analysis-label { color:#6552d2; }
+.mgt-result-content .ai-analysis-text { color:#302c42; }
+.mgt-result-content .ai-analysis-loading { color:#625e70; } .mgt-result-content .ai-analysis-error { color:#a33e4b; }
+.mgt-result-content .ai-analysis-evidence { border-color:#e8e4f5; background:#f8f7fc; }
+.mgt-result-content .ai-analysis-evidence-note,.mgt-result-content .ai-cache-notice { color:#817c91; }
 
 .mgt-result-content .growth-goal-card { border-color:var(--mgt-line); background:#171624; box-shadow:none; }
 .mgt-result-content .growth-goal-heading h3 { color:#eeeaff; }
@@ -578,3 +578,16 @@ button:focus-visible,input:focus-visible,select:focus-visible,a:focus-visible { 
 .mgt-ranking-diagnostics>div { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:6px; margin-top:7px; }
 .mgt-ranking-diagnostics>div span { padding:7px 8px; border:1px solid rgba(169,149,255,.15); border-radius:7px; background:rgba(132,105,240,.07); }
 @media(max-width:480px) { .mgt-ranking-diagnostics>div { grid-template-columns:1fr; } }
+
+/* Restore the readable neutral surfaces and blue growth emphasis of the original Flask view. */
+.mgt-result-content .history-table tbody tr:nth-child(even) { background:#fbfbfd; }
+.mgt-result-content .history-table tbody tr:hover { background:#f5f7fc; }
+.mgt-result-content .history-experience-value { color:#303b52; font-weight:700; white-space:nowrap; }
+.mgt-result-content .history-growth-value { color:#5474c8; font-weight:800; white-space:nowrap; }
+.mgt-result-content .history-growth-value.is-positive { color:#3f73d1; }
+.mgt-result-content .history-growth-value.is-negative { color:#c65c69; }
+.mgt-result-content .ai-analysis-actions .ai-analysis-cache-note:empty { display:none; }
+.mgt-result-content .ai-analysis-item:last-child { border-color:#e6e2f2; background:#f8f7fc; }
+.mgt-result-content .ai-analysis-item:last-child .ai-analysis-label { color:#6552d2; }
+.mgt-result-content .ai-analysis-label { color:#6552d2; }
+.mgt-result-content .ai-analysis-text { color:#302c42; }
