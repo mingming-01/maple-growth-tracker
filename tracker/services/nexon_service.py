@@ -70,9 +70,8 @@ def get_api_class(character_class):
 def get_character_rankings(target_date, world_name, character_class, ocid):
     """전체·월드·직업·직업 월드 랭킹을 조회한다.
 
-    랭킹 데이터는 당일 집계가 아직 게시되지 않을 수 있으므로,
-    당일 결과가 완전히 비어 있는 경우에만 직전 2일을 순서대로 확인한다.
-    인증·호출 제한 등 날짜와 무관한 오류는 과거 날짜 재시도로 숨기지 않는다.
+    오늘자 집계가 아직 비어 있을 때만 직전 2일까지 확인한다.
+    인증·호출 제한 등 HTTP 오류를 과거 날짜 재시도로 숨기지는 않는다.
     """
     from datetime import datetime, timedelta
 
@@ -120,28 +119,46 @@ def get_character_rankings(target_date, world_name, character_class, ocid):
             values = [future.result() for future in futures]
 
         names = ("ranking", "worldRanking", "jobWorldRanking", "jobRanking")
-        result = {name: (data.get("ranking") if data else None)
-                  for name, (data, _) in zip(names, values)}
-        responses = [response for _, response in values if response is not None]
-        has_data = any(result.values())
-        has_error = any(response.status_code != 200 for response in responses)
+        status_codes = {
+            name: response.status_code if response is not None else None
+            for name, (_, response) in zip(names, values)
+        }
+        result = {
+            name: (data.get("ranking") if isinstance(data, dict) else None)
+            for name, (data, _) in zip(names, values)
+        }
+        has_data = any(value is not None for value in result.values())
+        http_error = any(
+            code is not None and code != 200
+            for code in status_codes.values()
+        )
+        mapping_missing = not bool(api_class)
+        has_error = http_error or mapping_missing
+
         if has_data and has_error:
             status = "partial"
         elif has_data:
             status = "available"
-        elif has_error:
+        elif http_error:
             status = "unavailable"
         else:
             status = "empty"
 
+        warnings = []
+        if mapping_missing:
+            warnings.append("직업 랭킹 API 직업명 매핑을 찾지 못했습니다.")
+        if http_error:
+            warnings.append("일부 랭킹 API 요청이 정상 응답하지 않았습니다.")
+
         result.update({
             "rankingDataStatus": status,
             "rankingDate": date_text,
-            "rankingApiStatuses": [response.status_code for response in responses],
+            "rankingApiStatuses": status_codes,
+            "rankingWarnings": warnings,
         })
         return result
 
-    # 오늘자 집계가 아직 게시되지 않았을 때만 직전 날짜로 대체한다.
+    # 오늘자 데이터가 정상 HTTP 응답이지만 비어 있을 때만 과거 집계일을 확인한다.
     for days_ago in range(0, 3):
         candidate = fetch_for_date(requested_date - timedelta(days=days_ago))
         if candidate["rankingDataStatus"] != "empty":
