@@ -607,3 +607,9 @@ button:focus-visible,input:focus-visible,select:focus-visible,a:focus-visible { 
 @media (hover:none), (pointer:coarse) {
   .game-union-champion-avatar-tooltip summary { min-height:34px; }
 }
+
+.mgt-ranking-diagnostics { margin-top:9px; color:#b8addc; font-size:10px; }
+.mgt-ranking-diagnostics summary { display:inline-flex; min-height:30px; align-items:center; cursor:pointer; }
+.mgt-ranking-diagnostics>div { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:6px; margin-top:7px; }
+.mgt-ranking-diagnostics>div span { padding:7px 8px; border:1px solid rgba(169,149,255,.15); border-radius:7px; background:rgba(132,105,240,.07); }
+@media(max-width:480px) { .mgt-ranking-diagnostics>div { grid-template-columns:1fr; } }
