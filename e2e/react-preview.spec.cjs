@@ -310,6 +310,10 @@ test("mobile touch opens item tooltips without clipped detail panels", async ({ 
     await symbol.tap();
     const tooltip = page.locator("body > .game-floating-tooltip");
     await expect(tooltip).toContainText("심볼 설명 터치 확인");
+    await symbol.tap();
+    await expect(tooltip).toHaveCount(0);
+    await symbol.tap();
+    await expect(tooltip).toContainText("심볼 설명 터치 확인");
     let bounds = await tooltip.boundingBox();
     expect(bounds.x).toBeGreaterThanOrEqual(0);
     expect(bounds.y).toBeGreaterThanOrEqual(0);
