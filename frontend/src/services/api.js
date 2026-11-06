@@ -23,16 +23,16 @@ async function requestJson(path, options = {}) {
   return payload;
 }
 
-export function getCharacter(name, { refresh = false, signal } = {}) {
+export function getCharacter(name, { refresh = true, signal } = {}) {
   const params = new URLSearchParams({ name: String(name || "").trim() });
   if (refresh) params.set("refresh", "1");
-  return requestJson("/api/character?" + params.toString(), { signal });
+  return requestJson("/api/character?" + params.toString(), { signal, cache: "no-store" });
 }
 
-export function getHistory(name, { refresh = false, signal } = {}) {
+export function getHistory(name, { refresh = true, signal } = {}) {
   const params = new URLSearchParams({ name: String(name || "").trim() });
   if (refresh) params.set("refresh", "1");
-  return requestJson("/api/history?" + params.toString(), { signal });
+  return requestJson("/api/history?" + params.toString(), { signal, cache: "no-store" });
 }
 
 export function getHistoryArchive(ocid, days = 30, options = {}) {
@@ -47,7 +47,8 @@ export function getHistoryArchive(ocid, days = 30, options = {}) {
   if (options.offset !== undefined) params.set("offset", String(options.offset));
   if (options.limit !== undefined) params.set("limit", String(options.limit));
   return requestJson("/api/history/archive?" + params.toString(), {
-    signal: options.signal
+    signal: options.signal,
+    cache: "no-store"
   });
 }
 
@@ -57,7 +58,10 @@ export function getCharacterDetails(ocid, section, { refresh = false, signal } =
     section: String(section || "")
   });
   if (refresh) params.set("refresh", "1");
-  return requestJson("/api/character-details?" + params.toString(), { signal });
+  return requestJson("/api/character-details?" + params.toString(), {
+    signal,
+    cache: refresh ? "no-store" : "default"
+  });
 }
 
 export function postAiAnalysis(name, metrics, { signal } = {}) {
