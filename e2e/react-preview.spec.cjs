@@ -231,7 +231,16 @@ test("React admin panel logs in through Flask session and filters protected oper
   await expect(page.getByRole("heading", { name: "관리자 로그인" })).toBeVisible();
   await page.getByLabel("관리자 아이디").fill("admin");
   await page.getByLabel("비밀번호").fill("test-password");
+  const logsResponsePromise = page.waitForResponse(response => {
+    const url = new URL(response.url());
+    return url.pathname === "/admin/api/logs" && response.status() === 200;
+  });
   await page.getByRole("button", { name: "로그인" }).click();
+
+  const logsResponse = await logsResponsePromise;
+  const logsPayload = await logsResponse.json();
+  expect(logsPayload.logs.map(item => item.character_name)).toContain("밍득");
+  expect(logsPayload.logs.map(item => item.error_type)).toContain("http_5xx");
 
   await expect(page.getByRole("heading", { name: "관리자 로그" })).toBeVisible();
   await expect(page.locator(".mgt-admin-table tbody tr").filter({ hasText: "밍득" })).toBeVisible();
