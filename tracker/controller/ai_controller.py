@@ -3,8 +3,7 @@ from datetime import datetime, timedelta
 
 from flask import Blueprint, jsonify, request
 
-from tracker.controller.character_controller import get_character
-from tracker.controller.history_controller import get_history
+from tracker.services.nexon_service import resolve_character, is_temporary_nexon_failure
 from tracker.services.request_limits import consume_ai_request
 from tracker.domain.ai_growth_insights import build_growth_insights
 from tracker.runtime import KOREA_TIMEZONE, get_growth_history_service
@@ -39,27 +38,58 @@ def ai_analysis():
     if len(character_name) > 30:
         return jsonify({"error": "캐릭터 이름이 너무 깁니다."}), 400
     metrics = None
+    supplied_history = None
     if request.method == "POST":
         payload = request.get_json(silent=True) or {}
         metrics = payload.get("metrics")
+        supplied_history = payload.get("history")
         if not isinstance(metrics, dict):
             return jsonify({"error": "계산된 성장 지표가 필요합니다."}), 400
+        if supplied_history is not None and not isinstance(supplied_history, list):
+            return jsonify({"error": "성장 기록 형식이 올바르지 않습니다."}), 400
+        supplied_history = [
+            {
+                key: item.get(key)
+                for key in (
+                    "date", "level", "experience", "experienceChange", "ranking",
+                    "rankingChange", "levelUp", "recordStatus"
+                )
+                if key in item
+            }
+            for item in (supplied_history or [])[:90]
+            if isinstance(item, dict) and item.get("date")
+        ]
     rate_limit_response = _ai_rate_limit_response()
     if rate_limit_response:
         return rate_limit_response
 
     try:
-        character_response = get_character()
-        if character_response.status_code != 200:
-            return jsonify({"error": "캐릭터 정보를 불러오지 못했습니다."}), character_response.status_code
-        character = character_response.get_json()
-        request.environ["maple_character_context"] = character
+        # AI 분석은 랭킹 API에 의존하지 않는다. 기본 캐릭터 정보만 확인해
+        # 랭킹 조회 장애가 성장 분석 전체를 막지 않도록 분리한다.
+        ocid, basic, basic_response = resolve_character(character_name)
+        if not ocid or not basic:
+            status = 503 if is_temporary_nexon_failure(basic_response) else 404
+            return jsonify({"error": "캐릭터 기본 정보를 확인하지 못했습니다."}), status
+        character = {
+            "characterName": basic.get("character_name"),
+            "worldName": basic.get("world_name"),
+            "job": basic.get("character_class"),
+            "level": basic.get("character_level"),
+            "experience": basic.get("character_exp"),
+            "experienceRate": basic.get("character_exp_rate"),
+            "ocid": ocid,
+        }
 
-        history_response = get_history()
-        if history_response.status_code != 200:
-            return jsonify({"error": "성장 기록을 불러오지 못했습니다."}), history_response.status_code
-        history_data = history_response.get_json()
-        recent_history = history_data.get("history", [])
+        if supplied_history is not None:
+            recent_history = supplied_history
+        else:
+            # GET 호환 및 기존 클라이언트용 fallback
+            from tracker.controller.history_controller import get_history
+            history_response = get_history()
+            if history_response.status_code != 200:
+                return jsonify({"error": "성장 기록을 불러오지 못했습니다."}), history_response.status_code
+            history_data = history_response.get_json()
+            recent_history = history_data.get("history", [])
         today = datetime.now(KOREA_TIMEZONE).date()
         insight_records = list(recent_history)
 
