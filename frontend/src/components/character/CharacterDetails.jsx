@@ -610,7 +610,9 @@ function UnionTab({ data, selected, onSelect }) {
               </div>
               {item.character_image && (
                 <details className="react-detail-tooltip game-union-champion-avatar-tooltip">
-                  <summary>아바타 보기</summary>
+                  <summary aria-label={`${item.champion_name || "유니온 챔피언"} 아바타 크게 보기`}>
+                    {apiImage(item.character_image,item.champion_name,"game-union-champion-avatar-preview")}
+                  </summary>
                   <div className="react-detail-tooltip-body">
                     {apiImage(item.character_image,item.champion_name,"game-union-champion-tooltip-avatar")}
                     <strong>{item.champion_name || "캐릭터 아바타"}</strong>
