@@ -31,29 +31,39 @@ function signedTrillion(value) {
 
 function parseAnalysis(analysis) {
   const sections = {
-    growthPattern:"",
-    growthChange:"",
-    levelUp:"",
-    growthOutlook:"",
-    judgement:""
+    growthPattern: "",
+    growthChange: "",
+    levelUp: "",
+    growthOutlook: "",
+    judgement: ""
   };
-  const headings = [
-    ["growthPattern","성장 패턴"],
-    ["growthChange","성장 변화"],
-    ["levelUp","레벨업 분석"],
-    ["growthOutlook","성장 전망"],
-    ["judgement","AI 코멘트"]
-  ];
-  headings.forEach(([key,title],index) => {
-    const next = headings[index+1]?.[1];
-    const lookahead = next ? `(?=\\[${next}\\]|$)` : "$";
-    const match = String(analysis || "").match(new RegExp(`\\[${title}\\]\\s*([\\s\\S]*?)${lookahead}`));
-    if (match) sections[key] = match[1].trim();
+  const aliases = new Map([
+    ["성장 패턴", "growthPattern"],
+    ["성장 변화", "growthChange"],
+    ["성장 분석", "growthChange"],
+    ["레벨업 분석", "levelUp"],
+    ["레벨업", "levelUp"],
+    ["성장 전망", "growthOutlook"],
+    ["AI 코멘트", "judgement"],
+    ["AI 판단", "judgement"]
+  ]);
+  const source = String(analysis || "");
+  const headings = Array.from(source.matchAll(/\[([^\]]+)\]/g));
+
+  if (!headings.length) {
+    if (source.trim()) sections.judgement = source.trim();
+    return sections;
+  }
+
+  headings.forEach((match, index) => {
+    const key = aliases.get(String(match[1] || "").trim());
+    if (!key) return;
+    const bodyStart = match.index + match[0].length;
+    const bodyEnd = headings[index + 1]?.index ?? source.length;
+    const body = source.slice(bodyStart, bodyEnd).trim();
+    if (body) sections[key] = body;
   });
-  if (!sections.growthChange) sections.growthChange = String(analysis || "").match(/\\[성장 분석\\]\\s*([\\s\\S]*?)(?=\\[레벨업\\]|$)/)?.[1]?.trim() || "";
-  if (!sections.levelUp) sections.levelUp = String(analysis || "").match(/\\[레벨업\\]\\s*([\\s\\S]*?)(?=\\[AI 판단\\]|$)/)?.[1]?.trim() || "";
-  if (!sections.judgement) sections.judgement = String(analysis || "").match(/\\[AI 판단\\]\\s*([\\s\\S]*)/)?.[1]?.trim() || "";
-  if (!Object.values(sections).some(Boolean) && analysis) sections.judgement = String(analysis);
+
   return sections;
 }
 
