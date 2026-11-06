@@ -164,6 +164,12 @@ def get_character_rankings(target_date, world_name, character_class, ocid):
         if candidate["rankingDataStatus"] != "empty":
             return candidate
 
+    # 3일 모두 HTTP 200이지만 해당 캐릭터의 랭킹이 비어 있으면
+    # API 장애(unavailable)가 아니라 아직 집계되지 않았거나 집계 대상이 아닌 상태다.
+    candidate["rankingDataStatus"] = "not_ready"
+    candidate["rankingWarnings"].append(
+        "최근 3일간 공개 랭킹 데이터에서 캐릭터 순위를 확인하지 못했습니다."
+    )
     return candidate
 
 
