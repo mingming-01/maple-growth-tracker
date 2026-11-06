@@ -171,6 +171,24 @@ class CharacterDetailServiceTests(unittest.TestCase):
         self.assertEqual(result["status"], "available")
         self.assertEqual([source["id"] for source in result["sources"]], ["skill6", "hexaMatrix", "hexaStat"])
 
+    def test_equipment_section_includes_character_appearance_source(self):
+        spec = next(
+            source for source in SECTION_SOURCES["equipment"]
+            if source["id"] == "characterAppearance"
+        )
+        result = _normalize_source(
+            {
+                "character_hair": {"hair_name": "테스트 헤어"},
+                "character_face": {"face_name": "테스트 성형"},
+                "character_skin_name": "뽀송 피부",
+            },
+            spec,
+        )
+        self.assertEqual(result["status"], "available")
+        self.assertEqual(result["data"]["character_hair"]["hair_name"], "테스트 헤어")
+        self.assertEqual(result["data"]["character_face"]["face_name"], "테스트 성형")
+        self.assertEqual(result["data"]["character_skin_name"], "뽀송 피부")
+
     def test_item_equipment_preset_payload_is_normalized_to_slot_key(self):
         spec = SECTION_SOURCES["equipment"][0]
         result = _normalize_source({

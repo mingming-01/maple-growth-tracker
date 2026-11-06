@@ -35,6 +35,8 @@ SECTION_SOURCES = {
 
     ],
     "equipment": [
+        {"id": "characterAppearance", "label": "헤어·성형·피부", "endpoint": "character/basic",
+         "current_fields": ("character_hair", "character_face", "character_skin_name")},
         {"id": "itemEquipment", "label": "장비", "endpoint": "character/item-equipment",
          "preset_prefix": "item_equipment_preset_", "active_fields": ("preset_no",),
          "current_fields": ("item_equipment",), "preset_count": 3},
