@@ -115,8 +115,29 @@ def get_history():
                     "experience": ranking_data.get("character_exp"),
                     "recordStatus": "available"
                 }
-            # 랭킹 API에서 해당 캐릭터를 찾지 못해도 기본 정보 API의 날짜별
-            # 스냅샷에는 레벨·경험치가 존재할 수 있으므로 보조 조회한다.
+
+            # 랭킹 API가 429/5xx 등 일시적 오류를 반환했다면 기본 정보 API를
+            # 연쇄 호출하지 않는다. 제한 상황에서 요청량이 더 커지는 것을 방지한다.
+            if is_temporary_nexon_failure(response):
+                if saved and saved.get("recordStatus") == "available":
+                    return {
+                        "date": date_string,
+                        "ranking": saved.get("ranking"),
+                        "level": saved.get("level"),
+                        "experience": saved.get("experience"),
+                        "recordStatus": "available",
+                        "_fromStore": True
+                    }
+                return {
+                    "date": date_string,
+                    "ranking": None,
+                    "level": None,
+                    "experience": None,
+                    "recordStatus": "unavailable",
+                    "retryable": True
+                }
+
+            # 정상 응답으로 랭킹 항목이 없을 때만 기본 정보 API를 보조 조회한다.
             try:
                 basic_data, basic_response = get_basic_character_snapshot(
                     ocid,
