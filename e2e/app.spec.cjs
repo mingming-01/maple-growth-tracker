@@ -130,11 +130,17 @@ test("30-day growth chart and browser-saved favorite characters work", async ({ 
       dataStatus: "current", dataAsOf: timestamp
     })
   }));
-  await page.route(/\/api\/ai-analysis/, route => route.fulfill({
-    status: 200,
-    contentType: "application/json",
-    body: JSON.stringify({ analysis: "[성장 패턴] 테스트", cacheHit: false })
-  }));
+  const aiPayloads = [];
+  await page.route(/\/api\/ai-analysis/, route => {
+    if (route.request().method() === "POST") {
+      aiPayloads.push(route.request().postDataJSON());
+    }
+    return route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({ analysis: "[성장 패턴] 테스트", cacheHit: false })
+    });
+  });
 
   const archiveCalls = [];
   await page.route(/\/api\/history\/archive\?/, async route => {
@@ -204,6 +210,16 @@ test("30-day growth chart and browser-saved favorite characters work", async ({ 
   await expect(page.locator("#periodSummaryRange")).toContainText("직전 30일");
   expect(archiveCalls.filter(call => call.collecting)).toHaveLength(3);
   expect(archiveCalls.some(call => !call.collecting && call.endDate === "2026-10-07")).toBe(true);
+  await expect.poll(() => aiPayloads.some(payload =>
+    payload.metrics?.analysisInsights?.analysisPeriod?.days === 30
+  )).toBe(true);
+  const periodPayload = aiPayloads.find(payload =>
+    payload.metrics?.analysisInsights?.analysisPeriod?.days === 30
+  );
+  expect(periodPayload.metrics.analysisInsights.dataQuality.coveragePercent).toBe(100);
+  expect(periodPayload.metrics.analysisInsights.periodComparison.status).toBe("available");
+  expect(periodPayload.metrics.analysisInsights.periodComparison.changePercent).toBe(100);
+  expect(periodPayload.metrics.analysisInsights.weekdayWeekend.sufficientSamples).toBe(true);
 });
 
 test("character details automatically open the game-style stat window", async ({ page }) => {
