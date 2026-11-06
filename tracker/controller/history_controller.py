@@ -82,12 +82,13 @@ def get_history():
         def fetch_history(target_date):
             date_string = target_date.strftime("%Y-%m-%d")
             saved = stored_recent.get(date_string)
+            # 정상 스냅샷이 아닌 저장 기록은 다음 새로고침에서 재확인한다.
+            # not_ready를 오래 고정해 성장 기록이 영구적으로 비는 현상을 방지한다.
             should_check_api = (
                 target_date == today
                 or (
-                    target_date == today - timedelta(days=1)
-                    and saved
-                    and saved.get("recordStatus") == "not_ready"
+                    saved is not None
+                    and saved.get("recordStatus") != "available"
                 )
             )
 
@@ -116,11 +117,14 @@ def get_history():
                 }
             # 랭킹 API에서 해당 캐릭터를 찾지 못해도 기본 정보 API의 날짜별
             # 스냅샷에는 레벨·경험치가 존재할 수 있으므로 보조 조회한다.
-            basic_data, basic_response = get_basic_character_snapshot(
-                ocid,
-                target_date=date_string if target_date < today else None,
-                historical=True
-            )
+            try:
+                basic_data, basic_response = get_basic_character_snapshot(
+                    ocid,
+                    target_date=date_string if target_date < today else None,
+                    historical=True
+                )
+            except requests.RequestException:
+                basic_data, basic_response = None, None
             if basic_data:
                 level = basic_data.get("character_level")
                 experience = basic_data.get("character_exp")
