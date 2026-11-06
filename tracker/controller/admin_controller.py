@@ -5,7 +5,7 @@ import secrets
 import sqlite3
 
 import psycopg
-from flask import Blueprint, current_app, redirect, render_template, request, session, url_for
+from flask import Blueprint, current_app, jsonify, redirect, render_template, request, session, url_for
 from werkzeug.security import check_password_hash
 
 from tracker.runtime import KOREA_TIMEZONE, connect_log_db, get_runtime_state
@@ -204,6 +204,129 @@ def admin_logs():
         snapshot_storage_warning=state.snapshot_storage_warning,
         csrf_token=session.setdefault("csrf_token", secrets.token_urlsafe(32))
     )
+
+
+@admin_bp.route("/api/logs")
+@admin_required
+def admin_logs_api():
+    """React 관리자 화면용 JSON 로그 API. 기존 세션 인증과 필터 조건을 그대로 사용한다."""
+    state = get_runtime_state()
+    log_db_backend = state.log_db_backend
+    search_text = request.args.get("q", "").strip()[:100]
+    selected_action = request.args.get("action", "").strip()[:80]
+    selected_result = request.args.get("result", "").strip()
+    date_from_text = request.args.get("date_from", "").strip()
+    date_to_text = request.args.get("date_to", "").strip()
+
+    try:
+        date_from = date.fromisoformat(date_from_text) if date_from_text else None
+    except ValueError:
+        date_from = None
+        date_from_text = ""
+    try:
+        date_to = date.fromisoformat(date_to_text) if date_to_text else None
+    except ValueError:
+        date_to = None
+        date_to_text = ""
+
+    placeholder = "%s" if log_db_backend == "postgres" else "?"
+    conditions = []
+    parameters = []
+
+    if search_text:
+        pattern = f"%{search_text}%"
+        conditions.append(
+            "("
+            "COALESCE(action, '') LIKE " + placeholder
+            + " OR COALESCE(path, '') LIKE " + placeholder
+            + " OR COALESCE(character_name, '') LIKE " + placeholder
+            + " OR COALESCE(world_name, '') LIKE " + placeholder
+            + " OR COALESCE(comparison_name, '') LIKE " + placeholder
+            + " OR COALESCE(error_type, '') LIKE " + placeholder
+            + " OR COALESCE(CAST(status_code AS TEXT), '') LIKE " + placeholder
+            + ")"
+        )
+        parameters.extend([pattern] * 7)
+
+    if selected_action:
+        conditions.append(f"action = {placeholder}")
+        parameters.append(selected_action)
+    if selected_result in ("성공", "실패"):
+        conditions.append(f"result = {placeholder}")
+        parameters.append(selected_result)
+    else:
+        selected_result = ""
+
+    def date_bound(day):
+        value = datetime.combine(day, datetime.min.time()).replace(tzinfo=KOREA_TIMEZONE)
+        return value if log_db_backend == "postgres" else value.isoformat(timespec="seconds")
+
+    if date_from:
+        conditions.append(f"created_at >= {placeholder}")
+        parameters.append(date_bound(date_from))
+    if date_to:
+        conditions.append(f"created_at < {placeholder}")
+        parameters.append(date_bound(date_to + timedelta(days=1)))
+
+    where_clause = " WHERE " + " AND ".join(conditions) if conditions else ""
+    rows = []
+    total_count = 0
+    action_options = []
+    storage_warning = state.log_storage_warning
+
+    try:
+        connection = connect_log_db()
+        try:
+            with connection:
+                count_row = connection.execute(
+                    f"SELECT COUNT(*) AS total FROM action_logs{where_clause}",
+                    parameters,
+                ).fetchone()
+                total_count = count_row["total"]
+
+                rows = connection.execute(
+                    "SELECT created_at, action, character_name, world_name, comparison_name, "
+                    "result, path, status_code, duration_ms, error_type "
+                    f"FROM action_logs{where_clause} "
+                    "ORDER BY created_at DESC, id DESC LIMIT 500",
+                    parameters,
+                ).fetchall()
+                action_options = [
+                    row["action"]
+                    for row in connection.execute(
+                        "SELECT DISTINCT action FROM action_logs ORDER BY action"
+                    ).fetchall()
+                ]
+        finally:
+            connection.close()
+    except (sqlite3.Error, psycopg.Error):
+        storage_warning = (
+            "관리자 로그 저장소에 연결할 수 없습니다. 환경 설정과 데이터베이스 연결을 확인해주세요."
+        )
+        print("관리자 로그 조회에 실패했습니다.")
+
+    if log_db_backend == "sqlite" and not storage_warning:
+        storage_warning = (
+            "현재 로그는 SQLite에 저장됩니다. Render 재배포 후 보존하려면 PostgreSQL 연결이 필요합니다."
+        )
+
+    logs = []
+    for row in rows:
+        item = dict(row)
+        item["created_at_display"] = format_admin_log_time(item.get("created_at"))
+        logs.append(item)
+
+    return jsonify({
+        "logs": logs,
+        "totalCount": total_count,
+        "displayedCount": min(total_count, 500),
+        "actionOptions": action_options,
+        "storageBackend": log_db_backend,
+        "storageWarning": storage_warning,
+        "snapshotStorageBackend": state.snapshot_db_backend,
+        "snapshotStorageWarning": state.snapshot_storage_warning,
+        "csrfToken": session.setdefault("csrf_token", secrets.token_urlsafe(32)),
+    })
 
 
 @admin_bp.route("/logout", methods=["POST"])
