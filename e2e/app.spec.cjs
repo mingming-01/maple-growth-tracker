@@ -59,7 +59,7 @@ test("character details automatically open the game-style stat window", async ({
   }));
 
   const detailRequests = { stats: 0, union: 0 };
-  await page.route(/\\/api\\/character-details\\?/, route => {
+  await page.route(/\/api\/character-details\?/, route => {
     const section = new URL(route.request().url()).searchParams.get("section");
     detailRequests[section] = (detailRequests[section] || 0) + 1;
     const payload = section === "union" ? {
