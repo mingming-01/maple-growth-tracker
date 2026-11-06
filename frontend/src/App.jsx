@@ -52,6 +52,7 @@ function rankingFallback(status, label) {
   if (status === "not_ready") return "당일 집계 전";
   if (status === "unavailable") return "조회 실패";
   if (status === "partial") return "일부 조회 실패";
+  if (status === "empty") return "최근 집계자료 없음";
   return label || "랭킹 자료 없음";
 }
 
@@ -67,17 +68,32 @@ function RankingItem({ label, value, status }) {
 
 function RankingStatus({ character }) {
   const status = character.rankingDataStatus;
+  const rankingDate = character.rankingDate
+    ? new Date(character.rankingDate + "T00:00:00+09:00").toLocaleDateString("ko-KR")
+    : "";
+  const dateNote = rankingDate ? " 집계 기준일 · " + rankingDate + "." : "";
+  const warnings = Array.isArray(character.rankingWarnings) ? character.rankingWarnings : [];
+
   if (status === "available" && [character.ranking,character.worldRanking,character.jobWorldRanking,character.jobRanking].some(value => value !== null && value !== undefined)) {
-    return <p className="mgt-ranking-status is-success">Nexon에서 제공한 현재 랭킹 데이터입니다.</p>;
+    return <p className="mgt-ranking-status is-success">Nexon 공개 랭킹 데이터입니다.{dateNote}</p>;
   }
+
   const message = status === "not_ready"
     ? "오늘 날짜의 랭킹 집계가 아직 준비되지 않았습니다. 잠시 후 최신 정보 다시 조회를 눌러 확인해주세요."
     : status === "unavailable"
-      ? "Nexon 랭킹 API 조회에 실패했습니다. 기본 캐릭터 정보는 정상적으로 조회됐으며, 랭킹은 재조회할 수 있습니다."
+      ? "Nexon 랭킹 API 요청에 실패했습니다. 캐릭터 기본 정보는 정상 조회됐으며, 최신 정보 다시 조회로 재시도할 수 있습니다."
       : status === "partial"
-        ? "랭킹 일부 항목을 가져오지 못했습니다. 확인된 순위만 표시하고 나머지는 임의로 채우지 않았습니다."
-        : "현재 응답에서 랭킹을 확인하지 못했습니다. 최신 정보 다시 조회를 눌러 다시 확인해주세요.";
-  return <p className="mgt-ranking-status is-warning" role="status">{message}</p>;
+        ? "일부 랭킹만 확인됐습니다. 확인된 순위만 표시하고 누락된 값은 임의로 채우지 않았습니다."
+        : status === "empty"
+          ? "최근 3일의 공개 랭킹 응답에 이 캐릭터의 순위가 없습니다. 집계 대상 외 캐릭터이거나 랭킹 데이터가 아직 제공되지 않았을 수 있습니다."
+          : "현재 응답에서 랭킹을 확인하지 못했습니다. 최신 정보 다시 조회를 눌러 다시 확인해주세요.";
+
+  return (
+    <div className="mgt-ranking-status is-warning" role="status">
+      <p>{message}{dateNote}</p>
+      {warnings.length > 0 && <small>{warnings.join(" ")}</small>}
+    </div>
+  );
 }
 
 function CharacterProfile({ character, history, onToggleFavorite, isFavorite }) {
