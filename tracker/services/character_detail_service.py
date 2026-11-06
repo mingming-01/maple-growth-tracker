@@ -16,7 +16,7 @@ SECTION_SOURCES = {
          "preset_prefix": "hyper_stat_preset_", "active_fields": ("use_preset_no",),
          "current_fields": ("hyper_stat",), "preset_count": 3},
         {"id": "ability", "label": "어빌리티", "endpoint": "character/ability",
-         "preset_prefix": "ability_preset_", "active_fields": ("ability_preset_no", "use_preset_no"),
+         "preset_prefix": "ability_preset_", "active_fields": ("preset_no",),
          "current_fields": ("ability_info",), "preset_count": 3},
         {"id": "itemEquipment", "label": "장비 프리셋", "endpoint": "character/item-equipment",
          "preset_prefix": "item_equipment_preset_", "active_fields": ("preset_no",),
@@ -158,21 +158,37 @@ def _classify_preset(source_id, value):
                 signals.append(name)
 
     elif source_id == "hyperStat":
-        for name, weight in (
-            ("보스 몬스터 공격 시 데미지", 3), ("보스 데미지", 3),
-            ("방어율 무시", 2), ("크리티컬 데미지", 2),
-            ("공격력", 1), ("마력", 1),
-        ):
-            if name in text:
-                boss += weight
-                signals.append(name)
-        for name, weight in (
-            ("메소 획득량", 4), ("아이템 드롭률", 4), ("드롭률", 4),
-            ("일반 몬스터", 3), ("경험치 획득량", 3),
-        ):
-            if name in text:
-                hunting += weight
-                signals.append(name)
+        # 하이퍼 스탯은 텍스트 포함 여부가 아니라 실제 투자된 stat_type과 stat_level로 판단한다.
+        rows = value.get("hyper_stat", []) if isinstance(value, dict) else value
+        rows = rows if isinstance(rows, list) else []
+        boss_names = (
+            "보스 몬스터 공격 시 데미지", "보스 몬스터 데미지", "보스 데미지",
+            "몬스터 방어율 무시", "방어율 무시", "크리티컬 데미지",
+            "크리티컬 확률",
+        )
+        hunting_names = (
+            "일반 몬스터 공격 시 데미지", "일반 몬스터 데미지",
+            "추가 경험치 획득", "추가 경험치 획득량", "경험치 획득량",
+            "몬스터 처치 시 경험치 획득량", "메소 획득량",
+            "아이템 드롭률", "아이템 획득 확률",
+        )
+        for row in rows:
+            if not isinstance(row, dict):
+                continue
+            try:
+                level = max(0, int(row.get("stat_level") or 0))
+            except (TypeError, ValueError):
+                level = 0
+            if level <= 0:
+                continue
+            name = " ".join(str(row.get("stat_type") or "").strip().split())
+            if any(token in name for token in boss_names):
+                boss += level
+                signals.append("{} Lv.{}".format(name, level))
+            elif any(token in name for token in hunting_names):
+                hunting += level
+                signals.append("{} Lv.{}".format(name, level))
+        # 일반 데미지와 공격력·마력은 보스/사냥 공통 효율이므로 구분 신호로 사용하지 않는다.
 
     elif source_id == "ability":
         for name, weight in (
@@ -191,16 +207,8 @@ def _classify_preset(source_id, value):
                 signals.append(name)
 
     elif source_id == "unionStateStat":
-        for name in ("보스 몬스터 공격 시 데미지", "보스 데미지", "방어율 무시",
-                     "크리티컬 데미지", "최종 데미지"):
-            if name in text:
-                boss += 2
-                signals.append(name)
-        for name in ("일반 몬스터 공격 시 데미지", "경험치 획득량",
-                     "메소 획득량", "아이템 드롭률"):
-            if name in text:
-                hunting += 2
-                signals.append(name)
+        # 유니온 프리셋은 사용자가 번호로 식별하므로 자동 보스/사냥 판정을 하지 않는다.
+        pass
 
     purpose = "unknown"
     if boss >= 2 and boss > hunting:
@@ -356,7 +364,18 @@ def _normalize_source(payload, spec):
             field = f"{prefix}{number}"
             value = payload.get(field)
             if _has_data(value):
-                selected[_preset_data_key(prefix)] = value
+                if prefix == "ability_preset_" and isinstance(value, dict):
+                    selected["ability_info"] = value.get("ability_info") or []
+                    selected["ability_grade"] = (
+                        value.get("ability_preset_grade") or value.get("ability_grade")
+                    )
+                elif prefix == "hyper_stat_preset_":
+                    selected["hyper_stat"] = value if isinstance(value, list) else []
+                    remain_key = "{}{}_remain_point".format(prefix, number)
+                    if remain_key in payload:
+                        selected["remain_point"] = payload.get(remain_key)
+                else:
+                    selected[_preset_data_key(prefix)] = value
         if selected:
             presets.append({
                 "number": number,
@@ -409,6 +428,69 @@ def _extract_combat_power(payload):
 
 
 
+_CHAMPION_IMAGE_CACHE = {}
+_CHAMPION_IMAGE_CACHE_LOCK = Lock()
+_CHAMPION_IMAGE_CACHE_TTL = 43200
+
+
+def _fetch_champion_image(character_name):
+    """챔피언 캐릭터의 공식 기본 이미지 URL을 조회하고 12시간 캐시한다."""
+    name = str(character_name or "").strip()
+    if not name:
+        return None
+    now = time.monotonic()
+    with _CHAMPION_IMAGE_CACHE_LOCK:
+        cached = _CHAMPION_IMAGE_CACHE.get(name)
+        if cached and cached["expires_at"] > now:
+            return cached["image"]
+
+    image_url = None
+    try:
+        id_response = request_nexon_api("id", {"character_name": name})
+        if id_response.status_code == 200:
+            ocid = (id_response.json() or {}).get("ocid")
+            if ocid:
+                basic_response = request_nexon_api("character/basic", {"ocid": ocid})
+                if basic_response.status_code == 200:
+                    image_url = (basic_response.json() or {}).get("character_image")
+    except (requests.RequestException, ValueError, TypeError):
+        image_url = None
+
+    with _CHAMPION_IMAGE_CACHE_LOCK:
+        _CHAMPION_IMAGE_CACHE[name] = {
+            "image": image_url,
+            "expires_at": time.monotonic() + _CHAMPION_IMAGE_CACHE_TTL,
+        }
+    return image_url
+
+
+def _enrich_champion_images(source):
+    """유니온 챔피언 카드에 공식 캐릭터 외형 URL을 보강한다."""
+    current = source.get("currentData") or {}
+    champions = current.get("union_champion")
+    if not isinstance(champions, list) or not champions:
+        return source
+
+    missing = [
+        champion for champion in champions
+        if isinstance(champion, dict)
+        and not champion.get("character_image")
+        and champion.get("champion_name")
+    ]
+    if not missing:
+        return source
+
+    with ThreadPoolExecutor(max_workers=min(3, len(missing))) as executor:
+        images = list(executor.map(
+            lambda champion: _fetch_champion_image(champion.get("champion_name")),
+            missing,
+        ))
+    for champion, image_url in zip(missing, images):
+        if image_url:
+            champion["character_image"] = image_url
+    return source
+
+
 def _fetch_source(ocid, spec, force_refresh=False):
     params = {"ocid": ocid, **spec.get("params", {})}
     cache_key = "nexon-source:{}:{}:{}".format(
@@ -458,6 +540,8 @@ def _fetch_source(ocid, spec, force_refresh=False):
         "id": spec["id"], "label": spec["label"], **result,
         "message": "API 응답에 표시할 데이터가 없습니다." if result["status"] == "empty" else None,
     }
+    if spec["id"] == "unionChampion" and source["status"] == "available":
+        source = _enrich_champion_images(source)
     with _SOURCE_CACHE_LOCK:
         _SOURCE_CACHE[cache_key] = {
             "source": source,

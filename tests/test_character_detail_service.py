@@ -76,8 +76,11 @@ class CharacterDetailServiceTests(unittest.TestCase):
         self.assertEqual(result["data"]["union_max_point"], 9000)
         self.assertNotIn("union_block", result["data"])
         self.assertNotIn("union_inner_stat", result["data"])
-        self.assertEqual(result["presets"][0]["purpose"], "hunting")
-        self.assertEqual(result["presets"][1]["purpose"], "boss")
+        # 유니온 프리셋은 사용자가 번호로 직접 구분하므로 자동 목적 판정을 하지 않는다.
+        self.assertEqual(result["presets"][0]["purpose"], "unknown")
+        self.assertEqual(result["presets"][1]["purpose"], "unknown")
+        self.assertEqual(result["presets"][0]["bossScore"], 0)
+        self.assertEqual(result["presets"][0]["huntingScore"], 0)
 
     def test_union_state_stat_keeps_unknown_active_preset_unconfirmed(self):
         spec = SECTION_SOURCES["union"][1]
@@ -179,6 +182,68 @@ class CharacterDetailServiceTests(unittest.TestCase):
         self.assertEqual(result["presets"][0]["data"]["item_equipment"][0]["item_name"], "테스트 모자")
         self.assertEqual(result["presets"][1]["data"]["item_equipment"][0]["item_name"], "테스트 무기")
 
+    def test_ability_presets_normalize_nested_ability_info_and_grade(self):
+        spec = SECTION_SOURCES["stats"][2]
+        result = _normalize_source(
+            {
+                "ability_grade": "레전드리",
+                "preset_no": 2,
+                "ability_info": [{"ability_value": "보스 데미지 +20%"}],
+                "ability_preset_1": {
+                    "ability_preset_grade": "유니크",
+                    "ability_info": [{"ability_no": "1", "ability_grade": "유니크", "ability_value": "메소 획득량 +10%"}],
+                },
+                "ability_preset_2": {
+                    "ability_preset_grade": "레전드리",
+                    "ability_info": [{"ability_no": "1", "ability_grade": "레전드리", "ability_value": "재사용 대기시간 미적용 +7.5%"}],
+                },
+            },
+            spec,
+        )
+        self.assertEqual(result["activePresetNo"], 2)
+        self.assertEqual(result["presets"][0]["data"]["ability_grade"], "유니크")
+        self.assertEqual(
+            result["presets"][0]["data"]["ability_info"][0]["ability_value"],
+            "메소 획득량 +10%",
+        )
+        self.assertEqual(
+            result["presets"][1]["data"]["ability_info"][0]["ability_value"],
+            "재사용 대기시간 미적용 +7.5%",
+        )
+
+    def test_hyper_stat_classifier_uses_invested_levels_for_hunting_and_boss(self):
+        from tracker.services.character_detail_service import _classify_preset
+
+        hunting = _classify_preset("hyperStat", {"hyper_stat": [
+            {"stat_type": "일반 몬스터 데미지", "stat_level": 10},
+            {"stat_type": "경험치 획득량", "stat_level": 10},
+            {"stat_type": "크리티컬 데미지", "stat_level": 2},
+        ]})
+        boss = _classify_preset("hyperStat", {"hyper_stat": [
+            {"stat_type": "보스 데미지", "stat_level": 10},
+            {"stat_type": "몬스터 방어율 무시", "stat_level": 10},
+            {"stat_type": "데미지", "stat_level": 5},
+        ]})
+        generic = _classify_preset("hyperStat", {"hyper_stat": [
+            {"stat_type": "데미지", "stat_level": 10},
+            {"stat_type": "공격력", "stat_level": 10},
+        ]})
+        self.assertEqual(hunting["purpose"], "hunting")
+        self.assertEqual(boss["purpose"], "boss")
+        self.assertEqual(generic["purpose"], "unknown")
+        self.assertIn("일반 몬스터 데미지 Lv.10", hunting["signals"])
+
+    def test_union_stat_presets_are_not_classified_as_boss_or_hunting(self):
+        from tracker.services.character_detail_service import _classify_preset
+
+        result = _classify_preset(
+            "unionStateStat",
+            {"union_state_stat": ["보스 몬스터 공격 시 데미지 20% 증가"]},
+        )
+        self.assertEqual(result["purpose"], "unknown")
+        self.assertEqual(result["bossScore"], 0)
+        self.assertEqual(result["huntingScore"], 0)
+
     def test_link_preset_combines_equipped_and_owned_link_skills(self):
         spec = SECTION_SOURCES["stats"][4]
         result = _normalize_source({
@@ -249,7 +314,10 @@ class CharacterDetailServiceTests(unittest.TestCase):
             self.assertEqual(params.get("ocid"), "sample-union-ocid")
             return payloads[endpoint]
 
-        with patch("tracker.services.character_detail_service.request_nexon_api", side_effect=fake_request):
+        with patch("tracker.services.character_detail_service.request_nexon_api", side_effect=fake_request), patch(
+            "tracker.services.character_detail_service._fetch_champion_image",
+            return_value=None,
+        ):
             result = get_character_detail_section("sample-union-ocid", "union")
 
         self.assertEqual(result["status"], "available")
@@ -266,6 +334,28 @@ class CharacterDetailServiceTests(unittest.TestCase):
         self.assertEqual(
             sources["unionChampion"]["currentData"]["union_champion"][0]["champion_grade"],
             "SSS",
+        )
+
+    def test_champion_image_enrichment_resolves_character_image(self):
+        from tracker.services.character_detail_service import _enrich_champion_images
+
+        source = {
+            "currentData": {
+                "union_champion": [{
+                    "champion_name": "밍득",
+                    "champion_grade": "SSS",
+                    "champion_class": "아크메이지(썬,콜)",
+                }]
+            }
+        }
+        with patch(
+            "tracker.services.character_detail_service._fetch_champion_image",
+            return_value="https://example.com/character.png",
+        ):
+            result = _enrich_champion_images(source)
+        self.assertEqual(
+            result["currentData"]["union_champion"][0]["character_image"],
+            "https://example.com/character.png",
         )
 
     def test_unknown_section_is_rejected(self):
