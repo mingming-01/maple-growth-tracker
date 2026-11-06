@@ -88,7 +88,7 @@ def get_history():
                 target_date == today
                 or (
                     saved is not None
-                    and saved.get("recordStatus") != "available"
+                    and saved.get("recordStatus") == "unavailable"
                 )
             )
 
@@ -195,7 +195,9 @@ def get_history():
             }
 
         dates = [today - timedelta(days=i) for i in range(7)]
-        with ThreadPoolExecutor(max_workers=7) as executor:
+        # Historical snapshots are rate-limited upstream; keep a small bounded
+        # worker pool instead of launching seven simultaneous date lookups.
+        with ThreadPoolExecutor(max_workers=3) as executor:
             history = list(executor.map(fetch_history, dates))
         history.reverse()
     except requests.RequestException:
