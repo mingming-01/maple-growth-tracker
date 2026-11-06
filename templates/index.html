@@ -123,7 +123,17 @@
                             </div>
                         </div>
                         <div class="character-stats">
-                            <div class="stat"><div class="stat-label">경험치 진행도</div><div id="experienceRate" class="stat-value">-</div></div>
+                            <div class="stat level-progress-stat">
+                                <div class="stat-label">현재 레벨 진행률</div>
+                                <div class="level-progress-heading">
+                                    <div id="experienceRate" class="stat-value">-</div>
+                                    <span id="levelProgressRemaining" class="level-progress-remaining">-</span>
+                                </div>
+                                <div id="levelProgressTrack" class="level-progress-track" role="progressbar" aria-label="현재 레벨 경험치 진행률" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0">
+                                    <span id="levelProgressFill" class="level-progress-fill"></span>
+                                </div>
+                                <p id="levelProgressDaily" class="level-progress-daily">성장 기록이 쌓이면 일일 진척률을 계산합니다.</p>
+                            </div>
                             <div class="stat"><div class="stat-label">일일 평균 경험치</div><div id="averageDailyExperience" class="stat-value">-</div></div>
                         </div>
                     </div>
@@ -143,7 +153,7 @@
             <section class="section">
                 <div class="section-header"><h2 class="section-title">성장 요약</h2><p class="section-description">최근 경험치와 랭킹 변화를 요약합니다.</p></div>
                 <div class="summary-grid">
-                    <div class="summary-card"><div class="summary-label">어제보다</div><div id="yesterdayGrowth" class="summary-value positive">-</div></div>
+                    <div class="summary-card"><div class="summary-label">최근 확인된 성장량</div><div id="yesterdayGrowth" class="summary-value positive">-</div></div>
                     <div class="summary-card"><div class="summary-label">랭킹 변화</div><div id="rankingChange" class="summary-value">-</div></div>
                     <div class="summary-card"><div class="summary-label">최근 7일 성장</div><div id="weeklyGrowth" class="summary-value positive">-</div></div>
                     <div class="summary-card"><div class="summary-label">일 평균 획득량</div><div id="averageGrowth" class="summary-value positive">-</div></div>
@@ -154,7 +164,7 @@
                 <div class="section-header history-chart-header">
                     <div>
                         <h2 class="section-title">성장 추이</h2>
-                        <p class="section-description">선택한 기간의 누적 성장과 일일 획득량입니다.</p>
+                        <p class="section-description">선택한 기간의 확인된 누적 증가량과 일일 순증가량입니다.</p>
                     </div>
                     <div class="history-range-control">
                         <label for="historyRangeSelect">기록 범위</label>
@@ -201,9 +211,35 @@
                             <span id="periodCoverageDetail" class="period-summary-detail">정상적으로 저장된 날짜</span>
                         </article>
                     </div>
+                    <div class="period-summary-extra-grid">
+                        <article class="period-summary-extra-card">
+                            <span class="period-summary-label">기간 최고 일일 성장</span>
+                            <strong id="periodBestGrowthValue" class="period-summary-extra-value">-</strong>
+                            <span id="periodBestGrowthDetail" class="period-summary-detail">최고 성장일</span>
+                        </article>
+                        <article class="period-summary-extra-card">
+                            <span class="period-summary-label">성장 활동일</span>
+                            <strong id="periodActiveDaysValue" class="period-summary-extra-value">-</strong>
+                            <span id="periodActiveDaysDetail" class="period-summary-detail">정체·감소 기록 포함</span>
+                        </article>
+                        <article class="period-summary-extra-card">
+                            <span class="period-summary-label">레벨업 횟수</span>
+                            <strong id="periodLevelUpsValue" class="period-summary-extra-value">-</strong>
+                            <span id="periodLevelUpsDetail" class="period-summary-detail">기간 내 레벨업 기록</span>
+                        </article>
+                    </div>
                     <p id="periodSummaryFootnote" class="period-summary-footnote" role="status" aria-live="polite"></p>
                 </section>
                 <div class="chart-card"><div class="chart-wrapper"><canvas id="growthChart"></canvas></div></div>
+                <section class="growth-timeline-section" aria-labelledby="growthTimelineTitle">
+                    <div class="growth-timeline-heading">
+                        <h3 id="growthTimelineTitle">주요 성장 타임라인</h3>
+                        <p>선택한 기간에서 확인된 레벨업과 성장·랭킹 기록입니다.</p>
+                    </div>
+                    <ol id="growthTimelineList" class="growth-timeline-list">
+                        <li class="growth-timeline-empty">기록을 불러오면 주요 이벤트가 표시됩니다.</li>
+                    </ol>
+                </section>
             </section>
 
             <section class="section">
@@ -250,9 +286,10 @@
                             <article class="comparison-character-card">
                                 <h3 id="primaryCompareName" class="comparison-name">현재 캐릭터</h3>
                                 <div class="comparison-stat"><span>레벨</span><strong id="primaryCompareLevel">-</strong></div>
-                                <div class="comparison-stat"><span>현재 경험치</span><strong id="primaryCompareExpRate">-</strong></div>
+                                <div class="comparison-stat"><span>레벨 내 진행률</span><strong id="primaryCompareExpRate">-</strong></div>
                                 <div class="comparison-stat"><span>최근 성장량</span><strong id="primaryCompareDaily">-</strong></div>
                                 <div class="comparison-stat"><span>평균 성장량</span><strong id="primaryCompareAverage">-</strong></div>
+                                <div class="comparison-stat"><span>현재 레벨 기준 일일 진척</span><strong id="primaryCompareLevelPace">-</strong></div>
                                 <div class="comparison-stat"><span>최근 7일 성장</span><strong id="primaryCompareWeekly">-</strong></div>
                                 <div class="comparison-stat"><span>랭킹 변화</span><strong id="primaryCompareRanking">-</strong></div>
                                 <div class="comparison-stat"><span>예상 레벨업</span><strong id="primaryComparePrediction">-</strong></div>
@@ -260,9 +297,10 @@
                             <article class="comparison-character-card">
                                 <h3 id="secondaryCompareName" class="comparison-name">비교 캐릭터</h3>
                                 <div class="comparison-stat"><span>레벨</span><strong id="secondaryCompareLevel">-</strong></div>
-                                <div class="comparison-stat"><span>현재 경험치</span><strong id="secondaryCompareExpRate">-</strong></div>
+                                <div class="comparison-stat"><span>레벨 내 진행률</span><strong id="secondaryCompareExpRate">-</strong></div>
                                 <div class="comparison-stat"><span>최근 성장량</span><strong id="secondaryCompareDaily">-</strong></div>
                                 <div class="comparison-stat"><span>평균 성장량</span><strong id="secondaryCompareAverage">-</strong></div>
+                                <div class="comparison-stat"><span>현재 레벨 기준 일일 진척</span><strong id="secondaryCompareLevelPace">-</strong></div>
                                 <div class="comparison-stat"><span>최근 7일 성장</span><strong id="secondaryCompareWeekly">-</strong></div>
                                 <div class="comparison-stat"><span>랭킹 변화</span><strong id="secondaryCompareRanking">-</strong></div>
                                 <div class="comparison-stat"><span>예상 레벨업</span><strong id="secondaryComparePrediction">-</strong></div>
@@ -287,6 +325,7 @@
                                     <h4 id="comparisonPeriodPrimaryName" class="comparison-period-name">현재 캐릭터</h4>
                                     <div class="comparison-period-stat"><span>확인된 경험치 증가</span><strong id="comparisonPeriodPrimaryGrowth">-</strong></div>
                                     <div class="comparison-period-stat"><span>관측된 1일 평균</span><strong id="comparisonPeriodPrimaryAverage">-</strong></div>
+                                    <div class="comparison-period-stat"><span>현재 레벨 기준 일일 진척</span><strong id="comparisonPeriodPrimaryLevelPace">-</strong></div>
                                     <div class="comparison-period-stat"><span>랭킹 변화</span><strong id="comparisonPeriodPrimaryRanking">-</strong></div>
                                     <div class="comparison-period-stat"><span>기록 충실도</span><strong id="comparisonPeriodPrimaryCoverage">-</strong></div>
                                     <p id="comparisonPeriodPrimaryDetail" class="comparison-period-detail"></p>
@@ -295,6 +334,7 @@
                                     <h4 id="comparisonPeriodSecondaryName" class="comparison-period-name">비교 캐릭터</h4>
                                     <div class="comparison-period-stat"><span>확인된 경험치 증가</span><strong id="comparisonPeriodSecondaryGrowth">-</strong></div>
                                     <div class="comparison-period-stat"><span>관측된 1일 평균</span><strong id="comparisonPeriodSecondaryAverage">-</strong></div>
+                                    <div class="comparison-period-stat"><span>현재 레벨 기준 일일 진척</span><strong id="comparisonPeriodSecondaryLevelPace">-</strong></div>
                                     <div class="comparison-period-stat"><span>랭킹 변화</span><strong id="comparisonPeriodSecondaryRanking">-</strong></div>
                                     <div class="comparison-period-stat"><span>기록 충실도</span><strong id="comparisonPeriodSecondaryCoverage">-</strong></div>
                                     <p id="comparisonPeriodSecondaryDetail" class="comparison-period-detail"></p>
