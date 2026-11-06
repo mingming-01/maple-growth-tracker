@@ -28,23 +28,22 @@ def _throttle_nexon_request():
     else:
         state = None
 
-    lock = state.nexon_request_lock if state else _fallback_rate_limit_lock
+    # Flask 요청 스레드와 ThreadPoolExecutor 작업자가 같은 프로세스 제한기를 공유한다.
+    lock = _fallback_rate_limit_lock
     try:
         min_interval = max(0.0, float(_setting("NEXON_API_MIN_INTERVAL", DEFAULT_NEXON_API_MIN_INTERVAL)))
     except (TypeError, ValueError):
         min_interval = DEFAULT_NEXON_API_MIN_INTERVAL
 
     with lock:
-        previous = state.last_nexon_request_at if state else _fallback_last_request_at
-        elapsed = time.monotonic() - previous
+        elapsed = time.monotonic() - _fallback_last_request_at
         if elapsed < min_interval:
             time.sleep(min_interval - elapsed)
         requested_at = time.monotonic()
+        _fallback_last_request_at = requested_at
         if state:
             state.last_nexon_request_at = requested_at
             state.nexon_request_count += 1
-        else:
-            _fallback_last_request_at = requested_at
 
 
 def request_nexon_api(endpoint, params, historical=False):
