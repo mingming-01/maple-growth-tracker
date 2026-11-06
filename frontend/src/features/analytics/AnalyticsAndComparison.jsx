@@ -353,17 +353,18 @@ export function GrowthComparison({ character, history, initialState, onSave }) {
         comparison:{character:secondCharacter,metrics:secondMetrics,history:historyItems}
       });
       const cached = getCachedAI("growth-comparison-v1",signature);
-      if (cached?.analysis) {
-        setAnalysis(cached.analysis);
+      let comparisonReport = cached?.analysis || "";
+      if (comparisonReport) {
+        setAnalysis(comparisonReport);
         setNotice("저장된 비교 분석을 재사용했습니다. AI 모델을 다시 호출하지 않았습니다.");
       } else {
         const result = await postAiComparison(
           {character,metrics:primaryMetrics,history},
           {character:secondCharacter,metrics:secondMetrics,history:historyItems}
         );
-        const report = result.analysis || "분석 결과가 없습니다.";
-        setAnalysis(report);
-        saveCachedAI("growth-comparison-v1",signature,report);
+        comparisonReport = result.analysis || "분석 결과가 없습니다.";
+        setAnalysis(comparisonReport);
+        saveCachedAI("growth-comparison-v1",signature,comparisonReport);
         setNotice(result.cacheHit
           ? "서버에 저장된 비교 분석을 재사용했습니다."
           : "새 비교 분석을 생성했습니다.");
@@ -373,10 +374,10 @@ export function GrowthComparison({ character, history, initialState, onSave }) {
           character:secondCharacter,
           history:historyItems,
           metrics:secondMetrics,
-          aiAnalysis:periodResult ? (getCachedAI("growth-comparison-v1",signature)?.analysis || "") : "",
+          aiAnalysis:comparisonReport,
           periodDays:days,
           periodSummary:periodResult,
-          periodError:""
+          periodError:periodResult ? "" : "기간별 비교 기록을 불러오지 못했습니다."
         }
       });
     } catch (requestError) {
