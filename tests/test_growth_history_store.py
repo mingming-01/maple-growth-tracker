@@ -178,10 +178,10 @@ class GrowthHistoryApiTests(unittest.TestCase):
             "character_exp": 123456
         }
         with patch.object(
-            history_controller, "get_ranking",
+            history_controller, "get_ranking_snapshot",
             side_effect=[(None, ranking_response), (None, ranking_response)]
         ) as get_ranking, patch.object(
-            history_controller, "get_basic_character",
+            history_controller, "get_basic_character_snapshot",
             side_effect=[(basic, basic_response), (basic, basic_response), (basic, basic_response)]
         ) as get_basic:
             response = self.client.get(
@@ -223,9 +223,9 @@ class GrowthHistoryApiTests(unittest.TestCase):
             "character_exp": 123456
         }
         with patch.object(
-            history_controller, "get_ranking", return_value=(ranking, ranking_response)
+            history_controller, "get_ranking_snapshot", return_value=(ranking, ranking_response)
         ) as get_ranking, patch.object(
-            history_controller, "get_basic_character", return_value=(current_basic, Mock(status_code=200))
+            history_controller, "get_basic_character_snapshot", return_value=(current_basic, Mock(status_code=200))
         ) as get_basic:
             response = self.client.get(
                 "/api/history/archive?ocid=test-ocid&days=30&collect=1"
@@ -252,9 +252,9 @@ class GrowthHistoryApiTests(unittest.TestCase):
             "character_exp": 123456
         }
         with patch.object(
-            history_controller, "get_ranking", return_value=(None, invalid_response)
+            history_controller, "get_ranking_snapshot", return_value=(None, invalid_response)
         ), patch.object(
-            history_controller, "get_basic_character",
+            history_controller, "get_basic_character_snapshot",
             side_effect=[(current_basic, Mock(status_code=200)), (None, invalid_response)]
         ):
             response = self.client.get(
