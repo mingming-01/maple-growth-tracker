@@ -463,3 +463,82 @@ button:focus-visible,input:focus-visible,select:focus-visible,a:focus-visible { 
   .mgt-admin-filter-actions button { flex:1; }
   .mgt-admin-login { padding:20px 16px; }
 }
+
+
+/* Mobile and touch usability refinements */
+@media (hover: none), (pointer: coarse) {
+  .mgt-nav a, .react-detail-tooltip summary, .game-preset-select,
+  .mgt-search-form button, .mgt-export-actions button {
+    -webkit-tap-highlight-color: transparent;
+    touch-action: manipulation;
+  }
+  .react-detail-tooltip summary {
+    display: inline-flex; align-items: center; justify-content: center;
+    min-width: 64px; min-height: 32px; padding: 5px 9px;
+    border: 1px solid rgba(169,149,255,.24); border-radius: 8px;
+    background: rgba(132,105,240,.12); font-size: 10px;
+  }
+  .react-detail-tooltip summary::after { content: " ＋"; }
+  .react-detail-tooltip[open] summary::after { content: " −"; }
+}
+.react-equipment-board .equipment-game-slot { position: relative; overflow: visible; }
+.react-equipment-board .equipment-game-slot:focus-within,
+.react-equipment-board .equipment-game-slot:has(.react-detail-tooltip[open]) { z-index: 8; }
+.react-equipment-board .react-detail-tooltip { position: relative; z-index: 2; }
+.react-equipment-board .react-detail-tooltip-body {
+  position: absolute; left: 50%; bottom: calc(100% + 8px);
+  width: min(250px, calc(100vw - 36px)); max-height: min(280px, 48vh);
+  margin: 0; transform: translateX(-50%); overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
+}
+.react-equipment-board .equipment-game-slot:nth-child(4n + 1) .react-detail-tooltip-body { left: 0; transform: none; }
+.react-equipment-board .equipment-game-slot:nth-child(4n) .react-detail-tooltip-body { left: auto; right: 0; transform: none; }
+.history-table-wrapper { max-width: 100%; overflow-x: auto; overscroll-behavior-inline: contain; -webkit-overflow-scrolling: touch; }
+.history-table { min-width: 640px; }
+.chart-wrapper { min-width: 0; }
+.mgt-ranking-grid .ranking-item { overflow-wrap: anywhere; }
+@media (max-width: 760px) {
+  .mgt-topbar { gap: 10px; }
+  .mgt-nav { gap: 12px; overflow-x: auto; max-width: 62vw; padding: 8px 2px; scrollbar-width: none; }
+  .mgt-nav::-webkit-scrollbar { display: none; }
+  .mgt-brand { gap: 7px; font-size: 11px; letter-spacing: .8px; }
+  .mgt-brand-mark { width: 31px; height: 31px; }
+  .mgt-hero { min-height: 0; padding: 28px 22px; }
+  .mgt-hero-ornament { width: 100px; height: 110px; margin-right: 0; opacity: .7; }
+  .mgt-hero-ornament .mgt-orbit-one { width: 100px; height: 50px; }
+  .mgt-hero-ornament .mgt-orbit-two { width: 72px; height: 100px; }
+  .mgt-hero-ornament .mgt-orbit-core { width: 48px; height: 48px; border-radius: 15px; font-size: 22px; }
+  .mgt-search-panel { padding: 18px 15px; }
+  .mgt-search-form { gap: 7px; }
+  .mgt-search-form button { min-width: 104px; padding: 0 12px; }
+  .mgt-profile-main { padding: 18px 15px; }
+  .mgt-character-identity { gap: 13px; }
+  .mgt-character-avatar-frame { width: 112px; height: 112px; border-radius: 17px; }
+  .mgt-character-avatar { width: 170px; height: 170px; }
+  .mgt-profile-side { border-left: 0; border-top: 1px solid var(--mgt-line); padding: 15px; }
+  .mgt-ranking-panel { padding: 16px 14px; }
+  .mgt-ranking-grid { grid-template-columns: repeat(2,minmax(0,1fr)); }
+  .mgt-result-toolbar { align-items: flex-start; flex-direction: column; }
+  .mgt-export-actions { justify-content: flex-start; }
+}
+@media (max-width: 480px) {
+  .mgt-topbar { height: auto; min-height: 58px; flex-wrap: wrap; padding: 8px 10px; }
+  .mgt-nav { order: 2; max-width: 100%; width: 100%; justify-content: space-between; gap: 9px; font-size: 10px; }
+  .mgt-page-content { width: calc(100% - 18px); }
+  .mgt-hero { padding: 23px 16px; border-radius: 17px; }
+  .mgt-hero h1 { font-size: 27px; }
+  .mgt-hero p { font-size: 11px; }
+  .mgt-hero-ornament { display: none; }
+  .mgt-search-heading { align-items: flex-start; flex-direction: column; gap: 9px; }
+  .mgt-search-form { flex-direction: column; }
+  .mgt-search-form input, .mgt-search-form button { width: 100%; min-height: 48px; }
+  .mgt-character-identity { align-items: flex-start; }
+  .mgt-character-avatar-frame { width: 88px; height: 88px; }
+  .mgt-character-avatar { width: 135px; height: 135px; }
+  .mgt-character-copy h2 { font-size: 21px; }
+  .mgt-character-meta { gap: 6px 9px; font-size: 10px; }
+  .mgt-ranking-grid .ranking-item { min-height: 74px; padding: 10px; }
+  .mgt-ranking-grid .ranking-item strong { font-size: 12px; }
+  .react-equipment-board .equipment-game-slot { min-height: 94px; }
+  .react-equipment-board .react-detail-tooltip-body { width: min(220px, calc(100vw - 28px)); }
+}
