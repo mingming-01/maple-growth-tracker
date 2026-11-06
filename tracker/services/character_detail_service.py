@@ -161,15 +161,17 @@ def _classify_preset(source_id, value):
         # 하이퍼 스탯은 텍스트 포함 여부가 아니라 실제 투자된 stat_type과 stat_level로 판단한다.
         rows = value.get("hyper_stat", []) if isinstance(value, dict) else value
         rows = rows if isinstance(rows, list) else []
-        boss_names = {
-            "보스 몬스터 공격 시 데미지", "보스 데미지", "몬스터 방어율 무시",
-            "방어율 무시", "크리티컬 데미지", "크리티컬 확률",
-        }
-        hunting_names = {
+        boss_names = (
+            "보스 몬스터 공격 시 데미지", "보스 몬스터 데미지", "보스 데미지",
+            "몬스터 방어율 무시", "방어율 무시", "크리티컬 데미지",
+            "크리티컬 확률",
+        )
+        hunting_names = (
             "일반 몬스터 공격 시 데미지", "일반 몬스터 데미지",
-            "경험치 획득량", "추가 경험치 획득량", "몬스터 처치 시 경험치 획득량",
-            "메소 획득량", "아이템 드롭률", "아이템 획득 확률",
-        }
+            "추가 경험치 획득", "추가 경험치 획득량", "경험치 획득량",
+            "몬스터 처치 시 경험치 획득량", "메소 획득량",
+            "아이템 드롭률", "아이템 획득 확률",
+        )
         for row in rows:
             if not isinstance(row, dict):
                 continue
@@ -180,10 +182,10 @@ def _classify_preset(source_id, value):
             if level <= 0:
                 continue
             name = " ".join(str(row.get("stat_type") or "").strip().split())
-            if name in boss_names:
+            if any(token in name for token in boss_names):
                 boss += level
                 signals.append("{} Lv.{}".format(name, level))
-            elif name in hunting_names:
+            elif any(token in name for token in hunting_names):
                 hunting += level
                 signals.append("{} Lv.{}".format(name, level))
         # 일반 데미지와 공격력·마력은 보스/사냥 공통 효율이므로 구분 신호로 사용하지 않는다.
