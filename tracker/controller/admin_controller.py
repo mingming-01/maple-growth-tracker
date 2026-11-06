@@ -114,7 +114,7 @@ def admin_logs():
 
     def date_bound(day):
         value = datetime.combine(day, datetime.min.time()).replace(tzinfo=KOREA_TIMEZONE)
-        return value if LOG_DB_BACKEND == "postgres" else value.isoformat(timespec="seconds")
+        return value if log_db_backend == "postgres" else value.isoformat(timespec="seconds")
 
     if date_from:
         conditions.append(f"created_at >= {placeholder}")
