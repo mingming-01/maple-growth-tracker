@@ -87,6 +87,7 @@ def get_character():
         "rankingDataStatus": character_rankings["rankingDataStatus"],
         "rankingDate": character_rankings.get("rankingDate"),
         "rankingApiStatuses": character_rankings.get("rankingApiStatuses", {}),
+        "rankingApiDiagnostics": character_rankings.get("rankingApiDiagnostics", {}),
         "rankingWarnings": character_rankings.get("rankingWarnings", []),
     }
     best_power, _ = load_api_snapshot(f"combat-power-best:{ocid}")
