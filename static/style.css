@@ -890,8 +890,10 @@ button:disabled { cursor: wait; opacity: 0.65; }
 .game-union-crystal-grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(230px,1fr)); gap:8px; }
 .game-union-crystal { min-width:0; padding:11px; border:1px solid #49536d; border-radius:9px; background:linear-gradient(145deg,#232d43,#1a2235); }
 .game-union-crystal-top { display:flex; align-items:center; gap:8px; min-width:0; }
+.game-union-crystal-order { display:grid; place-items:center; flex:none; width:23px; height:23px; border:1px solid #756c9d; border-radius:6px; color:#eee7ff; background:#34314e; font-size:9px; font-weight:950; font-variant-numeric:tabular-nums; }
 .game-union-crystal-gem { display:grid; place-items:center; flex:none; width:42px; height:42px; overflow:hidden; border:1px solid #9a83ba; border-radius:9px; color:#f0dcff; background:radial-gradient(circle at 35% 25%,#6f5d99,#292d48 72%); font-size:9px; font-weight:950; }
 .game-union-crystal-monster { width:38px; height:38px; object-fit:contain; image-rendering:auto; }
+.game-union-crystal-fallback { color:#f1d58b; font-size:21px; font-weight:900; }
 .game-union-crystal-name { min-width:0; color:#efe1b8; font-size:11px; font-weight:900; overflow-wrap:anywhere; }
 .game-union-crystal-level { margin-left:auto; color:#f1d47d; font-size:10px; font-weight:900; white-space:nowrap; }
 .game-union-crystal-status { display:inline-flex; margin-top:9px; padding:4px 7px; border-radius:5px; font-size:9px; font-weight:850; }
