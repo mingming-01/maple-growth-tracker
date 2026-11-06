@@ -591,20 +591,6 @@ function unionEffectTile(effect,index) {
     return tile;
 }
 
-const ARTIFACT_MOB_IDS = {
-    "주황버섯":"1210100",
-    "슬라임":"210100",
-    "뿔버섯":"2110200",
-    "스텀프":"100005",
-    "스텀피":"3220000",
-    "스톤골렘":"5130101",
-    "주니어발록":"8130100",
-    "주니어 발록":"8130100",
-    "발록":"8130100",
-    "자쿰":"8800000",
-    "핑크빈":"8820001",
-    "파풀라투스":"8500002"
-};
 function renderUnionArtifact(artifact,content) {
     const panel=el("section","game-union-artifact-panel");
     const heading=el("div","game-union-section-heading");
@@ -636,22 +622,17 @@ function renderUnionArtifact(artifact,content) {
         const tile=el("article","game-union-crystal");
         const top=el("div","game-union-crystal-top");
         const order=el("span","game-union-crystal-order",String(index+1).padStart(2,"0"));
-        const gem=el("span","game-union-crystal-gem");
-        const mobId=ARTIFACT_MOB_IDS[crystal?.name];
-        const mobUrl=crystal?.mob_icon||crystal?.monster_icon||crystal?.monster_image||crystal?.image_url||
-            (mobId?"https://maplestory.io/api/KMS/latest/mob/"+mobId+"/icon":null);
+        const mobUrl=crystal?.mob_icon||crystal?.monster_icon||crystal?.monster_image||crystal?.image_url||null;
         if(mobUrl) {
             const mobIcon=image(mobUrl,crystal?.name||"몬스터","game-union-crystal-monster");
             if(mobIcon) {
-                mobIcon.addEventListener("error",()=> {
-                    mobIcon.remove();
-                    if(!gem.childElementCount) gem.appendChild(el("span","game-union-crystal-fallback","✦"));
-                },{once:true});
-                gem.appendChild(mobIcon);
+                const imageFrame=el("span","game-union-crystal-gem");
+                mobIcon.addEventListener("error",()=>imageFrame.remove(),{once:true});
+                imageFrame.appendChild(mobIcon);
+                top.appendChild(imageFrame);
             }
         }
-        if(!gem.childElementCount) gem.appendChild(el("span","game-union-crystal-fallback","✦"));
-        top.append(order,gem,el("strong","game-union-crystal-name",crystal?.name||"크리스탈"),
+        top.append(order,el("strong","game-union-crystal-name",crystal?.name||"크리스탈"),
             el("span","game-union-crystal-level",present(crystal?.level)?"Lv. "+fmt(crystal.level):""));
         tile.appendChild(top);
 
