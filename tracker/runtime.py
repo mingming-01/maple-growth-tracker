@@ -20,7 +20,7 @@ from tracker.repositories.api_snapshot_repository import (
     save_api_snapshot as save_api_snapshot_for_path,
     load_api_snapshot as load_api_snapshot_for_path,
 )
-from google import genai
+from google import genai, types
 
 
 # 변경되지 않는 도메인 상수만 모듈 상수로 유지한다.
@@ -43,8 +43,15 @@ class RuntimeState:
         )
         self.nexon_api_key = config.get("NEXON_API_KEY", "")
         self.gemini_api_key = config.get("GEMINI_API_KEY", "")
+        try:
+            ai_timeout_ms = max(1000, int(float(config.get("AI_API_TIMEOUT", 30)) * 1000))
+        except (TypeError, ValueError):
+            ai_timeout_ms = 30000
         self.gemini_client = (
-            genai.Client(api_key=self.gemini_api_key)
+            genai.Client(
+                api_key=self.gemini_api_key,
+                http_options=types.HttpOptions(timeout=ai_timeout_ms),
+            )
             if self.gemini_api_key else None
         )
         self.openrouter_api_key = config.get("OPENROUTER_API_KEY", "")
