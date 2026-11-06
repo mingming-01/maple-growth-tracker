@@ -69,6 +69,23 @@ class NexonServiceTests(unittest.TestCase):
 
     @patch("tracker.services.nexon_service.get_api_class", return_value="전사-히어로")
     @patch("tracker.services.nexon_service.get_ranking_snapshot")
+    def test_ranking_lookup_marks_three_empty_days_as_not_ready(
+        self, get_ranking, _get_api_class
+    ):
+        get_ranking.return_value = (None, Mock(status_code=200))
+
+        result = nexon_service.get_character_rankings(
+            "2026-11-07", "크로아", "히어로", "ocid-value"
+        )
+
+        self.assertEqual(result["rankingDataStatus"], "not_ready")
+        self.assertEqual(result["rankingDate"], "2026-11-05")
+        self.assertEqual(get_ranking.call_count, 12)
+        self.assertTrue(result["rankingWarnings"])
+
+
+    @patch("tracker.services.nexon_service.get_api_class", return_value="전사-히어로")
+    @patch("tracker.services.nexon_service.get_ranking_snapshot")
     def test_ranking_lookup_does_not_hide_authentication_errors_with_old_dates(
         self, get_ranking, _get_api_class
     ):
