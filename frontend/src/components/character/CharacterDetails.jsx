@@ -56,6 +56,59 @@ function numberText(value) {
   return Number.isFinite(parsed) ? parsed.toLocaleString("ko-KR") : String(value);
 }
 
+const EQUIPMENT_OPTION_FIELDS = [
+  ["STR", "str"], ["DEX", "dex"], ["INT", "int"], ["LUK", "luk"],
+  ["최대 HP", "max_hp"], ["최대 MP", "max_mp"],
+  ["공격력", "attack_power"], ["마력", "magic_power"], ["방어력", "armor"],
+  ["이동 속도", "speed"], ["점프력", "jump"],
+  ["보스 몬스터 공격 시 데미지", "boss_damage", "%"],
+  ["몬스터 방어율 무시", "ignore_monster_armor", "%"],
+  ["올스탯", "all_stat", "%"], ["데미지", "damage", "%"]
+];
+
+function optionNumber(value) {
+  if (value === null || value === undefined || value === "") return null;
+  const parsed = Number(String(value).replace(/,/g, "").replace(/%/g, "").replace(/\+/g, ""));
+  return Number.isFinite(parsed) ? parsed : null;
+}
+
+function equipmentTotalOptions(item) {
+  const total = item?.item_total_option;
+  let values = total && typeof total === "object" ? { ...total } : {};
+  if (!Object.keys(values).length) {
+    for (const source of [
+      item?.item_base_option,
+      item?.item_etc_option,
+      item?.item_add_option,
+      item?.item_starforce_option
+    ]) {
+      if (!source || typeof source !== "object") continue;
+      for (const [key, raw] of Object.entries(source)) {
+        const value = optionNumber(raw);
+        if (value === null) continue;
+        values[key] = (optionNumber(values[key]) || 0) + value;
+      }
+    }
+  }
+
+  return EQUIPMENT_OPTION_FIELDS.flatMap(([label, key, suffix = ""]) => {
+    const value = optionNumber(values[key]);
+    if (value === null || value === 0) return [];
+    const amount = (value > 0 ? "+" : "") + numberText(value) + suffix;
+    return [{ label, value: amount }];
+  });
+}
+
+function equipmentPotentialOptions(item) {
+  const normal = [item?.potential_option_1, item?.potential_option_2, item?.potential_option_3].filter(hasValue);
+  const additional = [
+    item?.additional_potential_option_1,
+    item?.additional_potential_option_2,
+    item?.additional_potential_option_3
+  ].filter(hasValue);
+  return { normal, additional };
+}
+
 function apiImage(url, alt, className = "") {
   if (typeof url !== "string" || !/^https:\/\//i.test(url)) return null;
   return <img className={className} src={url} alt={alt || ""} loading="lazy" referrerPolicy="no-referrer" />;
@@ -377,20 +430,47 @@ function EquipmentTab({ data, selected, onSelect }) {
           const isAppearance = ["hair", "faceStyle", "skin"].includes(key);
           const iconUrl = isAndroid ? android.android_icon : item?.item_icon;
           const title = isAndroid ? androidName || "안드로이드" : item?.item_name || String(appearanceValue || "");
+          const totalOptions = item ? equipmentTotalOptions(item) : [];
+          const potentialOptions = item ? equipmentPotentialOptions(item) : { normal: [], additional: [] };
           const tooltipLines = item ? [
-            "부위 · " + (item.item_equipment_part || item.item_equipment_slot || slotName),
-            hasValue(item.starforce) ? "스타포스 " + item.starforce : null,
-            ...(item.item_base_option ? Object.entries(item.item_base_option).map(([name, value]) => name + " " + value) : []),
-            ...(item.item_add_option ? Object.entries(item.item_add_option).map(([name, value]) => "추가 " + name + " " + value) : []),
-            ...(item.item_etc_option ? Object.entries(item.item_etc_option).map(([name, value]) => "주문서 " + name + " " + value) : []),
-            ...(item.item_starforce_option ? Object.entries(item.item_starforce_option).map(([name, value]) => "스타포스 " + name + " " + value) : []),
-            item.potential_option_1, item.potential_option_2, item.potential_option_3,
-            item.additional_potential_option_1, item.additional_potential_option_2, item.additional_potential_option_3,
-            item.soul_name, item.soul_option
+            "스타포스 " + (item.starforce ?? item.item_starforce ?? 0),
+            ...totalOptions.map(option => option.label + " " + option.value),
+            ...potentialOptions.normal,
+            ...potentialOptions.additional
           ] : isAndroid ? [
             android.android_grade, android.android_gender, android.android_description,
             android.android_hair?.hair_name, android.android_face?.face_name, android.android_skin_name
           ] : [];
+          const tooltipContent = item ? (
+            <div className="game-equipment-tooltip">
+              <div className="game-equipment-tooltip-heading">
+                <strong>{title || slotName}</strong>
+                <span>★ {item.starforce ?? item.item_starforce ?? 0}</span>
+              </div>
+              <div className="game-equipment-tooltip-total">
+                {totalOptions.length ? totalOptions.map(option => (
+                  <div className="game-equipment-tooltip-stat" key={option.label}>
+                    <span>{option.label}</span><b>{option.value}</b>
+                  </div>
+                )) : <p className="game-equipment-tooltip-empty">합산 옵션 정보가 없습니다.</p>}
+              </div>
+              <div className="game-equipment-tooltip-potential">
+                <strong>잠재능력</strong>
+                {potentialOptions.normal.length ? (
+                  <div><span className="game-equipment-tooltip-subtitle">잠재 옵션</span>
+                    {potentialOptions.normal.map((value, optionIndex) => <p key={optionIndex}>{value}</p>)}
+                  </div>
+                ) : null}
+                {potentialOptions.additional.length ? (
+                  <div><span className="game-equipment-tooltip-subtitle">에디셔널 잠재 옵션</span>
+                    {potentialOptions.additional.map((value, optionIndex) => <p key={optionIndex}>{value}</p>)}
+                  </div>
+                ) : null}
+                {!potentialOptions.normal.length && !potentialOptions.additional.length
+                  ? <p>잠재능력 정보가 없습니다.</p> : null}
+              </div>
+            </div>
+          ) : null;
           return (
             <DetailTooltip
               as="article"
@@ -400,6 +480,7 @@ function EquipmentTab({ data, selected, onSelect }) {
               style={{ gridArea: equipmentGridArea(key) }}
               title={title || slotName}
               lines={tooltipLines}
+              tooltipContent={tooltipContent}
             >
               <span className="equipment-slot-caption">{slotName}</span>
               <span className="equipment-game-icon-frame">

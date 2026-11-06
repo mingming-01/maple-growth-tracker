@@ -106,7 +106,7 @@ def get_ranking(
     if world_name:
         params["world_name"] = world_name
     if character_class:
-        params["class"] = character_class
+        params["character_class"] = character_class
     if ocid:
         params["ocid"] = ocid
 

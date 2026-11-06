@@ -275,14 +275,32 @@ test("mobile touch opens item tooltips without clipped detail panels", async ({ 
       currentData: { item_equipment: [{
         item_name: "테스트 무기", item_equipment_slot: "무기",
         item_icon: "https://example.com/weapon.png",
-        item_base_option: { 공격력: "300" },
-        potential_option_1: "보스 몬스터 공격 시 데미지 +40%"
+        starforce: "22",
+        item_total_option: {
+          str: "500", dex: "20", attack_power: "350",
+          boss_damage: "40", ignore_monster_armor: "20"
+        },
+        item_base_option: { attack_power: "200" },
+        item_etc_option: { attack_power: "50" },
+        item_add_option: { attack_power: "60" },
+        item_starforce_option: { attack_power: "40" },
+        potential_option_1: "보스 몬스터 공격 시 데미지 +40%",
+        additional_potential_option_1: "공격력 +12%"
       }] },
       presets: [{ number: 1, data: { item_equipment: [{
         item_name: "테스트 무기", item_equipment_slot: "무기",
         item_icon: "https://example.com/weapon.png",
-        item_base_option: { 공격력: "300" },
-        potential_option_1: "보스 몬스터 공격 시 데미지 +40%"
+        starforce: "22",
+        item_total_option: {
+          str: "500", dex: "20", attack_power: "350",
+          boss_damage: "40", ignore_monster_armor: "20"
+        },
+        item_base_option: { attack_power: "200" },
+        item_etc_option: { attack_power: "50" },
+        item_add_option: { attack_power: "60" },
+        item_starforce_option: { attack_power: "40" },
+        potential_option_1: "보스 몬스터 공격 시 데미지 +40%",
+        additional_potential_option_1: "공격력 +12%"
       }] } }], data: {}
     }] : section === "skills" ? [{
       id: "skill6", label: "6차 스킬", status: "available",
@@ -331,7 +349,16 @@ test("mobile touch opens item tooltips without clipped detail panels", async ({ 
     const weapon = page.locator('.equipment-game-slot[data-slot="weapon"]');
     await expect(weapon).toBeVisible();
     await weapon.tap();
-    await expect(page.locator("body > .game-floating-tooltip")).toContainText("보스 몬스터 공격 시 데미지 +40%");
+    const equipmentTooltip = page.locator("body > .game-floating-tooltip");
+    await expect(equipmentTooltip.locator(".game-equipment-tooltip-heading span")).toHaveText("★ 22");
+    await expect(equipmentTooltip).toContainText("STR");
+    await expect(equipmentTooltip).toContainText("+500");
+    await expect(equipmentTooltip).toContainText("공격력");
+    await expect(equipmentTooltip).toContainText("+350");
+    await expect(equipmentTooltip).toContainText("잠재능력");
+    await expect(equipmentTooltip).toContainText("보스 몬스터 공격 시 데미지 +40%");
+    await expect(equipmentTooltip).toContainText("에디셔널 잠재 옵션");
+    await expect(equipmentTooltip).toContainText("공격력 +12%");
 
     await page.locator(".mgt-topbar").tap();
     await page.locator('[data-detail-tab="skills"]').tap();
