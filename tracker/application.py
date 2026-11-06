@@ -54,6 +54,7 @@ def create_app(test_config=None):
     from tracker.controller.character_controller import character_bp
     from tracker.controller.history_controller import history_bp
     from tracker.controller.ai_controller import ai_bp
+    from tracker.controller.character_detail_controller import character_detail_bp
     from tracker.services.ai_analysis_service import (
         generate_ai_analysis,
         generate_ai_comparison,
@@ -68,6 +69,7 @@ def create_app(test_config=None):
     app.register_blueprint(character_bp)
     app.register_blueprint(history_bp)
     app.register_blueprint(ai_bp)
+    app.register_blueprint(character_detail_bp)
 
     app.before_request(runtime.start_request_timer)
     app.after_request(runtime.record_user_action)
