@@ -85,6 +85,9 @@ def get_character():
         "rankingExperience": basic["character_exp"],
         "ocid": ocid,
         "rankingDataStatus": character_rankings["rankingDataStatus"],
+        "rankingDate": character_rankings.get("rankingDate"),
+        "rankingApiStatuses": character_rankings.get("rankingApiStatuses", {}),
+        "rankingWarnings": character_rankings.get("rankingWarnings", []),
     }
     best_power, _ = load_api_snapshot(f"combat-power-best:{ocid}")
     best_power = best_power if isinstance(best_power, dict) else {}
@@ -93,7 +96,7 @@ def get_character():
     result["bestPresetCombination"] = None
 
 
-    data_status = "partial" if character_rankings["rankingDataStatus"] in ("partial", "unavailable") else "current"
+    data_status = "partial" if character_rankings["rankingDataStatus"] in ("partial", "unavailable", "empty") else "current"
     saved_at = datetime.now().astimezone().isoformat(timespec="seconds")
 
     # 일시적으로 빈 응답이 와도 기존의 정상 랭킹 스냅샷은 덮어쓰지 않는다.
