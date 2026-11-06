@@ -14,7 +14,7 @@ test("React preview is isolated from the existing Flask homepage", async ({ page
 test("React preview keeps the existing Flask admin route reachable", async ({ page }) => {
   await page.goto("/preview/");
   await expect(page.locator('[data-testid="react-preview-ready"]')).toBeVisible();
-  await expect(page.locator('.mgt-nav a[href="/admin/login"]')).toHaveAttribute("href", "/admin/login");
+  await expect(page.locator('.mgt-nav a[href="#admin"]')).toBeVisible();
   await expect(page.locator('.mgt-footer a[href="/admin/login"]')).toHaveAttribute("href", "/admin/login");
 });
 
@@ -130,4 +130,117 @@ test("React profile keeps a readable avatar and progress bar on mobile", async (
   await expect(page.locator(".mgt-character-avatar-frame")).toBeVisible();
   const avatar = await page.locator(".mgt-character-avatar-frame").boundingBox();
   expect(avatar.width).toBeGreaterThanOrEqual(110);
+});
+
+
+test("React admin panel logs in through Flask session and filters protected operations logs", async ({ page }) => {
+  let authenticated = false;
+  const logs = [
+    {
+      created_at: "2026-11-06T09:00:00+00:00",
+      created_at_display: "2026-11-06 (금) 18:00:00 KST",
+      action: "캐릭터 조회",
+      character_name: "밍득",
+      world_name: "크로아",
+      comparison_name: null,
+      result: "성공",
+      path: "/api/character",
+      status_code: 200,
+      duration_ms: 45,
+      error_type: null
+    },
+    {
+      created_at: "2026-11-06T08:00:00+00:00",
+      created_at_display: "2026-11-06 (금) 17:00:00 KST",
+      action: "성장 기록 조회",
+      character_name: "테스트캐릭터",
+      world_name: "루나",
+      comparison_name: null,
+      result: "실패",
+      path: "/api/history",
+      status_code: 503,
+      duration_ms: 300,
+      error_type: "http_5xx"
+    }
+  ];
+
+  await page.route("**/admin/api/logs**", async route => {
+    if (!authenticated) {
+      await route.fulfill({
+        status: 302,
+        headers: { location: "/admin/login" },
+        body: ""
+      });
+      return;
+    }
+    const url = new URL(route.request().url());
+    const q = (url.searchParams.get("q") || "").toLowerCase();
+    const result = url.searchParams.get("result") || "";
+    const action = url.searchParams.get("action") || "";
+    const filtered = logs.filter(item => {
+      const matchesQuery = !q || [item.action,item.character_name,item.world_name,item.path,item.error_type]
+        .some(value => String(value || "").toLowerCase().includes(q));
+      return matchesQuery && (!result || item.result === result) && (!action || item.action === action);
+    });
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({
+        logs: filtered,
+        totalCount: filtered.length,
+        displayedCount: filtered.length,
+        actionOptions: ["캐릭터 조회","성장 기록 조회"],
+        storageBackend: "postgres",
+        storageWarning: "",
+        snapshotStorageBackend: "postgres",
+        snapshotStorageWarning: "",
+        csrfToken: "e2e-csrf-token"
+      })
+    });
+  });
+
+  await page.route("**/admin/login", async route => {
+    if (route.request().method() === "GET") {
+      await route.fulfill({
+        status: 200,
+        contentType: "text/html",
+        body: '<form><input type="hidden" name="csrf_token" value="e2e-csrf-token"></form>'
+      });
+      return;
+    }
+    authenticated = true;
+    await route.fulfill({
+      status: 302,
+      headers: { location: "/admin/logs" },
+      body: ""
+    });
+  });
+  await page.route("**/admin/logs", route => route.fulfill({
+    status: 200,
+    contentType: "text/html",
+    body: "<html><body>Legacy admin fallback</body></html>"
+  }));
+  await page.route("**/admin/logout", route => {
+    authenticated = false;
+    return route.fulfill({ status: 302, headers: { location: "/admin/login" }, body: "" });
+  });
+
+  await page.goto("/preview/");
+  await page.locator('.mgt-nav a[href="#admin"]').click();
+  await expect(page.getByRole("heading", { name: "관리자 로그인" })).toBeVisible();
+  await page.getByLabel("관리자 아이디").fill("admin");
+  await page.getByLabel("비밀번호").fill("test-password");
+  await page.getByRole("button", { name: "로그인" }).click();
+
+  await expect(page.getByRole("heading", { name: "관리자 로그" })).toBeVisible();
+  await expect(page.getByText("밍득", { exact: true })).toBeVisible();
+  await expect(page.getByText("http_5xx")).toBeVisible();
+
+  await page.getByLabel("검색어").fill("테스트캐릭터");
+  await page.getByRole("button", { name: "검색" }).click();
+  await expect(page.getByText("테스트캐릭터", { exact: true })).toBeVisible();
+  await expect(page.getByText("밍득", { exact: true })).toHaveCount(0);
+
+  await page.getByRole("button", { name: "로그아웃" }).click();
+  await expect(page.getByRole("heading", { name: "관리자 로그인" })).toBeVisible();
 });
