@@ -648,7 +648,7 @@ function renderAIAnalysisEvidence(history) {
 }
 
 // AI 성장 리포트
-function renderAIAnalysis(analysis, history = currentHistory)
+function renderAIAnalysis(analysis, history = currentHistory) {
     if (!aiAnalysisResult) return;
     const sections = {
         growthPattern: "",

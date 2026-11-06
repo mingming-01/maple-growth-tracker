@@ -65,7 +65,7 @@ test("AI growth report explains the exact records used as evidence", async ({ pa
     status: 200,
     contentType: "application/json",
     body: JSON.stringify({
-      analysis: "[성장 패턴] 테스트 리포트입니다.\\n[성장 변화] 변화가 확인됩니다.\\n[레벨업 분석] 확인된 레벨업은 없습니다.\\n[성장 전망] 자료를 참고하세요.\\n[AI 코멘트] 기록을 이어가세요.",
+      analysis: "[성장 패턴] 테스트 리포트입니다.\n[성장 변화] 변화가 확인됩니다.\n[레벨업 분석] 확인된 레벨업은 없습니다.\n[성장 전망] 자료를 참고하세요.\n[AI 코멘트] 기록을 이어가세요.",
       cacheHit: false
     })
   }));
