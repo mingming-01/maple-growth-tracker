@@ -95,6 +95,34 @@ class CharacterDetailServiceTests(unittest.TestCase):
         )
         self.assertIsNone(result["activePresetNo"])
 
+    def test_union_state_stat_does_not_guess_between_identical_preset_effects(self):
+        spec = SECTION_SOURCES["union"][1]
+        result = _normalize_source(
+            {
+                "union_state_stat": ["보스 데미지 10% 증가"],
+                "union_state_stat_preset": [
+                    {"preset_no": 1, "union_state_stat": ["보스 데미지 10% 증가"]},
+                    {"preset_no": 2, "union_state_stat": ["보스 데미지 10% 증가"]},
+                ],
+            },
+            spec,
+        )
+        self.assertIsNone(result["activePresetNo"])
+
+    def test_union_state_stat_falls_back_to_current_configuration_without_presets(self):
+        spec = SECTION_SOURCES["union"][1]
+        result = _normalize_source(
+            {"union_state_stat": ["경험치 획득량 10% 증가"], "union_state_stat_preset": []},
+            spec,
+        )
+        self.assertEqual(result["activePresetNo"], 0)
+        self.assertEqual(result["presets"][0]["number"], 0)
+        self.assertTrue(result["presets"][0]["currentOnly"])
+        self.assertEqual(
+            result["presets"][0]["data"]["union_state_stat"],
+            ["경험치 획득량 10% 증가"],
+        )
+
     def test_section_returns_partial_when_one_detail_api_fails(self):
         payloads = {
             "character/stat": FakeResponse(200, {"final_stat": [{"stat_name": "전투력", "stat_value": "100"}]}),
