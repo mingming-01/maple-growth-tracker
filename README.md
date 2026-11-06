@@ -235,7 +235,6 @@ maple-growth-tracker/
 │       ├── ai_provider.py
 │       └── http_client.py
 │
-│
 ├── templates/                     # 메인·관리자 화면
 ├── static/                        # JavaScript·CSS·이미지·직업 매핑
 ├── migrations/                    # PostgreSQL 테이블 및 권한 설정
