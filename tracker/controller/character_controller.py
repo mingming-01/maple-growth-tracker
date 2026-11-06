@@ -5,6 +5,8 @@ import requests
 from flask import Blueprint, jsonify, request
 
 from tracker.services.nexon_service import (
+    get_character_rankings,
+    is_temporary_nexon_failure,
     resolve_character,
 )
 from tracker.runtime import (
@@ -12,8 +14,6 @@ from tracker.runtime import (
     KOREA_TIMEZONE,
     get_cache,
     get_cache_timestamp,
-    get_character_rankings,
-    is_temporary_nexon_failure,
     load_api_snapshot,
     save_api_snapshot,
     set_cache,
