@@ -31,12 +31,18 @@ class CharacterDetailServiceTests(unittest.TestCase):
             "android_icon": "https://example.com/android.png",
             "android_description": "안드로이드 설명",
             "android_grade": "레전드리",
+            "android_hair": {"hair_name": "테스트 안드로이드 헤어"},
+            "android_face": {"face_name": "테스트 안드로이드 성형"},
+            "android_skin_name": "테스트 안드로이드 피부",
         }
         result = _normalize_source(payload, spec)
 
         self.assertEqual(result["status"], "available")
         self.assertEqual(result["currentData"]["android_name"], "테스트 안드로이드")
         self.assertEqual(result["currentData"]["android_icon"], "https://example.com/android.png")
+        self.assertEqual(result["currentData"]["android_hair"]["hair_name"], "테스트 안드로이드 헤어")
+        self.assertEqual(result["currentData"]["android_face"]["face_name"], "테스트 안드로이드 성형")
+        self.assertEqual(result["currentData"]["android_skin_name"], "테스트 안드로이드 피부")
         self.assertNotIn("android_name", result["data"])
 
     def test_character_appearance_fields_are_exposed_in_current_data(self):

@@ -109,7 +109,10 @@ test("character details automatically open the game-style stat window", async ({
             android_name: "테스트 안드로이드",
             android_icon: "",
             android_grade: "레전드리",
-            android_gender: "여성"
+            android_gender: "여성",
+            android_hair: { hair_name: "테스트 안드로이드 헤어", base_color: "검정" },
+            android_face: { face_name: "테스트 안드로이드 성형", base_color: "갈색" },
+            android_skin_name: "테스트 안드로이드 피부"
           },
           data: {}
         },
@@ -319,7 +322,14 @@ test("character details automatically open the game-style stat window", async ({
   await expect(page.locator("#characterDetailsContent")).toContainText("테스트 헤어");
   await expect(page.locator("#characterDetailsContent")).toContainText("테스트 성형");
   await expect(page.locator("#characterDetailsContent")).toContainText("뽀송 피부");
-  await expect(page.locator("#characterDetailsContent")).toContainText("테스트 안드로이드");
+  const androidSlot = page.locator('#characterDetailsContent [data-slot="android"]');
+  await expect(androidSlot).toContainText("테스트 안드로이드");
+  await androidSlot.hover();
+  const androidTooltip = androidSlot.locator(".game-hover-tooltip");
+  await expect(androidTooltip).toBeVisible();
+  await expect(androidTooltip).toContainText("헤어 · 테스트 안드로이드 헤어");
+  await expect(androidTooltip).toContainText("성형 · 테스트 안드로이드 성형");
+  await expect(androidTooltip).toContainText("피부 · 테스트 안드로이드 피부");
   await expect(page.locator('#characterDetailsContent [data-slot="weapon"]')).toContainText("테스트 무기");
   await expect(page.locator('#characterDetailsContent [data-slot="subweapon"]')).toContainText("테스트 보조무기");
   const expectedSlots = {
