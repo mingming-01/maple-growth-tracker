@@ -58,88 +58,151 @@ test("character details automatically open the game-style stat window", async ({
     body: JSON.stringify({ analysis: "[성장 패턴] 테스트", cacheHit: false })
   }));
 
-  let detailRequests = 0;
+  const detailRequests = { stats: 0, union: 0 };
   await page.route(/\/api\/character-details\?/, route => {
-    detailRequests += 1;
+    const section = new URL(route.request().url()).searchParams.get("section");
+    detailRequests[section] = (detailRequests[section] || 0) + 1;
+    const payload = section === "union" ? {
+      section: "union",
+      status: "available",
+      sources: [
+        {
+          id: "union", label: "유니온 기본 정보", status: "available",
+          data: { union_level: 9000, union_grade: "그랜드 마스터 유니온", union_artifact_level: 40 }
+        },
+        {
+          id: "unionStateStat", label: "유니온 스탯", status: "available",
+          activePresetNo: 2,
+          currentData: { union_state_stat: ["보스 몬스터 공격 시 데미지 +20% 증가"] },
+          presets: [
+            { number: 1, data: { union_state_stat: ["경험치 획득량 10% 증가", "메소 획득량 5% 증가"] } },
+            { number: 2, data: { union_state_stat: ["보스 몬스터 공격 시 데미지 +20% 증가"] } }
+          ],
+          data: { union_max_point: 9000 }
+        },
+        {
+          id: "unionArtifact", label: "유니온 아티팩트", status: "available",
+          currentData: {
+            union_artifact_effect: [{ name: "올스탯 증가", level: 10 }],
+            union_artifact_crystal: [{
+              name: "주황버섯", level: 5, validity_flag: "0", is_expired: false,
+              crystal_option_name_1: "버프 지속시간 증가",
+              crystal_option_name_2: "크리티컬 데미지 증가",
+              crystal_option_name_3: "보스 몬스터 공격 시 데미지 증가"
+            }],
+            union_artifact_remain_ap: 20
+          },
+          data: {}
+        },
+        {
+          id: "unionChampion", label: "유니온 챔피언", status: "available",
+          currentData: {
+            union_champion: [{
+              champion_name: "테스트캐릭터", champion_slot: 1, champion_grade: "SSS",
+              champion_class: "아크메이지(불,독)",
+              champion_badge_info: [{ stat: "보스 몬스터 공격 시 데미지 +1%" }]
+            }],
+            champion_badge_total_info: [{ stat: "보스 몬스터 공격 시 데미지 +1%" }]
+          },
+          data: {}
+        }
+      ]
+    } : {
+      section: "stats",
+      status: "available",
+      dataStatus: "current",
+      defaultProfile: "current",
+      actualPresetNumbers: { equipment: 1, hyperStat: 2, ability: 1, link: 1, union: 2 },
+      actualPresetCombinationComplete: true,
+      profileRecommendations: {
+        boss: { presetNumbers: { equipment: 1, hyperStat: 2, ability: 1, link: 1, union: 2 }, matchedCategories: ["hyperStat", "ability", "union"], score: 12, confidence: "high" },
+        hunting: { presetNumbers: { equipment: 2, hyperStat: 1, ability: 2, link: 2, union: 1 }, matchedCategories: ["hyperStat", "union"], score: 8, confidence: "medium" }
+      },
+      sources: [
+        {
+          id: "stat", label: "주요 스탯", status: "available", combatPower: "123456",
+          activePresetNo: null, presets: [],
+          data: { final_stat: [
+            { stat_name: "STR", stat_value: "12000" },
+            { stat_name: "전투력", stat_value: "123456" }
+          ] }
+        },
+        {
+          id: "hyperStat", label: "하이퍼 스탯", status: "available", activePresetNo: 2,
+          currentData: { hyper_stat: [{ stat_type: "보스 데미지", stat_level: 10 }] },
+          presets: [
+            { number: 1, purpose: "hunting", data: { hyper_stat: [{ stat_type: "크리티컬 데미지", stat_level: 5 }] } },
+            { number: 2, purpose: "boss", data: { hyper_stat: [{ stat_type: "보스 데미지", stat_level: 10 }] } }
+          ],
+          data: {}
+        },
+        {
+          id: "ability", label: "어빌리티", status: "available", activePresetNo: 1,
+          currentData: { ability_info: [{ ability_value: "보스 몬스터 공격 시 데미지 +20%" }] },
+          presets: [{ number: 1, purpose: "boss", data: { ability_info: [{ ability_value: "보스 몬스터 공격 시 데미지 +20%" }] } }],
+          data: {}
+        },
+        {
+          id: "itemEquipment", label: "장비 프리셋", status: "available", activePresetNo: 1,
+          currentData: { item_equipment: [] },
+          presets: [{ number: 1, purpose: "unknown", data: { item_equipment: [] } }],
+          data: {}
+        },
+        {
+          id: "linkSkill", label: "링크 스킬 프리셋", status: "available", activePresetNo: 1,
+          currentData: { character_link_skill: [], character_owned_link_skill: null },
+          presets: [{
+            number: 1, purpose: "boss",
+            data: {
+              character_link_skill: [{ skill_name: "소울 컨트랙트", skill_level: 2 }],
+              character_owned_link_skill: { skill_name: "데몬스 퓨리", skill_level: 2 }
+            }
+          }],
+          data: {}
+        },
+        {
+          id: "unionStateStat", label: "유니온 스탯", status: "available", activePresetNo: 2,
+          currentData: { union_state_stat: ["보스 몬스터 공격 시 데미지 +20% 증가"] },
+          presets: [
+            { number: 1, purpose: "hunting", data: { union_state_stat: ["경험치 획득량 10% 증가"] } },
+            { number: 2, purpose: "boss", data: { union_state_stat: ["보스 몬스터 공격 시 데미지 +20% 증가"] } }
+          ],
+          data: { union_max_point: 9000 }
+        }
+      ]
+    };
     return route.fulfill({
       status: 200,
       contentType: "application/json",
-      body: JSON.stringify({
-        section: "stats",
-        status: "available",
-        dataStatus: "current",
-        defaultProfile: "current",
-        actualPresetNumbers: { equipment: 1, hyperStat: 2, ability: 1, link: 1, union: 1 },
-        actualPresetCombinationComplete: true,
-        profileRecommendations: {
-          boss: { presetNumbers: { equipment: 1, hyperStat: 2, ability: 1, link: 1, union: 1 }, matchedCategories: ["equipment", "hyperStat", "link"], score: 12, confidence: "high" },
-          hunting: { presetNumbers: { equipment: 2, hyperStat: 1, ability: 2, link: 2, union: 2 }, matchedCategories: ["equipment", "hyperStat"], score: 8, confidence: "medium" }
-        },
-        sources: [
-          {
-            id: "stat", label: "주요 스탯", status: "available", combatPower: "123456",
-            activePresetNo: null, presets: [],
-            data: { final_stat: [
-              { stat_name: "STR", stat_value: "12000" },
-              { stat_name: "전투력", stat_value: "123456" }
-            ] }
-          },
-          {
-            id: "hyperStat", label: "하이퍼 스탯", status: "available", activePresetNo: 2,
-            currentData: { hyper_stat: [{ stat_type: "보스 데미지", stat_level: 10 }] },
-            presets: [
-              { number: 1, purpose: "hunting", data: { hyper_stat: [{ stat_type: "크리티컬 데미지", stat_level: 5 }] } },
-              { number: 2, purpose: "boss", data: { hyper_stat: [{ stat_type: "보스 데미지", stat_level: 10 }] } }
-            ],
-            data: {}
-          },
-          {
-            id: "ability", label: "어빌리티", status: "available", activePresetNo: 1,
-            currentData: { ability_info: [{ ability_value: "보스 몬스터 공격 시 데미지 +20%" }] },
-            presets: [{ number: 1, purpose: "boss", data: { ability_info: [{ ability_value: "보스 몬스터 공격 시 데미지 +20%" }] } }],
-            data: {}
-          },
-          {
-            id: "itemEquipment", label: "장비 프리셋", status: "available", activePresetNo: 1,
-            currentData: { item_equipment: [] },
-            presets: [{ number: 1, purpose: "unknown", data: { item_equipment: [] } }],
-            data: {}
-          },
-          {
-            id: "linkSkill", label: "링크 스킬 프리셋", status: "available", activePresetNo: 1,
-            currentData: { character_link_skill: [], character_owned_link_skill: null },
-            presets: [{
-              number: 1, purpose: "boss",
-              data: {
-                character_link_skill: [{ skill_name: "소울 컨트랙트", skill_level: 2 }],
-                character_owned_link_skill: { skill_name: "데몬스 퓨리", skill_level: 2 }
-              }
-            }],
-            data: {}
-          },
-          {
-            id: "unionRaider", label: "유니온 프리셋", status: "available", activePresetNo: 1,
-            presets: [{ number: 1, purpose: "unknown", data: { union_raider: {}, union_block: {} } }],
-            currentData: {}, data: {}
-          }
-        ]
-      })
+      body: JSON.stringify(payload)
     });
   });
-
   await page.goto("/");
   await page.locator("#characterName").fill("프리셋테스트");
   await page.locator("#searchForm button[type='submit']").click();
   await expect(page.locator("#resultSection")).toBeVisible();
   await expect(page.locator("#characterDetailsContent")).toContainText("능력치");
   await expect(page.locator("#characterDetailsContent")).toContainText("현재 적용 중인 실제 전투력");
-  expect(detailRequests).toBe(1);
+  expect(detailRequests.stats).toBe(1);
 
+  await expect(page.locator("#characterDetailsContent .game-preset-select")).toHaveCount(3); 
   const hyperPreset = page.locator("#characterDetailsContent .game-preset-select").first();
   await expect(hyperPreset).toHaveValue("2");
   await hyperPreset.selectOption("1");
   await expect(page.locator("#characterDetailsContent")).toContainText("크리티컬 데미지");
 
   await page.locator('[data-detail-tab="stats"]').click();
-  expect(detailRequests).toBe(1);
+  expect(detailRequests.stats).toBe(1);
+
+  await page.locator('[data-detail-tab="union"]').click();
+  await expect(page.locator("#characterDetailsContent")).toContainText("유니온 스탯 투자");
+  await expect(page.locator("#characterDetailsContent")).toContainText("주황버섯");
+  await expect(page.locator("#characterDetailsContent")).toContainText("테스트캐릭터");
+  await expect(page.locator("#characterDetailsContent")).toContainText("SSS");
+  const unionPreset = page.locator("#characterDetailsContent .game-union-state-panel .game-preset-select");
+  await expect(unionPreset).toHaveValue("2");
+  await unionPreset.selectOption("1");
+  await expect(page.locator("#characterDetailsContent")).toContainText("경험치 획득량");
+  await expect(page.locator("#characterDetailsContent")).not.toContainText("보스 몬스터 공격 시 데미지 +20% 증가");
+  expect(detailRequests.union).toBe(1);
 });

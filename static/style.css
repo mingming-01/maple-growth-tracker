@@ -805,3 +805,79 @@ button:disabled { cursor: wait; opacity: 0.65; }
     .game-equipment-toolbar .game-preset-select-wrap { width:100%; }
     .game-equipment-toolbar .game-preset-select { flex:1; width:auto; }
 }
+
+
+/* Modern Union state-stat presets, artifact crystals and champion roster */
+.game-union-window { display:grid; gap:14px; min-width:0; }
+.game-union-window>section {
+    min-width:0; padding:17px; border:1px solid #414963; border-radius:13px;
+    background:linear-gradient(145deg,rgba(35,43,63,.98),rgba(25,32,49,.98));
+    box-shadow:inset 0 1px rgba(255,255,255,.035),0 5px 15px rgba(0,0,0,.12);
+}
+.game-union-section-heading { display:flex; align-items:center; gap:10px; margin-bottom:13px; }
+.game-union-section-heading .game-window-title { margin-left:auto; }
+.game-union-summary { display:grid; grid-template-columns:repeat(auto-fit,minmax(135px,1fr)); gap:8px; }
+.game-union-stat { min-width:0; display:grid; gap:5px; padding:11px; border:1px solid #414c66; border-radius:8px; background:#1a2234; }
+.game-union-stat span { color:#9da9c2; font-size:10px; }
+.game-union-stat strong { color:#e7e8f2; font-size:13px; overflow-wrap:anywhere; }
+.game-union-state-toolbar { display:flex; align-items:end; flex-wrap:wrap; gap:10px; margin-bottom:9px; }
+.game-union-state-toolbar .game-preset-select-wrap { display:flex; align-items:center; gap:9px; min-width:210px; }
+.game-union-state-toolbar .game-preset-select-label { white-space:nowrap; }
+.game-union-state-toolbar .game-preset-select { width:150px; }
+.game-union-point-card { display:grid; gap:4px; min-width:145px; padding:9px 12px; border:1px solid #625b80; border-radius:8px; background:#282a42; }
+.game-union-point-card span { color:#a9a9c6; font-size:9px; font-weight:800; }
+.game-union-point-card strong { color:#e8dcff; font-size:16px; font-weight:950; }
+.game-union-active-state { margin:8px 0 10px; color:#9ca8c0; font-size:10px; line-height:1.5; }
+.game-union-active-state.is-applied { color:#9fdbb6; }
+.game-union-state-grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(185px,1fr)); gap:7px; }
+.game-union-state-stat { display:grid; grid-template-columns:28px minmax(0,1fr) auto; align-items:center; gap:8px; min-width:0; padding:10px 11px; border:1px solid #3e4a65; border-radius:8px; background:linear-gradient(130deg,#202a40,#1a2337); }
+.game-union-state-index { display:grid; place-items:center; width:25px; height:25px; border-radius:6px; color:#a9a1d9; background:#343351; font-size:9px; font-weight:900; }
+.game-union-state-name { color:#dce2f0; font-size:10px; line-height:1.45; overflow-wrap:anywhere; }
+.game-union-state-value { color:#f1d58b; font-size:10px; font-weight:950; text-align:right; white-space:nowrap; }
+.game-union-subpanel { min-width:0; margin-top:13px; padding-top:12px; border-top:1px solid rgba(255,255,255,.09); }
+.game-union-subtitle { margin:0 0 10px; color:#c9c8e2; font-size:11px; font-weight:900; }
+.game-union-artifact-summary { display:flex; gap:8px; flex-wrap:wrap; }
+.game-union-artifact-summary:empty { display:none; }
+.game-union-artifact-effect-grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(160px,1fr)); gap:7px; }
+.game-union-artifact-effect { display:flex; align-items:center; justify-content:space-between; gap:10px; min-width:0; padding:10px; border:1px solid #404c67; border-radius:8px; background:#1a2336; }
+.game-union-artifact-effect strong { color:#dce2ef; font-size:10px; overflow-wrap:anywhere; }
+.game-union-artifact-effect span { color:#f0d17d; font-size:10px; font-weight:900; white-space:nowrap; }
+.game-union-crystal-grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(230px,1fr)); gap:8px; }
+.game-union-crystal { min-width:0; padding:11px; border:1px solid #49536d; border-radius:9px; background:linear-gradient(145deg,#232d43,#1a2235); }
+.game-union-crystal-top { display:flex; align-items:center; gap:8px; min-width:0; }
+.game-union-crystal-gem { display:grid; place-items:center; flex:none; width:32px; height:32px; border:1px solid #9a83ba; border-radius:8px; color:#f0dcff; background:radial-gradient(circle at 35% 25%,#6f5d99,#292d48 72%); font-size:9px; font-weight:950; }
+.game-union-crystal-name { min-width:0; color:#efe1b8; font-size:11px; font-weight:900; overflow-wrap:anywhere; }
+.game-union-crystal-level { margin-left:auto; color:#f1d47d; font-size:10px; font-weight:900; white-space:nowrap; }
+.game-union-crystal-status { display:inline-flex; margin-top:9px; padding:4px 7px; border-radius:5px; font-size:9px; font-weight:850; }
+.game-union-crystal-status.is-valid { color:#a8e0bb; background:#243e36; }
+.game-union-crystal-status.is-expired { color:#e5b4a8; background:#48332f; }
+.game-union-crystal-options { display:grid; gap:4px; margin-top:9px; }
+.game-union-crystal-option { padding:5px 7px; border:1px solid #3e4a64; border-radius:5px; color:#cbd4e5; background:#1a2336; font-size:9px; line-height:1.4; }
+.game-union-crystal-expiry { display:block; margin-top:8px; color:#858fa7; font-size:9px; }
+.game-union-grade-distribution { display:flex; flex-wrap:wrap; gap:7px; margin-bottom:12px; }
+.game-union-grade-count { display:flex; align-items:center; gap:7px; padding:7px 10px; border:1px solid #3e4962; border-radius:7px; background:#1a2234; }
+.game-union-grade-count strong { color:#dce1ef; font-size:10px; }
+.game-union-grade-badge { display:inline-grid; place-items:center; min-width:32px; height:24px; padding:0 7px; border:1px solid #897eaa; border-radius:6px; color:#e8ddff; background:linear-gradient(135deg,#5d507e,#332e4f); font-size:10px; font-weight:950; }
+.game-union-grade-badge.grade-sss { border-color:#dbb65f; color:#ffe6a3; background:linear-gradient(135deg,#80612e,#44351f); }
+.game-union-grade-badge.grade-ss { border-color:#b5a4e7; color:#eee4ff; background:linear-gradient(135deg,#66568c,#39324f); }
+.game-union-grade-badge.grade-s { border-color:#83a9d4; color:#d9edff; background:linear-gradient(135deg,#425f83,#293a51); }
+.game-union-grade-badge.grade-a { border-color:#7dba9a; color:#d9ffea; background:linear-gradient(135deg,#37674e,#233d31); }
+.game-union-grade-badge.grade-b { border-color:#9aa8ba; color:#e1e8f2; background:linear-gradient(135deg,#566273,#303a49); }
+.game-union-champion-grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(220px,1fr)); gap:8px; }
+.game-union-champion-card { min-width:0; padding:11px; border:1px solid #424d67; border-radius:9px; background:linear-gradient(145deg,#242e45,#1a2236); }
+.game-union-champion-card-head { display:flex; align-items:center; justify-content:space-between; gap:8px; margin-bottom:9px; }
+.game-union-champion-slot { color:#8794ad; font-size:9px; font-weight:800; letter-spacing:.08em; }
+.game-union-champion-name { display:block; color:#e5e7f0; font-size:12px; font-weight:900; overflow-wrap:anywhere; }
+.game-union-champion-class { display:block; margin-top:4px; color:#a6afc4; font-size:10px; }
+.game-union-champion-badges { display:grid; gap:5px; margin-top:10px; }
+.game-union-champion-effect { display:block; padding:6px 8px; border:1px solid #48536c; border-radius:6px; color:#d6dfef; background:#1a2337; font-size:9px; line-height:1.45; overflow-wrap:anywhere; }
+.game-union-champion-total { margin-top:13px; padding-top:12px; border-top:1px solid rgba(255,255,255,.1); }
+.game-union-champion-total-list { display:flex; flex-wrap:wrap; gap:6px; }
+.game-union-muted { margin:6px 0 0; color:#828da4; font-size:9px; }
+@media (max-width:620px) {
+    .game-union-state-toolbar { align-items:stretch; }
+    .game-union-state-toolbar .game-preset-select-wrap { width:100%; min-width:0; }
+    .game-union-state-toolbar .game-preset-select { flex:1; width:auto; }
+    .game-union-state-grid,.game-union-crystal-grid,.game-union-champion-grid { grid-template-columns:1fr; }
+    .game-union-artifact-effect { align-items:flex-start; flex-direction:column; }
+}
