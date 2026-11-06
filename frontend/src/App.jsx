@@ -290,7 +290,7 @@ function App() {
     });
   },[]);
 
-  async function searchName(query) {
+  async function searchName(query, { refresh = false } = {}) {
     const target = String(query || "").trim();
     if (!target || loading) return;
     setName(target);
@@ -299,10 +299,10 @@ function App() {
     setHistoryWarning("");
     setLastSearched("");
     try {
-      const nextCharacter = await getCharacter(target,{refresh:true});
+      const nextCharacter = await getCharacter(target,{refresh});
       let historyResult;
       try {
-        historyResult = await getHistory(target,{refresh:true});
+        historyResult = await getHistory(target,{refresh});
       } catch (historyError) {
         historyResult = {history:[],dataStatus:"unavailable",historyStatus:"unavailable"};
         setHistoryWarning(historyError.message || "성장 기록을 조회하지 못했습니다. 캐릭터 기본 정보는 표시합니다.");
@@ -340,7 +340,7 @@ function App() {
   }
 
   async function refreshCurrent() {
-    if (character?.characterName) await searchName(character.characterName);
+    if (character?.characterName) await searchName(character.characterName,{refresh:true});
   }
 
   function toggleFavorite() {
