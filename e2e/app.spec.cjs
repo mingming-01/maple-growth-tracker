@@ -62,7 +62,19 @@ test("character details automatically open the game-style stat window", async ({
   await page.route(/\/api\/character-details\?/, route => {
     const section = new URL(route.request().url()).searchParams.get("section");
     detailRequests[section] = (detailRequests[section] || 0) + 1;
-    const payload = section === "equipment" ? {
+    const payload = section === "symbols" ? {
+      section: "symbols",
+      status: "available",
+      sources: [{
+        id: "symbolEquipment", label: "심볼", status: "available",
+        currentData: { symbol: [{
+          symbol_name: "테스트 아케인심볼", symbol_level: 20,
+          symbol_growth_count: 0, symbol_require_growth_count: 0,
+          symbol_description: "최대 레벨에 도달한 심볼"
+        }] },
+        data: {}
+      }]
+    } : section === "equipment" ? {
       section: "equipment",
       status: "available",
       sources: [
@@ -168,7 +180,7 @@ test("character details automatically open the game-style stat window", async ({
           currentData: {
             union_champion: [{
               champion_name: "테스트캐릭터", champion_slot: 1, champion_grade: "SSS",
-              champion_class: "아크메이지(불,독)",
+              champion_class: "아크메이지(불,독)", character_image: "https://example.com/champion.png",
               champion_badge_info: [{ stat: "보스 몬스터 공격 시 데미지 +1%" }]
             }],
             champion_badge_total_info: [{ stat: "보스 몬스터 공격 시 데미지 +1%" }]
@@ -276,6 +288,12 @@ test("character details automatically open the game-style stat window", async ({
   expect(detailRequests.stats).toBe(1);
   await expect(page.locator("#characterDetailsContent .game-preset-select").nth(2)).toHaveValue("2");
 
+  await page.locator('[data-detail-tab="symbols"]').click();
+  await expect(page.locator("#characterDetailsContent")).toContainText("테스트 아케인심볼");
+  const maxSymbol = page.locator("#characterDetailsContent .game-symbol-tile");
+  await maxSymbol.hover();
+  await expect(maxSymbol.locator(".game-hover-tooltip")).toContainText("성장량 MAX");
+
   await page.locator('[data-detail-tab="equipment"]').click();
   await expect(page.locator("#characterDetailsContent")).toContainText("테스트 헤어");
   await expect(page.locator("#characterDetailsContent")).toContainText("테스트 성형");
@@ -295,6 +313,12 @@ test("character details automatically open the game-style stat window", async ({
   await expect(page.locator("#characterDetailsContent")).toContainText("주황버섯");
   await expect(page.locator("#characterDetailsContent")).toContainText("테스트캐릭터");
   await expect(page.locator("#characterDetailsContent")).toContainText("SSS");
+  await expect(page.locator("#characterDetailsContent .game-union-champion-avatar-wrap")).toHaveCount(0);
+  await expect(page.locator("#characterDetailsContent .game-champion-hover-tooltip img")).toHaveCount(1);
+  const championCard = page.locator("#characterDetailsContent .game-union-champion-card");
+  await championCard.hover();
+  await expect(championCard.locator(".game-champion-hover-tooltip")).toBeVisible();
+  await expect(championCard.locator(".game-champion-hover-tooltip img")).toHaveCSS("width", "164px");
   await expect(page.locator("#characterDetailsContent .game-union-crystal-monster")).toHaveCount(1);
   await expect(page.locator("#characterDetailsContent .game-union-crystal-order")).toHaveText("01");
   const unionPreset = page.locator("#characterDetailsContent .game-union-state-panel .game-preset-select");
