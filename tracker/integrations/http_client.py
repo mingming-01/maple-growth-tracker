@@ -66,6 +66,11 @@ def request_with_retries(
         if response.status_code not in retry_codes or attempt >= attempts:
             return response
 
+        # 다음 시도 전에 응답 연결을 반환해 연결 풀을 고갈시키지 않는다.
+        close_response = getattr(response, "close", None)
+        if callable(close_response):
+            close_response()
+
         response_headers = getattr(response, "headers", {}) or {}
         retry_after = _retry_after_seconds(response_headers.get("Retry-After"))
         delay = (
