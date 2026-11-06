@@ -1,7 +1,15 @@
 """AI 성장 분석과 캐릭터 비교의 프롬프트·모델 호출을 담당한다."""
+import json
+from datetime import date
 
-from app import *
 from tracker.integrations.ai_provider import request_openrouter, should_use_openrouter
+from tracker.runtime import (
+    OPENROUTER_API_KEY,
+    gemini_client,
+    get_ai_response_cache,
+    sanitize_ai_text,
+    set_ai_response_cache,
+)
 
 
 def generate_ai_analysis(character, history, computed_metrics=None):
