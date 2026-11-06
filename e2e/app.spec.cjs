@@ -6,7 +6,7 @@ test.beforeEach(async ({ page }) => {
 });
 
 test("home page renders and validates an empty character search", async ({ page }) => {
-  await page.goto("/");
+  await page.goto("/legacy/");
   await expect(page.locator("#searchForm")).toBeVisible();
   await expect(page.getByRole("heading", { name: "MAPLE GROWTH TRACKER" }).first()).toBeVisible();
   await expect(page.locator("#favoriteEmpty")).toBeVisible();
@@ -95,7 +95,7 @@ test("AI growth report explains the exact records used as evidence", async ({ pa
     })
   }));
 
-  await page.goto("/");
+  await page.goto("/legacy/");
   await page.locator("#characterName").fill("근거테스트");
   await page.locator("#searchForm button[type='submit']").click();
 
@@ -209,7 +209,7 @@ test("30-day growth chart and browser-saved favorite characters work", async ({ 
     });
   });
 
-  await page.goto("/");
+  await page.goto("/legacy/");
   await page.locator("#characterName").fill("페이즈4테스트");
   await page.locator("#searchForm button[type='submit']").click();
   await expect(page.locator("#resultSection")).toBeVisible();
@@ -489,7 +489,7 @@ test("character details automatically open the game-style stat window", async ({
       body: JSON.stringify(payload)
     });
   });
-  await page.goto("/");
+  await page.goto("/legacy/");
   await page.locator("#characterName").fill("프리셋테스트");
   await page.locator("#searchForm button[type='submit']").click();
   await expect(page.locator("#resultSection")).toBeVisible();
@@ -619,7 +619,7 @@ test("character details automatically open the game-style stat window", async ({
 
 test("character detail tabs remain in one horizontal row on mobile", async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 844 });
-  await page.goto("/");
+  await page.goto("/legacy/");
   await page.locator("#resultSection").evaluate(element => { element.hidden = false; });
   await page.locator("#characterDetailsSection").evaluate(element => { element.hidden = false; });
   const tabs = page.locator(".detail-tabs");
@@ -695,7 +695,7 @@ test("next-level growth goal persists and alerts when the target level is reache
     })
   }));
 
-  await page.goto("/");
+  await page.goto("/legacy/");
   await page.locator("#characterName").fill("목표테스트");
   await page.locator("#searchForm button[type='submit']").click();
 
