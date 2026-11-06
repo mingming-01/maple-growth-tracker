@@ -434,40 +434,224 @@ function renderLinkSection(data) {
     if(!grid.childElementCount) grid.appendChild(el("p","game-empty","장착된 링크 스킬이 없습니다."));
     content.appendChild(grid); return content;
 }
-function renderUnionSection(data) {
-    const content=el("div","game-union-window"), base=sourceById(data,"union");
-    const raider=sourceById(data,"unionRaider"), artifact=sourceById(data,"unionArtifact");
-    const baseData=base?.data||{}, summary=el("div","game-union-summary");
-    [["유니온 레벨",baseData.union_level],["유니온 등급",baseData.union_grade],
-     ["아티팩트 레벨",baseData.union_artifact_level],["아티팩트 포인트",baseData.union_artifact_point]]
-      .forEach(([label,value])=>{
+function unionEffectTile(effect,index) {
+    const raw=String(effect??"").trim();
+    const match=raw.match(/^(.+?)\\s+([+-]?\\d+(?:\\.\\d+)?%?)\\s*증가$/);
+    const tile=el("article","game-union-state-stat");
+    tile.append(
+        el("span","game-union-state-index",String(index+1).padStart(2,"0")),
+        el("strong","game-union-state-name",match?match[1]:raw||"효과 정보 없음"),
+        el("span","game-union-state-value",match?match[2]+" 증가":"")
+    );
+    tile.title=raw;
+    return tile;
+}
+
+function renderUnionArtifact(artifact,content) {
+    const panel=el("section","game-union-artifact-panel");
+    const heading=el("div","game-union-section-heading");
+    heading.append(el("span","game-window-eyebrow","UNION ARTIFACT"),
+        el("h3","game-window-title","유니온 아티팩트"));
+    panel.appendChild(heading);
+    if(!artifact||artifact.status==="unavailable") {
+        panel.appendChild(el("p","game-empty",artifact?.message||"아티팩트 정보를 조회할 수 없습니다."));
+        content.appendChild(panel);
+        return;
+    }
+
+    const raw=artifact.currentData||artifact.data||{};
+    const effects=Array.isArray(raw.union_artifact_effect)?raw.union_artifact_effect:[];
+    const crystals=Array.isArray(raw.union_artifact_crystal)?raw.union_artifact_crystal:[];
+    const summary=el("div","game-union-artifact-summary");
+    if(present(raw.union_artifact_remain_ap)) {
+        const remain=el("div","game-union-point-card");
+        remain.append(el("span","","잔여 아티팩트 AP"),
+            el("strong","",fmt(raw.union_artifact_remain_ap)));
+        summary.appendChild(remain);
+    }
+    panel.appendChild(summary);
+
+    const effectsPanel=el("div","game-union-subpanel");
+    effectsPanel.appendChild(el("h4","game-union-subtitle","아티팩트 효과"));
+    const effectGrid=el("div","game-union-artifact-effect-grid");
+    effects.forEach(effect=>{
+        const tile=el("article","game-union-artifact-effect");
+        tile.append(el("strong","",effect?.name||"효과"),
+            el("span","",present(effect?.level)?"Lv. "+fmt(effect.level):"레벨 정보 없음"));
+        effectGrid.appendChild(tile);
+    });
+    if(effectGrid.childElementCount) effectsPanel.appendChild(effectGrid);
+    else effectsPanel.appendChild(el("p","game-empty","조회된 아티팩트 효과가 없습니다."));
+    panel.appendChild(effectsPanel);
+
+    const crystalPanel=el("div","game-union-subpanel");
+    crystalPanel.appendChild(el("h4","game-union-subtitle","아티팩트 크리스탈"));
+    const crystalGrid=el("div","game-union-crystal-grid");
+    crystals.forEach((crystal,index)=>{
+        const tile=el("article","game-union-crystal");
+        const top=el("div","game-union-crystal-top");
+        const gem=el("span","game-union-crystal-gem",String(index+1).padStart(2,"0"));
+        top.append(gem,el("strong","game-union-crystal-name",crystal?.name||"크리스탈"),
+            el("span","game-union-crystal-level",present(crystal?.level)?"Lv. "+fmt(crystal.level):""));
+        tile.appendChild(top);
+
+        const valid=String(crystal?.validity_flag??"0")==="0" && crystal?.is_expired!==true;
+        tile.appendChild(el("span","game-union-crystal-status "+(valid?"is-valid":"is-expired"),
+            valid?"효과 적용 상태":"만료 또는 비활성"));
+        const optionsList=el("div","game-union-crystal-options");
+        [1,2,3].forEach(slot=>{
+            const value=crystal?.["crystal_option_name_"+slot];
+            if(present(value)) optionsList.appendChild(el("span","game-union-crystal-option",value));
+        });
+        if(optionsList.childElementCount) tile.appendChild(optionsList);
+        if(present(crystal?.date_expire)) tile.appendChild(el("span","game-union-crystal-expiry","만료 예정 · "+String(crystal.date_expire)));
+        crystalGrid.appendChild(tile);
+    });
+    if(crystalGrid.childElementCount) crystalPanel.appendChild(crystalGrid);
+    else crystalPanel.appendChild(el("p","game-empty","등록된 아티팩트 크리스탈이 없습니다."));
+    panel.appendChild(crystalPanel);
+    content.appendChild(panel);
+}
+
+function renderUnionChampions(championSource,content) {
+    const panel=el("section","game-union-champion-panel");
+    const heading=el("div","game-union-section-heading");
+    heading.append(el("span","game-window-eyebrow","UNION CHAMPION"),
+        el("h3","game-window-title","유니온 챔피언"));
+    panel.appendChild(heading);
+    if(!championSource||championSource.status==="unavailable") {
+        panel.appendChild(el("p","game-empty",championSource?.message||"유니온 챔피언 정보를 조회할 수 없습니다."));
+        content.appendChild(panel);
+        return;
+    }
+
+    const raw=championSource.currentData||championSource.data||{};
+    const champions=Array.isArray(raw.union_champion)?raw.union_champion:[];
+    const gradeOrder=["SSS","SS","S","A","B"];
+    const gradeCounts=new Map(gradeOrder.map(grade=>[grade,0]));
+    champions.forEach(champion=>{
+        const grade=String(champion?.champion_grade||"").toUpperCase();
+        gradeCounts.set(grade,(gradeCounts.get(grade)||0)+1);
+    });
+
+    const distribution=el("div","game-union-grade-distribution");
+    gradeOrder.forEach(grade=>{
+        const count=gradeCounts.get(grade)||0;
+        if(!count) return;
+        const tile=el("div","game-union-grade-count");
+        tile.append(el("span","game-union-grade-badge grade-"+grade.toLowerCase(),grade),
+            el("strong","",String(count)+"명"));
+        distribution.appendChild(tile);
+    });
+    if(distribution.childElementCount) panel.appendChild(distribution);
+
+    const list=el("div","game-union-champion-grid");
+    champions.forEach(champion=>{
+        const card=el("article","game-union-champion-card");
+        const grade=String(champion?.champion_grade||"—").toUpperCase();
+        const head=el("div","game-union-champion-card-head");
+        head.append(el("span","game-union-grade-badge grade-"+grade.toLowerCase(),grade),
+            el("span","game-union-champion-slot","SLOT "+fmt(champion?.champion_slot??"—")));
+        card.appendChild(head);
+        card.append(el("strong","game-union-champion-name",champion?.champion_name||"캐릭터 정보 없음"),
+            el("span","game-union-champion-class",champion?.champion_class||"직업 정보 없음"));
+        const badges=Array.isArray(champion?.champion_badge_info)?champion.champion_badge_info:[];
+        const badgeList=el("div","game-union-champion-badges");
+        badges.forEach(badge=>{
+            if(present(badge?.stat)) badgeList.appendChild(el("span","game-union-champion-effect",badge.stat));
+        });
+        if(badgeList.childElementCount) card.appendChild(badgeList);
+        else card.appendChild(el("p","game-union-muted","개별 휘장 효과 정보 없음"));
+        list.appendChild(card);
+    });
+    if(list.childElementCount) panel.appendChild(list);
+    else panel.appendChild(el("p","game-empty","등록된 유니온 챔피언이 없습니다."));
+
+    const totals=Array.isArray(raw.champion_badge_total_info)?raw.champion_badge_total_info:[];
+    const totalPanel=el("div","game-union-champion-total");
+    totalPanel.appendChild(el("h4","game-union-subtitle","전체 챔피언 휘장 효과"));
+    const totalList=el("div","game-union-champion-total-list");
+    totals.forEach(item=>{
+        if(present(item?.stat)) totalList.appendChild(el("span","game-union-champion-effect",item.stat));
+    });
+    if(totalList.childElementCount) totalPanel.appendChild(totalList);
+    else totalPanel.appendChild(el("p","game-union-muted","전체 휘장 효과 정보가 없습니다."));
+    panel.appendChild(totalPanel);
+    content.appendChild(panel);
+}
+
+function renderUnionSection(data,selectedPresetNumber=null) {
+    const content=el("div","game-union-window");
+    const base=sourceById(data,"union");
+    const stateStats=sourceById(data,"unionStateStat");
+    const artifact=sourceById(data,"unionArtifact");
+    const champion=sourceById(data,"unionChampion");
+    const baseData=base?.data||{};
+    const summary=el("div","game-union-summary");
+    [
+        ["유니온 레벨",baseData.union_level],
+        ["유니온 등급",baseData.union_grade],
+        ["아티팩트 레벨",baseData.union_artifact_level],
+        ["아티팩트 경험치",baseData.union_artifact_exp],
+        ["아티팩트 포인트",baseData.union_artifact_point]
+    ].forEach(([label,value])=>{
         if(!present(value)) return;
         const tile=el("div","game-union-stat");
-        tile.append(el("span","",label),el("strong","",fmt(value))); summary.appendChild(tile);
-      });
+        tile.append(el("span","",label),el("strong","",fmt(value)));
+        summary.appendChild(tile);
+    });
     if(summary.childElementCount) content.appendChild(summary);
-    const number=fallbackPreset(raider), raidData=presetData(raider,number);
-    const panel=el("section","game-union-raider"); panel.appendChild(el("h3","game-window-title","공격대 효과"));
-    const effectTerms=["보스 데미지","방어율 무시","크리티컬 데미지","일반 몬스터","경험치","메소 획득량","아이템 드롭률"];
-    const text=JSON.stringify(raidData);
-    const found=effectTerms.filter(term=>text.includes(term));
-    if(found.length) {
-        const grid=el("div","game-union-effect-grid");
-        found.forEach(value=>grid.appendChild(el("span","game-union-effect",value)));
-        panel.appendChild(grid);
-    } else panel.appendChild(el("p","game-empty","공격대 효과 정보가 없습니다."));
-    content.appendChild(panel);
-    if(artifact?.status==="available") {
-        const artifactPanel=el("section","game-union-artifact");
-        artifactPanel.appendChild(el("h3","game-window-title","유니온 아티팩트"));
-        Object.entries(artifact.data||{}).filter(([key,value])=>/level|point|exp/i.test(key)&&present(value)&&typeof value!=="object")
-          .forEach(([key,value])=>{
-            const row=el("div","game-union-stat");
-            row.append(el("span","",key.replace(/_/g," ")),el("strong","",fmt(value)));
-            artifactPanel.appendChild(row);
-          });
-        content.appendChild(artifactPanel);
+
+    const statePanel=el("section","game-union-state-panel");
+    const stateHeading=el("div","game-union-section-heading");
+    stateHeading.append(el("span","game-window-eyebrow","UNION STATE"),
+        el("h3","game-window-title","유니온 스탯 투자"));
+    statePanel.appendChild(stateHeading);
+
+    if(!stateStats||stateStats.status==="unavailable") {
+        statePanel.appendChild(el("p","game-empty",stateStats?.message||"유니온 스탯 정보를 조회할 수 없습니다."));
+    } else {
+        const presets=Array.isArray(stateStats.presets)?stateStats.presets:[];
+        const selectedNumber=selectedPresetNumber??fallbackPreset(stateStats);
+        const selected=presetByNumber(stateStats,selectedNumber);
+        const raw=selected?.data?.union_state_stat||
+            stateStats.currentData?.union_state_stat||[];
+        const info=el("div","game-union-state-toolbar");
+        const maxPoint=stateStats.data?.union_max_point;
+        if(present(maxPoint)) {
+            const point=el("div","game-union-point-card");
+            point.append(el("span","","총 유니온 포인트"),el("strong","",fmt(maxPoint)));
+            info.appendChild(point);
+        }
+        if(presets.length>0) {
+            info.appendChild(presetSelect(stateStats,"union",selectedNumber,next=>{
+                const updated=renderUnionSection(data,next);
+                content.replaceChildren(...updated.childNodes);
+            }));
+        }
+        statePanel.appendChild(info);
+
+        const applied=stateStats.activePresetNo;
+        const stateLabel=el("p","game-union-active-state");
+        if(applied!==null&&applied!==undefined&&Number(applied)===Number(selectedNumber)) {
+            stateLabel.textContent="현재 적용 중인 스탯 프리셋";
+            stateLabel.classList.add("is-applied");
+        } else if(applied!==null&&applied!==undefined) {
+            stateLabel.textContent="선택한 프리셋 미리보기 · 현재 적용 프리셋 "+applied;
+        } else {
+            stateLabel.textContent="현재 적용 번호는 공개 응답에서 확정할 수 없어. 선택한 프리셋의 효과만 표시합니다.";
+        }
+        statePanel.appendChild(stateLabel);
+
+        const statGrid=el("div","game-union-state-grid");
+        if(Array.isArray(raw)) raw.forEach((effect,index)=>statGrid.appendChild(unionEffectTile(effect,index)));
+        if(statGrid.childElementCount) statePanel.appendChild(statGrid);
+        else statePanel.appendChild(el("p","game-empty","선택한 프리셋에 표시할 스탯 효과가 없습니다."));
     }
+    content.appendChild(statePanel);
+
+    renderUnionArtifact(artifact,content);
+    renderUnionChampions(champion,content);
     return content;
 }
 
