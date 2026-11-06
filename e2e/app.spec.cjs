@@ -365,14 +365,8 @@ test("character details automatically open the game-style stat window", async ({
   await expect(page.locator("#characterDetailsContent .game-champion-hover-tooltip img")).toHaveCount(1);
   const championCard = page.locator("#characterDetailsContent .game-union-champion-card");
   await championCard.hover();
-  const tooltipDebug = await championCard.evaluate(card => ({
-    hovered: card.matches(":hover"),
-    describedBy: card.getAttribute("aria-describedby"),
-    childTooltip: Boolean(card.querySelector(".game-champion-hover-tooltip")),
-    bodyTooltip: Boolean(document.querySelector("body > .game-champion-hover-tooltip"))
-  }));
-  console.log("Union champion tooltip state:", tooltipDebug);
   await expect(championCard).toHaveAttribute("aria-describedby", /union-champion-tooltip/);
+  await expect(championCard.locator(".game-champion-hover-tooltip")).toHaveCount(0);
   const championTooltip = page.locator("body > .game-champion-hover-tooltip");
   await expect(championTooltip).toBeVisible();
   await expect(championTooltip).toHaveCSS("position", "fixed");
@@ -393,8 +387,15 @@ test("character details automatically open the game-style stat window", async ({
   expect(tooltipBounds.right).toBeLessThanOrEqual(tooltipBounds.viewportWidth);
   expect(tooltipBounds.bottom).toBeLessThanOrEqual(tooltipBounds.viewportHeight);
   await expect(championTooltip).toHaveText(/테스트캐릭터/);
-  await expect(page.locator("#characterDetailsContent .game-union-crystal-grid")).toHaveCSS("grid-template-columns", /repeat\(3,/);
-  await expect(page.locator("#characterDetailsContent .game-union-champion-grid")).toHaveCSS("grid-template-columns", /repeat\(3,/);
+  await page.mouse.move(0, 0);
+  await expect(championTooltip).toHaveCount(0);
+  await expect(championCard.locator(".game-champion-hover-tooltip")).toHaveCount(1);
+  const crystalColumns = await page.locator("#characterDetailsContent .game-union-crystal-grid")
+    .evaluate(element => getComputedStyle(element).gridTemplateColumns.trim().split(/\s+/).length);
+  const championColumns = await page.locator("#characterDetailsContent .game-union-champion-grid")
+    .evaluate(element => getComputedStyle(element).gridTemplateColumns.trim().split(/\s+/).length);
+  expect(crystalColumns).toBe(3);
+  expect(championColumns).toBe(3);
   await expect(page.locator("#characterDetailsContent .game-union-crystal-monster")).toHaveCount(0);
   await expect(page.locator("#characterDetailsContent .game-union-crystal-order")).toHaveText("01");
   const unionPreset = page.locator("#characterDetailsContent .game-union-state-panel .game-preset-select");
