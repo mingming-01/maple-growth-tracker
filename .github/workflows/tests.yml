@@ -4,11 +4,6 @@ on:
   push:
     branches:
       - main
-      - "improve/**"
-      - "feature/**"
-      - "feat/**"
-      - "refactor/**"
-      - "fix/**"
   pull_request:
     branches:
       - main
