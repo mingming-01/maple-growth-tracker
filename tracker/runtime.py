@@ -14,6 +14,7 @@ import psycopg
 from psycopg.rows import dict_row
 from tracker.repositories.growth_history_store import GrowthHistoryStore
 from tracker.services.growth_history_service import GrowthHistoryService
+from tracker.services.admin_log_service import admin_required, format_admin_log_time
 from tracker.repositories.api_snapshot_repository import (
     initialize_snapshot_db as initialize_snapshot_db_for_path,
     save_api_snapshot as save_api_snapshot_for_path,
@@ -62,6 +63,8 @@ class RuntimeState:
         self.log_storage_warning = ""
         self.log_db_path = os.path.join(instance_path, "admin_logs.sqlite3")
         self.snapshot_db_path = os.path.join(instance_path, "growth_snapshots.sqlite3")
+        self.snapshot_db_backend = "postgres" if self.growth_database_url.startswith(("postgres://", "postgresql://")) else "sqlite"
+        self.snapshot_storage_warning = ""
         self.growth_history_repository = GrowthHistoryStore(
             database_url=self.growth_database_url,
             sqlite_path=os.path.join(instance_path, "growth_history.sqlite3"),
@@ -73,6 +76,12 @@ class RuntimeState:
         self.ai_response_cache = {}
         self.nexon_request_lock = Lock()
         self.last_nexon_request_at = 0.0
+        self.nexon_request_count = 0
+        self.request_limit_lock = Lock()
+        self.ai_request_timestamps = {}
+        self.ai_daily_usage = {}
+        self.ai_global_daily_usage = {}
+        self.admin_login_failures = {}
 
 
 _fallback_runtime_state = None
@@ -263,7 +272,11 @@ def log_action(
 
 
 def initialize_snapshot_db():
-    return initialize_snapshot_db_for_path(get_runtime_state().snapshot_db_path)
+    state = get_runtime_state()
+    state.snapshot_db_backend, state.snapshot_storage_warning = initialize_snapshot_db_for_path(
+        state.snapshot_db_path, state.growth_database_url
+    )
+    return state.snapshot_db_backend
 
 
 def get_ai_response_cache(prompt):
@@ -331,14 +344,18 @@ def get_cache_timestamp(key):
 
 
 def save_api_snapshot(cache_key, data):
+    state = get_runtime_state()
     return save_api_snapshot_for_path(
-        get_runtime_state().snapshot_db_path, cache_key, data
+        state.snapshot_db_path, cache_key, data,
+        state.growth_database_url, state.snapshot_db_backend
     )
 
 
 def load_api_snapshot(cache_key):
+    state = get_runtime_state()
     return load_api_snapshot_for_path(
-        get_runtime_state().snapshot_db_path, cache_key
+        state.snapshot_db_path, cache_key,
+        state.growth_database_url, state.snapshot_db_backend
     )
 
 
@@ -375,100 +392,9 @@ def get_character_rankings(target_date, world_name, character_class, ocid):
     return fetch_rankings(target_date, world_name, character_class, ocid)
 
 
-def sanitize_ai_text(value, expected_date=None):
-    """모델 응답의 마크다운과 내부 표현을 정리해 일반 문장만 화면에 전달한다."""
-    text = str(value or "")
-    text = re.sub(r"```[\w-]*", "", text)
-    text = re.sub(r"(?m)^\s*[-*_]{3,}\s*$", "", text)
-    text = re.sub(r"(?m)^\s{0,3}#{1,6}\s*", "", text)
-    text = re.sub(r"(?m)^\s*>\s?", "", text)
-    text = re.sub(r"(?m)^\s*(?:[-*+]\s+|\d+[.)]\s+)", "", text)
-    text = re.sub(r"\[([^\]]+)\]\([^)]+\)", r"\1", text)
-
-    internal_terms = {
-        r"\bmetrics\.prediction\b": "성장 전망",
-        r"\brankingChange\b": "랭킹 변화",
-        r"\bvalidGrowthDays\b": "성장 기록",
-        r"\brecordedDays\b": "기록된 날짜",
-        r"\blatestDailyGrowth\b": "최근 성장 흐름",
-        r"\baverageDailyGrowth\b": "평균 성장 흐름",
-        r"\bhighestDailyGrowth\b": "높은 성장 기록",
-        r"\blowestDailyGrowth\b": "낮은 성장 기록",
-        r"\bsevenDayGrowth\b": "최근 성장 기록",
-        r"\bgrowthComparison\b": "성장 흐름 비교",
-        r"\bearlierAverage\b": "이전 성장 흐름",
-        r"\brecentAverage\b": "최근 성장 흐름",
-        r"\blevelUps\b": "레벨업 기록",
-        r"\bestimatedDays\b": "예상 기간",
-        r"\bestimatedDate\b": "예상 날짜",
-        r"\brequiredExperience\b": "필요 경험치",
-        r"\binsufficient_data\b": "기록 부족",
-        r"\bincreased\b": "증가한 흐름",
-        r"\bdecreased\b": "감소한 흐름",
-        r"\bstable\b": "일정한 흐름",
-        r"\bnull\b|\bundefined\b": "확인되지 않음"
-    }
-    for pattern, replacement in internal_terms.items():
-        text = re.sub(pattern, replacement, text, flags=re.IGNORECASE)
-
-    # 긴 원본 경험치가 그대로 노출되는 것을 막는다.
-    text = re.sub(
-        r"\(?\s*(?:\d{1,3}(?:,\d{3}){2,}|\d{10,})(?:\.\d+)?\s*\)?",
-        "해당 경험치 수치",
-        text
-    )
-
-    # 화면의 예측 카드와 동일한 계산 날짜를 사용해 AI가 다른 날짜를 말하지 않게 한다.
-    if expected_date:
-        try:
-            prediction_date = date.fromisoformat(str(expected_date))
-            date_label = f"{prediction_date.month}월 {prediction_date.day}일"
-            date_patterns = (
-                r"\b\d{4}\s*년\s*\d{1,2}\s*월\s*\d{1,2}\s*일",
-                r"\b\d{1,2}\s*월\s*\d{1,2}\s*일",
-                r"\b\d{4}-\d{1,2}-\d{1,2}\b",
-                r"\b\d{1,2}[./]\d{1,2}(?:[./]\d{2,4})?\b"
-            )
-            for pattern in date_patterns:
-                text = re.sub(pattern, date_label, text)
-        except (TypeError, ValueError):
-            pass
-
-    text = re.sub(r"[*_~`]", "", text)
-    text = re.sub(r"(?m)^\s*#+\s*", "", text)
-    text = re.sub(r"[ \t]+\n", "\n", text)
-    text = re.sub(r"\n{3,}", "\n\n", text)
-    return text.strip()
 
 # 메인 화면
 # 관리자 로그인 및 로그 조회
-def admin_required(view):
-    @wraps(view)
-    def wrapped_view(*args, **kwargs):
-        if not session.get("admin_authenticated"):
-            return redirect(url_for("admin.admin_login"))
-        return view(*args, **kwargs)
-    return wrapped_view
-
-
-def format_admin_log_time(value):
-    """관리자 로그 시간을 한국 시간 기준으로 읽기 쉬운 문자열로 만든다."""
-    if isinstance(value, str):
-        try:
-            value = datetime.fromisoformat(value)
-        except ValueError:
-            return value
-
-    if not isinstance(value, datetime):
-        return str(value or "-")
-    if value.tzinfo is None:
-        value = value.replace(tzinfo=KOREA_TIMEZONE)
-    else:
-        value = value.astimezone(KOREA_TIMEZONE)
-
-    weekdays = ("월", "화", "수", "목", "금", "토", "일")
-    return f"{value:%Y-%m-%d} ({weekdays[value.weekday()]}) {value:%H:%M:%S} KST"
-
 
 # 캐릭터 정보와 현재 랭킹 조회
 def start_request_timer():
