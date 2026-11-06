@@ -2,7 +2,7 @@
 
 const PRESET_CATEGORY = {
     itemEquipment: "equipment", hyperStat: "hyperStat",
-    ability: "ability", linkSkill: "link", unionRaider: "union"
+    ability: "ability", linkSkill: "link", unionStateStat: "union"
 };
 const REQUIRED_PRESET_KEYS = ["equipment", "hyperStat", "ability", "link", "union"];
 
@@ -162,10 +162,9 @@ function summaryFor(source,number) {
             ...(data.character_owned_link_skill?[data.character_owned_link_skill]:[])];
         return {title:"링크 스킬",detail:links.length+"개 장착",hints:links.map(item=>item?.skill_name).filter(Boolean).slice(0,4)};
     }
-    if(source.id==="unionRaider") {
-        const text=JSON.stringify(data);
-        const terms=["보스 데미지","방어율 무시","크리티컬 데미지","일반 몬스터","경험치","메소 획득량","아이템 드롭률"];
-        return {title:"유니온",detail:"프리셋 "+(number??"—"),hints:terms.filter(term=>text.includes(term)).slice(0,4)};
+    if(source.id==="unionStateStat") {
+        const effects=Array.isArray(data.union_state_stat)?data.union_state_stat:[];
+        return {title:"유니온 스탯",detail:"프리셋 "+(number??"—"),hints:effects.slice(0,4)};
     }
     return {title:source.label||source.id,detail:"",hints:[]};
 }
