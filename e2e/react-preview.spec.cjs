@@ -23,7 +23,7 @@ test("React preview keeps the existing Flask admin route reachable", async ({ pa
   await expect(page.locator('.mgt-footer a[href="/admin/login"]')).toHaveAttribute("href", "/admin/login");
 });
 
-test("React preview refreshes ranking data and restores the full-size profile progress UI", async ({ page }) => {
+test("React preview loads profile data and refreshes only on explicit request", async ({ page }) => {
   await page.route("**/api/character?*", route => route.fulfill({
     status: 200,
     contentType: "application/json",
@@ -83,9 +83,14 @@ test("React preview refreshes ranking data and restores the full-size profile pr
   const characterRequestPromise = page.waitForRequest(request =>
     request.url().includes("/api/character?") && request.method() === "GET"
   );
+  const historyRequestPromise = page.waitForRequest(request =>
+    request.url().includes("/api/history?") && request.method() === "GET"
+  );
   await page.getByRole("button", { name: /캐릭터 조회/ }).click();
   const characterRequest = await characterRequestPromise;
-  expect(new URL(characterRequest.url()).searchParams.get("refresh")).toBe("1");
+  const historyRequest = await historyRequestPromise;
+  expect(new URL(characterRequest.url()).searchParams.get("refresh")).toBeNull();
+  expect(new URL(historyRequest.url()).searchParams.get("refresh")).toBeNull();
 
   await expect(page.getByRole("heading", { name: "프리뷰테스트" })).toBeVisible();
   await expect(page.getByText("12,345위")).toBeVisible();
@@ -98,6 +103,16 @@ test("React preview refreshes ranking data and restores the full-size profile pr
   expect(desktopAvatar.height).toBeGreaterThanOrEqual(200);
   await expect(page.getByRole("heading", { name: "캐릭터 상세 정보" })).toBeVisible();
   await expect(page.locator(".game-stat-detail-grade")).toHaveText("레전드리");
+
+  const refreshRequests = [];
+  page.on("request", request => {
+    if (/\/api\/(character|history)\?/.test(request.url()) &&
+        new URL(request.url()).searchParams.get("refresh") === "1") {
+      refreshRequests.push(request.url());
+    }
+  });
+  await page.getByRole("button", { name: "최신 정보 다시 조회" }).click();
+  await expect.poll(() => refreshRequests.length).toBe(2);
 });
 
 test("React profile keeps a readable avatar and progress bar on mobile", async ({ page }) => {
@@ -217,4 +232,120 @@ test("React admin panel renders and filters session-protected operations logs", 
 
   await page.getByRole("button", { name: "로그아웃" }).click();
   await expect(page.getByRole("heading", { name: "관리자 로그인" })).toBeVisible();
+});
+
+
+test("mobile touch opens item tooltips without clipped detail panels", async ({ browser }) => {
+  const context = await browser.newContext({
+    viewport: { width: 390, height: 844 },
+    isMobile: true,
+    hasTouch: true
+  });
+  const page = await context.newPage();
+
+  await page.route("**/api/character?*", route => route.fulfill({
+    status: 200,
+    contentType: "application/json",
+    body: JSON.stringify({
+      characterName: "터치테스트", ocid: "mobile-tooltip-ocid",
+      worldName: "크로아", job: "아크메이지", level: 280,
+      experience: 123456, experienceRate: "41.250",
+      ranking: 10, worldRanking: 20, jobWorldRanking: 30, jobRanking: 40,
+      rankingDataStatus: "available"
+    })
+  }));
+  await page.route("**/api/history?*", route => route.fulfill({
+    status: 200,
+    contentType: "application/json",
+    body: JSON.stringify({ history: [], historyStatus: "complete" })
+  }));
+  await page.route("**/api/character-details?*", route => {
+    const section = new URL(route.request().url()).searchParams.get("section");
+    const sources = section === "symbols" ? [{
+      id: "symbolEquipment", label: "심볼", status: "available",
+      currentData: { symbol: [{
+        symbol_name: "아케인심볼: 소멸의 여로", symbol_level: 20,
+        symbol_force: 300, symbol_description: "심볼 설명 터치 확인",
+        symbol_str: "500", symbol_require_growth_count: 100,
+        symbol_growth_count: 50
+      }] }, data: {}
+    }] : section === "equipment" ? [{
+      id: "itemEquipment", label: "장비", status: "available",
+      activePresetNo: 1,
+      currentData: { item_equipment: [{
+        item_name: "테스트 무기", item_equipment_slot: "무기",
+        item_icon: "https://example.com/weapon.png",
+        item_base_option: { 공격력: "300" },
+        potential_option_1: "보스 몬스터 공격 시 데미지 +40%"
+      }] },
+      presets: [{ number: 1, data: { item_equipment: [{
+        item_name: "테스트 무기", item_equipment_slot: "무기",
+        item_icon: "https://example.com/weapon.png",
+        item_base_option: { 공격력: "300" },
+        potential_option_1: "보스 몬스터 공격 시 데미지 +40%"
+      }] } }], data: {}
+    }] : section === "skills" ? [{
+      id: "skill6", label: "6차 스킬", status: "available",
+      data: { character_skill: [{
+        skill_name: "테스트 6차 스킬", skill_level: 30,
+        skill_icon: "https://example.com/skill.png",
+        skill_description: "스킬 설명 터치 확인",
+        skill_effect: "스킬 효과 터치 확인"
+      }] }
+    }] : [{
+      id: "stat", label: "스탯", status: "available",
+      combatPower: "123456", data: { final_stat: [{ stat_name: "STR", stat_value: "10000" }] }
+    }];
+    return route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({ section, status: "available", sources })
+    });
+  });
+
+  try {
+    await page.goto("/preview/");
+    await page.getByLabel("캐릭터명").fill("터치테스트");
+    await page.getByRole("button", { name: /캐릭터 조회/ }).tap();
+    await expect(page.getByRole("heading", { name: "터치테스트" })).toBeVisible();
+
+    await page.locator('[data-detail-tab="symbols"]').tap();
+    const symbol = page.locator(".game-symbol-tile[data-tooltip-trigger='true']");
+    await expect(symbol).toBeVisible();
+    await symbol.tap();
+    const tooltip = page.locator("body > .game-floating-tooltip");
+    await expect(tooltip).toContainText("심볼 설명 터치 확인");
+    await symbol.tap();
+    await expect(tooltip).toHaveCount(0);
+    await symbol.tap();
+    await expect(tooltip).toContainText("심볼 설명 터치 확인");
+    let bounds = await tooltip.boundingBox();
+    expect(bounds.x).toBeGreaterThanOrEqual(0);
+    expect(bounds.y).toBeGreaterThanOrEqual(0);
+    expect(bounds.x + bounds.width).toBeLessThanOrEqual(391);
+
+    await page.locator(".mgt-topbar").tap();
+    await expect(tooltip).toHaveCount(0);
+
+    await page.locator('[data-detail-tab="equipment"]').tap();
+    const weapon = page.locator('.equipment-game-slot[data-slot="weapon"]');
+    await expect(weapon).toBeVisible();
+    await weapon.tap();
+    await expect(page.locator("body > .game-floating-tooltip")).toContainText("보스 몬스터 공격 시 데미지 +40%");
+
+    await page.locator(".mgt-topbar").tap();
+    await page.locator('[data-detail-tab="skills"]').tap();
+    const skill = page.locator(".game-sixth-skill-tile[data-tooltip-trigger='true']");
+    await expect(skill).toBeVisible();
+    await skill.tap();
+    await expect(page.locator("body > .game-floating-tooltip")).toContainText("스킬 설명 터치 확인");
+
+    const scrollState = await page.evaluate(() => ({
+      scrollHeight: document.documentElement.scrollHeight,
+      viewportHeight: window.innerHeight
+    }));
+    expect(scrollState.scrollHeight).toBeGreaterThan(scrollState.viewportHeight);
+  } finally {
+    await context.close();
+  }
 });

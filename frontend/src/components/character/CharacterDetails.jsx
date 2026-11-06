@@ -1,4 +1,5 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { getCharacterDetails } from "../../services/api.js";
 
 const DETAIL_TABS = [
@@ -89,17 +90,109 @@ function DataState({ source }) {
   return null;
 }
 
-function DetailTooltip({ title, lines = [] }) {
+function DetailTooltip({
+  title,
+  lines = [],
+  children,
+  as = "div",
+  className = "",
+  tooltipContent = null,
+  ...wrapperProps
+}) {
   const visible = lines.filter(hasValue);
-  if (!visible.length) return null;
+  const [open, setOpen] = useState(false);
+  const [position, setPosition] = useState(null);
+  const triggerRef = useRef(null);
+  const Wrapper = as;
+
+  function updatePosition() {
+    const element = triggerRef.current;
+    if (!element || typeof window === "undefined") return;
+    const rect = element.getBoundingClientRect();
+    const width = Math.min(280, Math.max(180, window.innerWidth - 24));
+    const estimatedHeight = Math.min(280, Math.max(88, visible.length * 24 + 42));
+    let top = rect.bottom + 8;
+    if (top + estimatedHeight > window.innerHeight - 12) {
+      top = Math.max(12, rect.top - estimatedHeight - 8);
+    }
+    const left = Math.max(
+      12,
+      Math.min(rect.left + rect.width / 2 - width / 2, window.innerWidth - width - 12)
+    );
+    setPosition({ top, left, width });
+  }
+
+  useEffect(() => {
+    if (!open) return undefined;
+    updatePosition();
+
+    const closeOutside = event => {
+      if (!triggerRef.current?.contains(event.target)) setOpen(false);
+    };
+    const closeOnEscape = event => {
+      if (event.key === "Escape") setOpen(false);
+    };
+
+    document.addEventListener("pointerdown", closeOutside);
+    document.addEventListener("keydown", closeOnEscape);
+    window.addEventListener("resize", updatePosition);
+    window.addEventListener("scroll", updatePosition, true);
+    return () => {
+      document.removeEventListener("pointerdown", closeOutside);
+      document.removeEventListener("keydown", closeOnEscape);
+      window.removeEventListener("resize", updatePosition);
+      window.removeEventListener("scroll", updatePosition, true);
+    };
+  }, [open, visible.length]);
+
+  const hasTooltip = visible.length > 0 || Boolean(tooltipContent);
+
   return (
-    <details className="react-detail-tooltip">
-      <summary>상세 정보</summary>
-      <div className="react-detail-tooltip-body">
-        {title && <strong>{title}</strong>}
-        {visible.map((line, index) => <p key={index}>{line}</p>)}
-      </div>
-    </details>
+    <Wrapper
+      {...wrapperProps}
+      ref={triggerRef}
+      className={className}
+      data-tooltip-trigger={hasTooltip ? "true" : undefined}
+      role={hasTooltip ? "button" : undefined}
+      tabIndex={hasTooltip ? 0 : undefined}
+      aria-label={hasTooltip ? (title ? title + " 상세 정보" : "상세 정보") : undefined}
+      aria-expanded={hasTooltip ? open : undefined}
+      onPointerEnter={event => {
+        if (hasTooltip && event.pointerType === "mouse") setOpen(true);
+      }}
+      onPointerLeave={event => {
+        if (hasTooltip && event.pointerType === "mouse") setOpen(false);
+      }}
+      onPointerDown={event => {
+        if (hasTooltip && event.pointerType === "touch") {
+          setOpen(value => !value);
+        }
+      }}
+      onBlur={() => setOpen(false)}
+      onKeyDown={event => {
+        if (hasTooltip && (event.key === "Enter" || event.key === " ")) {
+          event.preventDefault();
+          setOpen(value => !value);
+        }
+      }}
+    >
+      {children}
+      {open && position && createPortal(
+        <div
+          className="game-floating-tooltip"
+          role="tooltip"
+          style={{ top: position.top, left: position.left, width: position.width }}
+        >
+          {tooltipContent || (
+            <>
+              {title && <strong>{title}</strong>}
+              {visible.map((line, index) => <p key={index}>{line}</p>)}
+            </>
+          )}
+        </div>,
+        document.body
+      )}
+    </Wrapper>
   );
 }
 
@@ -299,8 +392,15 @@ function EquipmentTab({ data, selected, onSelect }) {
             android.android_hair?.hair_name, android.android_face?.face_name, android.android_skin_name
           ] : [];
           return (
-            <article className={"equipment-game-slot " + (item || isAndroid || (isAppearance && appearanceValue) ? "is-equipped" : "is-empty")}
-              data-slot={key} key={key} style={{ gridArea: equipmentGridArea(key) }} aria-label={slotName + " " + (title || "비어 있음")}>
+            <DetailTooltip
+              as="article"
+              className={"equipment-game-slot game-tooltip-trigger " + (item || isAndroid || (isAppearance && appearanceValue) ? "is-equipped" : "is-empty")}
+              data-slot={key}
+              key={key}
+              style={{ gridArea: equipmentGridArea(key) }}
+              title={title || slotName}
+              lines={tooltipLines}
+            >
               <span className="equipment-slot-caption">{slotName}</span>
               <span className="equipment-game-icon-frame">
                 {apiImage(iconUrl, title || slotName)}
@@ -308,8 +408,7 @@ function EquipmentTab({ data, selected, onSelect }) {
               </span>
               <strong className="equipment-game-item-name">{title || (isAppearance ? "정보 없음" : "비어 있음")}</strong>
               {item && Number(item.starforce || item.item_starforce) > 0 && <span className="equipment-game-star">★ {item.starforce || item.item_starforce}</span>}
-              <DetailTooltip title={title || slotName} lines={tooltipLines} />
-            </article>
+            </DetailTooltip>
           );
         })}
       </div>
@@ -370,19 +469,24 @@ function SymbolsTab({ data }) {
               ["LUK",symbol.symbol_luk],["HP",symbol.symbol_hp]
             ].filter(([,value]) => hasValue(value));
             return (
-              <article className="game-symbol-tile" key={index}>
-                {apiImage(symbol.symbol_icon, symbol.symbol_name, "game-symbol-icon")}
-                <strong className="game-symbol-name">{symbol.symbol_name || "심볼"}</strong>
-                <span className="game-symbol-level">Lv. {symbol.symbol_level ?? "—"}</span>
-                {hasValue(symbol.symbol_force) && <span className="game-symbol-force">포스 {numberText(symbol.symbol_force)}</span>}
-                <DetailTooltip title={symbol.symbol_name} lines={[
+              <DetailTooltip
+                as="article"
+                className="game-symbol-tile game-tooltip-trigger"
+                key={index}
+                title={symbol.symbol_name || "심볼"}
+                lines={[
                   symbol.symbol_description,
                   ...stats.map(([key,value]) => key + " +" + numberText(value)),
                   hasValue(symbol.symbol_require_growth_count)
                     ? "성장량 " + numberText(symbol.symbol_growth_count) + " / " + numberText(symbol.symbol_require_growth_count)
                     : "성장량 정보 API 미제공"
-                ]} />
-              </article>
+                ]}
+              >
+                {apiImage(symbol.symbol_icon, symbol.symbol_name, "game-symbol-icon")}
+                <strong className="game-symbol-name">{symbol.symbol_name || "심볼"}</strong>
+                <span className="game-symbol-level">Lv. {symbol.symbol_level ?? "—"}</span>
+                {hasValue(symbol.symbol_force) && <span className="game-symbol-force">포스 {numberText(symbol.symbol_force)}</span>}
+              </DetailTooltip>
             );
           })}
         </div>
@@ -412,12 +516,17 @@ function SkillsTab({ data }) {
             <h4 className="game-sixth-subtitle">6차 스킬</h4>
             <div className="game-sixth-skill-grid">
               {Array.isArray(skills) && skills.length ? skills.map((item, index) => (
-                <article className="game-sixth-skill-tile" key={index}>
+                <DetailTooltip
+                  as="article"
+                  className="game-sixth-skill-tile game-tooltip-trigger"
+                  key={index}
+                  title={item.skill_name || "6차 스킬"}
+                  lines={[item.skill_description,item.skill_effect,item.skill_effect_next]}
+                >
                   {apiImage(item.skill_icon, item.skill_name, "game-sixth-skill-icon")}
                   <strong className="game-sixth-skill-name">{item.skill_name || "스킬"}</strong>
                   <span className="game-sixth-skill-level">Lv. {item.skill_level ?? "—"}</span>
-                  <DetailTooltip title={item.skill_name} lines={[item.skill_description,item.skill_effect,item.skill_effect_next]} />
-                </article>
+                </DetailTooltip>
               )) : <Empty>{skill?.message || "조회된 6차 스킬이 없습니다."}</Empty>}
             </div>
             <DataState source={skill} />
@@ -426,14 +535,19 @@ function SkillsTab({ data }) {
             <h4 className="game-sixth-subtitle">HEXA 매트릭스</h4>
             <div className="game-hexa-grid">
               {Array.isArray(cores) && cores.length ? cores.map((core, index) => (
-                <article className="game-hexa-tile" key={index}>
+                <DetailTooltip
+                  as="article"
+                  className="game-hexa-tile game-tooltip-trigger"
+                  key={index}
+                  title={core.hexa_core_name || "HEXA 코어"}
+                  lines={[
+                    ...(Array.isArray(core.linked_skill) ? core.linked_skill.map(item => item.hexa_skill_id) : [])
+                  ]}
+                >
                   <span className="game-hexa-kind">{core.hexa_core_type || "코어"}</span>
                   <strong className="game-hexa-name">{core.hexa_core_name || "HEXA 코어"}</strong>
                   <span className="game-hexa-level">Lv. {core.hexa_core_level ?? "—"}</span>
-                  <DetailTooltip title={core.hexa_core_name} lines={[
-                    ...(Array.isArray(core.linked_skill) ? core.linked_skill.map(item => item.hexa_skill_id) : [])
-                  ]} />
-                </article>
+                </DetailTooltip>
               )) : <Empty>{hexa?.message || "조회된 HEXA 코어가 없습니다."}</Empty>}
             </div>
             <DataState source={hexa} />
@@ -500,12 +614,17 @@ function LinkTab({ data, selected, onSelect }) {
       <DataState source={source} />
       <div className="game-link-grid">
         {links.length ? links.map((skill,index) => (
-          <article className="game-link-tile" key={index}>
+          <DetailTooltip
+            as="article"
+            className="game-link-tile game-tooltip-trigger"
+            key={index}
+            title={skill.skill_name || "링크 스킬"}
+            lines={[skill.skill_description,skill.skill_effect,skill.skill_effect_next]}
+          >
             {apiImage(skill.skill_icon,skill.skill_name,"game-link-icon")}
             <strong className="game-link-name">{skill.skill_name || "링크 스킬"}</strong>
             <span className="game-link-level">Lv. {skill.skill_level ?? "—"}</span>
-            <DetailTooltip title={skill.skill_name} lines={[skill.skill_description,skill.skill_effect,skill.skill_effect_next]} />
-          </article>
+          </DetailTooltip>
         )) : <Empty>장착된 링크 스킬이 없습니다.</Empty>}
       </div>
     </div>
@@ -609,13 +728,18 @@ function UnionTab({ data, selected, onSelect }) {
                 <span className="game-union-champion-slot">SLOT {item.champion_slot ?? "—"}</span>
               </div>
               {item.character_image && (
-                <details className="react-detail-tooltip game-union-champion-avatar-tooltip">
-                  <summary>아바타 보기</summary>
-                  <div className="react-detail-tooltip-body">
-                    {apiImage(item.character_image,item.champion_name,"game-union-champion-tooltip-avatar")}
-                    <strong>{item.champion_name || "캐릭터 아바타"}</strong>
-                  </div>
-                </details>
+                <DetailTooltip
+                  className="game-union-champion-avatar-tooltip game-tooltip-trigger"
+                  title={item.champion_name || "유니온 챔피언"}
+                  tooltipContent={
+                    <>
+                      {apiImage(item.character_image,item.champion_name,"game-union-champion-tooltip-avatar")}
+                      <strong>{item.champion_name || "캐릭터 아바타"}</strong>
+                    </>
+                  }
+                >
+                  {apiImage(item.character_image,item.champion_name,"game-union-champion-avatar-preview")}
+                </DetailTooltip>
               )}
               <strong className="game-union-champion-name">{item.champion_name || "캐릭터 정보 없음"}</strong>
               <span className="game-union-champion-class">{item.champion_class || "직업 정보 없음"}</span>
