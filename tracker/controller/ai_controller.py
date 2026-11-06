@@ -1,9 +1,13 @@
 """AI 성장 분석 HTTP 라우트."""
+from datetime import datetime, timedelta
+
 from flask import Blueprint, jsonify, request
 
 from tracker.controller.character_controller import get_character
 from tracker.controller.history_controller import get_history
 from tracker.services.request_limits import consume_ai_request
+from tracker.domain.ai_growth_insights import build_growth_insights
+from tracker.runtime import KOREA_TIMEZONE, get_growth_history_service
 from tracker.services.ai_analysis_service import (
     generate_ai_analysis,
     generate_ai_comparison,
@@ -55,7 +59,39 @@ def ai_analysis():
         if history_response.status_code != 200:
             return jsonify({"error": "성장 기록을 불러오지 못했습니다."}), history_response.status_code
         history_data = history_response.get_json()
-        result = generate_ai_analysis(character, history_data.get("history", []), metrics)
+        recent_history = history_data.get("history", [])
+        today = datetime.now(KOREA_TIMEZONE).date()
+        insight_records = list(recent_history)
+
+        # 30일·90일 화면에서 저장한 과거 기록이 있으면 읽기만 한다.
+        # 이 과정에서는 Nexon API를 추가 호출하거나 누락 날짜를 보정하지 않는다.
+        ocid = character.get("ocid")
+        if ocid:
+            try:
+                stored_records = get_growth_history_service().get_records(
+                    ocid, today - timedelta(days=14), today
+                )
+                records_by_date = {
+                    item.get("date"): item
+                    for item in stored_records
+                    if item.get("date")
+                }
+                for item in recent_history:
+                    if item.get("date"):
+                        existing = records_by_date.get(item["date"])
+                        if existing is None or item.get("recordStatus") == "available":
+                            records_by_date[item["date"]] = item
+                insight_records = list(records_by_date.values())
+            except Exception:
+                # 저장소 상태가 AI 기본 분석을 막지 않도록 최근 응답으로 계산한다.
+                print("AI 분석용 장기 성장 기록을 조회하지 못했습니다.")
+
+        growth_insights = build_growth_insights(
+            insight_records, reference_date=today
+        )
+        result = generate_ai_analysis(
+            character, recent_history, metrics, growth_insights
+        )
         if "error" in result:
             return jsonify(result), 500
         return jsonify(result)
