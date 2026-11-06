@@ -6,6 +6,7 @@ on:
     branches:
       - main
     paths:
+      - ".github/workflows/e2e.yml"
       - "static/js/character-details.js"
       - "static/style.css"
       - "e2e/**"
