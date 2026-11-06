@@ -165,7 +165,6 @@ function DetailTooltip({
       }}
       onPointerDown={event => {
         if (hasTooltip && event.pointerType === "touch") {
-          event.preventDefault();
           setOpen(value => !value);
         }
       }}
