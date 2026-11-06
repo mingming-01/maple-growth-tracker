@@ -66,7 +66,8 @@ def request_with_retries(
         if response.status_code not in retry_codes or attempt >= attempts:
             return response
 
-        retry_after = _retry_after_seconds(response.headers.get("Retry-After"))
+        response_headers = getattr(response, "headers", {}) or {}
+        retry_after = _retry_after_seconds(response_headers.get("Retry-After"))
         delay = (
             min(max_backoff, retry_after)
             if retry_after is not None
