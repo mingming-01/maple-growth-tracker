@@ -76,8 +76,8 @@ class CharacterDetailServiceTests(unittest.TestCase):
         }
 
         def fake_request(endpoint, params):
-            self.assertEqual(params, {"ocid": "sample-ocid"})
-            return payloads[endpoint]
+            self.assertEqual(params.get("ocid"), "sample-ocid")
+            return payloads.get(endpoint, FakeResponse(200, {}))
 
         with patch(
             "tracker.services.character_detail_service.request_nexon_api",
@@ -90,6 +90,28 @@ class CharacterDetailServiceTests(unittest.TestCase):
         self.assertEqual(statuses["stat"], "available")
         self.assertEqual(statuses["hyperStat"], "unavailable")
         self.assertEqual(statuses["ability"], "available")
+
+    def test_preset_classifier_uses_option_signals_and_keeps_ambiguous_unknown(self):
+        from tracker.services.character_detail_service import _classify_preset
+        self.assertEqual(_classify_preset({"ability_value": "보스 몬스터 공격 시 데미지 +20%"})["purpose"], "boss")
+        self.assertEqual(_classify_preset({"ability_value": "메소 획득량 +20%"})["purpose"], "hunting")
+        self.assertEqual(_classify_preset({"stat_type": "STR"})["purpose"], "unknown")
+
+    def test_skills_section_requests_sixth_job_skills_and_hexa_data(self):
+        payloads = {
+            "character/skill": FakeResponse(200, {"character_skill_grade": "6", "character_skill": [{"skill_name": "테스트 6차", "skill_level": 1}]}),
+            "character/hexamatrix": FakeResponse(200, {"character_hexa_core_equipment": [{"hexa_core_name": "테스트 코어", "hexa_core_level": 10}]}),
+            "character/hexamatrix-stat": FakeResponse(200, {"character_hexa_stat_core": [{"slot_id": "1"}]}),
+        }
+        def fake_request(endpoint, params):
+            self.assertEqual(params.get("ocid"), "sample-ocid")
+            if endpoint == "character/skill":
+                self.assertEqual(params.get("character_skill_grade"), "6")
+            return payloads[endpoint]
+        with patch("tracker.services.character_detail_service.request_nexon_api", side_effect=fake_request):
+            result = get_character_detail_section("sample-ocid", "skills")
+        self.assertEqual(result["status"], "available")
+        self.assertEqual([source["id"] for source in result["sources"]], ["skill6", "hexaMatrix", "hexaStat"])
 
     def test_unknown_section_is_rejected(self):
         with self.assertRaises(ValueError):

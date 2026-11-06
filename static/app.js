@@ -49,6 +49,10 @@ const levelValue = document.getElementById("levelValue");
 const experienceRate = document.getElementById("experienceRate");
 const guildName = document.getElementById("guildName");
 const averageDailyExperience = document.getElementById("averageDailyExperience");
+const bestCombatPower = document.getElementById("bestCombatPower");
+const bestCombatPowerDate = document.getElementById("bestCombatPowerDate");
+const rankingMovementValue = document.getElementById("rankingMovementValue");
+const rankingMovementDetail = document.getElementById("rankingMovementDetail");
 
 // 랭킹과 성장 요약
 const overallRanking = document.getElementById("overallRanking");
@@ -467,14 +471,50 @@ function renderCharacter(character, history) {
         const average = history?.length ? calculateAverageGrowth(history) : null;
         averageDailyExperience.textContent = average !== null ? formatTrillion(average) : "-";
     }
+    if (bestCombatPower) {
+        bestCombatPower.textContent = character.bestCombatPower !== null && character.bestCombatPower !== undefined
+            ? formatNumber(character.bestCombatPower) : "-";
+    }
+    if (bestCombatPowerDate) {
+        if (character.bestCombatPowerObservedAt) {
+            const date = new Date(character.bestCombatPowerObservedAt);
+            bestCombatPowerDate.textContent = Number.isNaN(date.getTime())
+                ? "사이트 조회 기록 중 최고"
+                : "조회 기록 중 최고 · " + date.toLocaleDateString("ko-KR");
+        } else {
+            bestCombatPowerDate.textContent = "스탯 API 조회 기록이 쌓이면 표시합니다.";
+        }
+    }
     updateFavoriteCurrentButton();
 }
 
-function renderRanking(character) {
+function renderRanking(character, history = []) {
     if (overallRanking) overallRanking.textContent = formatRanking(character.ranking);
     if (worldRanking) worldRanking.textContent = formatRanking(character.worldRanking);
     if (jobWorldRanking) jobWorldRanking.textContent = formatRanking(character.jobWorldRanking);
     if (jobRanking) jobRanking.textContent = formatRanking(character.jobRanking);
+    if (rankingMovementValue && rankingMovementDetail) {
+        const movement = getRankingChange(history || []);
+        const validRecords = (history || []).filter(item =>
+            item.ranking !== null && item.ranking !== undefined && Number.isFinite(Number(item.ranking))
+        );
+        rankingMovementValue.classList.remove("is-up", "is-down");
+        if (movement === null || validRecords.length < 2) {
+            rankingMovementValue.textContent = "기록 부족";
+            rankingMovementDetail.textContent = "랭킹 기록이 2개 이상 쌓이면 최근 변화를 표시합니다.";
+        } else if (movement > 0) {
+            rankingMovementValue.textContent = "▲ " + formatNumber(movement) + "계단 상승";
+            rankingMovementValue.classList.add("is-up");
+            rankingMovementDetail.textContent = "최근 두 개의 유효한 저장 기록을 비교했습니다.";
+        } else if (movement < 0) {
+            rankingMovementValue.textContent = "▼ " + formatNumber(Math.abs(movement)) + "계단 하락";
+            rankingMovementValue.classList.add("is-down");
+            rankingMovementDetail.textContent = "최근 두 개의 유효한 저장 기록을 비교했습니다.";
+        } else {
+            rankingMovementValue.textContent = "변동 없음";
+            rankingMovementDetail.textContent = "최근 두 개의 저장 기록에서 순위 변동이 없었습니다.";
+        }
+    }
 }
 
 function renderGrowthSummary(character, history) {
@@ -1386,7 +1426,7 @@ async function handleSearch(event) {
         const metrics = calculateGrowthMetrics(character, history, prediction);
         sessionStorage.removeItem(STORAGE_KEY);
         renderCharacter(character, history);
-        renderRanking(character);
+        renderRanking(character, history);
         renderGrowthSummary(character, history);
         renderPrediction(character, history, prediction);
         renderHistory(currentDisplayHistory);
@@ -1835,7 +1875,7 @@ function restoreTrackerState() {
     renderPeriodSummary(currentPeriodSummary);
 
     renderCharacter(currentCharacter, currentHistory);
-    renderRanking(currentCharacter);
+    renderRanking(currentCharacter, currentHistory);
     renderGrowthSummary(currentCharacter, currentHistory);
     renderPrediction(currentCharacter, currentHistory, prediction);
     renderHistory(currentDisplayHistory);

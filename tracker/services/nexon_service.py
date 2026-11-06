@@ -1,5 +1,8 @@
 """Nexon Open API 응답을 애플리케이션 기능에 맞게 조합하는 서비스."""
 import json
+import requests
+from datetime import datetime
+from zoneinfo import ZoneInfo
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
@@ -9,6 +12,7 @@ from tracker.integrations.nexon_api import (
     get_basic_character,
     get_ocid,
     get_ranking,
+    request_nexon_api,
 )
 
 
@@ -63,6 +67,27 @@ def get_api_class(character_class):
     return jobs_data.get(character_class)
 
 
+def get_current_combat_power(ocid):
+    """현재 적용 상태의 실제 전투력을 Nexon stat API에서 조회한다."""
+    try:
+        response = request_nexon_api("character/stat", {"ocid": ocid})
+        if response.status_code != 200:
+            return None
+        payload = response.json()
+    except (requests.RequestException, ValueError, TypeError):
+        return None
+    final_stats = payload.get("final_stat", []) if isinstance(payload, dict) else []
+    for item in final_stats:
+        if not isinstance(item, dict) or str(item.get("stat_name", "")).strip() != "전투력":
+            continue
+        try:
+            value = int(float(str(item.get("stat_value", "")).replace(",", "").strip()))
+        except (TypeError, ValueError):
+            return None
+        return {"value": value, "observedAt": datetime.now(ZoneInfo("Asia/Seoul")).isoformat(timespec="seconds")}
+    return None
+
+
 def get_character_rankings(target_date, world_name, character_class, ocid):
     """전체·월드·직업·직업 월드 랭킹을 병렬 조회해 결과 상태를 합친다."""
     result = {
@@ -71,6 +96,7 @@ def get_character_rankings(target_date, world_name, character_class, ocid):
         "jobWorldRanking": None,
         "jobRanking": None,
         "rankingDataStatus": "not_ready",
+        "combatPower": None,
     }
     api_class = get_api_class(character_class)
 
@@ -101,17 +127,19 @@ def get_character_rankings(target_date, world_name, character_class, ocid):
             ocid=ocid,
         )
 
-    with ThreadPoolExecutor(max_workers=4) as executor:
+    with ThreadPoolExecutor(max_workers=5) as executor:
         futures = [
             executor.submit(fetch_overall),
             executor.submit(fetch_world),
             executor.submit(fetch_job_world),
             executor.submit(fetch_job),
+            executor.submit(get_current_combat_power, ocid),
         ]
         overall_data, overall_response = futures[0].result()
         world_data, world_response = futures[1].result()
         job_world_data, job_world_response = futures[2].result()
         job_data, job_response = futures[3].result()
+        combat_power = futures[4].result()
 
     if overall_data:
         result["ranking"] = overall_data.get("ranking")
@@ -121,6 +149,8 @@ def get_character_rankings(target_date, world_name, character_class, ocid):
         result["jobWorldRanking"] = job_world_data.get("ranking")
     if job_data:
         result["jobRanking"] = job_data.get("ranking")
+    if combat_power:
+        result["combatPower"] = combat_power
 
     responses = [
         response

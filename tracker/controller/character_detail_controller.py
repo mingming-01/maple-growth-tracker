@@ -1,7 +1,8 @@
 """캐릭터 상세 정보 탭의 지연 조회 API."""
 from flask import Blueprint, jsonify, request
+from datetime import datetime
 
-from tracker.runtime import get_cache, set_cache
+from tracker.runtime import get_cache, set_cache, record_best_combat_power, KOREA_TIMEZONE
 from tracker.services.character_detail_service import (
     VALID_SECTIONS,
     get_character_detail_section,
@@ -33,6 +34,27 @@ def get_character_details():
         return jsonify(result)
 
     result = get_character_detail_section(ocid, section)
+    if section == "stats":
+        sources = result.get("sources", [])
+        stat_source = next((source for source in sources if source.get("id") == "stat"), {})
+        preset_keys = {
+            "itemEquipment": "equipment", "hyperStat": "hyperStat",
+            "ability": "ability", "linkSkill": "link", "unionRaider": "union",
+        }
+        preset_numbers = {
+            preset_keys[source.get("id")]: source.get("activePresetNo")
+            for source in sources
+            if source.get("id") in preset_keys and source.get("activePresetNo") is not None
+        }
+        best = record_best_combat_power(
+            ocid, stat_source.get("combatPower"),
+            preset_numbers=preset_numbers or None,
+            observed_at=datetime.now(KOREA_TIMEZONE).isoformat(timespec="seconds"),
+        )
+        if best:
+            result["bestCombatPower"] = best.get("value")
+            result["bestCombatPowerObservedAt"] = best.get("observedAt")
+            result["bestPresetCombination"] = best.get("presetNumbers")
     result["dataStatus"] = "current"
     set_cache(cache_key, result, DETAIL_CACHE_TTL)
     return jsonify(result)

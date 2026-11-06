@@ -359,6 +359,30 @@ def save_api_snapshot(cache_key, data):
     )
 
 
+def record_best_combat_power(ocid, combat_power, preset_numbers=None, observed_at=None):
+    """조회한 실제 전투력의 최고 관측값과 당시 프리셋 번호를 보존한다."""
+    try:
+        value = int(float(str(combat_power).replace(",", "").strip()))
+    except (TypeError, ValueError):
+        value = None
+    key = f"combat-power-best:{ocid}"
+    existing, _ = load_api_snapshot(key)
+    existing = existing if isinstance(existing, dict) else {}
+    if value is not None and value > 0:
+        try:
+            previous_value = int(existing.get("value") or 0)
+        except (TypeError, ValueError):
+            previous_value = 0
+        if value >= previous_value:
+            existing = {
+                "value": value,
+                "observedAt": observed_at or datetime.now(KOREA_TIMEZONE).isoformat(timespec="seconds"),
+                "presetNumbers": preset_numbers or existing.get("presetNumbers"),
+            }
+            save_api_snapshot(key, existing)
+    return existing or None
+
+
 def load_api_snapshot(cache_key):
     state = get_runtime_state()
     return load_api_snapshot_for_path(
