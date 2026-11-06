@@ -658,18 +658,19 @@ function renderSkillsSection(data) {
     return content;
 }
 
-function renderLinkSection(data) {
+function renderLinkSection(data,selectedPresetNumber=null,onPresetChange=()=>{}) {
     const source=sourceById(data,"linkSkill"), content=el("div","game-link-window");
     if(!source||source.status==="unavailable") {
         content.appendChild(el("p","game-empty",source?.message||"링크 스킬 정보를 조회할 수 없습니다.")); return content;
     }
-    const number=data.selectedLinkPreset??fallbackPreset(source), raw=presetData(source,number);
+    const number=data.selectedLinkPreset??selectedPresetNumber??fallbackPreset(source), raw=presetData(source,number);
     const links=[...(Array.isArray(raw.character_link_skill)?raw.character_link_skill:[]),
         ...(raw.character_owned_link_skill?[raw.character_owned_link_skill]:[])];
     const toolbar=el("div","game-equipment-toolbar");
     toolbar.append(el("span","game-window-eyebrow","LINK SKILL"),el("h3","game-window-title","링크 스킬"));
     if(source.presets?.length>1) toolbar.appendChild(presetSelect(source,"link",number,next=>{
-        const updated=renderLinkSection({...data,selectedLinkPreset:next});
+        onPresetChange(next);
+        const updated=renderLinkSection({...data,selectedLinkPreset:next},next,onPresetChange);
         content.replaceChildren(...updated.childNodes);
     }));
     content.appendChild(toolbar);
@@ -859,7 +860,7 @@ function renderUnionChampions(championSource,content) {
     content.appendChild(panel);
 }
 
-function renderUnionSection(data,selectedPresetNumber=null) {
+function renderUnionSection(data,selectedPresetNumber=null,onPresetChange=()=>{}) {
     const content=el("div","game-union-window");
     const base=sourceById(data,"union");
     const stateStats=sourceById(data,"unionStateStat");
@@ -904,7 +905,8 @@ function renderUnionSection(data,selectedPresetNumber=null) {
         }
         if(presets.length>0) {
             info.appendChild(presetSelect(stateStats,"union",selectedNumber,next=>{
-                const updated=renderUnionSection(data,next);
+                onPresetChange(next);
+                const updated=renderUnionSection(data,next,onPresetChange);
                 content.replaceChildren(...updated.childNodes);
             }));
         }
@@ -979,8 +981,13 @@ export function initCharacterDetails({apiFetch,readApiResponse,onStatsLoaded=()=
         ));
         else if(name==="symbols") content.replaceChildren(renderSymbolsSection(data));
         else if(name==="skills") content.replaceChildren(renderSkillsSection(data));
-        else if(name==="link") content.replaceChildren(renderLinkSection(data));
-        else if(name==="union") content.replaceChildren(renderUnionSection(data));
+        else if(name==="link") content.replaceChildren(renderLinkSection(
+            {...data,selectedLinkPreset:selectedNumbers.link},selectedNumbers.link,
+            next=>{selectedNumbers.link=next;profileMode="custom";}
+        ));
+        else if(name==="union") content.replaceChildren(renderUnionSection(
+            data,selectedNumbers.union,next=>{selectedNumbers.union=next;profileMode="custom";}
+        ));
 
         if(data.status==="partial") setNotice("일부 공개 데이터만 확인됐습니다. 조회되지 않은 항목은 임의로 채우지 않았습니다.",true);
         else if(data.status==="unavailable") setNotice("상세 정보를 불러오지 못했습니다. 잠시 후 다시 시도해주세요.",true);
