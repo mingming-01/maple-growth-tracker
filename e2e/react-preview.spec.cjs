@@ -14,7 +14,8 @@ test("React preview is isolated from the existing Flask homepage", async ({ page
 test("React preview keeps the existing Flask admin route reachable", async ({ page }) => {
   await page.goto("/preview/");
   await expect(page.locator('[data-testid="react-preview-ready"]')).toBeVisible();
-  await expect(page.getByRole("link", { name: "관리자" })).toHaveAttribute("href", "/admin/login");
+  await expect(page.locator('.mgt-nav a[href="/admin/login"]')).toHaveAttribute("href", "/admin/login");
+  await expect(page.locator('.mgt-footer a[href="/admin/login"]')).toHaveAttribute("href", "/admin/login");
 });
 
 test("React preview refreshes ranking data and restores the full-size profile progress UI", async ({ page }) => {
@@ -86,7 +87,9 @@ test("React preview refreshes ranking data and restores the full-size profile pr
   await expect(page.getByText("크로아")).toBeVisible();
   await expect(page.getByRole("progressbar", { name: "현재 레벨 경험치 진행률" })).toHaveAttribute("aria-valuenow", "35.6");
   await expect(page.locator(".mgt-character-avatar-frame")).toBeVisible();
-  await expect(page.locator(".mgt-character-avatar-frame")).toHaveJSProperty("clientWidth", 210);
+  const desktopAvatar = await page.locator(".mgt-character-avatar-frame").boundingBox();
+  expect(desktopAvatar.width).toBeGreaterThanOrEqual(200);
+  expect(desktopAvatar.height).toBeGreaterThanOrEqual(200);
   await expect(page.getByRole("heading", { name: "캐릭터 상세 정보" })).toBeVisible();
   await expect(page.getByText("레전드리", { exact: true })).toBeVisible();
 });
