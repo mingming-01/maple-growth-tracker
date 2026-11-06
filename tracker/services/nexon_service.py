@@ -133,6 +133,7 @@ def get_character_rankings(target_date, world_name, character_class, ocid):
             executor.submit(fetch_world),
             executor.submit(fetch_job_world),
             executor.submit(fetch_job),
+            executor.submit(get_current_combat_power, ocid),
         ]
         overall_data, overall_response = futures[0].result()
         world_data, world_response = futures[1].result()

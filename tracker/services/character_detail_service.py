@@ -1,6 +1,8 @@
 """Nexon Open API 캐릭터 상세 데이터 조회 및 프리셋 정규화."""
 from concurrent.futures import ThreadPoolExecutor
+from threading import Lock
 import json
+import time
 
 import requests
 
@@ -62,6 +64,9 @@ SECTION_SOURCES = {
 }
 
 VALID_SECTIONS = frozenset(SECTION_SOURCES)
+_SOURCE_CACHE = {}
+_SOURCE_CACHE_LOCK = Lock()
+_SOURCE_CACHE_TTL = 300
 
 
 def _has_data(value):
@@ -182,14 +187,13 @@ def _fetch_source(ocid, spec):
     cache_key = "nexon-source:{}:{}:{}".format(
         ocid, spec["endpoint"], json.dumps(params, sort_keys=True, ensure_ascii=False)
     )
-    from flask import has_app_context
-    if has_app_context():
-        from tracker.runtime import get_cache, set_cache
-        cached = get_cache(cache_key)
-        if cached is not None:
-            return cached
-    else:
-        set_cache = None
+    now = time.monotonic()
+    with _SOURCE_CACHE_LOCK:
+        cached_item = _SOURCE_CACHE.get(cache_key)
+        if cached_item and cached_item["expires_at"] > now:
+            return cached_item["source"]
+        if cached_item:
+            _SOURCE_CACHE.pop(cache_key, None)
     try:
         response = request_nexon_api(spec["endpoint"], params)
     except requests.RequestException:
@@ -226,8 +230,11 @@ def _fetch_source(ocid, spec):
         "id": spec["id"], "label": spec["label"], **result,
         "message": "API 응답에 표시할 데이터가 없습니다." if result["status"] == "empty" else None,
     }
-    if set_cache:
-        set_cache(cache_key, source, 300)
+    with _SOURCE_CACHE_LOCK:
+        _SOURCE_CACHE[cache_key] = {
+            "source": source,
+            "expires_at": time.monotonic() + _SOURCE_CACHE_TTL,
+        }
     return source
 
 
