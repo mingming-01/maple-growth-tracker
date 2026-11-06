@@ -83,9 +83,14 @@ test("React preview loads profile data and refreshes only on explicit request", 
   const characterRequestPromise = page.waitForRequest(request =>
     request.url().includes("/api/character?") && request.method() === "GET"
   );
+  const historyRequestPromise = page.waitForRequest(request =>
+    request.url().includes("/api/history?") && request.method() === "GET"
+  );
   await page.getByRole("button", { name: /캐릭터 조회/ }).click();
   const characterRequest = await characterRequestPromise;
+  const historyRequest = await historyRequestPromise;
   expect(new URL(characterRequest.url()).searchParams.get("refresh")).toBeNull();
+  expect(new URL(historyRequest.url()).searchParams.get("refresh")).toBeNull();
 
   await expect(page.getByRole("heading", { name: "프리뷰테스트" })).toBeVisible();
   await expect(page.getByText("12,345위")).toBeVisible();
