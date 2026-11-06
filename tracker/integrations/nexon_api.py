@@ -47,7 +47,7 @@ def _throttle_nexon_request():
 
 
 def request_nexon_api(endpoint, params, historical=False):
-    """넥슨 API 요청에 제한 재시도와 과거 기록 호출 간격 제한을 적용한다."""
+    """넥슨 API 요청에 공통 호출 간격 제한과 일시적 오류 재시도를 적용한다."""
     api_key = _setting("NEXON_API_KEY", "")
     headers = {"x-nxopen-api-key": api_key} if api_key else {}
     timeout = (
