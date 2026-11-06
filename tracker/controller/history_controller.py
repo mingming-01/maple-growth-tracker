@@ -18,7 +18,7 @@ from tracker.runtime import (
     HISTORY_BACKFILL_BATCH_SIZE,
     HISTORY_CACHE_TTL,
     KOREA_TIMEZONE,
-    growth_history_store,
+    get_growth_history_store,
     is_temporary_nexon_failure,
     load_api_snapshot,
     save_api_snapshot,
@@ -36,6 +36,7 @@ history_bp = Blueprint("history", __name__, url_prefix="/api")
 @history_bp.route("/history")
 def get_history():
     """기본 검색에서 최근 7일의 성장 기록을 조회하고 저장한다."""
+    growth_history_store = get_growth_history_store()
     character_name = request.args.get("name", "").strip()
     if not character_name:
         return jsonify({"error": "캐릭터 이름을 입력해주세요."}), 400
@@ -273,6 +274,7 @@ def fetch_historical_record(ocid, world_name, target_date, today):
 @history_bp.route("/history/archive")
 def get_history_archive():
     """30일·90일 기록을 조회하고 사용자가 요청한 범위에서 누락 기록을 보충한다."""
+    growth_history_store = get_growth_history_store()
     ocid = request.args.get("ocid", "").strip()
     try:
         days = int(request.args.get("days", "30"))
