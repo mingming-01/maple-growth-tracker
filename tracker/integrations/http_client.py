@@ -73,8 +73,10 @@ def request_with_retries(
 
         response_headers = getattr(response, "headers", {}) or {}
         retry_after = _retry_after_seconds(response_headers.get("Retry-After"))
+        # Retry-After is an explicit upstream instruction; do not shorten it
+        # to max_backoff. The exponential fallback remains bounded.
         delay = (
-            min(max_backoff, retry_after)
+            retry_after
             if retry_after is not None
             else min(max_backoff, backoff_factor * (2 ** (attempt - 1)))
         )
