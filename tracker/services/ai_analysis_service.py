@@ -1,10 +1,48 @@
 """AI 성장 분석과 캐릭터 비교의 프롬프트·모델 호출을 담당한다."""
+import json
+import time
+from datetime import date
 
-from app import *
 from tracker.integrations.ai_provider import request_openrouter, should_use_openrouter
+from tracker.runtime import (
+    get_ai_response_cache,
+    get_gemini_client,
+    get_runtime_state,
+    sanitize_ai_text,
+    set_ai_response_cache,
+)
+
+
+def _generate_gemini_content(client, prompt):
+    """일시적인 Gemini 오류만 제한적으로 재시도한다."""
+    state = get_runtime_state()
+    try:
+        retry_count = int(state.ai_api_retries)
+    except (TypeError, ValueError):
+        retry_count = 1
+    try:
+        backoff = max(0.0, float(state.ai_api_retry_backoff))
+    except (TypeError, ValueError):
+        backoff = 0.5
+
+    max_attempts = min(max(0, retry_count), 3) + 1
+    for attempt in range(max_attempts):
+        try:
+            return client.models.generate_content(
+                model="gemini-3.6-flash",
+                contents=prompt,
+            )
+        except Exception as error:
+            if not should_use_openrouter(error) or attempt + 1 >= max_attempts:
+                raise
+            delay = min(3.0, backoff * (2 ** attempt))
+            if delay:
+                time.sleep(delay)
 
 
 def generate_ai_analysis(character, history, computed_metrics=None):
+    gemini_client = get_gemini_client()
+    openrouter_api_key = get_runtime_state().openrouter_api_key
 
     growth_data = [
         {
@@ -97,10 +135,7 @@ def generate_ai_analysis(character, history, computed_metrics=None):
 
     if gemini_client:
         try:
-            response = gemini_client.models.generate_content(
-                model="gemini-3.6-flash",
-                contents=prompt
-            )
+            response = _generate_gemini_content(gemini_client, prompt)
             analysis = sanitize_ai_text(
                 response.text or "분석 결과가 비어 있습니다.",
                 expected_date
@@ -114,7 +149,7 @@ def generate_ai_analysis(character, history, computed_metrics=None):
             if not should_use_openrouter(error):
                 return {"error": "AI 분석을 불러오지 못했습니다."}
 
-    if OPENROUTER_API_KEY:
+    if openrouter_api_key:
         try:
             response_text = request_openrouter(prompt)
             print("OpenRouter로 성장 분석을 처리했습니다.")
@@ -134,6 +169,9 @@ def generate_ai_analysis(character, history, computed_metrics=None):
 
 
 def generate_ai_comparison(primary, comparison):
+    gemini_client = get_gemini_client()
+    openrouter_api_key = get_runtime_state().openrouter_api_key
+
     def prepare_subject(subject):
         character = subject["character"]
         metrics = subject["metrics"]
@@ -185,10 +223,7 @@ def generate_ai_comparison(primary, comparison):
 
     if gemini_client:
         try:
-            response = gemini_client.models.generate_content(
-                model="gemini-3.6-flash",
-                contents=prompt
-            )
+            response = _generate_gemini_content(gemini_client, prompt)
             analysis = sanitize_ai_text(
                 response.text or "비교 분석 결과가 비어 있습니다."
             )
@@ -201,7 +236,7 @@ def generate_ai_comparison(primary, comparison):
             if not should_use_openrouter(error):
                 return {"error": "AI 성장 분석을 불러오지 못했습니다."}
 
-    if OPENROUTER_API_KEY:
+    if openrouter_api_key:
         try:
             response_text = request_openrouter(prompt)
             print("OpenRouter로 성장 비교 분석을 처리했습니다.")

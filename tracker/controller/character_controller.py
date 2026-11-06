@@ -1,9 +1,30 @@
-"""Flask HTTP 컨트롤러."""
+"""캐릭터 정보 조회 HTTP 라우트."""
+from datetime import datetime
 
-from app import *
+import requests
+from flask import Blueprint, jsonify, request
+
+from tracker.services.nexon_service import (
+    get_character_rankings,
+    is_temporary_nexon_failure,
+    resolve_character,
+)
+from tracker.runtime import (
+    CHARACTER_CACHE_TTL,
+    KOREA_TIMEZONE,
+    get_cache,
+    get_cache_timestamp,
+    load_api_snapshot,
+    save_api_snapshot,
+    set_cache,
+    stale_snapshot_response,
+    with_data_status,
+)
+
+character_bp = Blueprint("character", __name__, url_prefix="/api")
 
 
-@app.route("/api/character")
+@character_bp.route("/character")
 def get_character():
     """캐릭터 기본 정보와 현재 공개 랭킹을 조회한다."""
     character_name = request.args.get("name", "").strip()
@@ -21,7 +42,7 @@ def get_character():
         ))
 
     try:
-        ocid, response = get_ocid(character_name)
+        ocid, basic, response = resolve_character(character_name)
         if not ocid:
             if is_temporary_nexon_failure(response):
                 return stale_snapshot_response(
@@ -29,7 +50,6 @@ def get_character():
                 )
             return jsonify({"error": "캐릭터 정보를 찾을 수 없거나 조회할 수 없습니다."}), response.status_code
 
-        basic, response = get_basic_character(ocid)
         if not basic:
             if is_temporary_nexon_failure(response):
                 return stale_snapshot_response(

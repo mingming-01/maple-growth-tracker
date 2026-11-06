@@ -1,9 +1,17 @@
-"""Flask HTTP 컨트롤러."""
+"""AI 성장 분석 HTTP 라우트."""
+from flask import Blueprint, jsonify, request
 
-from app import *
+from tracker.controller.character_controller import get_character
+from tracker.controller.history_controller import get_history
+from tracker.services.ai_analysis_service import (
+    generate_ai_analysis,
+    generate_ai_comparison,
+)
+
+ai_bp = Blueprint("ai", __name__, url_prefix="/api")
 
 
-@app.route("/api/ai-analysis", methods=["GET", "POST"])
+@ai_bp.route("/ai-analysis", methods=["GET", "POST"])
 def ai_analysis():
     """캐릭터의 계산된 성장 지표를 바탕으로 AI 성장 리포트를 만든다."""
     character_name = request.args.get("name", "").strip()
@@ -36,7 +44,7 @@ def ai_analysis():
         print(f"Gemini AI 분석 API 요청에 실패했습니다: {error}")
         return {"error": "AI 분석을 불러오지 못했습니다."}
 
-@app.route("/api/ai-comparison", methods=["POST"])
+@ai_bp.route("/ai-comparison", methods=["POST"])
 def ai_comparison():
     """두 캐릭터의 계산된 성장 지표를 바탕으로 비교 설명을 만든다."""
     payload = request.get_json(silent=True) or {}

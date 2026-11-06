@@ -2,43 +2,44 @@ import tempfile
 import unittest
 from datetime import datetime, timezone
 from pathlib import Path
-from unittest.mock import patch
 
 import app as tracker
-from tracker.controller import admin_controller
+from tracker import create_app
+from tracker.runtime import get_runtime_state
 
 
 class AdminLogTests(unittest.TestCase):
     def setUp(self):
+        self.app = create_app({
+            "TESTING": True,
+            "GROWTH_DATABASE_URL": "",
+            "NEXON_API_KEY": "",
+            "GEMINI_API_KEY": "",
+            "OPENROUTER_API_KEY": "",
+        })
         self.temp_dir = tempfile.TemporaryDirectory()
         self.log_path = Path(self.temp_dir.name) / "admin_logs.sqlite3"
-        self.path_patch = patch.object(tracker, "LOG_DB_PATH", str(self.log_path))
-        self.backend_patch = patch.object(tracker, "LOG_DB_BACKEND", "sqlite")
-        self.warning_patch = patch.object(tracker, "LOG_STORAGE_WARNING", "")
-        self.controller_backend_patch = patch.object(admin_controller, "LOG_DB_BACKEND", "sqlite")
-        self.controller_warning_patch = patch.object(admin_controller, "LOG_STORAGE_WARNING", "")
-        self.path_patch.start()
-        self.backend_patch.start()
-        self.warning_patch.start()
-        self.controller_backend_patch.start()
-        self.controller_warning_patch.start()
-        tracker.initialize_log_db()
+        with self.app.app_context():
+            self.state = get_runtime_state()
+            self.state.log_db_path = str(self.log_path)
+            self.state.log_db_backend = "sqlite"
+            self.state.log_storage_warning = ""
+            tracker.initialize_log_db()
 
-        self.client = tracker.app.test_client()
+        self.client = self.app.test_client()
         with self.client.session_transaction() as session:
             session["admin_authenticated"] = True
             session["csrf_token"] = "test-token"
 
     def tearDown(self):
-        self.controller_warning_patch.stop()
-        self.controller_backend_patch.stop()
-        self.warning_patch.stop()
-        self.backend_patch.stop()
-        self.path_patch.stop()
         self.temp_dir.cleanup()
 
+    def log(self, *args, **kwargs):
+        with self.app.app_context():
+            tracker.log_action(*args, **kwargs)
+
     def test_log_action_saves_request_details(self):
-        tracker.log_action(
+        self.log(
             "캐릭터 조회",
             character_name="밍득",
             world_name="크로아",
@@ -48,14 +49,15 @@ class AdminLogTests(unittest.TestCase):
             duration_ms=42,
         )
 
-        connection = tracker.connect_log_db()
-        try:
-            row = connection.execute(
-                "SELECT action, character_name, world_name, path, status_code, "
-                "duration_ms, error_type FROM action_logs"
-            ).fetchone()
-        finally:
-            connection.close()
+        with self.app.app_context():
+            connection = tracker.connect_log_db()
+            try:
+                row = connection.execute(
+                    "SELECT action, character_name, world_name, path, status_code, "
+                    "duration_ms, error_type FROM action_logs"
+                ).fetchone()
+            finally:
+                connection.close()
 
         self.assertEqual(row["action"], "캐릭터 조회")
         self.assertEqual(row["character_name"], "밍득")
@@ -65,7 +67,7 @@ class AdminLogTests(unittest.TestCase):
         self.assertIsNone(row["error_type"])
 
     def test_admin_log_filters_by_character_and_result(self):
-        tracker.log_action(
+        self.log(
             "캐릭터 조회",
             character_name="밍득",
             result="성공",
@@ -73,7 +75,7 @@ class AdminLogTests(unittest.TestCase):
             status_code=200,
             duration_ms=25,
         )
-        tracker.log_action(
+        self.log(
             "성장 기록 조회",
             character_name="테스트캐릭터",
             result="실패",
@@ -99,7 +101,7 @@ class AdminLogTests(unittest.TestCase):
             "2026-10-27 (화) 16:06:22 KST",
         )
 
-        tracker.log_action(
+        self.log(
             "캐릭터 조회",
             character_name="밍득",
             result="성공",

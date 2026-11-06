@@ -1,12 +1,42 @@
-"""Flask HTTP 컨트롤러."""
+"""최근·과거 성장 기록 HTTP 라우트."""
+from concurrent.futures import ThreadPoolExecutor
+from datetime import date, datetime, timedelta
 
-from app import *
+import requests
+from flask import Blueprint, jsonify, request
+
+from tracker.domain.growth_calculations import (
+    calculate_archive_history_changes,
+    calculate_recent_history_changes,
+)
+from tracker.services.nexon_service import (
+    get_basic_character_snapshot,
+    get_ranking_snapshot,
+    is_temporary_nexon_failure,
+    resolve_character,
+)
+from tracker.runtime import (
+    HISTORY_BACKFILL_BATCH_SIZE,
+    HISTORY_CACHE_TTL,
+    KOREA_TIMEZONE,
+    get_growth_history_service,
+    load_api_snapshot,
+    save_api_snapshot,
+    set_cache,
+    stale_snapshot_response,
+    with_data_status,
+    get_cache,
+    get_cache_timestamp,
+)
+
+history_bp = Blueprint("history", __name__, url_prefix="/api")
 
 
 # 최근 7일 성장 기록 조회 및 변화량 계산
-@app.route("/api/history")
+@history_bp.route("/history")
 def get_history():
     """기본 검색에서 최근 7일의 성장 기록을 조회하고 저장한다."""
+    growth_history_service = get_growth_history_service()
     character_name = request.args.get("name", "").strip()
     if not character_name:
         return jsonify({"error": "캐릭터 이름을 입력해주세요."}), 400
@@ -22,7 +52,7 @@ def get_history():
         ))
 
     try:
-        ocid, response = get_ocid(character_name)
+        ocid, basic, response = resolve_character(character_name)
         if not ocid:
             if is_temporary_nexon_failure(response):
                 return stale_snapshot_response(
@@ -30,7 +60,6 @@ def get_history():
                 )
             return jsonify({"error": "캐릭터 정보를 찾을 수 없거나 조회할 수 없습니다."}), response.status_code
 
-        basic, response = get_basic_character(ocid)
         if not basic:
             if is_temporary_nexon_failure(response):
                 return stale_snapshot_response(
@@ -42,7 +71,7 @@ def get_history():
         today = datetime.now(KOREA_TIMEZONE).date()
         stored_recent = {}
         try:
-            stored_records = growth_history_store.get_records(
+            stored_records = growth_history_service.get_records(
                 ocid, today - timedelta(days=6), today
             )
             stored_recent = {item["date"]: item for item in stored_records}
@@ -72,7 +101,7 @@ def get_history():
                     "_fromStore": True
                 }
 
-            ranking_data, response = get_ranking(
+            ranking_data, response = get_ranking_snapshot(
                 target_date=date_string,
                 world_name=world_name,
                 ocid=ocid
@@ -133,7 +162,7 @@ def get_history():
 
     records_to_save = [item for item in history if not item.get("_fromStore")]
     try:
-        saved_record_count = growth_history_store.save_records(
+        saved_record_count = growth_history_service.save_records(
             ocid, basic["character_name"], world_name, records_to_save
         )
         storage_status = "saved" if saved_record_count else "no_new_records"
@@ -162,7 +191,7 @@ def get_history():
         "averageDailyExperience": average_experience,
         "historyStatus": history_status,
         "historyStorage": {
-            "backend": growth_history_store.backend,
+            "backend": growth_history_service.backend,
             "status": storage_status,
             "savedRecords": saved_record_count
         }
@@ -190,7 +219,7 @@ def fetch_historical_record(ocid, world_name, target_date, today):
     """랭킹 또는 날짜별 캐릭터 정보에서 과거 일일 스냅샷을 만든다."""
     date_text = target_date.isoformat()
     try:
-        ranking_data, ranking_response = get_ranking(
+        ranking_data, ranking_response = get_ranking_snapshot(
             date_text, world_name=world_name, ocid=ocid, historical=True
         )
     except requests.RequestException:
@@ -210,7 +239,7 @@ def fetch_historical_record(ocid, world_name, target_date, today):
 
     try:
         # 기본 정보 API는 오늘 날짜를 date로 받지 않으므로 오늘은 최신 응답을 사용한다.
-        basic_data, basic_response = get_basic_character(
+        basic_data, basic_response = get_basic_character_snapshot(
             ocid,
             target_date=date_text if target_date < today else None,
             historical=True
@@ -241,9 +270,10 @@ def fetch_historical_record(ocid, world_name, target_date, today):
     return None
 
 
-@app.route("/api/history/archive")
+@history_bp.route("/history/archive")
 def get_history_archive():
     """30일·90일 기록을 조회하고 사용자가 요청한 범위에서 누락 기록을 보충한다."""
+    growth_history_service = get_growth_history_service()
     ocid = request.args.get("ocid", "").strip()
     try:
         days = int(request.args.get("days", "30"))
@@ -270,7 +300,7 @@ def get_history_archive():
 
     start_date = end_date - timedelta(days=days - 1)
     try:
-        stored_records = growth_history_store.get_records(ocid, start_date, end_date)
+        stored_records = growth_history_service.get_records(ocid, start_date, end_date)
     except Exception:
         print("날짜별 성장 기록을 조회하지 못했습니다.")
         return jsonify({"error": "저장된 성장 기록을 조회할 수 없습니다. 저장소 연결을 확인해주세요."}), 503
@@ -297,7 +327,7 @@ def get_history_archive():
 
         # 브라우저에서 전달한 캐릭터명과 OCID를 확인해 다른 캐릭터 기록의 혼합 저장을 막는다.
         try:
-            verified_basic, verify_response = get_basic_character(ocid, historical=True)
+            verified_basic, verify_response = get_basic_character_snapshot(ocid, historical=True)
         except requests.RequestException:
             verified_basic, verify_response = None, None
 
@@ -334,7 +364,7 @@ def get_history_archive():
             ]
 
         try:
-            saved_count = growth_history_store.save_records(
+            saved_count = growth_history_service.save_records(
                 ocid, character_name, world_name, fetched_records
             ) if fetched_records else 0
         except Exception:
@@ -397,6 +427,6 @@ def get_history_archive():
         "notReadyDays": not_ready_days,
         "notCollectedDays": not_collected_days,
         "collection": collection,
-        "storageBackend": growth_history_store.backend,
-        "persistentStorage": growth_history_store.uses_postgres
+        "storageBackend": growth_history_service.backend,
+        "persistentStorage": growth_history_service.uses_postgres
     })

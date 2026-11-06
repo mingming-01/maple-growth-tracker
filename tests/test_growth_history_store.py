@@ -5,8 +5,11 @@ from pathlib import Path
 from unittest.mock import Mock, patch
 
 import app as tracker
+from tracker import create_app
 from tracker.controller import history_controller
-from growth_history_store import GrowthHistoryStore
+from tracker.repositories.growth_history_store import GrowthHistoryStore
+from tracker.runtime import get_runtime_state
+from tracker.services.growth_history_service import GrowthHistoryService
 
 
 class GrowthHistoryStoreTests(unittest.TestCase):
@@ -88,6 +91,13 @@ class GrowthHistoryStoreTests(unittest.TestCase):
 
 class GrowthHistoryApiTests(unittest.TestCase):
     def setUp(self):
+        self.app = create_app({
+            "TESTING": True,
+            "GROWTH_DATABASE_URL": "",
+            "NEXON_API_KEY": "",
+            "GEMINI_API_KEY": "",
+            "OPENROUTER_API_KEY": "",
+        })
         self.temp_dir = tempfile.TemporaryDirectory()
         self.store = GrowthHistoryStore(
             sqlite_path=str(Path(self.temp_dir.name) / "growth_history.sqlite3")
@@ -104,17 +114,19 @@ class GrowthHistoryApiTests(unittest.TestCase):
                 "ranking": 321
             }]
         )
-        self.store_patch = patch.object(tracker, "growth_history_store", self.store)
-        self.controller_store_patch = patch.object(history_controller, "growth_history_store", self.store)
-        self.store_patch.start()
-        self.controller_store_patch.start()
-        tracker.CACHE.clear()
-        self.client = tracker.app.test_client()
+        with self.app.app_context():
+            self.state = get_runtime_state()
+            self.state.growth_history_repository = self.store
+            self.state.growth_history_service = GrowthHistoryService(self.store)
+            self.state.cache.clear()
+            self.state.log_db_path = str(Path(self.temp_dir.name) / "admin_logs.sqlite3")
+            self.state.log_db_backend = "sqlite"
+            tracker.initialize_log_db()
+        self.client = self.app.test_client()
 
     def tearDown(self):
-        tracker.CACHE.clear()
-        self.controller_store_patch.stop()
-        self.store_patch.stop()
+        with self.app.app_context():
+            self.state.cache.clear()
         self.temp_dir.cleanup()
 
     def test_archive_returns_calendar_days_and_marks_missing_days(self):
@@ -156,8 +168,8 @@ class GrowthHistoryApiTests(unittest.TestCase):
         self.assertEqual(comparison_history[-2]["ranking"], 654)
 
     def test_archive_does_not_fetch_past_data_without_collection_request(self):
-        with patch.object(history_controller, "get_ranking", side_effect=AssertionError("should not call Nexon")), patch.object(
-            history_controller, "get_basic_character", side_effect=AssertionError("should not call Nexon")
+        with patch.object(history_controller, "get_ranking_snapshot", side_effect=AssertionError("should not call Nexon")), patch.object(
+            history_controller, "get_basic_character_snapshot", side_effect=AssertionError("should not call Nexon")
         ):
             response = self.client.get("/api/history/archive?ocid=test-ocid&days=30")
 
@@ -174,10 +186,10 @@ class GrowthHistoryApiTests(unittest.TestCase):
             "character_exp": 123456
         }
         with patch.object(
-            history_controller, "get_ranking",
+            history_controller, "get_ranking_snapshot",
             side_effect=[(None, ranking_response), (None, ranking_response)]
         ) as get_ranking, patch.object(
-            history_controller, "get_basic_character",
+            history_controller, "get_basic_character_snapshot",
             side_effect=[(basic, basic_response), (basic, basic_response), (basic, basic_response)]
         ) as get_basic:
             response = self.client.get(
@@ -219,9 +231,9 @@ class GrowthHistoryApiTests(unittest.TestCase):
             "character_exp": 123456
         }
         with patch.object(
-            history_controller, "get_ranking", return_value=(ranking, ranking_response)
+            history_controller, "get_ranking_snapshot", return_value=(ranking, ranking_response)
         ) as get_ranking, patch.object(
-            history_controller, "get_basic_character", return_value=(current_basic, Mock(status_code=200))
+            history_controller, "get_basic_character_snapshot", return_value=(current_basic, Mock(status_code=200))
         ) as get_basic:
             response = self.client.get(
                 "/api/history/archive?ocid=test-ocid&days=30&collect=1"
@@ -248,9 +260,9 @@ class GrowthHistoryApiTests(unittest.TestCase):
             "character_exp": 123456
         }
         with patch.object(
-            history_controller, "get_ranking", return_value=(None, invalid_response)
+            history_controller, "get_ranking_snapshot", return_value=(None, invalid_response)
         ), patch.object(
-            history_controller, "get_basic_character",
+            history_controller, "get_basic_character_snapshot",
             side_effect=[(current_basic, Mock(status_code=200)), (None, invalid_response)]
         ):
             response = self.client.get(
@@ -337,9 +349,13 @@ class GrowthHistoryApiTests(unittest.TestCase):
         }
         today_ranking = {"ranking": 400, "character_level": 280, "character_exp": 20000}
 
-        with patch.object(history_controller, "get_ocid", return_value=("test-ocid", response_stub)), patch.object(
-            history_controller, "get_basic_character", return_value=(basic, response_stub)
-        ), patch.object(history_controller, "get_ranking", return_value=(today_ranking, response_stub)) as get_ranking:
+        with patch.object(
+            history_controller, "resolve_character",
+            return_value=("test-ocid", basic, response_stub)
+        ), patch.object(
+            history_controller, "get_ranking_snapshot",
+            return_value=(today_ranking, response_stub)
+        ) as get_ranking:
             response = self.client.get("/api/history?name=%ED%85%8C%EC%8A%A4%ED%8A%B8%EC%BA%90%EB%A6%AD%ED%84%B0&refresh=1")
 
         self.assertEqual(response.status_code, 200)
@@ -362,9 +378,13 @@ class GrowthHistoryApiTests(unittest.TestCase):
             "character_exp": 100000
         }
 
-        with patch.object(history_controller, "get_ocid", return_value=("test-ocid", response_stub)), patch.object(
-            history_controller, "get_basic_character", return_value=(basic, response_stub)
-        ), patch.object(history_controller, "get_ranking", return_value=(ranking, response_stub)):
+        with patch.object(
+            history_controller, "resolve_character",
+            return_value=("test-ocid", basic, response_stub)
+        ), patch.object(
+            history_controller, "get_ranking_snapshot",
+            return_value=(ranking, response_stub)
+        ):
             response = self.client.get("/api/history?name=%ED%85%8C%EC%8A%A4%ED%8A%B8%EC%BA%90%EB%A6%AD%ED%84%B0&refresh=1")
 
         self.assertEqual(response.status_code, 200)

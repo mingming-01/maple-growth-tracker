@@ -203,27 +203,43 @@ Chart.js, html2canvas, jsPDF는 CDN으로 불러옵니다.
 ```text
 maple-growth-tracker/
 │
-├── app.py                  # Flask 서버, NEXON API 호출, 성장 계산, AI 호출, 관리자 기능
+├── app.py                         # WSGI 진입점 및 로컬 개발 서버 실행
 ├── requirements.txt
 ├── .gitignore
 ├── README.md
 │
-├── instance/               # 실행 시 자동 생성
-│   └── admin_logs.sqlite3  # 로컬 개발용 관리자 로그 (SQLite)
+├── tracker/
+│   ├── __init__.py                # create_app 공개
+│   ├── application.py             # Flask Application Factory 및 Blueprint 등록
+│   ├── config.py                  # 환경변수 기반 설정
+│   ├── runtime.py                 # 앱별 런타임 상태와 공통 캐시·로그 처리
+│   │
+│   ├── controller/                # 기능별 Flask Blueprint와 HTTP 요청 처리
+│   │   ├── page_controller.py
+│   │   ├── admin_controller.py
+│   │   ├── character_controller.py
+│   │   ├── history_controller.py
+│   │   └── ai_controller.py
+│   │
+│   ├── domain/                    # Flask 및 외부 API에 독립적인 성장 계산 규칙
+│   │   └── growth_calculations.py
+│   ├── services/                  # 캐릭터 조회·성장 기록·AI 기능의 애플리케이션 서비스
+│   │   ├── nexon_service.py
+│   │   ├── growth_history_service.py
+│   │   └── ai_analysis_service.py
+│   ├── repositories/              # PostgreSQL·SQLite 저장소 접근
+│   │   ├── growth_history_store.py
+│   │   └── api_snapshot_repository.py
+│   └── integrations/              # 외부 API 연동과 공통 HTTP 재시도 정책
+│       ├── nexon_api.py
+│       ├── ai_provider.py
+│       └── http_client.py
 │
-├── templates/
-│   ├── index.html          # 메인 화면 / 결과 화면
-│   ├── admin_login.html    # 관리자 로그인
-│   └── admin_logs.html     # 관리자 로그 조회
-│
-└── static/
-    ├── app.js              # 조회, 성장 계산, 그래프, AI 호출, 상태 저장, 이미지/PDF 저장
-    ├── style.css
-    ├── favicon.svg         # 메인·관리자 공통 파비콘
-    ├── jobs.json           # 직업 → NEXON 랭킹 조회용 직업 값 매핑
-    └── images/
-        ├── logo.svg        # 사이트 로고
-        └── worlds/         # 월드 로고 이미지
+├── templates/                     # 메인·관리자 화면
+├── static/                        # JavaScript·CSS·이미지·직업 매핑
+├── migrations/                    # PostgreSQL 테이블 및 권한 설정
+├── tests/                         # API·도메인·저장소·앱 팩토리 테스트
+└── docs/                           # 프로젝트 운영·개선 문서
 ```
 
 ### API
@@ -343,6 +359,13 @@ ADMIN_PASSWORD_HASH=YOUR_PASSWORD_HASH
 # 선택
 FLASK_SECRET_KEY=RANDOM_SECRET
 FLASK_COOKIE_SECURE=false
+
+# 외부 API 재시도 정책 (기본값 사용 시 생략 가능)
+NEXON_API_RETRIES=2
+NEXON_API_RETRY_BACKOFF=0.35
+AI_API_TIMEOUT=30
+AI_API_RETRIES=1
+AI_API_RETRY_BACKOFF=0.5
 ```
 
 | 변수 | 설명 |
@@ -353,6 +376,12 @@ FLASK_COOKIE_SECURE=false
 | `ADMIN_USERNAME` / `ADMIN_PASSWORD_HASH` | 관리자 계정. 해시 대신 `ADMIN_PASSWORD`(평문)도 코드상 지원하지만 해시를 권장 |
 | `FLASK_SECRET_KEY` | 세션 서명 키. 없으면 실행할 때마다 임의로 생성되어 재시작 시 로그인 세션이 풀림 |
 | `FLASK_COOKIE_SECURE` | `true`면 세션 쿠키에 Secure 속성 적용 (HTTPS 환경) |
+| `NEXON_API_CONNECT_TIMEOUT` / `NEXON_API_READ_TIMEOUT` | Nexon API 연결·응답 제한 시간 (초, 기본값 3.05 / 10) |
+| `NEXON_API_RETRIES` / `NEXON_API_RETRY_BACKOFF` | Nexon API 추가 재시도 횟수와 최초 대기 시간 (기본값 2회 / 0.35초) |
+| `AI_API_TIMEOUT` / `AI_API_RETRIES` / `AI_API_RETRY_BACKOFF` | OpenRouter 요청 제한 시간, 추가 재시도 횟수, 최초 대기 시간 (기본값 30초 / 1회 / 0.5초) |
+
+- Nexon/OpenRouter 호출은 연결 오류, 시간 초과, 429 및 일시적인 5xx 응답만 제한적으로 재시도합니다. 인증·요청 오류 등 일반 4xx 응답은 반복하지 않습니다.
+- `*_RETRIES` 값은 최초 호출을 제외한 추가 재시도 횟수이며, 과도한 요청을 막기 위해 실제 전체 시도 횟수는 최대 4회로 제한됩니다.
 
 - NEXON Open API는 NEXON_API_KEY가 필요합니다.
 - AI 분석은 GEMINI_API_KEY 또는 OPENROUTER_API_KEY 중 하나 이상을 사용할 수 있습니다.

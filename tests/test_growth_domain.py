@@ -1,6 +1,6 @@
 import unittest
 
-from domain.growth_calculations import (
+from tracker.domain.growth_calculations import (
     calculate_archive_history_changes,
     calculate_recent_history_changes,
 )
