@@ -6,7 +6,7 @@ from unittest.mock import Mock, patch
 
 import app as tracker
 from tracker.controller import history_controller
-from growth_history_store import GrowthHistoryStore
+from tracker.repositories.growth_history_store import GrowthHistoryStore
 
 
 class GrowthHistoryStoreTests(unittest.TestCase):
