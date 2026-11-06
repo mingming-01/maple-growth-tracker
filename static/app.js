@@ -1,4 +1,5 @@
 import { apiFetch, readApiResponse } from "./js/api.js";
+import { initCharacterDetails } from "./js/character-details.js";
 import {
     sortHistoryAscending,
     sortHistoryDescending,
@@ -110,6 +111,8 @@ const favoriteFeedback = document.getElementById("favoriteFeedback");
 const favoriteCurrentButton = document.getElementById("favoriteCurrentButton");
 const favoriteCurrentButtonIcon = document.getElementById("favoriteCurrentButtonIcon");
 const favoriteCurrentButtonLabel = document.getElementById("favoriteCurrentButtonLabel");
+
+const characterDetails = initCharacterDetails({ apiFetch, readApiResponse });
 
 let growthChart = null;
 let currentCharacter = null;
@@ -1370,6 +1373,7 @@ async function handleSearch(event) {
         const history = historyResult.history || [];
         renderDataStatus(character, historyResult);
         currentCharacter = character;
+        characterDetails.setCharacter(character.ocid || "");
         currentHistory = history;
         currentDisplayHistory = history;
         currentHistoryRange = 7;
@@ -1437,6 +1441,7 @@ async function refreshVisibleCharacter({ automatic = false } = {}) {
         const historyResult = await searchHistory(name, true);
         const history = historyResult.history || [];
         currentCharacter = character;
+        characterDetails.setCharacter(character.ocid || "");
         currentHistory = history;
         try {
             await loadHistoryRange(Number(historyRangeSelect?.value || currentHistoryRange));
@@ -1792,6 +1797,7 @@ function restoreTrackerState() {
     }
 
     currentCharacter = state.character;
+    characterDetails.setCharacter(currentCharacter.ocid || "");
     currentHistory = state.history;
     renderDataStatus(currentCharacter, {
         historyStatus: currentCharacter.historyStatus,
