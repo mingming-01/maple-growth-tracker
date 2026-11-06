@@ -503,7 +503,7 @@ function renderUnionArtifact(artifact,content) {
             if(present(value)) optionsList.appendChild(el("span","game-union-crystal-option",value));
         });
         if(optionsList.childElementCount) tile.appendChild(optionsList);
-        if(present(crystal?.date_expire)) tile.appendChild(el("span","game-union-crystal-expiry","만료 예정 · "+String(crystal.date_expire)));
+        if(present(crystal?.date_expire)&&crystal?.is_expired!==true) tile.appendChild(el("span","game-union-crystal-expiry","만료 예정 · "+String(crystal.date_expire)));
         crystalGrid.appendChild(tile);
     });
     if(crystalGrid.childElementCount) crystalPanel.appendChild(crystalGrid);
