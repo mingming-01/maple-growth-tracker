@@ -203,27 +203,40 @@ Chart.js, html2canvas, jsPDF는 CDN으로 불러옵니다.
 ```text
 maple-growth-tracker/
 │
-├── app.py                  # Flask 서버, NEXON API 호출, 성장 계산, AI 호출, 관리자 기능
+├── app.py                         # WSGI 진입점 및 로컬 개발 서버 실행
 ├── requirements.txt
 ├── .gitignore
 ├── README.md
 │
-├── instance/               # 실행 시 자동 생성
-│   └── admin_logs.sqlite3  # 로컬 개발용 관리자 로그 (SQLite)
+├── tracker/
+│   ├── __init__.py                # create_app 공개
+│   ├── application.py             # Flask Application Factory 및 Blueprint 등록
+│   ├── config.py                  # 환경변수 기반 설정
+│   ├── runtime.py                 # 공통 캐시·로그·요청 처리 유틸리티와 런타임 초기화
+│   │
+│   ├── controller/                # 기능별 Flask Blueprint와 HTTP 요청 처리
+│   │   ├── page_controller.py
+│   │   ├── admin_controller.py
+│   │   ├── character_controller.py
+│   │   ├── history_controller.py
+│   │   └── ai_controller.py
+│   │
+│   ├── domain/                    # Flask 및 외부 API에 독립적인 성장 계산 규칙
+│   │   └── growth_calculations.py
+│   ├── services/                  # AI 성장 분석·비교 등 애플리케이션 서비스
+│   │   └── ai_analysis_service.py
+│   ├── repositories/              # PostgreSQL·SQLite 저장소 접근
+│   │   ├── growth_history_store.py
+│   │   └── api_snapshot_repository.py
+│   └── integrations/              # 외부 API 연동
+│       ├── nexon_api.py
+│       └── ai_provider.py
 │
-├── templates/
-│   ├── index.html          # 메인 화면 / 결과 화면
-│   ├── admin_login.html    # 관리자 로그인
-│   └── admin_logs.html     # 관리자 로그 조회
-│
-└── static/
-    ├── app.js              # 조회, 성장 계산, 그래프, AI 호출, 상태 저장, 이미지/PDF 저장
-    ├── style.css
-    ├── favicon.svg         # 메인·관리자 공통 파비콘
-    ├── jobs.json           # 직업 → NEXON 랭킹 조회용 직업 값 매핑
-    └── images/
-        ├── logo.svg        # 사이트 로고
-        └── worlds/         # 월드 로고 이미지
+├── templates/                     # 메인·관리자 화면
+├── static/                        # JavaScript·CSS·이미지·직업 매핑
+├── migrations/                    # PostgreSQL 테이블 및 권한 설정
+├── tests/                         # API·도메인·저장소·앱 팩토리 테스트
+└── docs/                           # 프로젝트 운영·개선 문서
 ```
 
 ### API
