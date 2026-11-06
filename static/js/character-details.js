@@ -537,8 +537,9 @@ function renderSymbolsSection(data) {
         const requiredValue=symbol.symbol_require_growth_count;
         const growth=Number(growthValue||0);
         const required=Number(requiredValue||0);
-        const isMax=(present(requiredValue)&&required<=0)||
-            (!present(requiredValue)&&!present(growthValue));
+        const isMax=present(requiredValue)
+            ? required<=0
+            : present(growthValue)&&growth===0&&Number(symbol.symbol_level)>0;
         const growthLines=[
             symbol.symbol_description,
             isMax?"성장량 MAX":present(requiredValue)?"성장량 "+fmt(growth)+" / "+fmt(required):"성장량 정보 없음",
