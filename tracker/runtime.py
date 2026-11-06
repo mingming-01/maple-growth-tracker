@@ -1,4 +1,4 @@
-from flask import jsonify, request, render_template, redirect, url_for, session, current_app
+from flask import jsonify, request, render_template, redirect, url_for, session, current_app, has_app_context
 from functools import wraps
 from werkzeug.exceptions import HTTPException
 from werkzeug.security import check_password_hash
@@ -32,94 +32,111 @@ from google import genai
 from tracker.integrations.nexon_api import get_ocid, get_basic_character, get_ranking
 
 
-# 앱 설정과 런타임 의존성은 create_app()에서 주입한다.
-API_KEY = os.getenv("NEXON_API_KEY")
+# 변경되지 않는 도메인 상수만 모듈 상수로 유지한다.
 BASE_URL = "https://open.api.nexon.com/maplestory/v1"
-HEADERS = {"x-nxopen-api-key": API_KEY} if API_KEY else {}
-NEXON_API_TIMEOUT = (3.05, 10)
 KOREA_TIMEZONE = ZoneInfo("Asia/Seoul")
 HISTORY_API_MIN_INTERVAL = 0.22
 HISTORY_BACKFILL_BATCH_SIZE = 10
-HISTORY_API_REQUEST_LOCK = Lock()
-_last_history_api_request_at = 0.0
+CHARACTER_CACHE_TTL = 300
+HISTORY_CACHE_TTL = 1800
+AI_RESPONSE_CACHE_TTL = 6 * 60 * 60
+AI_RESPONSE_CACHE_MAX_ENTRIES = 100
 
-GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
-gemini_client = genai.Client(api_key=GEMINI_API_KEY) if GEMINI_API_KEY else None
-OPENROUTER_API_KEY = os.getenv("OPENROUTER_API_KEY")
-OPENROUTER_MODEL = os.getenv("OPENROUTER_MODEL", "openrouter/free")
-OPENROUTER_URL = "https://openrouter.ai/api/v1/chat/completions"
 
-ADMIN_USERNAME = os.getenv("ADMIN_USERNAME", "")
-ADMIN_PASSWORD_HASH = os.getenv("ADMIN_PASSWORD_HASH", "")
-ADMIN_PASSWORD = os.getenv("ADMIN_PASSWORD", "")
-LOG_DB_PATH = os.path.join("instance", "admin_logs.sqlite3")
-SNAPSHOT_DB_PATH = os.path.join("instance", "growth_snapshots.sqlite3")
-GROWTH_DATABASE_URL = os.getenv("GROWTH_DATABASE_URL", "").strip()
-LOG_DB_BACKEND = (
-    "postgres"
-    if GROWTH_DATABASE_URL.startswith(("postgres://", "postgresql://"))
-    else "sqlite"
-)
-LOG_STORAGE_WARNING = ""
-growth_history_store = None
-app = None
+class RuntimeState:
+    """Flask 앱 인스턴스마다 독립적으로 보유하는 런타임 의존성."""
+
+    def __init__(self, flask_app=None):
+        config = flask_app.config if flask_app is not None else {}
+        instance_path = (
+            flask_app.instance_path if flask_app is not None
+            else os.path.abspath("instance")
+        )
+        self.nexon_api_key = config.get("NEXON_API_KEY", "")
+        self.gemini_api_key = config.get("GEMINI_API_KEY", "")
+        self.gemini_client = (
+            genai.Client(api_key=self.gemini_api_key)
+            if self.gemini_api_key else None
+        )
+        self.openrouter_api_key = config.get("OPENROUTER_API_KEY", "")
+        self.openrouter_model = config.get("OPENROUTER_MODEL", "openrouter/free")
+        self.admin_username = config.get("ADMIN_USERNAME", "")
+        self.admin_password_hash = config.get("ADMIN_PASSWORD_HASH", "")
+        self.admin_password = config.get("ADMIN_PASSWORD", "")
+        self.growth_database_url = config.get("GROWTH_DATABASE_URL", "").strip()
+        self.log_db_backend = (
+            "postgres"
+            if self.growth_database_url.startswith(("postgres://", "postgresql://"))
+            else "sqlite"
+        )
+        self.log_storage_warning = ""
+        self.log_db_path = os.path.join(instance_path, "admin_logs.sqlite3")
+        self.snapshot_db_path = os.path.join(instance_path, "growth_snapshots.sqlite3")
+        self.growth_history_store = GrowthHistoryStore(
+            database_url=self.growth_database_url,
+            sqlite_path=os.path.join(instance_path, "growth_history.sqlite3"),
+        )
+        self.cache = {}
+        self.ai_response_cache = {}
+        self.nexon_request_lock = Lock()
+        self.last_nexon_request_at = 0.0
+
+
+_fallback_runtime_state = None
+
+
+def get_runtime_state():
+    """현재 Flask 앱의 런타임 상태를 반환한다."""
+    global _fallback_runtime_state
+    if has_app_context():
+        state = current_app.extensions.get("maple_growth_tracker")
+        if state is not None:
+            return state
+    if _fallback_runtime_state is None:
+        _fallback_runtime_state = RuntimeState()
+    return _fallback_runtime_state
+
+
+def get_growth_history_store():
+    return get_runtime_state().growth_history_store
+
+
+def get_gemini_client():
+    return get_runtime_state().gemini_client
 
 
 def configure_runtime(flask_app):
-    """Flask 앱 설정으로 저장소와 외부 서비스 의존성을 초기화한다."""
-    global API_KEY, HEADERS, GEMINI_API_KEY, gemini_client
-    global OPENROUTER_API_KEY, OPENROUTER_MODEL, ADMIN_USERNAME
-    global ADMIN_PASSWORD_HASH, ADMIN_PASSWORD, LOG_DB_PATH
-    global SNAPSHOT_DB_PATH, GROWTH_DATABASE_URL, LOG_DB_BACKEND
-    global LOG_STORAGE_WARNING, growth_history_store
-
-    API_KEY = flask_app.config.get("NEXON_API_KEY", "")
-    HEADERS = {"x-nxopen-api-key": API_KEY} if API_KEY else {}
-    GEMINI_API_KEY = flask_app.config.get("GEMINI_API_KEY", "")
-    gemini_client = genai.Client(api_key=GEMINI_API_KEY) if GEMINI_API_KEY else None
-    OPENROUTER_API_KEY = flask_app.config.get("OPENROUTER_API_KEY", "")
-    OPENROUTER_MODEL = flask_app.config.get("OPENROUTER_MODEL", "openrouter/free")
-    ADMIN_USERNAME = flask_app.config.get("ADMIN_USERNAME", "")
-    ADMIN_PASSWORD_HASH = flask_app.config.get("ADMIN_PASSWORD_HASH", "")
-    ADMIN_PASSWORD = flask_app.config.get("ADMIN_PASSWORD", "")
-    GROWTH_DATABASE_URL = flask_app.config.get("GROWTH_DATABASE_URL", "").strip()
-    LOG_DB_BACKEND = (
-        "postgres"
-        if GROWTH_DATABASE_URL.startswith(("postgres://", "postgresql://"))
-        else "sqlite"
-    )
-    LOG_STORAGE_WARNING = ""
-    LOG_DB_PATH = os.path.join(flask_app.instance_path, "admin_logs.sqlite3")
-    SNAPSHOT_DB_PATH = os.path.join(flask_app.instance_path, "growth_snapshots.sqlite3")
+    """앱 전용 상태를 초기화하고 Flask extensions에 등록한다."""
     os.makedirs(flask_app.instance_path, exist_ok=True)
-    growth_history_store = GrowthHistoryStore(
-        database_url=GROWTH_DATABASE_URL,
-        sqlite_path=os.path.join(flask_app.instance_path, "growth_history.sqlite3")
-    )
-    initialize_log_db()
-    initialize_snapshot_db()
+    state = RuntimeState(flask_app)
+    flask_app.extensions["maple_growth_tracker"] = state
+    with flask_app.app_context():
+        initialize_log_db()
+        initialize_snapshot_db()
+    return state
 
 
 
 def connect_log_db():
-    if LOG_DB_BACKEND == "postgres":
+    state = get_runtime_state()
+    if state.log_db_backend == "postgres":
         return psycopg.connect(
-            GROWTH_DATABASE_URL,
+            state.growth_database_url,
             connect_timeout=3,
             sslmode="require",
             prepare_threshold=None,
             row_factory=dict_row,
         )
 
-    connection = sqlite3.connect(LOG_DB_PATH, timeout=5)
+    connection = sqlite3.connect(state.log_db_path, timeout=5)
     connection.row_factory = sqlite3.Row
     return connection
 
 
 def initialize_log_db():
-    global LOG_DB_BACKEND, LOG_STORAGE_WARNING
+    state = get_runtime_state()
 
-    if LOG_DB_BACKEND == "postgres":
+    if state.log_db_backend == "postgres":
         try:
             connection = connect_log_db()
             try:
@@ -162,13 +179,13 @@ def initialize_log_db():
         except psycopg.Error:
             # 로그 저장소 장애가 앱 전체의 시작을 막지 않도록 로컬 저장소로 전환한다.
             print("영구 관리자 로그 저장소 초기화에 실패했습니다.")
-            LOG_DB_BACKEND = "sqlite"
-            LOG_STORAGE_WARNING = (
+            state.log_db_backend = "sqlite"
+            state.log_storage_warning = (
                 "Supabase 로그 저장소에 연결하지 못해 임시 SQLite를 사용 중입니다. "
                 "이 환경의 로그는 재배포 후 유지되지 않을 수 있습니다."
             )
 
-    connection = sqlite3.connect(LOG_DB_PATH, timeout=5)
+    connection = sqlite3.connect(state.log_db_path, timeout=5)
     try:
         with connection:
             connection.execute("""
@@ -217,7 +234,8 @@ def log_action(
     error_type=None,
 ):
     """민감한 요청 본문은 저장하지 않고 운영에 필요한 행동 정보만 기록한다."""
-    placeholder = "%s" if LOG_DB_BACKEND == "postgres" else "?"
+    state = get_runtime_state()
+    placeholder = "%s" if state.log_db_backend == "postgres" else "?"
     placeholders = ", ".join([placeholder] * 10)
     query = f"""
         INSERT INTO action_logs
@@ -252,28 +270,20 @@ def log_action(
 
 
 def initialize_snapshot_db():
-    return initialize_snapshot_db_for_path(SNAPSHOT_DB_PATH)
-
-
-# 간단한 메모리 캐시
-CACHE = {}
-CHARACTER_CACHE_TTL = 300
-HISTORY_CACHE_TTL = 1800
-AI_RESPONSE_CACHE = {}
-AI_RESPONSE_CACHE_TTL = 6 * 60 * 60
-AI_RESPONSE_CACHE_MAX_ENTRIES = 100
+    return initialize_snapshot_db_for_path(get_runtime_state().snapshot_db_path)
 
 
 def get_ai_response_cache(prompt):
     """같은 프롬프트의 성공한 AI 결과를 일정 시간 재사용한다."""
     cache_key = hashlib.sha256(prompt.encode("utf-8")).hexdigest()
-    item = AI_RESPONSE_CACHE.get(cache_key)
+    cache = get_runtime_state().ai_response_cache
+    item = cache.get(cache_key)
     if not item:
         return None
 
     now = time.time()
     if now - item["cached_at"] > AI_RESPONSE_CACHE_TTL:
-        AI_RESPONSE_CACHE.pop(cache_key, None)
+        cache.pop(cache_key, None)
         return None
 
     item["used_at"] = now
@@ -286,32 +296,35 @@ def set_ai_response_cache(prompt, analysis):
 
     now = time.time()
     cache_key = hashlib.sha256(prompt.encode("utf-8")).hexdigest()
-    AI_RESPONSE_CACHE[cache_key] = {
+    cache = get_runtime_state().ai_response_cache
+    cache[cache_key] = {
         "analysis": analysis,
         "cached_at": now,
         "used_at": now,
     }
 
-    while len(AI_RESPONSE_CACHE) > AI_RESPONSE_CACHE_MAX_ENTRIES:
+    while len(cache) > AI_RESPONSE_CACHE_MAX_ENTRIES:
         oldest_key = min(
-            AI_RESPONSE_CACHE,
-            key=lambda key: AI_RESPONSE_CACHE[key]["used_at"],
+            cache,
+            key=lambda key: cache[key]["used_at"],
         )
-        AI_RESPONSE_CACHE.pop(oldest_key, None)
+        cache.pop(oldest_key, None)
 
 
 def get_cache(key):
-    item = CACHE.get(key)
+    cache = get_runtime_state().cache
+    item = cache.get(key)
     if not item:
         return None
     if time.time() - item["time"] > item["ttl"]:
-        del CACHE[key]
+        del cache[key]
         return None
     return item["data"]
 
 
 def set_cache(key, data, ttl):
-    CACHE[key] = {
+    cache = get_runtime_state().cache
+    cache[key] = {
         "time": time.time(),
         "data": data,
         "ttl": ttl,
@@ -320,16 +333,20 @@ def set_cache(key, data, ttl):
 
 
 def get_cache_timestamp(key):
-    item = CACHE.get(key)
+    item = get_runtime_state().cache.get(key)
     return item.get("saved_at") if item else None
 
 
 def save_api_snapshot(cache_key, data):
-    return save_api_snapshot_for_path(SNAPSHOT_DB_PATH, cache_key, data)
+    return save_api_snapshot_for_path(
+        get_runtime_state().snapshot_db_path, cache_key, data
+    )
 
 
 def load_api_snapshot(cache_key):
-    return load_api_snapshot_for_path(SNAPSHOT_DB_PATH, cache_key)
+    return load_api_snapshot_for_path(
+        get_runtime_state().snapshot_db_path, cache_key
+    )
 
 
 def with_data_status(data, status, saved_at=None):
