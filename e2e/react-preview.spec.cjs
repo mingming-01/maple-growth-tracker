@@ -92,7 +92,7 @@ test("React preview refreshes ranking data and restores the full-size profile pr
   expect(desktopAvatar.width).toBeGreaterThanOrEqual(200);
   expect(desktopAvatar.height).toBeGreaterThanOrEqual(200);
   await expect(page.getByRole("heading", { name: "캐릭터 상세 정보" })).toBeVisible();
-  await expect(page.getByText("레전드리", { exact: true })).toBeVisible();
+  await expect(page.locator(".game-stat-detail-grade")).toHaveText("레전드리");
 });
 
 test("React profile keeps a readable avatar and progress bar on mobile", async ({ page }) => {
@@ -234,13 +234,13 @@ test("React admin panel logs in through Flask session and filters protected oper
   await page.getByRole("button", { name: "로그인" }).click();
 
   await expect(page.getByRole("heading", { name: "관리자 로그" })).toBeVisible();
-  await expect(page.getByText("밍득", { exact: true })).toBeVisible();
-  await expect(page.getByText("http_5xx")).toBeVisible();
+  await expect(page.locator(".mgt-admin-table tbody tr").filter({ hasText: "밍득" })).toBeVisible();
+  await expect(page.locator(".mgt-admin-table tbody tr").filter({ hasText: "http_5xx" })).toBeVisible();
 
   await page.getByLabel("검색어").fill("테스트캐릭터");
   await page.getByRole("button", { name: "검색" }).click();
-  await expect(page.getByText("테스트캐릭터", { exact: true })).toBeVisible();
-  await expect(page.getByText("밍득", { exact: true })).toHaveCount(0);
+  await expect(page.locator(".mgt-admin-table tbody tr").filter({ hasText: "테스트캐릭터" })).toBeVisible();
+  await expect(page.locator(".mgt-admin-table tbody tr").filter({ hasText: "밍득" })).toHaveCount(0);
 
   await page.getByRole("button", { name: "로그아웃" }).click();
   await expect(page.getByRole("heading", { name: "관리자 로그인" })).toBeVisible();
