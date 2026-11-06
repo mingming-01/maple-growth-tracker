@@ -160,7 +160,7 @@ def admin_logs():
         )
         print("관리자 로그 조회에 실패했습니다.")
 
-    if LOG_DB_BACKEND == "sqlite" and not storage_warning:
+    if log_db_backend == "sqlite" and not storage_warning:
         storage_warning = (
             "현재 로그는 SQLite에 저장됩니다. 개발 환경에는 적합하지만 "
             "Render 재배포 후 보존하려면 PostgreSQL 연결이 필요합니다."
@@ -183,7 +183,7 @@ def admin_logs():
         date_from_text=date_from_text,
         date_to_text=date_to_text,
         action_options=action_options,
-        storage_backend=LOG_DB_BACKEND,
+        storage_backend=log_db_backend,
         storage_warning=storage_warning,
         csrf_token=session.setdefault("csrf_token", secrets.token_urlsafe(32))
     )
