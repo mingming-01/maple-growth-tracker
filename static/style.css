@@ -976,7 +976,8 @@ button:disabled { cursor: wait; opacity: 0.65; }
 .equipment-option-total { margin-left:3px; color:#fff; font-size:11px; }
 .equipment-potential-grade.is-legendary { color:#6bd58b !important; }
 .game-hexa-stat-grid { grid-template-columns:repeat(3,minmax(0,1fr)); }
-.game-union-crystal-monster { width:52px; height:52px; object-fit:contain; }
+.game-union-crystal-gem { width:56px; height:56px; }
+.game-union-crystal-monster { width:50px; height:50px; object-fit:contain; }
 .game-union-champion-avatar-wrap { float:none; width:76px; height:76px; margin:0 auto 8px; }
 .game-union-champion-card { display:flex; flex-direction:column; align-items:center; text-align:center; }
 .game-union-champion-card-head { width:100%; }
