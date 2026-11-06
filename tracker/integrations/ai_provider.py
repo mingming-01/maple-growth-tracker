@@ -1,28 +1,34 @@
 """AI 제공자(OpenRouter)와 통신한다."""
+import requests
+from flask import current_app, has_app_context
 
-from app import *
+from tracker.config import Config
+
+OPENROUTER_URL = "https://openrouter.ai/api/v1/chat/completions"
+
+
+def _setting(name, default=None):
+    if has_app_context():
+        return current_app.config.get(name, default)
+    return getattr(Config, name, default)
 
 
 def request_openrouter(prompt):
-    if not OPENROUTER_API_KEY:
+    api_key = _setting("OPENROUTER_API_KEY", "")
+    if not api_key:
         return None
 
     response = requests.post(
         OPENROUTER_URL,
         headers={
-            "Authorization": f"Bearer {OPENROUTER_API_KEY}",
-            "Content-Type": "application/json"
+            "Authorization": f"Bearer {api_key}",
+            "Content-Type": "application/json",
         },
         json={
-            "model": OPENROUTER_MODEL,
-            "messages": [
-                {
-                    "role": "user",
-                    "content": prompt
-                }
-            ]
+            "model": _setting("OPENROUTER_MODEL", "openrouter/free"),
+            "messages": [{"role": "user", "content": prompt}],
         },
-        timeout=60
+        timeout=60,
     )
     response.raise_for_status()
 
@@ -33,7 +39,6 @@ def request_openrouter(prompt):
 
     message = choices[0].get("message", {})
     content = message.get("content")
-
     if not content:
         raise ValueError("OpenRouter 응답에 분석 내용이 없습니다.")
 
@@ -50,6 +55,6 @@ def should_use_openrouter(error):
             "QUOTA",
             "503",
             "504",
-            "TIMEOUT"
+            "TIMEOUT",
         )
     )
