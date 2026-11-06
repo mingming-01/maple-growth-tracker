@@ -594,8 +594,8 @@ export default function GrowthDashboard({ character, history, onHistoryChange, o
                     <td>{localDate(item.date)}</td>
                     <td>{item.ranking == null ? "—" : Number(item.ranking).toLocaleString("ko-KR")+"위"}</td>
                     <td>{item.level == null ? "—" : "Lv. "+item.level}</td>
-                    <td>{item.experience == null ? "—" : Number(item.experience).toLocaleString("ko-KR")}</td>
-                    <td>{item.experienceChange == null ? "—" : signedFmt(item.experienceChange)}</td>
+                    <td className="history-experience-value">{item.experience == null ? "—" : Number(item.experience).toLocaleString("ko-KR")}</td>
+                    <td className={"history-growth-value " + (Number(item.experienceChange) > 0 ? "is-positive" : Number(item.experienceChange) < 0 ? "is-negative" : "")}>{item.experienceChange == null ? "—" : signedFmt(item.experienceChange)}</td>
                     <td>{item.recordStatus === "available" ? "정상" : item.recordStatus === "not_ready" ? "API 미제공" : "미수집"}</td>
                   </tr>
                 ))}
