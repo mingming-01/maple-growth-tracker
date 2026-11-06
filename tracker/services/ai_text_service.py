@@ -1,0 +1,63 @@
+"""AI 응답을 화면에 전달하기 전 표시 형식과 내부 필드명을 정리한다."""
+import re
+from datetime import date
+
+
+def sanitize_ai_text(value, expected_date=None):
+    """모델 응답의 마크다운과 내부 표현을 정리해 일반 문장만 화면에 전달한다."""
+    text = str(value or "")
+    text = re.sub(r"\x60\x60\x60[\w-]*", "", text)
+    text = re.sub(r"(?m)^\s*[-*_]{3,}\s*$", "", text)
+    text = re.sub(r"(?m)^\s{0,3}#{1,6}\s*", "", text)
+    text = re.sub(r"(?m)^\s*>\s?", "", text)
+    text = re.sub(r"(?m)^\s*(?:[-*+]\s+|\d+[.)]\s+)", "", text)
+    text = re.sub(r"\[([^\]]+)\]\([^)]+\)", r"\1", text)
+    internal_terms = {
+        r"\bmetrics\.prediction\b": "성장 전망",
+        r"\brankingChange\b": "랭킹 변화",
+        r"\bvalidGrowthDays\b": "성장 기록",
+        r"\brecordedDays\b": "기록된 날짜",
+        r"\blatestDailyGrowth\b": "최근 성장 흐름",
+        r"\baverageDailyGrowth\b": "평균 성장 흐름",
+        r"\bhighestDailyGrowth\b": "높은 성장 기록",
+        r"\blowestDailyGrowth\b": "낮은 성장 기록",
+        r"\bsevenDayGrowth\b": "최근 성장 기록",
+        r"\bgrowthComparison\b": "성장 흐름 비교",
+        r"\bearlierAverage\b": "이전 성장 흐름",
+        r"\brecentAverage\b": "최근 성장 흐름",
+        r"\blevelUps\b": "레벨업 기록",
+        r"\bestimatedDays\b": "예상 기간",
+        r"\bestimatedDate\b": "예상 날짜",
+        r"\brequiredExperience\b": "필요 경험치",
+        r"\binsufficient_data\b": "기록 부족",
+        r"\bincreased\b": "증가한 흐름",
+        r"\bdecreased\b": "감소한 흐름",
+        r"\bstable\b": "일정한 흐름",
+        r"\bnull\b|\bundefined\b": "확인되지 않음",
+    }
+    for pattern, replacement in internal_terms.items():
+        text = re.sub(pattern, replacement, text, flags=re.IGNORECASE)
+    text = re.sub(
+        r"\(?\s*(?:\d{1,3}(?:,\d{3}){2,}|\d{10,})(?:\.\d+)?\s*\)?",
+        "해당 경험치 수치",
+        text,
+    )
+    if expected_date:
+        try:
+            prediction_date = date.fromisoformat(str(expected_date))
+            date_label = f"{prediction_date.month}월 {prediction_date.day}일"
+            date_patterns = (
+                r"\b\d{4}\s*년\s*\d{1,2}\s*월\s*\d{1,2}\s*일",
+                r"\b\d{1,2}\s*월\s*\d{1,2}\s*일",
+                r"\b\d{4}-\d{1,2}-\d{1,2}\b",
+                r"\b\d{1,2}[./]\d{1,2}(?:[./]\d{2,4})?\b",
+            )
+            for pattern in date_patterns:
+                text = re.sub(pattern, date_label, text)
+        except (TypeError, ValueError):
+            pass
+    text = re.sub(r"[*_~\x60]", "", text)
+    text = re.sub(r"(?m)^\s*#+\s*", "", text)
+    text = re.sub(r"[ \t]+\n", "\n", text)
+    text = re.sub(r"\n{3,}", "\n\n", text)
+    return text.strip()

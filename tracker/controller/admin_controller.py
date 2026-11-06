@@ -8,12 +8,12 @@ import psycopg
 from flask import Blueprint, current_app, redirect, render_template, request, session, url_for
 from werkzeug.security import check_password_hash
 
-from tracker.runtime import (
-    KOREA_TIMEZONE,
-    admin_required,
-    connect_log_db,
-    format_admin_log_time,
-    get_runtime_state,
+from tracker.runtime import KOREA_TIMEZONE, connect_log_db, get_runtime_state
+from tracker.services.admin_log_service import admin_required, format_admin_log_time
+from tracker.services.request_limits import (
+    admin_login_lockout_remaining,
+    clear_admin_login_failures,
+    record_admin_login_failure,
 )
 
 admin_bp = Blueprint("admin", __name__, url_prefix="/admin")
@@ -21,44 +21,59 @@ admin_bp = Blueprint("admin", __name__, url_prefix="/admin")
 
 @admin_bp.route("/login", methods=["GET", "POST"])
 def admin_login():
-    """관리자 계정을 확인하고 인증 세션을 발급한다."""
+    """해시 비밀번호와 CSRF를 검증하고 반복 실패는 IP 단위로 잠근다."""
     admin_username = current_app.config.get("ADMIN_USERNAME", "")
     admin_password_hash = current_app.config.get("ADMIN_PASSWORD_HASH", "")
-    admin_password = current_app.config.get("ADMIN_PASSWORD", "")
+    is_production = bool(current_app.config.get("IS_PRODUCTION", False))
+    admin_password = "" if is_production else current_app.config.get("ADMIN_PASSWORD", "")
+    configured = bool(admin_username and (
+        admin_password_hash or (admin_password and not is_production)
+    ))
     if session.get("admin_authenticated"):
         return redirect(url_for("admin.admin_logs"))
 
     csrf_token = session.setdefault("csrf_token", secrets.token_urlsafe(32))
     error = None
+    remaining = admin_login_lockout_remaining(request.remote_addr)
     if request.method == "POST":
-        submitted_token = request.form.get("csrf_token", "")
-        valid_token = hmac.compare_digest(str(csrf_token), str(submitted_token))
-        username = request.form.get("username", "")
-        password = request.form.get("password", "")
-        password_valid = False
-        if admin_password_hash:
-            try:
-                password_valid = check_password_hash(admin_password_hash, password)
-            except (ValueError, TypeError):
-                password_valid = False
-        elif admin_password:
-            password_valid = hmac.compare_digest(admin_password, password)
-
-        if not admin_username or not (admin_password_hash or admin_password):
-            error = "관리자 인증 환경변수가 설정되지 않았습니다."
-        elif valid_token and hmac.compare_digest(admin_username, username) and password_valid:
-            session.clear()
-            session["admin_authenticated"] = True
-            session["csrf_token"] = secrets.token_urlsafe(32)
-            return redirect(url_for("admin.admin_logs"))
+        if remaining:
+            error = f"로그인 시도가 제한되어 있습니다. {remaining}초 후 다시 시도해주세요."
         else:
-            error = "아이디 또는 비밀번호를 확인해주세요."
+            submitted_token = request.form.get("csrf_token", "")
+            valid_token = hmac.compare_digest(str(csrf_token), str(submitted_token))
+            username = request.form.get("username", "")
+            password = request.form.get("password", "")
+            password_valid = False
+            if admin_password_hash:
+                try:
+                    password_valid = check_password_hash(admin_password_hash, password)
+                except (ValueError, TypeError):
+                    password_valid = False
+            elif admin_password:
+                password_valid = hmac.compare_digest(admin_password, password)
+
+            if not configured:
+                error = "관리자 인증 환경변수가 설정되지 않았습니다. 운영 환경은 ADMIN_PASSWORD_HASH가 필요합니다."
+            elif not valid_token:
+                error = "잘못된 요청입니다. 페이지를 새로고침한 뒤 다시 시도해주세요."
+            elif hmac.compare_digest(admin_username, username) and password_valid:
+                clear_admin_login_failures(request.remote_addr)
+                session.clear()
+                session["admin_authenticated"] = True
+                session["csrf_token"] = secrets.token_urlsafe(32)
+                return redirect(url_for("admin.admin_logs"))
+            else:
+                remaining = record_admin_login_failure(request.remote_addr)
+                error = (
+                    f"로그인 실패 횟수를 초과했습니다. {remaining}초 후 다시 시도해주세요."
+                    if remaining else "아이디 또는 비밀번호를 확인해주세요."
+                )
 
     return render_template(
         "admin_login.html",
         csrf_token=csrf_token,
         error=error,
-        configured=bool(admin_username and (admin_password_hash or admin_password))
+        configured=configured,
     )
 
 @admin_bp.route("/logs")
@@ -185,6 +200,8 @@ def admin_logs():
         action_options=action_options,
         storage_backend=log_db_backend,
         storage_warning=storage_warning,
+        snapshot_storage_backend=state.snapshot_db_backend,
+        snapshot_storage_warning=state.snapshot_storage_warning,
         csrf_token=session.setdefault("csrf_token", secrets.token_urlsafe(32))
     )
 

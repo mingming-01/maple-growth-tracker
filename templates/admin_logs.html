@@ -43,6 +43,14 @@
         <p class="admin-storage-notice {% if storage_backend == 'postgres' %}is-warning{% else %}is-neutral{% endif %}" role="status">{{ storage_warning }}</p>
         {% endif %}
 
+        <p class="admin-storage-notice {% if snapshot_storage_backend == 'postgres' and not snapshot_storage_warning %}is-neutral{% else %}is-warning{% endif %}" role="status">
+            API 스냅샷 저장소: {{ snapshot_storage_backend|upper }}
+            {% if snapshot_storage_warning %} — {{ snapshot_storage_warning }}
+            {% elif snapshot_storage_backend == 'sqlite' %} — SQLite 파일에 저장되며 Render 재배포 후 사라질 수 있습니다.
+            {% else %} — PostgreSQL 영구 저장소를 사용합니다.
+            {% endif %}
+        </p>
+
         <section class="admin-filter-card" aria-labelledby="adminFilterTitle">
             <div class="admin-filter-heading">
                 <div>

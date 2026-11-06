@@ -1,5 +1,6 @@
 """Flask 애플리케이션 팩토리."""
 import os
+import warnings
 from pathlib import Path
 
 from flask import Flask
@@ -23,11 +24,27 @@ def create_app(test_config=None):
         app.config.update(test_config)
 
     app.json.ensure_ascii = False
-    app.secret_key = app.config.get("FLASK_SECRET_KEY") or os.urandom(32)
+    is_production = bool(app.config.get("IS_PRODUCTION", False))
+    configured_secret = app.config.get("FLASK_SECRET_KEY")
+    if is_production and not configured_secret:
+        warnings.warn(
+            "운영 환경에 FLASK_SECRET_KEY가 설정되지 않았습니다. "
+            "재시작 시 세션이 무효화될 수 있으므로 고정된 비밀키를 설정하세요.",
+            RuntimeWarning,
+        )
+    elif is_production and len(str(configured_secret)) < 32:
+        warnings.warn("운영 환경의 FLASK_SECRET_KEY는 32자 이상을 권장합니다.", RuntimeWarning)
+    if is_production and not app.config.get("ADMIN_PASSWORD_HASH"):
+        warnings.warn(
+            "운영 환경에 ADMIN_PASSWORD_HASH가 설정되지 않아 관리자 로그인이 비활성화됩니다.",
+            RuntimeWarning,
+        )
+    app.secret_key = configured_secret or os.urandom(32)
     app.config.update(
         SESSION_COOKIE_HTTPONLY=True,
         SESSION_COOKIE_SAMESITE="Lax",
-        SESSION_COOKIE_SECURE=bool(app.config.get("FLASK_COOKIE_SECURE", False)),
+        SESSION_COOKIE_SECURE=bool(app.config.get("FLASK_COOKIE_SECURE", False) or is_production),
+        MAX_CONTENT_LENGTH=64 * 1024,
     )
 
     runtime.configure_runtime(app)

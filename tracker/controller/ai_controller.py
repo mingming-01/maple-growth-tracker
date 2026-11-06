@@ -3,6 +3,7 @@ from flask import Blueprint, jsonify, request
 
 from tracker.controller.character_controller import get_character
 from tracker.controller.history_controller import get_history
+from tracker.services.request_limits import consume_ai_request
 from tracker.services.ai_analysis_service import (
     generate_ai_analysis,
     generate_ai_comparison,
@@ -11,12 +12,37 @@ from tracker.services.ai_analysis_service import (
 ai_bp = Blueprint("ai", __name__, url_prefix="/api")
 
 
+def _ai_rate_limit_response():
+    allowed, retry_after, reason = consume_ai_request(request.remote_addr)
+    if allowed:
+        return None
+    response = jsonify({
+        "error": "AI 요청 한도를 초과했습니다. 잠시 후 다시 시도해주세요.",
+        "limitType": reason,
+        "retryAfter": retry_after,
+    })
+    response.status_code = 429
+    response.headers["Retry-After"] = str(retry_after)
+    return response
+
+
 @ai_bp.route("/ai-analysis", methods=["GET", "POST"])
 def ai_analysis():
     """캐릭터의 계산된 성장 지표를 바탕으로 AI 성장 리포트를 만든다."""
     character_name = request.args.get("name", "").strip()
     if not character_name:
         return jsonify({"error": "캐릭터명을 입력해주세요."}), 400
+    if len(character_name) > 30:
+        return jsonify({"error": "캐릭터 이름이 너무 깁니다."}), 400
+    metrics = None
+    if request.method == "POST":
+        payload = request.get_json(silent=True) or {}
+        metrics = payload.get("metrics")
+        if not isinstance(metrics, dict):
+            return jsonify({"error": "계산된 성장 지표가 필요합니다."}), 400
+    rate_limit_response = _ai_rate_limit_response()
+    if rate_limit_response:
+        return rate_limit_response
 
     try:
         character_response = get_character()
@@ -29,13 +55,6 @@ def ai_analysis():
         if history_response.status_code != 200:
             return jsonify({"error": "성장 기록을 불러오지 못했습니다."}), history_response.status_code
         history_data = history_response.get_json()
-        metrics = None
-        if request.method == "POST":
-            payload = request.get_json(silent=True) or {}
-            metrics = payload.get("metrics")
-            if not isinstance(metrics, dict):
-                return jsonify({"error": "계산된 성장 지표가 필요합니다."}), 400
-
         result = generate_ai_analysis(character, history_data.get("history", []), metrics)
         if "error" in result:
             return jsonify(result), 500
@@ -63,6 +82,10 @@ def ai_comparison():
     second_name = comparison["character"]["characterName"].strip().casefold()
     if first_name == second_name:
         return jsonify({"error": "같은 캐릭터는 비교할 수 없습니다."}), 400
+
+    rate_limit_response = _ai_rate_limit_response()
+    if rate_limit_response:
+        return rate_limit_response
 
     result = generate_ai_comparison(primary, comparison)
     if "error" in result:

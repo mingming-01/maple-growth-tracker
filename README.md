@@ -426,3 +426,24 @@ Render에 Flask 애플리케이션으로 배포했습니다.
 - NEXON Open API, Gemini API(또는 OpenRouter)를 쓰려면 각각의 API Key가 필요하고, 사용량 한도가 적용될 수 있습니다.
 - 성장 예측은 최근 평균 성장량이 유지된다는 가정의 예상치입니다.
 - API Key 등 민감한 정보는 환경변수로 관리하고, 공개 저장소에 올리지 마세요.
+
+
+## Phase 1 운영 안정성 설정
+
+`GROWTH_DATABASE_URL`은 장기 성장 기록과 API 스냅샷에 공통으로 사용됩니다. PostgreSQL 연결에 성공하면 두 저장소가 PostgreSQL을 사용하고, 스냅샷 저장소 연결이 시작 시 실패하면 SQLite로 폴백하며 관리자 화면에 상태를 표시합니다. SQLite는 Render 인스턴스의 영속 디스크가 보장되지 않는 한 재배포 후 보존되지 않을 수 있습니다.
+
+추가 선택 환경변수:
+
+| 변수 | 기본값 | 설명 |
+|---|---:|---|
+| `NEXON_API_MIN_INTERVAL` | `0.22` | 모든 Nexon API 요청 시도 사이의 최소 간격(초) |
+| `AI_MAX_REQUESTS_PER_MINUTE` | `5` | IP별 AI API 분당 요청 상한 |
+| `AI_MAX_REQUESTS_PER_DAY_PER_IP` | `20` | IP별 KST 일일 AI 요청 상한 |
+| `AI_MAX_REQUESTS_PER_DAY_GLOBAL` | `100` | 앱 인스턴스별 KST 일일 AI 요청 상한 |
+| `ADMIN_LOGIN_MAX_ATTEMPTS` | `5` | 관리자 로그인 실패 허용 횟수 |
+| `ADMIN_LOGIN_WINDOW_SECONDS` | `900` | 로그인 실패 관찰 구간(초) |
+| `ADMIN_LOGIN_LOCKOUT_SECONDS` | `900` | 초과 시 잠금 시간(초) |
+
+AI 요청 카운터와 로그인 잠금은 현재 앱 인스턴스의 메모리에서 관리합니다. 프로세스 재시작 또는 다중 인스턴스에서 누적되지 않으므로, 실제 과금 상한은 Gemini/OpenRouter 공급자 계정의 예산 제한과 함께 설정해야 합니다. 운영 환경(`RENDER=true` 또는 `FLASK_ENV=production`)에서는 `ADMIN_PASSWORD_HASH` 사용이 필요하며 `ADMIN_PASSWORD` 평문 대체는 비활성화됩니다. `FLASK_SECRET_KEY`에는 고정된 32자 이상의 값을 설정하세요.
+
+브라우저 스모크 테스트는 `npm install`, `npx playwright install --with-deps chromium`, `npx playwright test`로 실행할 수 있습니다. 상세 제한과 미지원 범위는 `docs/PHASE1_HARDENING.md`를 참고하세요.
