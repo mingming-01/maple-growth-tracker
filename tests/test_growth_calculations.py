@@ -7,6 +7,8 @@ from unittest.mock import Mock, patch
 import app as tracker
 from tracker.controller import history_controller
 from tracker.repositories.growth_history_store import GrowthHistoryStore
+from tracker.runtime import get_runtime_state
+from tracker.services.growth_history_service import GrowthHistoryService
 
 
 class GrowthCalculationBehaviorTests(unittest.TestCase):
@@ -20,28 +22,22 @@ class GrowthCalculationBehaviorTests(unittest.TestCase):
         )
         self.store.initialize()
 
-        self.store_patch = patch.object(tracker, "growth_history_store", self.store)
-        self.controller_store_patch = patch.object(history_controller, "growth_history_store", self.store)
-        self.snapshot_patch = patch.object(
-            tracker,
-            "SNAPSHOT_DB_PATH",
-            str(Path(self.temp_dir.name) / "snapshots.sqlite3"),
-        )
-        self.log_patch = patch.object(tracker, "log_action")
-        self.store_patch.start()
-        self.controller_store_patch.start()
-        self.snapshot_patch.start()
-        self.log_patch.start()
-        tracker.initialize_snapshot_db()
-        tracker.CACHE.clear()
+        with tracker.app.app_context():
+            self.state = get_runtime_state()
+            self.state.growth_history_repository = self.store
+            self.state.growth_history_service = GrowthHistoryService(self.store)
+            self.state.snapshot_db_path = str(Path(self.temp_dir.name) / "snapshots.sqlite3")
+            self.state.log_db_path = str(Path(self.temp_dir.name) / "admin_logs.sqlite3")
+            self.state.log_db_backend = "sqlite"
+            self.state.cache.clear()
+            tracker.initialize_snapshot_db()
+            tracker.initialize_log_db()
+
         self.client = tracker.app.test_client()
 
     def tearDown(self):
-        tracker.CACHE.clear()
-        self.log_patch.stop()
-        self.snapshot_patch.stop()
-        self.controller_store_patch.stop()
-        self.store_patch.stop()
+        with tracker.app.app_context():
+            self.state.cache.clear()
         self.temp_dir.cleanup()
 
     def test_recent_history_excludes_level_up_experience_change(self):
@@ -68,14 +64,15 @@ class GrowthCalculationBehaviorTests(unittest.TestCase):
             )
 
         with patch.object(
-            history_controller, "get_ocid", return_value=("test-ocid", response_stub)
+            history_controller,
+            "resolve_character",
+            return_value=("test-ocid", basic, response_stub),
         ), patch.object(
-            history_controller, "get_basic_character", return_value=(basic, response_stub)
-        ), patch.object(
-            history_controller, "get_ranking", side_effect=get_ranking
+            history_controller, "get_ranking_snapshot", side_effect=get_ranking
         ):
             response = self.client.get(
-                "/api/history?name=%ED%85%8C%EC%8A%A4%ED%8A%B8%EC%BA%90%EB%A6%AD%ED%84%B0&refresh=1"
+                "/api/history",
+                query_string={"name": "테스트캐릭터", "refresh": "1"},
             )
 
         self.assertEqual(response.status_code, 200)
