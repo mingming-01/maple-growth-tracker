@@ -608,7 +608,7 @@ function unionEffectTile(effect,index) {
 }
 
 const ARTIFACT_MOB_IDS = {
-    "주황버섯":"1210102",
+    "주황버섯":"1210100",
     "슬라임":"210100",
     "뿔버섯":"2110200",
     "스텀프":"100005",
@@ -654,7 +654,7 @@ function renderUnionArtifact(artifact,content) {
         const order=el("span","game-union-crystal-order",String(index+1).padStart(2,"0"));
         const gem=el("span","game-union-crystal-gem");
         const mobId=ARTIFACT_MOB_IDS[crystal?.name];
-        const mobUrl=crystal?.mob_icon||crystal?.monster_icon||
+        const mobUrl=crystal?.mob_icon||crystal?.monster_icon||crystal?.monster_image||crystal?.image_url||
             (mobId?"https://maplestory.io/api/KMS/latest/mob/"+mobId+"/icon":null);
         if(mobUrl) {
             const mobIcon=image(mobUrl,crystal?.name||"몬스터","game-union-crystal-monster");
