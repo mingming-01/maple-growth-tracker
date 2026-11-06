@@ -143,7 +143,7 @@ export function buildGrowthTimeline(history, limit = 8) {
             type: "best-growth",
             date: best.item.date,
             title: "기간 최고 성장일",
-            description: `+${best.change.toLocaleString("ko-KR")} 경험치`,
+            description: `+${(best.change / 1_000_000_000_000).toFixed(2)}조 경험치`,
             priority: 1
         });
     }
