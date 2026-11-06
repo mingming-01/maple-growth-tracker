@@ -165,7 +165,7 @@ test("React admin panel logs in through Flask session and filters protected oper
     }
   ];
 
-  await page.route("**/admin/api/logs**", async route => {
+  await page.route(/\/admin\/api\/logs(?:\?.*)?$/, async route => {
     if (!authenticated) {
       await route.fulfill({
         status: 302,
@@ -200,7 +200,7 @@ test("React admin panel logs in through Flask session and filters protected oper
     });
   });
 
-  await page.route("**/admin/login", async route => {
+  await page.route(/\/admin\/login(?:\?.*)?$/, async route => {
     if (route.request().method() === "GET") {
       await route.fulfill({
         status: 200,
@@ -216,7 +216,7 @@ test("React admin panel logs in through Flask session and filters protected oper
       body: ""
     });
   });
-  await page.route("**/admin/logs", route => route.fulfill({
+  await page.route(/\/admin\/logs(?:\?.*)?$/, route => route.fulfill({
     status: 200,
     contentType: "text/html",
     body: "<html><body>Legacy admin fallback</body></html>"
@@ -231,18 +231,25 @@ test("React admin panel logs in through Flask session and filters protected oper
   await expect(page.getByRole("heading", { name: "관리자 로그인" })).toBeVisible();
   await page.getByLabel("관리자 아이디").fill("admin");
   await page.getByLabel("비밀번호").fill("test-password");
-  const logsResponsePromise = page.waitForResponse(response => {
+  const observedAdminResponses = [];
+  page.on("response", response => {
     const url = new URL(response.url());
-    return url.pathname === "/admin/api/logs" && response.status() === 200;
+    if (url.pathname.startsWith("/admin/")) {
+      observedAdminResponses.push({ path: url.pathname, status: response.status() });
+    }
   });
   await page.getByRole("button", { name: "로그인" }).click();
 
-  const logsResponse = await logsResponsePromise;
+  await expect(page.getByRole("heading", { name: "관리자 로그" })).toBeVisible();
+  await expect.poll(() => observedAdminResponses.some(item => item.path === "/admin/api/logs" && item.status === 200))
+    .toBe(true);
+  const logsResponse = await page.waitForResponse(response => {
+    const url = new URL(response.url());
+    return url.pathname === "/admin/api/logs" && response.status() === 200;
+  }, { timeout: 5000 });
   const logsPayload = await logsResponse.json();
   expect(logsPayload.logs.map(item => item.character_name)).toContain("밍득");
   expect(logsPayload.logs.map(item => item.error_type)).toContain("http_5xx");
-
-  await expect(page.getByRole("heading", { name: "관리자 로그" })).toBeVisible();
   await expect(page.locator(".mgt-admin-table tbody tr").filter({ hasText: "밍득" })).toBeVisible();
   await expect(page.locator(".mgt-admin-table tbody tr").filter({ hasText: "http_5xx" })).toBeVisible();
 
