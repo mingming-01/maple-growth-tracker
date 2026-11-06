@@ -11,9 +11,14 @@ on:
       - "e2e/**"
       - "playwright.config.cjs"
 
+concurrency:
+  group: browser-e2e-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   browser-e2e:
     runs-on: ubuntu-24.04
+    timeout-minutes: 10
     steps:
       - name: Check out source
         uses: actions/checkout@v4
@@ -35,7 +40,7 @@ jobs:
         run: npm install --no-audit --no-fund
 
       - name: Install Chromium
-        run: npx playwright install --with-deps chromium
+        run: npx playwright install chromium
 
       - name: Run browser E2E tests
         run: npx playwright test
