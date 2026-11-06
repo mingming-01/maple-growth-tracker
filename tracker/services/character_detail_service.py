@@ -301,14 +301,34 @@ def _normalize_source(payload, spec):
         # 현재 효과 목록과 프리셋 효과 목록이 완전히 일치할 때만 활성 번호를 확정한다.
         active_number = None
         current_values = current_data.get(value_field)
-        if isinstance(current_values, list):
-            current_signature = json.dumps(sorted(str(value) for value in current_values), ensure_ascii=False, separators=(",", ":"))
+        if isinstance(current_values, list) and presets:
+            current_signature = json.dumps(
+                sorted(str(value) for value in current_values),
+                ensure_ascii=False,
+                separators=(",", ":"),
+            )
+            matching_numbers = []
             for preset in presets:
                 preset_values = preset["data"].get(value_field, [])
-                preset_signature = json.dumps(sorted(str(value) for value in preset_values), ensure_ascii=False, separators=(",", ":"))
+                preset_signature = json.dumps(
+                    sorted(str(value) for value in preset_values),
+                    ensure_ascii=False,
+                    separators=(",", ":"),
+                )
                 if current_signature == preset_signature:
-                    active_number = preset["number"]
-                    break
+                    matching_numbers.append(preset["number"])
+            # 같은 효과를 가진 프리셋이 여러 개면 번호를 추측하지 않는다.
+            if len(matching_numbers) == 1:
+                active_number = matching_numbers[0]
+
+        if not presets and current_data:
+            presets = [{
+                "number": 0,
+                "data": current_data,
+                "currentOnly": True,
+                **_classify_preset(spec["id"], current_data),
+            }]
+            active_number = 0
 
         excluded = set(current_fields) | {preset_list_field} | set(spec.get("exclude_fields", ()))
         data = {
