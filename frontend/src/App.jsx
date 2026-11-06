@@ -3,6 +3,7 @@ import html2canvas from "html2canvas";
 import { jsPDF } from "jspdf";
 import { getCharacter, getHistory } from "./services/api.js";
 import CharacterDetails from "./components/character/CharacterDetails.jsx";
+import AdminDashboard from "./components/admin/AdminDashboard.jsx";
 import GrowthDashboard from "./features/growth/GrowthDashboard.jsx";
 import { AIReport, GrowthComparison } from "./features/analytics/AnalyticsAndComparison.jsx";
 import {
@@ -206,7 +207,15 @@ function App() {
   const [favorites,setFavorites] = useState(() => readFavorites());
   const [favoriteFeedback,setFavoriteFeedback] = useState("");
   const [exporting,setExporting] = useState("");
+  const [view,setView] = useState(() => window.location.hash === "#admin" ? "admin" : "dashboard");
+  const [comparisonState,setComparisonState] = useState(restored?.comparison || null);
   const resultRef = useRef(null);
+
+  useEffect(() => {
+    const syncView = () => setView(window.location.hash === "#admin" ? "admin" : "dashboard");
+    window.addEventListener("hashchange",syncView);
+    return () => window.removeEventListener("hashchange",syncView);
+  },[]);
 
   const isFavorite = useMemo(() => {
     if (!character) return false;
@@ -221,7 +230,21 @@ function App() {
 
   const persistPatch = useCallback(patch => {
     saveTrackerState(patch);
+    if (Object.prototype.hasOwnProperty.call(patch || {}, "comparison")) {
+      setComparisonState(patch.comparison || null);
+    }
   },[]);
+
+  function openAdmin(event) {
+    event?.preventDefault?.();
+    if (window.location.hash !== "#admin") window.location.hash = "admin";
+    setView("admin");
+  }
+
+  function closeAdmin() {
+    window.history.replaceState(null,"",window.location.pathname + window.location.search);
+    setView("dashboard");
+  }
 
   const onStatsLoaded = useCallback(data => {
     setCharacter(previous => {
@@ -261,6 +284,7 @@ function App() {
       nextCharacter.historyStorage = historyResult.historyStorage || null;
       setCharacter(nextCharacter);
       setHistory(records);
+      setComparisonState(null);
       setLastSearched(new Date().toLocaleTimeString("ko-KR",{hour:"2-digit",minute:"2-digit"}));
       saveTrackerState({
         character:nextCharacter,
@@ -386,15 +410,18 @@ function App() {
           <span>MAPLE <b>GROWTH</b></span>
         </a>
         <nav className="mgt-nav" aria-label="주요 메뉴">
-          <a href="#character">캐릭터</a>
-          <a href="#details">스펙</a>
-          <a href="#growth">성장 기록</a>
-          <a href="#analytics">AI 분석</a>
-          <a href="/admin/login">관리자</a>
+          {view === "dashboard" ? <>
+            <a href="#character">캐릭터</a>
+            <a href="#details">스펙</a>
+            <a href="#growth">성장 기록</a>
+            <a href="#analytics">AI 분석</a>
+          </> : <a href="#dashboard" onClick={event=>{event.preventDefault();closeAdmin();}}>대시보드</a>}
+          <a href="#admin" onClick={openAdmin}>관리자</a>
         </nav>
       </header>
 
       <main className="mgt-page-content">
+        {view === "admin" ? <AdminDashboard onBack={closeAdmin} /> : <>
         <section className="mgt-hero">
           <div>
             <div className="mgt-hero-label"><span /> CHARACTER GROWTH DASHBOARD</div>
@@ -456,7 +483,7 @@ function App() {
                 <GrowthComparison
                   character={character}
                   history={history}
-                  initialState={restored?.comparison}
+                  initialState={comparisonState}
                   onSave={persistPatch}
                 />
               </div>
@@ -473,10 +500,11 @@ function App() {
           </section>
         )}
 
+        </>}
         <footer className="mgt-footer">
           <span>MAPLE GROWTH TRACKER</span>
           <span>Powered by NEXON Open API · Flask · React</span>
-          <a href="/admin/login">관리자</a>
+          <a href="/admin/login">레거시 관리자 로그인</a>
         </footer>
       </main>
     </div>
