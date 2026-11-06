@@ -51,22 +51,49 @@ class CharacterDetailServiceTests(unittest.TestCase):
             10,
         )
 
-    def test_union_raider_merges_separate_raider_and_block_preset_payloads(self):
+    def test_union_state_stat_presets_use_modern_schema_and_match_active_effects(self):
         spec = SECTION_SOURCES["union"][1]
         result = _normalize_source(
             {
-                "union_raider_preset_no": 3,
-                "union_raider_preset_3": {"union_raider_stat": ["보스 데미지 증가"]},
-                "union_block_preset_3": {"union_block": [{"block_type": "전사"}]},
-                "union_occupied_stat": ["공격력 증가"],
+                "use_preset_no": 1,  # 구형 공격대 전투 지도 번호이므로 새 스탯 프리셋 번호로 사용하지 않는다.
+                "union_max_point": 9000,
+                "union_state_stat": ["보스 몬스터 공격 시 데미지 20% 증가", "크리티컬 데미지 5% 증가"],
+                "union_state_stat_preset": [
+                    {"preset_no": 1, "union_state_stat": ["경험치 획득량 10% 증가"]},
+                    {"preset_no": 2, "union_state_stat": ["보스 몬스터 공격 시 데미지 20% 증가", "크리티컬 데미지 5% 증가"]},
+                ],
+                "union_block": [{"block_type": "전사"}],  # 구형 테트리스 데이터는 새 UI 데이터에서 제외한다.
+                "union_inner_stat": [{"stat_field_id": "0", "stat_field_effect": "공격력 증가"}],
             },
             spec,
         )
-        self.assertEqual(result["activePresetNo"], 3)
-        self.assertEqual(len(result["presets"]), 1)
-        self.assertIn("union_raider", result["presets"][0]["data"])
-        self.assertIn("union_block", result["presets"][0]["data"])
-        self.assertIn("union_occupied_stat", result["data"])
+        self.assertEqual(result["activePresetNo"], 2)
+        self.assertEqual([item["number"] for item in result["presets"]], [1, 2])
+        self.assertEqual(
+            result["presets"][0]["data"]["union_state_stat"],
+            ["경험치 획득량 10% 증가"],
+        )
+        self.assertEqual(result["data"]["union_max_point"], 9000)
+        self.assertNotIn("union_block", result["data"])
+        self.assertNotIn("union_inner_stat", result["data"])
+        self.assertEqual(result["presets"][0]["purpose"], "hunting")
+        self.assertEqual(result["presets"][1]["purpose"], "boss")
+
+    def test_union_state_stat_keeps_unknown_active_preset_unconfirmed(self):
+        spec = SECTION_SOURCES["union"][1]
+        result = _normalize_source(
+            {
+                "use_preset_no": 3,
+                "union_max_point": 6000,
+                "union_state_stat": ["보스 데미지 10% 증가"],
+                "union_state_stat_preset": [
+                    {"preset_no": 1, "union_state_stat": ["경험치 획득량 5% 증가"]},
+                    {"preset_no": 2, "union_state_stat": ["메소 획득량 5% 증가"]},
+                ],
+            },
+            spec,
+        )
+        self.assertIsNone(result["activePresetNo"])
 
     def test_section_returns_partial_when_one_detail_api_fails(self):
         payloads = {
@@ -157,6 +184,61 @@ class CharacterDetailServiceTests(unittest.TestCase):
         self.assertEqual(result["boss"]["presetNumbers"]["link"], 2)
         self.assertEqual(result["boss"]["presetNumbers"]["hyperStat"], 2)
         self.assertEqual(result["hunting"]["presetNumbers"]["equipment"], 1)
+
+    def test_union_section_fetches_state_presets_artifact_crystals_and_champions(self):
+        payloads = {
+            "user/union": FakeResponse(200, {"union_level": 9000, "union_grade": "그랜드 마스터 유니온"}),
+            "user/union-raider": FakeResponse(200, {
+                "union_max_point": 9000,
+                "union_state_stat": ["경험치 획득량 10% 증가"],
+                "union_state_stat_preset": [
+                    {"preset_no": 1, "union_state_stat": ["경험치 획득량 10% 증가"]},
+                    {"preset_no": 2, "union_state_stat": ["보스 몬스터 공격 시 데미지 20% 증가"]},
+                ],
+                "union_block": [],
+            }),
+            "user/union-artifact": FakeResponse(200, {
+                "union_artifact_effect": [{"name": "올스탯 증가", "level": 10}],
+                "union_artifact_crystal": [{
+                    "name": "주황버섯", "level": 5, "validity_flag": "0", "is_expired": False,
+                    "crystal_option_name_1": "버프 지속시간 증가",
+                    "crystal_option_name_2": "크리티컬 데미지 증가",
+                    "crystal_option_name_3": "보스 몬스터 공격 시 데미지 증가",
+                }],
+                "union_artifact_remain_ap": 20,
+            }),
+            "user/union-champion": FakeResponse(200, {
+                "union_champion": [{
+                    "champion_name": "테스트캐릭터", "champion_slot": 1,
+                    "champion_grade": "SSS", "champion_class": "아크메이지(불,독)",
+                    "champion_badge_info": [{"stat": "보스 몬스터 공격 시 데미지 +1%"}],
+                }],
+                "champion_badge_total_info": [{"stat": "보스 몬스터 공격 시 데미지 +1%"}],
+            }),
+        }
+
+        def fake_request(endpoint, params):
+            self.assertEqual(params.get("ocid"), "sample-ocid")
+            return payloads[endpoint]
+
+        with patch("tracker.services.character_detail_service.request_nexon_api", side_effect=fake_request):
+            result = get_character_detail_section("sample-ocid", "union")
+
+        self.assertEqual(result["status"], "available")
+        sources = {source["id"]: source for source in result["sources"]}
+        self.assertEqual(
+            set(sources),
+            {"union", "unionStateStat", "unionArtifact", "unionChampion"},
+        )
+        self.assertEqual(sources["unionStateStat"]["presets"][1]["number"], 2)
+        self.assertEqual(
+            sources["unionArtifact"]["currentData"]["union_artifact_crystal"][0]["name"],
+            "주황버섯",
+        )
+        self.assertEqual(
+            sources["unionChampion"]["currentData"]["union_champion"][0]["champion_grade"],
+            "SSS",
+        )
 
     def test_unknown_section_is_rejected(self):
         with self.assertRaises(ValueError):
