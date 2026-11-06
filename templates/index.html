@@ -135,6 +135,11 @@
                                 <p id="levelProgressDaily" class="level-progress-daily">성장 기록이 쌓이면 일일 진척률을 계산합니다.</p>
                             </div>
                             <div class="stat"><div class="stat-label">일일 평균 경험치</div><div id="averageDailyExperience" class="stat-value">-</div></div>
+                            <div class="stat power-record-stat">
+                                <div class="stat-label">최고 전투력</div>
+                                <div id="bestCombatPower" class="stat-value">-</div>
+                                <p id="bestCombatPowerDate" class="stat-note">사이트에서 조회한 실제 전투력 기준</p>
+                            </div>
                         </div>
                     </div>
                     <div class="ranking-panel">
@@ -146,6 +151,14 @@
                             <div class="ranking-card"><div class="ranking-label">직업 랭킹 (월드)</div><div id="jobWorldRanking" class="ranking-value">-</div></div>
                             <div class="ranking-card"><div class="ranking-label">직업 랭킹 (전체)</div><div id="jobRanking" class="ranking-value">-</div></div>
                         </div>
+                        <div class="ranking-insight-card">
+                            <div class="ranking-insight-heading">
+                                <span class="ranking-insight-label">최근 저장 기록 대비</span>
+                                <span class="ranking-insight-icon" aria-hidden="true">↗</span>
+                            </div>
+                            <strong id="rankingMovementValue" class="ranking-insight-value">기록 확인 중</strong>
+                            <p id="rankingMovementDetail" class="ranking-insight-detail">랭킹 기록이 쌓이면 최근 변화를 표시합니다.</p>
+                        </div>
                     </div>
                 </div>
             </section>
@@ -154,13 +167,15 @@
                 <div class="section-header character-details-header">
                     <div>
                         <h2 class="section-title">캐릭터 상세 정보</h2>
-                        <p class="section-description">스탯·장비·링크·유니온 구성을 프리셋별로 확인합니다. 탭을 선택하면 필요한 API만 조회합니다.</p>
+                        <p class="section-description">스탯 탭에서 주요 프리셋 조합을 한 화면에서 확인하고, 장비·심볼·6차 스킬은 별도 화면에서 살펴봅니다.</p>
                     </div>
                     <button type="button" id="refreshCharacterDetailsButton" class="export-button">선택 탭 새로고침</button>
                 </div>
                 <div class="detail-tabs" role="tablist" aria-label="캐릭터 상세 정보 구분">
                     <button type="button" class="detail-tab" role="tab" data-detail-tab="stats" aria-selected="false">스탯</button>
                     <button type="button" class="detail-tab" role="tab" data-detail-tab="equipment" aria-selected="false">장비</button>
+                    <button type="button" class="detail-tab" role="tab" data-detail-tab="symbols" aria-selected="false">심볼</button>
+                    <button type="button" class="detail-tab" role="tab" data-detail-tab="skills" aria-selected="false">6차 스킬</button>
                     <button type="button" class="detail-tab" role="tab" data-detail-tab="link" aria-selected="false">링크 스킬</button>
                     <button type="button" class="detail-tab" role="tab" data-detail-tab="union" aria-selected="false">유니온</button>
                 </div>

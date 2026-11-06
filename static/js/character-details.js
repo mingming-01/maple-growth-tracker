@@ -14,9 +14,14 @@ const FIELD_LABELS = {
     additional_potential_option_grade: "에디셔널 등급",
     additional_potential_option_1: "에디셔널 1", additional_potential_option_2: "에디셔널 2",
     additional_potential_option_3: "에디셔널 3",
-    symbol: "심볼", symbol_name: "심볼 이름", symbol_level: "심볼 레벨",
+    symbol: "심볼", symbol_name: "심볼 이름", symbol_icon: "심볼 아이콘",
+    symbol_description: "심볼 설명", symbol_level: "심볼 레벨",
     symbol_force: "심볼 포스", symbol_growth_count: "성장 횟수",
     symbol_require_growth_count: "다음 성장 필요 횟수", set_effect: "세트 효과",
+    skill_name: "스킬 이름", skill_description: "스킬 설명", skill_level: "스킬 레벨",
+    skill_effect: "현재 레벨 효과", skill_effect_next: "다음 레벨 효과", skill_icon: "스킬 아이콘",
+    hexa_core_name: "HEXA 코어 이름", hexa_core_level: "코어 레벨",
+    hexa_core_type: "코어 종류", linked_skill: "연결 스킬", hexa_skill_id: "연결 스킬 이름",
     set_name: "세트 이름", set_effect_info: "세트 효과 정보", set_count: "세트 착용 수",
     character_link_skill: "링크 스킬", skill_name: "스킬 이름", skill_description: "스킬 설명",
     skill_level: "스킬 레벨", skill_effect: "스킬 효과", union_level: "유니온 레벨",
@@ -103,7 +108,150 @@ function renderObject(container, value, depth = 0) {
     });
 }
 
-function renderSource(source) {
+function findArrayByKey(value, keys, depth = 0) {
+    if (!value || typeof value !== "object" || depth > 7) return null;
+    if (!Array.isArray(value)) for (const key of keys) if (Array.isArray(value[key])) return value[key];
+    for (const child of Object.values(value)) {
+        const found = findArrayByKey(child, keys, depth + 1);
+        if (found) return found;
+    }
+    return null;
+}
+
+function appendTooltipRows(container, title, value) {
+    if (value === null || value === undefined || value === "") return;
+    const group = createElement("div", "equipment-tooltip-group");
+    group.appendChild(createElement("strong", "equipment-tooltip-group-title", title));
+    const entries = Array.isArray(value) ? value :
+        (typeof value === "object" ? Object.entries(value).map(([key, entry]) => ({ [key]: entry })) : [value]);
+    entries.forEach(entry => {
+        if (entry === null || entry === undefined || entry === "") return;
+        const line = typeof entry === "object"
+            ? Object.entries(entry).filter(([, v]) => v !== null && v !== undefined && v !== "")
+                .map(([key, v]) => humanizeKey(key) + ": " + String(v)).join(" · ")
+            : String(entry);
+        if (line) group.appendChild(createElement("p", "equipment-tooltip-line", line));
+    });
+    if (group.childElementCount > 1) container.appendChild(group);
+}
+
+function renderEquipmentSlots(container, data) {
+    const items = findArrayByKey(data, ["item_equipment"]);
+    if (!items || !items.length) { renderObject(container, data); return; }
+    const grid = createElement("div", "equipment-slot-grid");
+    items.forEach(item => {
+        if (!item || typeof item !== "object") return;
+        const slotName = item.item_equipment_slot || item.item_equipment_part || "기타 장비";
+        const slot = createElement("article", "equipment-slot");
+        slot.tabIndex = 0;
+        slot.setAttribute("aria-label", slotName + " · " + (item.item_name || "장착 장비"));
+        slot.appendChild(createElement("span", "equipment-slot-label", slotName));
+        const iconFrame = createElement("span", "equipment-slot-icon-frame");
+        if (typeof item.item_icon === "string" && /^https:\/\//i.test(item.item_icon)) {
+            const icon = document.createElement("img");
+            icon.src = item.item_icon; icon.alt = item.item_name || slotName;
+            icon.loading = "lazy"; icon.referrerPolicy = "no-referrer";
+            iconFrame.appendChild(icon);
+        } else iconFrame.appendChild(createElement("span", "equipment-slot-no-icon", "장비"));
+        slot.append(iconFrame, createElement("strong", "equipment-slot-name", item.item_name || "이름 정보 없음"));
+        if (item.item_starforce !== null && item.item_starforce !== undefined) {
+            slot.appendChild(createElement("span", "equipment-slot-starforce", "★ " + item.item_starforce));
+        }
+        const tooltip = createElement("div", "equipment-tooltip");
+        tooltip.appendChild(createElement("strong", "equipment-tooltip-name", item.item_name || slotName));
+        if (item.item_description) tooltip.appendChild(createElement("p", "equipment-tooltip-description", item.item_description));
+        if (item.item_starforce !== null && item.item_starforce !== undefined) {
+            tooltip.appendChild(createElement("p", "equipment-tooltip-meta", "스타포스 " + item.item_starforce));
+        }
+        appendTooltipRows(tooltip, "기본 옵션", item.item_base_option);
+        appendTooltipRows(tooltip, "추가 옵션", item.item_add_option);
+        appendTooltipRows(tooltip, "기타 옵션", item.item_etc_option);
+        appendTooltipRows(tooltip, "스타포스 옵션", item.item_starforce_option);
+        appendTooltipRows(tooltip, "잠재능력", [
+            item.potential_option_grade, item.potential_option_1, item.potential_option_2, item.potential_option_3
+        ].filter(Boolean));
+        appendTooltipRows(tooltip, "에디셔널 잠재능력", [
+            item.additional_potential_option_grade, item.additional_potential_option_1,
+            item.additional_potential_option_2, item.additional_potential_option_3
+        ].filter(Boolean));
+        if (tooltip.childElementCount > 1) slot.appendChild(tooltip);
+        grid.appendChild(slot);
+    });
+    container.appendChild(grid);
+}
+
+function renderSixthJobSkills(container, data) {
+    const skills = findArrayByKey(data, ["character_skill"]);
+    if (!skills || !skills.length) { renderObject(container, data); return; }
+    const grid = createElement("div", "sixth-skill-grid");
+    skills.forEach(skill => {
+        if (!skill || typeof skill !== "object") return;
+        const card = createElement("article", "sixth-skill-card");
+        const iconFrame = createElement("div", "sixth-skill-icon-frame");
+        if (typeof skill.skill_icon === "string" && /^https:\/\//i.test(skill.skill_icon)) {
+            const icon = document.createElement("img");
+            icon.src = skill.skill_icon; icon.alt = skill.skill_name || "스킬 아이콘";
+            icon.loading = "lazy"; icon.referrerPolicy = "no-referrer";
+            iconFrame.appendChild(icon);
+        }
+        const body = createElement("div", "sixth-skill-body");
+        const heading = createElement("div", "sixth-skill-heading");
+        heading.append(
+            createElement("strong", "sixth-skill-name", skill.skill_name || "이름 정보 없음"),
+            createElement("span", "sixth-skill-level", "Lv. " + (skill.skill_level ?? "-"))
+        );
+        body.append(heading);
+        if (skill.skill_description) body.appendChild(createElement("p", "sixth-skill-description", skill.skill_description));
+        if (skill.skill_effect) body.appendChild(createElement("p", "sixth-skill-effect", skill.skill_effect));
+        card.append(iconFrame, body); grid.appendChild(card);
+    });
+    container.appendChild(grid);
+}
+
+function renderHexaCores(container, data) {
+    const cores = findArrayByKey(data, ["character_hexa_core_equipment"]);
+    if (!cores || !cores.length) { renderObject(container, data); return; }
+    const grid = createElement("div", "hexa-core-grid");
+    cores.forEach(core => {
+        if (!core || typeof core !== "object") return;
+        const card = createElement("article", "hexa-core-card");
+        card.append(
+            createElement("span", "hexa-core-type", core.hexa_core_type || "HEXA 코어"),
+            createElement("strong", "hexa-core-name", core.hexa_core_name || "이름 정보 없음"),
+            createElement("span", "hexa-core-level", "코어 레벨 " + (core.hexa_core_level ?? "-"))
+        );
+        const links = Array.isArray(core.linked_skill) ? core.linked_skill : [];
+        const linked = links.map(item => item?.hexa_skill_id).filter(Boolean).join(", ");
+        if (linked) card.appendChild(createElement("p", "hexa-core-linked", "연결 스킬 · " + linked));
+        grid.appendChild(card);
+    });
+    container.appendChild(grid);
+}
+
+function getProfilePreset(source, mode, bestPresetCombination) {
+    const presets = Array.isArray(source.presets) ? source.presets : [];
+    if (!presets.length) return null;
+    const active = presets.find(item => item.number === source.activePresetNo) || presets[0];
+    if (mode === "boss" || mode === "hunting") {
+        const purpose = mode === "boss" ? "boss" : "hunting";
+        const recommendation = [...presets].filter(item => item.purpose === purpose)
+            .sort((a, b) => (b.purposeScore || 0) - (a.purposeScore || 0))[0];
+        return recommendation || active;
+    }
+    if (mode === "highest") {
+        const key = {
+            itemEquipment: "equipment", hyperStat: "hyperStat",
+            ability: "ability", linkSkill: "link", unionRaider: "union"
+        }[source.id];
+        const preferred = key ? bestPresetCombination?.[key] : null;
+        const match = preferred !== null && preferred !== undefined
+            ? presets.find(item => item.number === Number(preferred)) : null;
+        if (match) return match;
+    }
+    return active;
+}
+
+function renderSource(source, profileMode = "highest", bestPresetCombination = null) {
     const card = createElement("article", "detail-source-card");
     const heading = createElement("div", "detail-source-heading");
     const title = createElement("h4", "detail-source-title", source.label || source.id);
@@ -137,7 +285,7 @@ function renderSource(source) {
     if (Array.isArray(source.presets) && source.presets.length) {
         const presets = source.presets;
         const active = presets.find(item => item.number === source.activePresetNo) || presets[0];
-        chosenPreset = active;
+        chosenPreset = getProfilePreset(source, profileMode, bestPresetCombination) || active;
         if (presets.length > 1) {
             const control = createElement("label", "detail-preset-control");
             control.appendChild(createElement("span", "", "확인할 프리셋"));
@@ -146,8 +294,8 @@ function renderSource(source) {
             presets.forEach(preset => {
                 const option = document.createElement("option");
                 option.value = String(preset.number);
-                option.textContent = preset.number === 0 ? "현재 구성" : "프리셋 " + preset.number;
-                option.selected = preset.number === active.number;
+                option.textContent = preset.number === 0 ? "현재 구성" : "프리셋 " + preset.number + " · " + (preset.purposeLabel || "용도 미확인");
+                option.selected = preset.number === chosenPreset.number;
                 select.appendChild(option);
             });
             select.addEventListener("change", () => {
@@ -168,11 +316,11 @@ function renderSource(source) {
 
     function renderPresetBody() {
         body.replaceChildren();
-        if (chosenPreset && chosenPreset.data) {
-            renderObject(body, chosenPreset.data);
-        } else {
-            renderObject(body, source.data || {});
-        }
+        const bodyData = chosenPreset && chosenPreset.data ? chosenPreset.data : (source.data || {});
+        if (source.id === "itemEquipment") renderEquipmentSlots(body, bodyData);
+        else if (source.id === "skill6") renderSixthJobSkills(body, bodyData);
+        else if (source.id === "hexaMatrix") renderHexaCores(body, bodyData);
+        else renderObject(body, bodyData);
         if (!body.childElementCount) {
             body.appendChild(createElement("p", "detail-empty", "표시할 항목이 없습니다."));
         }
@@ -219,6 +367,8 @@ export function initCharacterDetails({ apiFetch, readApiResponse }) {
             ));
         }
         setNotice("");
+        activeProfileMode = "highest";
+        if (content) content.classList.remove("is-single");
         tabs.forEach(tab => {
             tab.disabled = !currentOcid;
             tab.setAttribute("aria-selected", "false");
@@ -258,14 +408,47 @@ export function initCharacterDetails({ apiFetch, readApiResponse }) {
         }
     }
 
-    function renderSection(data) {
+    let activeProfileMode = "highest";
+
+    function renderSection(data, profileMode = activeProfileMode) {
         if (!content) return;
+        activeProfileMode = profileMode;
         content.replaceChildren();
+        content.classList.toggle("is-single", Array.isArray(data.sources) && data.sources.length === 1);
+        if (data.section === "stats") {
+            const panel = createElement("section", "detail-profile-panel");
+            const heading = createElement("div", "detail-profile-heading");
+            const copy = createElement("div", "detail-profile-copy");
+            copy.append(
+                createElement("strong", "detail-profile-title", "프리셋 조합 빠른 선택"),
+                createElement("p", "detail-profile-description",
+                    "영역별 프리셋 번호는 서로 독립적입니다. 보스·사냥 구분은 옵션 특징을 이용한 추천이며 인게임 별칭이 아닙니다.")
+            );
+            heading.append(copy, createElement("span", "detail-profile-record",
+                data.bestCombatPower
+                    ? "최고 관측 전투력 " + Number(data.bestCombatPower).toLocaleString("ko-KR")
+                    : "최고 전투력 조합 기록 없음"));
+            panel.appendChild(heading);
+            const actions = createElement("div", "detail-profile-actions");
+            [["highest", "최고 전투력 조합"], ["current", "게임 적용 상태"],
+             ["boss", "보스 추천"], ["hunting", "사냥 추천"]].forEach(([mode, label]) => {
+                const button = createElement("button",
+                    "detail-profile-button" + (mode === profileMode ? " is-active" : ""), label);
+                button.type = "button";
+                button.setAttribute("aria-pressed", mode === profileMode ? "true" : "false");
+                button.addEventListener("click", () => renderSection(data, mode));
+                actions.appendChild(button);
+            });
+            panel.appendChild(actions);
+            content.appendChild(panel);
+        }
         if (!Array.isArray(data.sources) || !data.sources.length) {
             content.appendChild(createElement("p", "detail-placeholder", "표시할 상세 정보가 없습니다."));
             return;
         }
-        data.sources.forEach(source => content.appendChild(renderSource(source)));
+        data.sources.forEach(source =>
+            content.appendChild(renderSource(source, profileMode, data.bestPresetCombination))
+        );
         if (data.status === "partial") {
             setNotice("일부 항목만 조회됐습니다. 조회할 수 없는 정보가 있어도 다른 데이터는 정상적으로 표시됩니다.", true);
         } else if (data.status === "unavailable") {

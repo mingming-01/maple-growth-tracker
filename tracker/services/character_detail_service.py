@@ -1,5 +1,6 @@
 """Nexon Open API 캐릭터 상세 데이터 조회 및 프리셋 정규화."""
 from concurrent.futures import ThreadPoolExecutor
+import json
 
 import requests
 
@@ -9,81 +10,54 @@ from tracker.integrations.nexon_api import request_nexon_api
 SECTION_SOURCES = {
     "stats": [
         {"id": "stat", "label": "주요 스탯", "endpoint": "character/stat"},
-        {
-            "id": "hyperStat",
-            "label": "하이퍼 스탯",
-            "endpoint": "character/hyper-stat",
-            "preset_prefix": "hyper_stat_preset_",
-            "active_fields": ("use_preset_no",),
-            "current_fields": ("hyper_stat",),
-            "preset_count": 3,
-        },
-        {
-            "id": "ability",
-            "label": "어빌리티",
-            "endpoint": "character/ability",
-            "preset_prefix": "ability_preset_",
-            "active_fields": ("ability_preset_no", "use_preset_no"),
-            "current_fields": ("ability_info",),
-            "preset_count": 3,
-        },
+        {"id": "hyperStat", "label": "하이퍼 스탯", "endpoint": "character/hyper-stat",
+         "preset_prefix": "hyper_stat_preset_", "active_fields": ("use_preset_no",),
+         "current_fields": ("hyper_stat",), "preset_count": 3},
+        {"id": "ability", "label": "어빌리티", "endpoint": "character/ability",
+         "preset_prefix": "ability_preset_", "active_fields": ("ability_preset_no", "use_preset_no"),
+         "current_fields": ("ability_info",), "preset_count": 3},
+        {"id": "itemEquipment", "label": "장비 프리셋", "endpoint": "character/item-equipment",
+         "preset_prefix": "item_equipment_preset_", "active_fields": ("preset_no",),
+         "current_fields": ("item_equipment",), "preset_count": 3},
+        {"id": "linkSkill", "label": "링크 스킬 프리셋", "endpoint": "character/link-skill",
+         "preset_prefix": "character_link_skill_preset_",
+         "active_fields": ("use_preset_no", "character_link_skill_preset_no"),
+         "current_fields": ("character_link_skill",), "preset_count": 3},
+        {"id": "unionRaider", "label": "유니온 프리셋", "endpoint": "user/union-raider",
+         "preset_groups": ("union_raider_preset_", "union_block_preset_"),
+         "active_fields": ("union_raider_preset_no", "union_block_preset_no"), "preset_count": 5},
     ],
     "equipment": [
-        {
-            "id": "itemEquipment",
-            "label": "장비",
-            "endpoint": "character/item-equipment",
-            "preset_prefix": "item_equipment_preset_",
-            "active_fields": ("preset_no",),
-            "current_fields": ("item_equipment",),
-            "preset_count": 3,
-        },
-        {
-            "id": "symbolEquipment",
-            "label": "아케인·어센틱 심볼",
-            "endpoint": "character/symbol-equipment",
-            "current_fields": ("symbol",),
-        },
-        {
-            "id": "setEffect",
-            "label": "세트 효과",
-            "endpoint": "character/set-effect",
-            "current_fields": ("set_effect",),
-        },
+        {"id": "itemEquipment", "label": "장비", "endpoint": "character/item-equipment",
+         "preset_prefix": "item_equipment_preset_", "active_fields": ("preset_no",),
+         "current_fields": ("item_equipment",), "preset_count": 3},
+        {"id": "setEffect", "label": "세트 효과", "endpoint": "character/set-effect",
+         "current_fields": ("set_effect",)},
+    ],
+    "symbols": [
+        {"id": "symbolEquipment", "label": "아케인·어센틱 심볼",
+         "endpoint": "character/symbol-equipment", "current_fields": ("symbol",)},
     ],
     "link": [
-        {
-            "id": "linkSkill",
-            "label": "링크 스킬",
-            "endpoint": "character/link-skill",
-            "preset_prefix": "character_link_skill_preset_",
-            "active_fields": ("use_preset_no", "character_link_skill_preset_no"),
-            "current_fields": ("character_link_skill",),
-            "preset_count": 3,
-        },
+        {"id": "linkSkill", "label": "링크 스킬", "endpoint": "character/link-skill",
+         "preset_prefix": "character_link_skill_preset_",
+         "active_fields": ("use_preset_no", "character_link_skill_preset_no"),
+         "current_fields": ("character_link_skill",), "preset_count": 3},
     ],
     "union": [
-        {
-            "id": "union",
-            "label": "유니온 기본 정보",
-            "endpoint": "user/union",
-        },
-        {
-            "id": "unionRaider",
-            "label": "유니온 공격대",
-            "endpoint": "user/union-raider",
-            "preset_groups": ("union_raider_preset_", "union_block_preset_"),
-            "active_fields": ("union_raider_preset_no", "union_block_preset_no"),
-            "preset_count": 5,
-        },
-        {
-            "id": "unionArtifact",
-            "label": "유니온 아티팩트",
-            "endpoint": "user/union-artifact",
-            "preset_prefix": "union_artifact_preset_",
-            "active_fields": ("union_artifact_preset_no",),
-            "preset_count": 3,
-        },
+        {"id": "union", "label": "유니온 기본 정보", "endpoint": "user/union"},
+        {"id": "unionRaider", "label": "유니온 공격대", "endpoint": "user/union-raider",
+         "preset_groups": ("union_raider_preset_", "union_block_preset_"),
+         "active_fields": ("union_raider_preset_no", "union_block_preset_no"), "preset_count": 5},
+        {"id": "unionArtifact", "label": "유니온 아티팩트", "endpoint": "user/union-artifact",
+         "preset_prefix": "union_artifact_preset_", "active_fields": ("union_artifact_preset_no",),
+         "preset_count": 3},
+    ],
+    "skills": [
+        {"id": "skill6", "label": "6차 스킬", "endpoint": "character/skill",
+         "params": {"character_skill_grade": "6"}},
+        {"id": "hexaMatrix", "label": "HEXA 코어", "endpoint": "character/hexamatrix"},
+        {"id": "hexaStat", "label": "HEXA 스탯", "endpoint": "character/hexamatrix-stat"},
     ],
 }
 
@@ -106,6 +80,37 @@ def _active_preset(payload, fields):
     return None
 
 
+def _preset_text(value):
+    if isinstance(value, dict):
+        return " ".join([str(key) for key in value] + [_preset_text(item) for item in value.values()])
+    if isinstance(value, (list, tuple)):
+        return " ".join(_preset_text(item) for item in value)
+    return str(value) if value is not None else ""
+
+
+def _classify_preset(value):
+    """사용자 별칭이 아닌 세팅 옵션 신호로 용도를 보수적으로 분류한다."""
+    text = _preset_text(value).lower()
+    boss = (
+        ("보스 몬스터 공격 시 데미지", 3), ("보스 데미지", 3),
+        ("방어율 무시", 2), ("크리티컬 데미지", 1),
+        ("리스트레인트 링", 4), ("컨티뉴어스 링", 4),
+        ("웨폰퍼프 링", 3), ("리스크테이커 링", 2),
+    )
+    hunting = (
+        ("일반 몬스터 공격 시 데미지", 3), ("일반 몬스터 데미지", 3),
+        ("메소 획득량", 3), ("아이템 드롭률", 3),
+        ("경험치 획득량", 2), ("몬스터 경험치", 2),
+    )
+    boss_score = sum(weight for keyword, weight in boss if keyword in text)
+    hunting_score = sum(weight for keyword, weight in hunting if keyword in text)
+    if boss_score >= 2 and boss_score > hunting_score:
+        return {"purpose": "boss", "purposeLabel": "보스 성향", "purposeScore": boss_score}
+    if hunting_score >= 2 and hunting_score > boss_score:
+        return {"purpose": "hunting", "purposeLabel": "사냥 성향", "purposeScore": hunting_score}
+    return {"purpose": "unknown", "purposeLabel": "용도 미확인", "purposeScore": max(boss_score, hunting_score)}
+
+
 def _normalize_source(payload, spec):
     """API 원본은 유지하되 프리셋 목록과 현재 선택 번호를 별도로 추출한다."""
     payload = payload if isinstance(payload, dict) else {}
@@ -126,7 +131,7 @@ def _normalize_source(payload, spec):
             if _has_data(value):
                 selected[field] = value
         if selected:
-            presets.append({"number": number, "data": selected})
+            presets.append({"number": number, "data": selected, **_classify_preset(selected)})
 
     current_fields = spec.get("current_fields", ())
     current_data = {
@@ -173,8 +178,20 @@ def _normalize_source(payload, spec):
 
 
 def _fetch_source(ocid, spec):
+    params = {"ocid": ocid, **spec.get("params", {})}
+    cache_key = "nexon-source:{}:{}:{}".format(
+        ocid, spec["endpoint"], json.dumps(params, sort_keys=True, ensure_ascii=False)
+    )
+    from flask import has_app_context
+    if has_app_context():
+        from tracker.runtime import get_cache, set_cache
+        cached = get_cache(cache_key)
+        if cached is not None:
+            return cached
+    else:
+        set_cache = None
     try:
-        response = request_nexon_api(spec["endpoint"], {"ocid": ocid})
+        response = request_nexon_api(spec["endpoint"], params)
     except requests.RequestException:
         return {
             "id": spec["id"],
@@ -205,16 +222,13 @@ def _fetch_source(ocid, spec):
         payload = {}
 
     result = _normalize_source(payload, spec)
-    return {
-        "id": spec["id"],
-        "label": spec["label"],
-        **result,
-        "message": (
-            "API 응답에 표시할 데이터가 없습니다."
-            if result["status"] == "empty"
-            else None
-        ),
+    source = {
+        "id": spec["id"], "label": spec["label"], **result,
+        "message": "API 응답에 표시할 데이터가 없습니다." if result["status"] == "empty" else None,
     }
+    if set_cache:
+        set_cache(cache_key, source, 300)
+    return source
 
 
 def get_character_detail_section(ocid, section):
