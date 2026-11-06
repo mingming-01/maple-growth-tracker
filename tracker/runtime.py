@@ -20,7 +20,8 @@ from tracker.repositories.api_snapshot_repository import (
     save_api_snapshot as save_api_snapshot_for_path,
     load_api_snapshot as load_api_snapshot_for_path,
 )
-from google import genai, types
+from google import genai
+from google.genai import types
 
 
 # 변경되지 않는 도메인 상수만 모듈 상수로 유지한다.
