@@ -106,7 +106,6 @@ _PRESET_DATA_KEYS = {
 }
 _SOURCE_CATEGORY = {
     "itemEquipment": "equipment",
-    "hyperStat": "hyperStat",
     "ability": "ability",
     "linkSkill": "link",
     "unionStateStat": "union",
@@ -158,37 +157,8 @@ def _classify_preset(source_id, value):
                 signals.append(name)
 
     elif source_id == "hyperStat":
-        # 하이퍼 스탯은 텍스트 포함 여부가 아니라 실제 투자된 stat_type과 stat_level로 판단한다.
-        rows = value.get("hyper_stat", []) if isinstance(value, dict) else value
-        rows = rows if isinstance(rows, list) else []
-        boss_names = (
-            "보스 몬스터 공격 시 데미지", "보스 몬스터 데미지", "보스 데미지",
-            "몬스터 방어율 무시", "방어율 무시", "크리티컬 데미지",
-            "크리티컬 확률",
-        )
-        hunting_names = (
-            "일반 몬스터 공격 시 데미지", "일반 몬스터 데미지",
-            "추가 경험치 획득", "추가 경험치 획득량", "경험치 획득량",
-            "몬스터 처치 시 경험치 획득량", "메소 획득량",
-            "아이템 드롭률", "아이템 획득 확률",
-        )
-        for row in rows:
-            if not isinstance(row, dict):
-                continue
-            try:
-                level = max(0, int(row.get("stat_level") or 0))
-            except (TypeError, ValueError):
-                level = 0
-            if level <= 0:
-                continue
-            name = " ".join(str(row.get("stat_type") or "").strip().split())
-            if any(token in name for token in boss_names):
-                boss += level
-                signals.append("{} Lv.{}".format(name, level))
-            elif any(token in name for token in hunting_names):
-                hunting += level
-                signals.append("{} Lv.{}".format(name, level))
-        # 일반 데미지와 공격력·마력은 보스/사냥 공통 효율이므로 구분 신호로 사용하지 않는다.
+        # 하이퍼 스탯은 보스/사냥 목적을 자동 판독하지 않는다.
+        pass
 
     elif source_id == "ability":
         for name, weight in (
