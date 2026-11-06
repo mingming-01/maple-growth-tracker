@@ -1399,12 +1399,11 @@ async function handleHistoryRangeChange() {
     }
     try {
         await loadHistoryRange(selectedDays);
-        const reportMetrics = calculateGrowthMetrics(currentCharacter, currentDisplayHistory);
         await runAIReport(
             currentCharacter.characterName,
             currentCharacter,
             currentDisplayHistory,
-            reportMetrics,
+            null,
             currentPeriodSummary
         );
     } catch (error) {
@@ -1488,8 +1487,18 @@ async function runAIReport(name, character, history, sharedMetrics, periodSummar
 
     try {
         const baseMetrics = sharedMetrics || calculateGrowthMetrics(character, history);
+        // 레벨업 전망은 화면의 기존 예측 카드와 동일하게 최근 7일 기록을 기준으로 유지한다.
+        const displayedPrediction = calculatePrediction(character, currentHistory);
+        const predictionMetrics = displayedPrediction ? {
+            nextLevel: displayedPrediction.nextLevel,
+            requiredExperience: displayedPrediction.requiredExp,
+            averageDailyGrowth: displayedPrediction.averageGrowth,
+            estimatedDays: displayedPrediction.days,
+            estimatedDate: formatLocalISODate(displayedPrediction.date)
+        } : baseMetrics.prediction;
         const metrics = {
             ...baseMetrics,
+            prediction: predictionMetrics,
             analysisInsights: calculateAdvancedGrowthInsights(history, periodSummary)
         };
         const signature = buildGrowthReportSignature(name, character, history, metrics);
@@ -1687,7 +1696,7 @@ async function refreshVisibleCharacter({ automatic = false } = {}) {
             name,
             character,
             currentDisplayHistory,
-            calculateGrowthMetrics(character, currentDisplayHistory),
+            null,
             currentPeriodSummary
         );
     } catch (error) {
