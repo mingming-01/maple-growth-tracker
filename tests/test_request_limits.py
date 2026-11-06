@@ -94,7 +94,8 @@ class RequestLimitTests(unittest.TestCase):
         self.assertEqual(first.status_code, 200)
         self.assertIn("로그인 실패 횟수를 초과", second.get_data(as_text=True))
         self.assertEqual(third.status_code, 200)
-        self.assertNotIn("관리자 로그", third.get_data(as_text=True))
+        with client.session_transaction() as session:
+            self.assertNotIn("admin_authenticated", session)
         with app.test_request_context():
             self.assertGreater(admin_login_lockout_remaining("127.0.0.1"), 0)
 
