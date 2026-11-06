@@ -826,7 +826,8 @@ function attachViewportTooltip(trigger,tooltip,id) {
 
     const hide=()=>{
         tooltip.classList.remove("is-open");
-        tooltip.remove();
+        if(tooltip.parentElement===document.body) trigger.appendChild(tooltip);
+        tooltip.style.visibility="";
         if(listenersAttached) {
             window.removeEventListener("scroll",positionTooltip,true);
             window.removeEventListener("resize",positionTooltip);
@@ -834,7 +835,7 @@ function attachViewportTooltip(trigger,tooltip,id) {
         }
     };
     const show=()=>{
-        if(!tooltip.isConnected) document.body.appendChild(tooltip);
+        if(tooltip.parentElement!==document.body) document.body.appendChild(tooltip);
         tooltip.classList.add("is-open");
         positionTooltip();
         if(!listenersAttached) {
