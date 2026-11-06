@@ -205,7 +205,10 @@ def get_history():
 
     failed_records = [item for item in history if item.get("recordStatus") == "unavailable"]
     if failed_records:
-        if all(item.get("retryable") for item in failed_records):
+        # 여러 날짜를 병렬 조회하므로 일시적 오류와 확정 오류가 섞일 수 있다.
+        # 하나라도 429/5xx/네트워크 오류가 있으면 전체 결과를 502로 단정하지 않고
+        # 저장된 정상 스냅샷을 우선 제공하거나 재시도 가능한 503으로 응답한다.
+        if any(item.get("retryable") for item in failed_records):
             return stale_snapshot_response(
                 cache_key, "성장 기록 조회가 일시적으로 지연되고 있습니다. 잠시 후 다시 시도해주세요."
             )
