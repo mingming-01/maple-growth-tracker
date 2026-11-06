@@ -25,9 +25,14 @@ SECTION_SOURCES = {
          "preset_groups": ("character_link_skill_preset_", "character_owned_link_skill_preset_"),
          "active_fields": ("use_preset_no", "character_link_skill_preset_no"),
          "current_fields": ("character_link_skill", "character_owned_link_skill"), "preset_count": 3},
-        {"id": "unionRaider", "label": "유니온 프리셋", "endpoint": "user/union-raider",
-         "preset_groups": ("union_raider_preset_", "union_block_preset_"),
-         "active_fields": ("union_raider_preset_no",), "preset_count": 5},
+        {"id": "unionStateStat", "label": "유니온 스탯", "endpoint": "user/union-raider",
+         "preset_list_field": "union_state_stat_preset",
+         "preset_number_field": "preset_no",
+         "preset_data_field": "union_state_stat",
+         "current_fields": ("union_state_stat",),
+         "exclude_fields": ("union_raider_stat", "union_occupied_stat", "union_inner_stat",
+                            "union_block", "use_preset_no")},
+
     ],
     "equipment": [
         {"id": "itemEquipment", "label": "장비", "endpoint": "character/item-equipment",
@@ -48,12 +53,18 @@ SECTION_SOURCES = {
     ],
     "union": [
         {"id": "union", "label": "유니온 기본 정보", "endpoint": "user/union"},
-        {"id": "unionRaider", "label": "유니온 공격대", "endpoint": "user/union-raider",
-         "preset_groups": ("union_raider_preset_", "union_block_preset_"),
-         "active_fields": ("union_raider_preset_no",), "preset_count": 5},
+        {"id": "unionStateStat", "label": "유니온 스탯", "endpoint": "user/union-raider",
+         "preset_list_field": "union_state_stat_preset",
+         "preset_number_field": "preset_no",
+         "preset_data_field": "union_state_stat",
+         "current_fields": ("union_state_stat",),
+         "exclude_fields": ("union_raider_stat", "union_occupied_stat", "union_inner_stat",
+                            "union_block", "use_preset_no")},
         {"id": "unionArtifact", "label": "유니온 아티팩트", "endpoint": "user/union-artifact",
-         "preset_prefix": "union_artifact_preset_", "active_fields": ("union_artifact_preset_no",),
-         "preset_count": 3},
+         "current_fields": ("union_artifact_effect", "union_artifact_crystal",
+                            "union_artifact_remain_ap")},
+        {"id": "unionChampion", "label": "유니온 챔피언", "endpoint": "user/union-champion",
+         "current_fields": ("union_champion", "champion_badge_total_info")},
     ],
     "skills": [
         {"id": "skill6", "label": "6차 스킬", "endpoint": "character/skill",
@@ -91,16 +102,14 @@ _PRESET_DATA_KEYS = {
     "ability_preset_": "ability_info",
     "character_link_skill_preset_": "character_link_skill",
     "character_owned_link_skill_preset_": "character_owned_link_skill",
-    "union_raider_preset_": "union_raider",
-    "union_block_preset_": "union_block",
-    "union_artifact_preset_": "union_artifact",
+
 }
 _SOURCE_CATEGORY = {
     "itemEquipment": "equipment",
     "hyperStat": "hyperStat",
     "ability": "ability",
     "linkSkill": "link",
-    "unionRaider": "union",
+    "unionStateStat": "union",
 }
 
 
@@ -181,12 +190,14 @@ def _classify_preset(source_id, value):
                 hunting += weight
                 signals.append(name)
 
-    elif source_id == "unionRaider":
-        for name in ("보스 데미지", "보스 몬스터 공격 시 데미지", "방어율 무시", "크리티컬 데미지"):
+    elif source_id == "unionStateStat":
+        for name in ("보스 몬스터 공격 시 데미지", "보스 데미지", "방어율 무시",
+                     "크리티컬 데미지", "최종 데미지"):
             if name in text:
                 boss += 2
                 signals.append(name)
-        for name in ("일반 몬스터", "경험치", "메소 획득량", "아이템 드롭률"):
+        for name in ("일반 몬스터 공격 시 데미지", "경험치 획득량",
+                     "메소 획득량", "아이템 드롭률"):
             if name in text:
                 hunting += 2
                 signals.append(name)
@@ -251,8 +262,69 @@ def _preset_data_key(prefix):
 
 
 def _normalize_source(payload, spec):
-    """프리셋 API 필드를 UI가 사용하는 공통 데이터 키로 정규화한다."""
+    """Nexon 원본 응답을 화면에서 사용하는 공통 데이터 구조로 정규화한다."""
     payload = payload if isinstance(payload, dict) else {}
+
+    # 최신 KMS 유니온 스탯은 preset_1 같은 개별 필드가 아니라
+    # union_state_stat_preset 배열 안에 preset_no와 효과 목록으로 제공된다.
+    preset_list_field = spec.get("preset_list_field")
+    if preset_list_field:
+        number_field = spec.get("preset_number_field", "preset_no")
+        value_field = spec.get("preset_data_field", "union_state_stat")
+        presets = []
+        rows = payload.get(preset_list_field)
+        if isinstance(rows, list):
+            for row in rows:
+                if not isinstance(row, dict):
+                    continue
+                try:
+                    number = int(row.get(number_field))
+                except (TypeError, ValueError):
+                    continue
+                values = row.get(value_field)
+                if not isinstance(values, list):
+                    values = []
+                selected = {value_field: values}
+                presets.append({
+                    "number": number,
+                    "data": selected,
+                    **_classify_preset(spec["id"], selected),
+                })
+
+        current_fields = spec.get("current_fields", ())
+        current_data = {
+            field: payload[field]
+            for field in current_fields
+            if _has_data(payload.get(field))
+        }
+        # 현 적용 프리셋 번호는 별도 필드로 오지 않을 수 있다.
+        # 현재 효과 목록과 프리셋 효과 목록이 완전히 일치할 때만 활성 번호를 확정한다.
+        active_number = None
+        current_values = current_data.get(value_field)
+        if isinstance(current_values, list):
+            current_signature = json.dumps(current_values, ensure_ascii=False, separators=(",", ":"))
+            for preset in presets:
+                preset_values = preset["data"].get(value_field, [])
+                preset_signature = json.dumps(preset_values, ensure_ascii=False, separators=(",", ":"))
+                if current_signature == preset_signature:
+                    active_number = preset["number"]
+                    break
+
+        excluded = set(current_fields) | {preset_list_field} | set(spec.get("exclude_fields", ()))
+        data = {
+            key: value
+            for key, value in payload.items()
+            if key not in excluded
+        }
+        return {
+            "status": "available" if data or presets or current_data else "empty",
+            "activePresetNo": active_number,
+            "presets": presets,
+            "currentData": current_data,
+            "data": data,
+            "combatPower": _extract_combat_power(payload),
+        }
+
     prefixes = list(spec.get("preset_groups", ()))
     if spec.get("preset_prefix"):
         prefixes.append(spec["preset_prefix"])
@@ -380,7 +452,7 @@ def get_character_detail_section(ocid, section, force_refresh=False):
         raise ValueError("지원하지 않는 상세 정보 구분입니다.")
 
     specs = SECTION_SOURCES[section]
-    with ThreadPoolExecutor(max_workers=min(3, len(specs))) as executor:
+    with ThreadPoolExecutor(max_workers=min(4, len(specs))) as executor:
         sources = list(executor.map(
             lambda spec: _fetch_source(ocid, spec, force_refresh=force_refresh),
             specs,
