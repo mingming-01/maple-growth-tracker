@@ -62,7 +62,76 @@ test("character details automatically open the game-style stat window", async ({
   await page.route(/\/api\/character-details\?/, route => {
     const section = new URL(route.request().url()).searchParams.get("section");
     detailRequests[section] = (detailRequests[section] || 0) + 1;
-    const payload = section === "union" ? {
+    const payload = section === "equipment" ? {
+      section: "equipment",
+      status: "available",
+      sources: [
+        {
+          id: "characterAppearance", label: "헤어·성형·피부", status: "available",
+          currentData: {
+            character_hair: { hair_name: "테스트 헤어" },
+            character_face: { face_name: "테스트 성형" },
+            character_skin_name: "뽀송 피부"
+          },
+          data: {}
+        },
+        {
+          id: "itemEquipment", label: "장비", status: "available", activePresetNo: 1,
+          currentData: {
+            item_equipment: [],
+            android_name: "테스트 안드로이드",
+            android_icon: "",
+            android_grade: "레전드리",
+            android_gender: "여성"
+          },
+          presets: [{ number: 1, data: { item_equipment: [] } }],
+          data: {}
+        },
+        {
+          id: "setEffect", label: "세트 효과", status: "available",
+          currentData: { set_effect: [] }, data: {}
+        }
+      ]
+    } : section === "skills" ? {
+      section: "skills",
+      status: "available",
+      sources: [
+        {
+          id: "skill6", label: "6차 스킬", status: "available",
+          data: { character_skill: [{
+            skill_name: "테스트 6차 스킬", skill_level: 1,
+            skill_description: "6차 스킬 설명"
+          }] }
+        },
+        {
+          id: "hexaMatrix", label: "HEXA 코어", status: "available",
+          data: { character_hexa_core_equipment: [{
+            hexa_core_type: "강화 코어", hexa_core_name: "테스트 HEXA 코어",
+            hexa_core_level: 10, linked_skill: [{ hexa_skill_id: "테스트 6차 스킬" }]
+          }] }
+        },
+        {
+          id: "hexaStat", label: "HEXA 스탯", status: "available",
+          data: {
+            character_hexa_stat_core: [{
+              slot_id: "0", main_stat_name: "크리티컬 데미지", main_stat_level: 10,
+              sub_stat_name_1: "보스 데미지", sub_stat_level_1: 5,
+              sub_stat_name_2: "방어율 무시", sub_stat_level_2: 5, stat_grade: "레어"
+            }],
+            character_hexa_stat_core_2: [{
+              slot_id: "1", main_stat_name: "보스 데미지", main_stat_level: 8,
+              sub_stat_name_1: "크리티컬 데미지", sub_stat_level_1: 4,
+              sub_stat_name_2: "공격력", sub_stat_level_2: 4, stat_grade: "레어"
+            }],
+            character_hexa_stat_core_3: [{
+              slot_id: "2", main_stat_name: "방어율 무시", main_stat_level: 6,
+              sub_stat_name_1: "보스 데미지", sub_stat_level_1: 3,
+              sub_stat_name_2: "공격력", sub_stat_level_2: 3, stat_grade: "레어"
+            }]
+          }
+        }
+      ]
+    } : section === "union" ? {
       section: "union",
       status: "available",
       sources: [
@@ -207,6 +276,20 @@ test("character details automatically open the game-style stat window", async ({
   expect(detailRequests.stats).toBe(1);
   await expect(page.locator("#characterDetailsContent .game-preset-select").nth(2)).toHaveValue("2");
 
+  await page.locator('[data-detail-tab="equipment"]').click();
+  await expect(page.locator("#characterDetailsContent")).toContainText("테스트 헤어");
+  await expect(page.locator("#characterDetailsContent")).toContainText("테스트 성형");
+  await expect(page.locator("#characterDetailsContent")).toContainText("뽀송 피부");
+  await expect(page.locator("#characterDetailsContent")).toContainText("테스트 안드로이드");
+
+  await page.locator('[data-detail-tab="skills"]').click();
+  await expect(page.locator("#characterDetailsContent")).toContainText("테스트 6차 스킬");
+  await expect(page.locator("#characterDetailsContent")).toContainText("테스트 HEXA 코어");
+  await expect(page.locator("#characterDetailsContent .game-hexa-stat-columns")).toHaveCount(1);
+  await expect(page.locator("#characterDetailsContent .game-hexa-stat-column")).toHaveCount(3);
+  await expect(page.locator("#characterDetailsContent .game-hexa-stat-column-title")).toHaveText(["HEXA 1", "HEXA 2", "HEXA 3"]);
+  await expect(page.locator("#characterDetailsContent .game-hexa-stat-entry .game-hover-tooltip")).toHaveCount(3);
+
   await page.locator('[data-detail-tab="union"]').click();
   await expect(page.locator("#characterDetailsContent")).toContainText("유니온 스탯 투자");
   await expect(page.locator("#characterDetailsContent")).toContainText("주황버섯");
@@ -222,4 +305,26 @@ test("character details automatically open the game-style stat window", async ({
   await expect(page.locator("#characterDetailsContent")).toContainText("경험치 획득량");
   await expect(page.locator("#characterDetailsContent")).not.toContainText("보스 몬스터 공격 시 데미지 +20% 증가");
   expect(detailRequests.union).toBe(1);
+});
+
+
+test("character detail tabs remain in one horizontal row on mobile", async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.goto("/");
+  const tabs = page.locator(".detail-tabs");
+  await expect(tabs).toBeVisible();
+  const layout = await tabs.evaluate(element => {
+    const children = Array.from(element.children).map(child => child.getBoundingClientRect());
+    return {
+      flexWrap: getComputedStyle(element).flexWrap,
+      overflowX: getComputedStyle(element).overflowX,
+      scrollWidth: element.scrollWidth,
+      clientWidth: element.clientWidth,
+      childTops: children.map(rect => Math.round(rect.top))
+    };
+  });
+  expect(layout.flexWrap).toBe("nowrap");
+  expect(layout.overflowX).toBe("auto");
+  expect(new Set(layout.childTops).size).toBe(1);
+  expect(layout.scrollWidth).toBeGreaterThan(layout.clientWidth);
 });
