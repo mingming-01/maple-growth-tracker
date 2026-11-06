@@ -211,27 +211,21 @@ class CharacterDetailServiceTests(unittest.TestCase):
             "재사용 대기시간 미적용 +7.5%",
         )
 
-    def test_hyper_stat_classifier_uses_invested_levels_for_hunting_and_boss(self):
-        from tracker.services.character_detail_service import _classify_preset
+    def test_hyper_stat_presets_are_not_used_for_boss_or_hunting_classification(self):
+        from tracker.services.character_detail_service import _classify_preset, recommend_preset_profiles
 
-        hunting = _classify_preset("hyperStat", {"hyper_stat": [
-            {"stat_type": "일반 몬스터 데미지", "stat_level": 10},
-            {"stat_type": "경험치 획득량", "stat_level": 10},
-            {"stat_type": "크리티컬 데미지", "stat_level": 2},
-        ]})
-        boss = _classify_preset("hyperStat", {"hyper_stat": [
+        result = _classify_preset("hyperStat", {"hyper_stat": [
             {"stat_type": "보스 데미지", "stat_level": 10},
-            {"stat_type": "몬스터 방어율 무시", "stat_level": 10},
-            {"stat_type": "데미지", "stat_level": 5},
+            {"stat_type": "경험치 획득량", "stat_level": 10},
         ]})
-        generic = _classify_preset("hyperStat", {"hyper_stat": [
-            {"stat_type": "데미지", "stat_level": 10},
-            {"stat_type": "공격력", "stat_level": 10},
-        ]})
-        self.assertEqual(hunting["purpose"], "hunting")
-        self.assertEqual(boss["purpose"], "boss")
-        self.assertEqual(generic["purpose"], "unknown")
-        self.assertIn("일반 몬스터 데미지 Lv.10", hunting["signals"])
+        self.assertEqual(result["purpose"], "unknown")
+        self.assertEqual(result["bossScore"], 0)
+        self.assertEqual(result["huntingScore"], 0)
+        profile = recommend_preset_profiles([{
+            "id": "hyperStat", "activePresetNo": 1,
+            "presets": [{"number": 1, "bossScore": 99, "huntingScore": 99}]
+        }])
+        self.assertNotIn("hyperStat", profile["boss"]["presetNumbers"])
 
     def test_union_stat_presets_are_not_classified_as_boss_or_hunting(self):
         from tracker.services.character_detail_service import _classify_preset
@@ -256,7 +250,7 @@ class CharacterDetailServiceTests(unittest.TestCase):
         self.assertEqual(preset["data"]["character_owned_link_skill"]["skill_name"], "데몬스 퓨리")
         self.assertEqual(preset["bossScore"], 6)
 
-    def test_profile_recommendation_combines_equipment_link_and_hyper_signals(self):
+    def test_profile_recommendation_combines_equipment_and_link_signals(self):
         from tracker.services.character_detail_service import recommend_preset_profiles
         sources = [
             {"id": "itemEquipment", "activePresetNo": 1, "presets": [
@@ -267,15 +261,11 @@ class CharacterDetailServiceTests(unittest.TestCase):
                 {"number": 1, "bossScore": 0, "huntingScore": 3},
                 {"number": 2, "bossScore": 6, "huntingScore": 0},
             ]},
-            {"id": "hyperStat", "activePresetNo": 1, "presets": [
-                {"number": 1, "bossScore": 0, "huntingScore": 4},
-                {"number": 2, "bossScore": 5, "huntingScore": 0},
-            ]},
         ]
         result = recommend_preset_profiles(sources)
         self.assertEqual(result["boss"]["presetNumbers"]["equipment"], 2)
         self.assertEqual(result["boss"]["presetNumbers"]["link"], 2)
-        self.assertEqual(result["boss"]["presetNumbers"]["hyperStat"], 2)
+        self.assertNotIn("hyperStat", result["boss"]["presetNumbers"])
         self.assertEqual(result["hunting"]["presetNumbers"]["equipment"], 1)
 
     def test_union_section_fetches_state_presets_artifact_crystals_and_champions(self):

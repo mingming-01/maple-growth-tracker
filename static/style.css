@@ -935,3 +935,64 @@ button:disabled { cursor: wait; opacity: 0.65; }
     .game-union-state-grid,.game-union-crystal-grid,.game-union-champion-grid { grid-template-columns:1fr; }
     .game-union-artifact-effect { align-items:flex-start; flex-direction:column; }
 }
+
+
+/* Follow-up: integrated 7-column equipment board with center set-effect panel. */
+.game-equipment-board {
+    position:relative; grid-template-columns:repeat(7,minmax(0,1fr)) !important;
+    grid-template-rows:repeat(4,minmax(104px,auto)) repeat(2,minmax(92px,auto));
+    gap:7px; padding:12px; align-items:stretch;
+}
+.game-equipment-board .equipment-game-slot { min-height:94px; grid-area:auto; }
+.game-equipment-board .game-set-effects-center {
+    min-width:0; min-height:0; overflow:auto; align-self:stretch;
+    display:flex; flex-direction:column; gap:8px;
+    padding:10px; border:1px solid #596783; border-radius:9px;
+    background:linear-gradient(145deg,rgba(35,44,65,.96),rgba(24,31,48,.98));
+}
+.game-set-effects-center>.game-window-title { margin:0; font-size:14px; }
+.game-set-effects-center .game-set-grid { display:grid; grid-template-columns:1fr; gap:6px; }
+.game-set-effects-center .game-set-item { min-width:0; padding:8px; border:1px solid #46536d; border-radius:7px; background:rgba(255,255,255,.035); }
+.game-set-effects-center .game-set-tier { display:block; margin-top:4px; color:#c6d0e1; font-size:11px; line-height:1.45; }
+.equipment-seed-ring-toggle {
+    position:absolute; top:3px; right:4px; z-index:5; width:23px; height:23px;
+    padding:0; border:1px solid #7d8aa4; border-radius:6px; color:#e9d9a8;
+    background:#202a40; cursor:pointer; font-size:13px;
+}
+.equipment-seed-ring-panel {
+    position:absolute; z-index:160; top:28px; right:3px; width:190px; padding:9px;
+    display:grid; gap:5px; border:1px solid #c4ad70; border-radius:8px;
+    color:#edf0f7; background:#1b2234; box-shadow:0 10px 25px rgba(0,0,0,.5);
+    font-size:11px;
+}
+.equipment-seed-ring-icon { width:42px; height:42px; object-fit:contain; }
+.equipment-tooltip-combined-row { display:flex; align-items:flex-start; justify-content:space-between; gap:8px; padding:3px 0; }
+.equipment-tooltip-combined-name { flex:0 0 66px; color:#dce2ef; font-size:11px; }
+.equipment-tooltip-combined-values { display:flex; flex-wrap:wrap; justify-content:flex-end; gap:3px 7px; font-size:10px; }
+.equipment-option-base { color:#dce2ef; }
+.equipment-option-additional { color:#67a8ff; }
+.equipment-option-scroll { color:#e6b85c; }
+.equipment-option-starforce { color:#b79aff; }
+.equipment-option-total { margin-left:3px; color:#fff; font-size:11px; }
+.equipment-potential-grade.is-legendary { color:#6bd58b !important; }
+.game-hexa-stat-grid { grid-template-columns:repeat(3,minmax(0,1fr)); }
+.game-union-crystal-gem { width:56px; height:56px; }
+.game-union-crystal-monster { width:50px; height:50px; object-fit:contain; }
+.game-union-champion-avatar-wrap { float:none; width:76px; height:76px; margin:0 auto 8px; }
+.game-union-champion-card { display:flex; flex-direction:column; align-items:center; text-align:center; }
+.game-union-champion-card-head { width:100%; }
+.game-champion-tooltip-image { display:block; width:104px; height:104px; margin:0 auto 8px; object-fit:contain; }
+@media (max-width:760px) {
+    .game-equipment-board { grid-template-columns:repeat(7,minmax(0,1fr)) !important; gap:4px; padding:6px; }
+    .game-equipment-board .equipment-game-slot { min-height:74px; padding:5px 2px; }
+    .game-equipment-board .equipment-game-item-name { font-size:9px; }
+    .game-equipment-board .equipment-slot-caption { font-size:9px; }
+    .game-equipment-board .game-set-effects-center { padding:5px; }
+    .game-set-effects-center .game-set-item { padding:5px; }
+    .game-hexa-stat-grid { grid-template-columns:repeat(3,minmax(0,1fr)); }
+}
+
+@media (max-width:760px) {
+    .game-equipment-layout { overflow-x:auto; }
+    .game-equipment-board { min-width:650px; }
+}
