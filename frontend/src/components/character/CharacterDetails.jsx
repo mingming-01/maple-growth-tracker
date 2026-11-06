@@ -169,7 +169,6 @@ function DetailTooltip({
           setOpen(value => !value);
         }
       }}
-      onFocus={() => setOpen(true)}
       onBlur={() => setOpen(false)}
       onKeyDown={event => {
         if (event.key === "Enter" || event.key === " ") {
