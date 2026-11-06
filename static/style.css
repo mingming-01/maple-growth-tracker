@@ -990,3 +990,8 @@ button:disabled { cursor: wait; opacity: 0.65; }
     .game-set-effects-center .game-set-item { padding:5px; }
     .game-hexa-stat-grid { grid-template-columns:repeat(3,minmax(0,1fr)); }
 }
+
+@media (max-width:760px) {
+    .game-equipment-layout { overflow-x:auto; }
+    .game-equipment-board { min-width:650px; }
+}
