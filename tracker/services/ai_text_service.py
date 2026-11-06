@@ -49,7 +49,7 @@ def sanitize_ai_text(value, expected_date=None):
             date_patterns = (
                 r"\b\d{4}\s*년\s*\d{1,2}\s*월\s*\d{1,2}\s*일",
                 r"\b\d{1,2}\s*월\s*\d{1,2}\s*일",
-                r"\b\d{4}-\d{1,2}-\d{1,2}\b",
+                r"(?<!\d)\d{4}-\d{1,2}-\d{1,2}(?!\d)",
             )
             for pattern in date_patterns:
                 text = re.sub(pattern, date_label, text)
