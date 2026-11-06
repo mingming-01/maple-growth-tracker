@@ -5,7 +5,6 @@ from pathlib import Path
 
 from flask import current_app, has_app_context
 
-from tracker.config import Config
 from tracker.integrations.nexon_api import (
     get_basic_character,
     get_ocid,
