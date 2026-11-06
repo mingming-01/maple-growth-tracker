@@ -72,11 +72,15 @@ def should_use_openrouter(error):
     return any(
         keyword in error_text
         for keyword in (
+            "408",
+            "425",
             "429",
-            "RESOURCE_EXHAUSTED",
-            "QUOTA",
+            "500",
+            "502",
             "503",
             "504",
+            "RESOURCE_EXHAUSTED",
+            "QUOTA",
             "TIMEOUT",
         )
     )
