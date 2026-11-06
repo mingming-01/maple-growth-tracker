@@ -100,7 +100,9 @@ function presetSelect(source,category,selected,onChange) {
     (source.presets||[]).forEach(item=>{
         const option=document.createElement("option");
         option.value=String(item.number);
-        const tag=item.purpose==="boss"?" · 보스":item.purpose==="hunting"?" · 사냥":"";
+        const tag=category==="hyperStat"
+            ? (item.purpose==="boss"?" · 보스":item.purpose==="hunting"?" · 사냥":"")
+            : "";
         option.textContent=item.number===0?"현재 구성":"프리셋 "+item.number+tag;
         option.selected=Number(item.number)===Number(selected);
         select.appendChild(option);
@@ -123,13 +125,13 @@ function renderStatsWindow(data,selection,mode) {
     panel.appendChild(powerPanel);
 
     const finalStats=sourceById(data,"stat")?.data?.final_stat||[];
-    const wanted=["STR","DEX","INT","LUK","공격력","마력","보스 몬스터 공격 시 데미지","몬스터 방어율 무시","크리티컬 데미지","크리티컬 확률","데미지"];
-    const byName=new Map((Array.isArray(finalStats)?finalStats:[]).map(item=>[item.stat_name,item.stat_value]));
+    const wanted=/^(STR|DEX|INT|LUK|공격력|마력|보스 몬스터 공격 시 데미지|보스 데미지|몬스터 방어율 무시|크리티컬 데미지|크리티컬 확률|데미지|최종 데미지|메소 획득량|아이템 드롭률|아이템 획득률|추가 경험치 획득량|경험치 획득량|일반 몬스터 공격 시 데미지|재사용 대기시간 감소|재사용 대기시간 미적용|버프 지속시간|쿨타임 감소|공격 속도|이동 속도)$/;
     const grid=el("div","game-stat-grid");
-    wanted.forEach(name=>{
-        if(!present(byName.get(name))) return;
+    (Array.isArray(finalStats)?finalStats:[]).forEach(item=>{
+        const name=String(item?.stat_name||"").trim();
+        if(!wanted.test(name)||!present(item?.stat_value)||name==="전투력") return;
         const tile=el("div","game-stat-tile");
-        tile.append(el("span","game-stat-name",STAT_LABELS[name]||name),el("strong","game-stat-number",fmt(byName.get(name))));
+        tile.append(el("span","game-stat-name",STAT_LABELS[name]||name),el("strong","game-stat-number",fmt(item.stat_value)));
         grid.appendChild(tile);
     });
     if(!grid.childElementCount) grid.appendChild(el("p","game-empty","스탯 정보를 확인할 수 없습니다."));
@@ -141,21 +143,25 @@ function summaryFor(source,number) {
     const data=presetData(source,number);
     if(source.id==="itemEquipment") {
         const items=Array.isArray(data.item_equipment)?data.item_equipment:[];
-        const rings=items.filter(item=>/링/.test(item?.item_name||"")).map(item=>item.item_name);
-        const hints=[];
-        if(rings.length) hints.push(...rings.slice(0,2));
-        const drop=items.filter(item=>/메소 획득량|아이템 드롭률|드롭률/.test(JSON.stringify(item)));
-        if(drop.length) hints.push("드롭·메획 장비 "+drop.length+"개");
-        return {title:"장비",detail:items.length+"개 장착",hints};
+        const hints=items.filter(item=>item?.item_name).slice(0,8).map(item=>item.item_name);
+        const optionText=items.flatMap(item=>[
+            item?.potential_option_1,item?.potential_option_2,item?.potential_option_3,
+            item?.additional_potential_option_1,item?.additional_potential_option_2,item?.additional_potential_option_3,
+            item?.soul_option
+        ]).filter(Boolean);
+        const highlights=optionText.filter(text=>/메소 획득량|아이템 드롭률|재사용 대기시간|쿨타임|경험치 획득/.test(text));
+        return {title:"장비",detail:items.length+"개 장착",hints:[...hints,...highlights]};
     }
     if(source.id==="hyperStat") {
         const items=Array.isArray(data.hyper_stat)?data.hyper_stat:[];
-        return {title:"하이퍼 스탯",detail:items.filter(item=>Number(item?.stat_level)>0).length+"개 투자",
-            hints:items.filter(item=>Number(item?.stat_level)>0).slice(0,4).map(item=>(item.stat_type||"스탯")+" Lv."+item.stat_level)};
+        const invested=items.filter(item=>Number(item?.stat_level)>0);
+        const remain=source.data?.["hyper_stat_preset_"+number+"_remain_point"];
+        return {title:"하이퍼 스탯",detail:invested.length+"개 투자"+(present(remain)?" · 잔여 "+fmt(remain)+"P":""),
+            hints:invested.map(item=>(item.stat_type||"스탯")+" Lv."+item.stat_level+(present(item.stat_increase)?" ("+item.stat_increase+")":""))};
     }
     if(source.id==="ability") {
         const ability=Array.isArray(data.ability_info)?data.ability_info:[];
-        return {title:"어빌리티",detail:source.data?.ability_grade||"",hints:ability.map(item=>item?.ability_value).filter(Boolean).slice(0,3)};
+        return {title:"어빌리티",detail:data.ability_grade||source.data?.ability_grade||"",hints:ability.map(item=>[item?.ability_grade,item?.ability_value].filter(Boolean).join(" · ")).filter(Boolean)};
     }
     if(source.id==="linkSkill") {
         const links=[...(Array.isArray(data.character_link_skill)?data.character_link_skill:[]),
@@ -164,7 +170,7 @@ function summaryFor(source,number) {
     }
     if(source.id==="unionStateStat") {
         const effects=Array.isArray(data.union_state_stat)?data.union_state_stat:[];
-        return {title:"유니온 스탯",detail:"프리셋 "+(number??"—"),hints:effects.slice(0,4)};
+        return {title:"유니온 스탯",detail:"프리셋 "+(number??"—"),hints:effects};
     }
     return {title:source.label||source.id,detail:"",hints:[]};
 }
@@ -197,7 +203,7 @@ function renderStatsSection(data,mode,selection,onModeChange) {
     const selects=el("div","game-preset-select-grid");
     (data.sources||[]).forEach(source=>{
         const category=PRESET_CATEGORY[source.id];
-        if(!["hyperStat","ability","union"].includes(category)||!Array.isArray(source.presets)||!source.presets.length) return;
+        if(!["equipment","hyperStat","ability","union"].includes(category)||!Array.isArray(source.presets)||!source.presets.length) return;
         selects.appendChild(presetSelect(source,category,selection[category],number=>onModeChange("custom",category,number)));
     });
     profile.appendChild(selects);
@@ -216,7 +222,7 @@ function renderStatsSection(data,mode,selection,onModeChange) {
     const grid=el("div","game-selected-build-grid");
     (data.sources||[]).forEach(source=>{
         const category=PRESET_CATEGORY[source.id];
-        if(["hyperStat","ability","union"].includes(category)) grid.appendChild(renderPresetSummary(source,selection[category]));
+        if(["equipment","hyperStat","ability","union"].includes(category)) grid.appendChild(renderPresetSummary(source,selection[category]));
     });
     builds.appendChild(grid); layout.appendChild(builds);
     return layout;
@@ -326,19 +332,45 @@ function renderEquipmentSection(data) {
     });
     content.appendChild(board);
 
-    const sets=setSource?.currentData?.set_effect||setSource?.data?.set_effect||[];
-    if(Array.isArray(sets)&&sets.length) {
-        const panel=el("section","game-set-effects"); panel.appendChild(el("h3","game-window-title","세트 효과"));
-        const grid=el("div","game-set-grid");
+    const panel=el("section","game-set-effects");
+    panel.appendChild(el("h3","game-window-title","세트 효과"));
+    const grid=el("div","game-set-grid");
+    const isActivePreset=present(source.activePresetNo)&&Number(source.activePresetNo)===Number(number);
+    const sets=isActivePreset
+        ? (setSource?.currentData?.set_effect||setSource?.data?.set_effect||[])
+        : [];
+    if(isActivePreset&&Array.isArray(sets)&&sets.length) {
         sets.forEach(set=>{
             const tile=el("div","game-set-item");
-            tile.append(el("strong","",set.set_name||"세트"),el("span","",set.total_parts?set.total_parts+"세트":""));
+            tile.append(el("strong","",set.set_name||"세트"),
+                el("span","",present(set.total_set_count)?set.total_set_count+"개 부위 적용":"적용 부위 수 미제공"));
+            const tiers=Array.isArray(set.set_effect_info)?set.set_effect_info:[];
+            tiers.forEach(tier=>{
+                tile.appendChild(el("span","game-set-tier",
+                    (present(tier?.set_count)?tier.set_count+"세트 · ":"")+(tier?.set_option||"")));
+            });
             grid.appendChild(tile);
         });
-        panel.appendChild(grid); content.appendChild(panel);
+    } else {
+        panel.appendChild(el("p","game-set-unavailable",isActivePreset
+            ? (setSource?.message||"현재 적용 장비의 세트 효과를 조회할 수 없습니다.")
+            : "선택한 장비 프리셋의 세트 효과는 별도 API가 제공하지 않습니다. 현재 적용 프리셋의 세트 효과를 다른 프리셋에 재사용하지 않습니다."));
     }
+    if(grid.childElementCount) panel.appendChild(grid);
+    content.appendChild(panel);
     return content;
 }
+function addHoverTooltip(parent,title,lines,className="game-hover-tooltip") {
+    const values=(lines||[]).filter(value=>present(value));
+    if(!values.length) return null;
+    const tip=el("div",className);
+    if(title) tip.appendChild(el("strong","game-hover-tooltip-title",title));
+    values.forEach(value=>tip.appendChild(el("p","game-hover-tooltip-line",value)));
+    parent.appendChild(tip);
+    parent.classList.add("has-hover-tooltip");
+    return tip;
+}
+
 function renderSymbolsSection(data) {
     const source=sourceById(data,"symbolEquipment"), content=el("div","game-symbol-window");
     if(!source||source.status!=="available") {
@@ -356,6 +388,17 @@ function renderSymbolsSection(data) {
         tile.append(el("strong","game-symbol-name",symbol.symbol_name||"심볼"),
             el("span","game-symbol-level","Lv. "+(symbol.symbol_level??"—")));
         if(present(symbol.symbol_force)) tile.appendChild(el("span","game-symbol-force","포스 "+symbol.symbol_force));
+        const growth=Number(symbol.symbol_growth_count||0);
+        const required=Number(symbol.symbol_require_growth_count||0);
+        const growthLines=[
+            symbol.symbol_description,
+            "성장량 "+fmt(growth)+" / "+(required>0?fmt(required):"최대 레벨"),
+            required>0?"다음 레벨까지 "+fmt(Math.max(0,required-growth))+" 남음":"최대 레벨 또는 다음 성장량 미제공",
+            present(symbol.symbol_drop_rate)?"아이템 드롭률 "+symbol.symbol_drop_rate:null,
+            present(symbol.symbol_meso_rate)?"메소 획득량 "+symbol.symbol_meso_rate:null,
+            present(symbol.symbol_exp_rate)?"경험치 획득량 "+symbol.symbol_exp_rate:null
+        ];
+        addHoverTooltip(tile,symbol.symbol_name||"심볼 성장 정보",growthLines);
         grid.appendChild(tile);
     });
     content.appendChild(grid); return content;
@@ -373,6 +416,11 @@ function renderSkillsSection(data) {
         if(icon) tile.appendChild(icon);
         tile.append(el("strong","game-sixth-skill-name",skill.skill_name||"스킬"),
             el("span","game-sixth-skill-level","Lv. "+(skill.skill_level??"—")));
+        addHoverTooltip(tile,skill.skill_name||"스킬 정보",[
+            skill.skill_description,
+            present(skill.skill_effect)?"현재 효과 · "+skill.skill_effect:null,
+            present(skill.skill_effect_next)?"다음 레벨 · "+skill.skill_effect_next:null
+        ]);
         grid.appendChild(tile);
     });
     if(!grid.childElementCount) grid.appendChild(el("p","game-empty",skillSource?.message||"조회된 6차 스킬이 없습니다."));
@@ -383,27 +431,52 @@ function renderSkillsSection(data) {
     const coreGrid=el("div","game-hexa-grid");
     if(Array.isArray(cores)) cores.forEach(core=>{
         const tile=el("div","game-hexa-tile");
+        const linked=Array.isArray(core.linked_skill)?core.linked_skill.map(item=>item?.hexa_skill_id).filter(Boolean):[];
         tile.append(el("span","game-hexa-kind",core.hexa_core_type||"코어"),
             el("strong","game-hexa-name",core.hexa_core_name||"HEXA 코어"),
             el("span","game-hexa-level","Lv. "+(core.hexa_core_level??"—")));
+        addHoverTooltip(tile,core.hexa_core_name||"HEXA 코어",[
+            core.hexa_core_type,
+            linked.length?"연결 스킬 · "+linked.join(", "):null
+        ]);
         coreGrid.appendChild(tile);
     });
     if(!coreGrid.childElementCount) coreGrid.appendChild(el("p","game-empty",hexaSource?.message||"조회된 HEXA 코어가 없습니다."));
     hexa.appendChild(coreGrid); content.appendChild(hexa);
 
-    const stats=hexaStat?.data?.character_hexa_stat_core||[];
-    if(Array.isArray(stats)&&stats.length) {
-        const statPanel=el("section","game-hexa-stat-panel");
-        statPanel.appendChild(el("h3","game-window-title","HEXA 스탯"));
+    const hexaData=hexaStat?.data||{};
+    const statSets=[
+        ["HEXA 스탯 I",hexaData.character_hexa_stat_core],
+        ["HEXA 스탯 II",hexaData.character_hexa_stat_core_2],
+        ["HEXA 스탯 III",hexaData.character_hexa_stat_core_3],
+        ["프리셋 HEXA 스탯 I",hexaData.preset_hexa_stat_core],
+        ["프리셋 HEXA 스탯 II",hexaData.preset_hexa_stat_core_2],
+        ["프리셋 HEXA 스탯 III",hexaData.preset_hexa_stat_core_3]
+    ].filter(([,rows])=>Array.isArray(rows)&&rows.length);
+    const statPanel=el("section","game-hexa-stat-panel");
+    statPanel.appendChild(el("h3","game-window-title","HEXA 스탯"));
+    if(statSets.length) statSets.forEach(([label,rows])=>{
+        const group=el("div","game-hexa-stat-group");
+        group.appendChild(el("h4","game-hexa-stat-heading",label));
         const statGrid=el("div","game-hexa-grid");
-        stats.forEach(stat=>{
+        rows.forEach(stat=>{
             const tile=el("div","game-hexa-tile");
-            tile.append(el("strong","game-hexa-name",stat.stat_type||stat.stat_name||"스탯"),
-                el("span","game-hexa-level","Lv. "+(stat.stat_level??"—")));
+            const slot=present(stat.slot_id)?"슬롯 "+(Number(stat.slot_id)+1):null;
+            tile.append(el("span","game-hexa-kind",slot||"스탯 코어"),
+                el("strong","game-hexa-name",stat.main_stat_name||"메인 스탯"),
+                el("span","game-hexa-level","Lv. "+(stat.main_stat_level??"—")));
+            const details=[
+                (stat.sub_stat_name_1||"서브 스탯 1")+" · Lv."+(stat.sub_stat_level_1??"—"),
+                (stat.sub_stat_name_2||"서브 스탯 2")+" · Lv."+(stat.sub_stat_level_2??"—"),
+                present(stat.stat_grade)?"코어 등급 "+stat.stat_grade:null
+            ];
+            addHoverTooltip(tile,"HEXA 스탯 상세",details);
             statGrid.appendChild(tile);
         });
-        statPanel.appendChild(statGrid); content.appendChild(statPanel);
-    }
+        group.appendChild(statGrid); statPanel.appendChild(group);
+    });
+    else statPanel.appendChild(el("p","game-empty",hexaStat?.message||"HEXA 스탯 응답에 표시할 스탯 코어가 없습니다."));
+    content.appendChild(statPanel);
     return content;
 }
 function renderLinkSection(data) {
@@ -428,6 +501,11 @@ function renderLinkSection(data) {
         if(icon) tile.appendChild(icon);
         tile.append(el("strong","game-link-name",skill.skill_name||"링크 스킬"),
             el("span","game-link-level","Lv. "+(skill.skill_level??"—")));
+        addHoverTooltip(tile,skill.skill_name||"링크 스킬",[
+            skill.skill_description,
+            present(skill.skill_effect)?"현재 효과 · "+skill.skill_effect:null,
+            present(skill.skill_effect_next)?"다음 레벨 · "+skill.skill_effect_next:null
+        ]);
         grid.appendChild(tile);
     });
     if(!grid.childElementCount) grid.appendChild(el("p","game-empty","장착된 링크 스킬이 없습니다."));
@@ -446,6 +524,19 @@ function unionEffectTile(effect,index) {
     return tile;
 }
 
+const ARTIFACT_MOB_IDS = {
+    "주황버섯":"1210102",
+    "슬라임":"210100",
+    "뿔버섯":"2110200",
+    "스텀프":"100005",
+    "스텀피":"3220000",
+    "스톤골렘":"5130101",
+    "주니어발록":"8130100",
+    "주니어 발록":"8130100",
+    "자쿰":"8800000",
+    "핑크빈":"8820001",
+    "파풀라투스":"8500002"
+};
 function renderUnionArtifact(artifact,content) {
     const panel=el("section","game-union-artifact-panel");
     const heading=el("div","game-union-section-heading");
@@ -470,19 +561,6 @@ function renderUnionArtifact(artifact,content) {
     }
     panel.appendChild(summary);
 
-    const effectsPanel=el("div","game-union-subpanel");
-    effectsPanel.appendChild(el("h4","game-union-subtitle","아티팩트 효과"));
-    const effectGrid=el("div","game-union-artifact-effect-grid");
-    effects.forEach(effect=>{
-        const tile=el("article","game-union-artifact-effect");
-        tile.append(el("strong","",effect?.name||"효과"),
-            el("span","",present(effect?.level)?"Lv. "+fmt(effect.level):"레벨 정보 없음"));
-        effectGrid.appendChild(tile);
-    });
-    if(effectGrid.childElementCount) effectsPanel.appendChild(effectGrid);
-    else effectsPanel.appendChild(el("p","game-empty","조회된 아티팩트 효과가 없습니다."));
-    panel.appendChild(effectsPanel);
-
     const crystalPanel=el("div","game-union-subpanel");
     crystalPanel.appendChild(el("h4","game-union-subtitle","아티팩트 크리스탈"));
     const crystalGrid=el("div","game-union-crystal-grid");
@@ -490,6 +568,11 @@ function renderUnionArtifact(artifact,content) {
         const tile=el("article","game-union-crystal");
         const top=el("div","game-union-crystal-top");
         const gem=el("span","game-union-crystal-gem",String(index+1).padStart(2,"0"));
+        const mobId=ARTIFACT_MOB_IDS[crystal?.name];
+        if(mobId) {
+            const mobIcon=image("https://maplestory.io/api/KMS/latest/mob/"+mobId+"/icon",crystal?.name||"몬스터","game-union-crystal-monster");
+            if(mobIcon) gem.replaceChildren(mobIcon);
+        }
         top.append(gem,el("strong","game-union-crystal-name",crystal?.name||"크리스탈"),
             el("span","game-union-crystal-level",present(crystal?.level)?"Lv. "+fmt(crystal.level):""));
         tile.appendChild(top);
@@ -509,6 +592,20 @@ function renderUnionArtifact(artifact,content) {
     if(crystalGrid.childElementCount) crystalPanel.appendChild(crystalGrid);
     else crystalPanel.appendChild(el("p","game-empty","등록된 아티팩트 크리스탈이 없습니다."));
     panel.appendChild(crystalPanel);
+
+    const effectsPanel=el("div","game-union-subpanel");
+    effectsPanel.appendChild(el("h4","game-union-subtitle","아티팩트 효과"));
+    const effectGrid=el("div","game-union-artifact-effect-grid");
+    effects.forEach(effect=>{
+        const tile=el("article","game-union-artifact-effect");
+        tile.append(el("strong","",effect?.name||"효과"),
+            el("span","",present(effect?.level)?"Lv. "+fmt(effect.level):"레벨 정보 없음"));
+        effectGrid.appendChild(tile);
+    });
+    if(effectGrid.childElementCount) effectsPanel.appendChild(effectGrid);
+    else effectsPanel.appendChild(el("p","game-empty","조회된 아티팩트 효과가 없습니다."));
+    panel.appendChild(effectsPanel);
+
     content.appendChild(panel);
 }
 
@@ -552,6 +649,11 @@ function renderUnionChampions(championSource,content) {
         head.append(el("span","game-union-grade-badge grade-"+grade.toLowerCase(),grade),
             el("span","game-union-champion-slot","SLOT "+fmt(champion?.champion_slot??"—")));
         card.appendChild(head);
+        const avatarWrap=el("div","game-union-champion-avatar-wrap");
+        const avatar=image(champion?.character_image,champion?.champion_name||"유니온 챔피언","game-union-champion-avatar");
+        if(avatar) avatarWrap.appendChild(avatar);
+        else avatarWrap.appendChild(el("span","game-union-champion-avatar-fallback",(champion?.champion_name||"챔피언").slice(0,1)));
+        card.appendChild(avatarWrap);
         card.append(el("strong","game-union-champion-name",champion?.champion_name||"캐릭터 정보 없음"),
             el("span","game-union-champion-class",champion?.champion_class||"직업 정보 없음"));
         const badges=Array.isArray(champion?.champion_badge_info)?champion.champion_badge_info:[];
@@ -561,6 +663,12 @@ function renderUnionChampions(championSource,content) {
         });
         if(badgeList.childElementCount) card.appendChild(badgeList);
         else card.appendChild(el("p","game-union-muted","개별 휘장 효과 정보 없음"));
+        addHoverTooltip(card,champion?.champion_name||"유니온 챔피언",[
+            champion?.champion_class,
+            "등급 · "+grade,
+            "슬롯 · "+fmt(champion?.champion_slot??"—"),
+            ...badges.map(item=>item?.stat).filter(Boolean)
+        ],"game-champion-hover-tooltip");
         list.appendChild(card);
     });
     if(list.childElementCount) panel.appendChild(list);
