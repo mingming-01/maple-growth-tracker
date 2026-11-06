@@ -11,6 +11,9 @@ backup_after_workbench/
 node_modules/
 package-lock.json
 
+# Generated frontend build
+static/react-preview/
+
 # Playwright test artifacts
 test-results/
 playwright-report/
