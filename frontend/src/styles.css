@@ -564,22 +564,35 @@ button:focus-visible,input:focus-visible,select:focus-visible,a:focus-visible { 
   .mgt-character-avatar { width:100%; height:100%; transform:none; }
 }
 .game-union-champion-card { position:relative; overflow:visible; }
-.game-union-champion-avatar-tooltip { position:relative; display:flex; justify-content:center; margin:7px 0; z-index:2; }
-.game-union-champion-avatar-tooltip summary {
-  display:inline-flex;
-  align-items:center;
+.game-union-champion-avatar-tooltip {
+  position:relative;
+  display:flex;
   justify-content:center;
-  min-height:30px;
-  padding:5px 10px;
-  border:1px solid rgba(169,149,255,.25);
-  border-radius:8px;
-  color:#cbbfff;
-  background:rgba(132,105,240,.12);
+  margin:7px 0;
+  z-index:2;
+}
+.game-union-champion-avatar-tooltip summary {
+  display:block;
+  width:76px;
+  height:76px;
+  margin:0 auto;
+  padding:0;
+  border:0;
+  border-radius:10px;
+  background:transparent;
   cursor:pointer;
   list-style:none;
   touch-action:manipulation;
+  -webkit-tap-highlight-color:transparent;
 }
 .game-union-champion-avatar-tooltip summary::-webkit-details-marker { display:none; }
+.game-union-champion-avatar-preview {
+  display:block;
+  width:76px;
+  height:76px;
+  object-fit:contain;
+  border-radius:10px;
+}
 .game-union-champion-avatar-tooltip .react-detail-tooltip-body {
   display:none;
   position:absolute;
@@ -592,6 +605,7 @@ button:focus-visible,input:focus-visible,select:focus-visible,a:focus-visible { 
   transform:translateX(-50%);
   text-align:center;
   z-index:20;
+  pointer-events:none;
 }
 .game-union-champion-avatar-tooltip[open] .react-detail-tooltip-body,
 .game-union-champion-avatar-tooltip:hover .react-detail-tooltip-body,
@@ -605,7 +619,8 @@ button:focus-visible,input:focus-visible,select:focus-visible,a:focus-visible { 
 }
 .game-union-champion-avatar-tooltip .react-detail-tooltip-body strong { margin:0; }
 @media (hover:none), (pointer:coarse) {
-  .game-union-champion-avatar-tooltip summary { min-height:34px; }
+  .game-union-champion-avatar-tooltip summary,
+  .game-union-champion-avatar-preview { touch-action:manipulation; }
 }
 
 .mgt-ranking-diagnostics { margin-top:9px; color:#b8addc; font-size:10px; }
