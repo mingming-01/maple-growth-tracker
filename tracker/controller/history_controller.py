@@ -82,12 +82,13 @@ def get_history():
         def fetch_history(target_date):
             date_string = target_date.strftime("%Y-%m-%d")
             saved = stored_recent.get(date_string)
+            # 정상 스냅샷이 아닌 저장 기록은 다음 새로고침에서 재확인한다.
+            # not_ready를 오래 고정해 성장 기록이 영구적으로 비는 현상을 방지한다.
             should_check_api = (
                 target_date == today
                 or (
-                    target_date == today - timedelta(days=1)
-                    and saved
-                    and saved.get("recordStatus") == "not_ready"
+                    saved is not None
+                    and saved.get("recordStatus") != "available"
                 )
             )
 
@@ -114,8 +115,10 @@ def get_history():
                     "experience": ranking_data.get("character_exp"),
                     "recordStatus": "available"
                 }
-            if response is not None and response.status_code == 200:
-                # 빈 응답으로 같은 날 앞서 저장한 정상 스냅샷을 덮어쓰지 않는다.
+
+            # 랭킹 API가 429/5xx 등 일시적 오류를 반환했다면 기본 정보 API를
+            # 연쇄 호출하지 않는다. 제한 상황에서 요청량이 더 커지는 것을 방지한다.
+            if is_temporary_nexon_failure(response):
                 if saved and saved.get("recordStatus") == "available":
                     return {
                         "date": date_string,
@@ -130,15 +133,65 @@ def get_history():
                     "ranking": None,
                     "level": None,
                     "experience": None,
+                    "recordStatus": "unavailable",
+                    "retryable": True
+                }
+
+            # 정상 응답으로 랭킹 항목이 없을 때만 기본 정보 API를 보조 조회한다.
+            try:
+                basic_data, basic_response = get_basic_character_snapshot(
+                    ocid,
+                    target_date=date_string if target_date < today else None,
+                    historical=True
+                )
+            except requests.RequestException:
+                basic_data, basic_response = None, None
+            if basic_data:
+                level = basic_data.get("character_level")
+                experience = basic_data.get("character_exp")
+                if level is not None and experience is not None:
+                    return {
+                        "date": date_string,
+                        "ranking": None,
+                        "level": level,
+                        "experience": experience,
+                        "recordStatus": "available"
+                    }
+
+            # 빈 응답으로 같은 날 앞서 저장한 정상 스냅샷을 덮어쓰지 않는다.
+            if saved and saved.get("recordStatus") == "available":
+                return {
+                    "date": date_string,
+                    "ranking": saved.get("ranking"),
+                    "level": saved.get("level"),
+                    "experience": saved.get("experience"),
+                    "recordStatus": "available",
+                    "_fromStore": True
+                }
+
+            if (
+                response is not None and response.status_code == 200
+                and basic_response is not None and basic_response.status_code == 200
+            ):
+                return {
+                    "date": date_string,
+                    "ranking": None,
+                    "level": None,
+                    "experience": None,
                     "recordStatus": "not_ready"
                 }
+
+            retryable = (
+                is_temporary_nexon_failure(response)
+                or is_temporary_nexon_failure(basic_response)
+            )
             return {
                 "date": date_string,
                 "ranking": None,
                 "level": None,
                 "experience": None,
                 "recordStatus": "unavailable",
-                "retryable": is_temporary_nexon_failure(response)
+                "retryable": retryable
             }
 
         dates = [today - timedelta(days=i) for i in range(7)]
@@ -152,7 +205,10 @@ def get_history():
 
     failed_records = [item for item in history if item.get("recordStatus") == "unavailable"]
     if failed_records:
-        if all(item.get("retryable") for item in failed_records):
+        # 여러 날짜를 병렬 조회하므로 일시적 오류와 확정 오류가 섞일 수 있다.
+        # 하나라도 429/5xx/네트워크 오류가 있으면 전체 결과를 502로 단정하지 않고
+        # 저장된 정상 스냅샷을 우선 제공하거나 재시도 가능한 503으로 응답한다.
+        if any(item.get("retryable") for item in failed_records):
             return stale_snapshot_response(
                 cache_key, "성장 기록 조회가 일시적으로 지연되고 있습니다. 잠시 후 다시 시도해주세요."
             )

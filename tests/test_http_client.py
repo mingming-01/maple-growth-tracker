@@ -34,6 +34,22 @@ class HttpClientRetryTests(unittest.TestCase):
 
     @patch("tracker.integrations.http_client.time.sleep")
     @patch("tracker.integrations.http_client.requests.get")
+    def test_honors_retry_after_instead_of_shortening_to_backoff_cap(self, get, sleep):
+        limited = self.response(429, {"Retry-After": "12"})
+        success = self.response(200)
+        get.side_effect = [limited, success]
+
+        result = request_with_retries(
+            "get", "https://example.test/api",
+            timeout=1, max_attempts=2, backoff_factor=0.1, max_backoff=3,
+        )
+
+        self.assertIs(result, success)
+        sleep.assert_called_once_with(12.0)
+        limited.close.assert_called_once()
+
+    @patch("tracker.integrations.http_client.time.sleep")
+    @patch("tracker.integrations.http_client.requests.get")
     def test_retries_connection_error_then_returns_success(self, get, sleep):
         success = self.response(200)
         get.side_effect = [requests.Timeout("temporary timeout"), success]

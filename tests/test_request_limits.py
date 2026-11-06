@@ -61,7 +61,7 @@ class RequestLimitTests(unittest.TestCase):
         with app.app_context():
             self.assertTrue(consume_ai_request("127.0.0.1")[0])
         client = app.test_client()
-        with patch.object(ai_controller, "get_character", side_effect=AssertionError("must not call Nexon")):
+        with patch.object(ai_controller, "resolve_character", side_effect=AssertionError("must not call Nexon")):
             response = client.get("/api/ai-analysis?name=테스트캐릭터")
         self.assertEqual(response.status_code, 429)
         self.assertIn("Retry-After", response.headers)

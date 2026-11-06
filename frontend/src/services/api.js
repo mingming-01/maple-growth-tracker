@@ -64,11 +64,11 @@ export function getCharacterDetails(ocid, section, { refresh = false, signal } =
   });
 }
 
-export function postAiAnalysis(name, metrics, { signal } = {}) {
+export function postAiAnalysis(name, metrics, history = [], { signal } = {}) {
   const params = new URLSearchParams({ name: String(name || "").trim() });
   return requestJson("/api/ai-analysis?" + params.toString(), {
     method: "POST",
-    body: JSON.stringify({ metrics }),
+    body: JSON.stringify({ metrics, history }),
     signal
   });
 }

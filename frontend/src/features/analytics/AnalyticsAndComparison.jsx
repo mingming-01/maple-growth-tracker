@@ -135,7 +135,7 @@ export function AIReport({ character, history }) {
       return;
     }
     try {
-      const result = await postAiAnalysis(character.characterName,metrics);
+      const result = await postAiAnalysis(character.characterName,metrics,history);
       if (!result.analysis) throw new Error("AI 분석 결과가 비어 있습니다.");
       setAnalysis(result.analysis);
       setInsights(result.growthInsights || null);

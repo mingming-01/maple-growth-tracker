@@ -92,6 +92,20 @@ function RankingStatus({ character }) {
     <div className="mgt-ranking-status is-warning" role="status">
       <p>{message}{dateNote}</p>
       {warnings.length > 0 && <small>{warnings.join(" ")}</small>}
+      {character.rankingApiDiagnostics && Object.keys(character.rankingApiDiagnostics).length > 0 && (
+        <details className="mgt-ranking-diagnostics">
+          <summary>랭킹 API 응답 상세</summary>
+          <div>
+            {Object.entries(character.rankingApiDiagnostics).map(([key, item]) => (
+              <span key={key}>
+                {({ranking:"종합",worldRanking:"월드",jobWorldRanking:"직업·월드",jobRanking:"직업"})[key] || key}
+                {" · HTTP "}{item.statusCode ?? "응답 없음"}
+                {" · 항목 "}{item.returnedEntries ?? "확인 불가"}건
+              </span>
+            ))}
+          </div>
+        </details>
+      )}
     </div>
   );
 }
