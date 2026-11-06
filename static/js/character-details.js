@@ -848,8 +848,16 @@ function attachViewportTooltip(trigger,tooltip,id) {
         else hide();
     };
 
-    trigger.addEventListener("pointerenter",()=>{hovered=true;sync();});
-    trigger.addEventListener("pointerleave",()=>{hovered=false;sync();});
+    trigger.addEventListener("mouseover",event=>{
+        if(event.relatedTarget&&trigger.contains(event.relatedTarget)) return;
+        hovered=true;
+        sync();
+    });
+    trigger.addEventListener("mouseout",event=>{
+        if(event.relatedTarget&&trigger.contains(event.relatedTarget)) return;
+        hovered=false;
+        sync();
+    });
     trigger.addEventListener("focusin",()=>{focused=true;sync();});
     trigger.addEventListener("focusout",()=>{focused=false;sync();});
 }
