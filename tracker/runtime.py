@@ -23,6 +23,7 @@ from tracker.domain.growth_calculations import (
     calculate_recent_history_changes,
 )
 from tracker.repositories.growth_history_store import GrowthHistoryStore
+from tracker.services.growth_history_service import GrowthHistoryService
 from tracker.repositories.api_snapshot_repository import (
     initialize_snapshot_db as initialize_snapshot_db_for_path,
     save_api_snapshot as save_api_snapshot_for_path,
@@ -72,9 +73,12 @@ class RuntimeState:
         self.log_storage_warning = ""
         self.log_db_path = os.path.join(instance_path, "admin_logs.sqlite3")
         self.snapshot_db_path = os.path.join(instance_path, "growth_snapshots.sqlite3")
-        self.growth_history_store = GrowthHistoryStore(
+        self.growth_history_repository = GrowthHistoryStore(
             database_url=self.growth_database_url,
             sqlite_path=os.path.join(instance_path, "growth_history.sqlite3"),
+        )
+        self.growth_history_service = GrowthHistoryService(
+            self.growth_history_repository
         )
         self.cache = {}
         self.ai_response_cache = {}
@@ -97,8 +101,8 @@ def get_runtime_state():
     return _fallback_runtime_state
 
 
-def get_growth_history_store():
-    return get_runtime_state().growth_history_store
+def get_growth_history_service():
+    return get_runtime_state().growth_history_service
 
 
 def get_gemini_client():
