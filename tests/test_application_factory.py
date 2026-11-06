@@ -5,6 +5,35 @@ from tracker import create_app
 
 
 class ApplicationFactoryTests(unittest.TestCase):
+    def test_runtime_state_is_isolated_between_app_instances(self):
+        from tracker.runtime import get_cache, get_runtime_state, set_cache
+
+        first_app = create_app({
+            "TESTING": True,
+            "NEXON_API_KEY": "first-app-key",
+            "GROWTH_DATABASE_URL": "",
+        })
+        second_app = create_app({
+            "TESTING": True,
+            "NEXON_API_KEY": "second-app-key",
+            "GROWTH_DATABASE_URL": "",
+        })
+
+        with first_app.app_context():
+            first_state = get_runtime_state()
+            set_cache("app-isolation", {"value": "first"}, 60)
+
+        with second_app.app_context():
+            second_state = get_runtime_state()
+            self.assertIsNone(get_cache("app-isolation"))
+
+        self.assertIsNot(first_state, second_state)
+        self.assertIsNot(first_state.cache, second_state.cache)
+        self.assertIsNot(first_state.ai_response_cache, second_state.ai_response_cache)
+        self.assertIsNot(first_state.growth_history_store, second_state.growth_history_store)
+        self.assertEqual(first_state.nexon_api_key, "first-app-key")
+        self.assertEqual(second_state.nexon_api_key, "second-app-key")
+
     def test_factory_applies_configuration_and_registers_routes(self):
         app = create_app({
             "TESTING": True,
