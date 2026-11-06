@@ -136,6 +136,8 @@ function renderStatsWindow(data,selection,mode) {
     });
     if(!grid.childElementCount) grid.appendChild(el("p","game-empty","스탯 정보를 확인할 수 없습니다."));
     panel.appendChild(grid);
+    panel.appendChild(el("p","game-stat-source-note",
+        "위 최종 능력치는 현재 게임 적용 상태의 Nexon API 값입니다. 프리셋을 바꾸면 아래 하이퍼 스탯·어빌리티·장비·유니온 구성 정보가 즉시 변경되며, 비활성 프리셋의 최종 합산 능력치와 전투력은 API에서 제공되지 않아 임의로 계산하지 않습니다."));
     return panel;
 }
 
@@ -157,7 +159,9 @@ function summaryFor(source,number) {
         const invested=items.filter(item=>Number(item?.stat_level)>0);
         const remain=data.remain_point;
         return {title:"하이퍼 스탯",detail:invested.length+"개 투자"+(present(remain)?" · 잔여 "+fmt(remain)+"P":""),
-            hints:invested.map(item=>(item.stat_type||"스탯")+" Lv."+item.stat_level+(present(item.stat_increase)?" ("+item.stat_increase+")":""))};
+            hints:invested.map(item=>(item.stat_type||"스탯")+" Lv."+item.stat_level
+                +(present(item.stat_point)?" · "+fmt(item.stat_point)+"P":"")
+                +(present(item.stat_increase)?" ("+item.stat_increase+")":""))};
     }
     if(source.id==="ability") {
         const ability=Array.isArray(data.ability_info)?data.ability_info:[];
@@ -218,7 +222,7 @@ function renderStatsSection(data,mode,selection,onModeChange) {
     layout.appendChild(renderStatsWindow(data,selection,mode));
 
     const builds=el("section","game-selected-build-window");
-    builds.appendChild(el("h3","game-window-title","선택된 세팅 구성"));
+    builds.appendChild(el("h3","game-window-title","선택된 프리셋 상세 · 변경 즉시 반영"));
     const grid=el("div","game-selected-build-grid");
     (data.sources||[]).forEach(source=>{
         const category=PRESET_CATEGORY[source.id];
