@@ -327,6 +327,13 @@ function formatTrillion(value) {
     return `${trillion.toFixed(2)}조`;
 }
 
+function formatSignedTrillion(value) {
+    if (value === null || value === undefined || !Number.isFinite(Number(value))) return "-";
+    const number = Number(value);
+    const sign = number > 0 ? "+" : number < 0 ? "−" : "";
+    return `${sign}${formatTrillion(Math.abs(number))}`;
+}
+
 function formatPercent(value) {
     if (value === null || value === undefined || !Number.isFinite(Number(value))) return "-";
     return `${Number(value).toFixed(3)}%`;
@@ -468,12 +475,12 @@ function renderGrowthSummary(character, history) {
     const dailyGrowth = getDailyGrowth(history);
     const weeklyGrowthValue = calculateWeeklyGrowth(history);
     const averageGrowthValue = calculateAverageGrowth(history);
-    if (yesterdayGrowth) yesterdayGrowth.textContent = dailyGrowth !== null ? `+${formatTrillion(dailyGrowth)}` : "-";
+    if (yesterdayGrowth) yesterdayGrowth.textContent = formatSignedTrillion(dailyGrowth);
     if (rankingChange) {
         const change = getRankingChange(history);
         rankingChange.textContent = change === null || change === 0 ? "-" : change > 0 ? `▲ ${change}` : `▼ ${Math.abs(change)}`;
     }
-    if (weeklyGrowth) weeklyGrowth.textContent = weeklyGrowthValue !== null ? `+${formatTrillion(weeklyGrowthValue)}` : "-";
+    if (weeklyGrowth) weeklyGrowth.textContent = formatSignedTrillion(weeklyGrowthValue);
     if (averageGrowth) averageGrowth.textContent = averageGrowthValue !== null ? formatTrillion(averageGrowthValue) : "-";
 }
 
@@ -1636,10 +1643,10 @@ function renderComparisonCharacter(prefix, character, metrics) {
         Name: character.characterName || "-",
         Level: character.level !== null && character.level !== undefined ? `Lv. ${formatNumber(character.level)}` : "-",
         ExpRate: formatPercent(character.experienceRate),
-        Daily: formatTrillion(metrics.latestDailyGrowth),
+        Daily: formatSignedTrillion(metrics.latestDailyGrowth),
         Average: formatTrillion(metrics.averageDailyGrowth),
         LevelPace: formatLevelPace(metrics.levelProgress?.dailyProgressRate),
-        Weekly: formatTrillion(metrics.sevenDayGrowth),
+        Weekly: formatSignedTrillion(metrics.sevenDayGrowth),
         Ranking: formatRankingChange(metrics.rankingChange),
         Prediction: getPredictionLabel(metrics)
     };
