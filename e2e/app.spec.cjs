@@ -204,6 +204,8 @@ test("character details automatically open the game-style stat window", async ({
 
   await page.locator('[data-detail-tab="stats"]').click();
   expect(detailRequests.stats).toBe(1);
+  await expect(page.locator("#characterDetailsContent .game-preset-select").first()).toHaveValue("1");
+  await expect(page.locator("#characterDetailsContent .game-preset-select").nth(2)).toHaveValue("2");
 
   await page.locator('[data-detail-tab="union"]').click();
   await expect(page.locator("#characterDetailsContent")).toContainText("유니온 스탯 투자");
