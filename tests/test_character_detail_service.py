@@ -60,7 +60,7 @@ class CharacterDetailServiceTests(unittest.TestCase):
                 "union_state_stat": ["보스 몬스터 공격 시 데미지 20% 증가", "크리티컬 데미지 5% 증가"],
                 "union_state_stat_preset": [
                     {"preset_no": 1, "union_state_stat": ["경험치 획득량 10% 증가"]},
-                    {"preset_no": 2, "union_state_stat": ["보스 몬스터 공격 시 데미지 20% 증가", "크리티컬 데미지 5% 증가"]},
+                    {"preset_no": 2, "union_state_stat": ["크리티컬 데미지 5% 증가", "보스 몬스터 공격 시 데미지 20% 증가"]},
                 ],
                 "union_block": [{"block_type": "전사"}],  # 구형 테트리스 데이터는 새 UI 데이터에서 제외한다.
                 "union_inner_stat": [{"stat_field_id": "0", "stat_field_effect": "공격력 증가"}],
