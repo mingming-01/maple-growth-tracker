@@ -8,7 +8,7 @@ const previewOutput = fileURLToPath(new URL("../static/react-preview/", import.m
 export default defineConfig({
   root: frontendRoot,
   plugins: [react()],
-  base: "./",
+  base: "/static/react-preview/",
   server: {
     host: "127.0.0.1",
     port: 5173,
