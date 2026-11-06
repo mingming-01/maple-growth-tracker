@@ -1,10 +1,39 @@
-"""Flask HTTP 컨트롤러."""
+"""최근·과거 성장 기록 HTTP 라우트."""
+from concurrent.futures import ThreadPoolExecutor
+from datetime import date, datetime, timedelta
 
-from app import *
+import requests
+from flask import Blueprint, jsonify, request
+
+from tracker.domain.growth_calculations import (
+    calculate_archive_history_changes,
+    calculate_recent_history_changes,
+)
+from tracker.integrations.nexon_api import (
+    get_basic_character,
+    get_ocid,
+    get_ranking,
+)
+from tracker.runtime import (
+    HISTORY_BACKFILL_BATCH_SIZE,
+    HISTORY_CACHE_TTL,
+    KOREA_TIMEZONE,
+    growth_history_store,
+    is_temporary_nexon_failure,
+    load_api_snapshot,
+    save_api_snapshot,
+    set_cache,
+    stale_snapshot_response,
+    with_data_status,
+    get_cache,
+    get_cache_timestamp,
+)
+
+history_bp = Blueprint("history", __name__, url_prefix="/api")
 
 
 # 최근 7일 성장 기록 조회 및 변화량 계산
-@app.route("/api/history")
+@history_bp.route("/history")
 def get_history():
     """기본 검색에서 최근 7일의 성장 기록을 조회하고 저장한다."""
     character_name = request.args.get("name", "").strip()
@@ -241,7 +270,7 @@ def fetch_historical_record(ocid, world_name, target_date, today):
     return None
 
 
-@app.route("/api/history/archive")
+@history_bp.route("/history/archive")
 def get_history_archive():
     """30일·90일 기록을 조회하고 사용자가 요청한 범위에서 누락 기록을 보충한다."""
     ocid = request.args.get("ocid", "").strip()
