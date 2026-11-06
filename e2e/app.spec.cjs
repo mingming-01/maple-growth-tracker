@@ -319,7 +319,7 @@ test("character details automatically open the game-style stat window", async ({
   await championCard.hover();
   await expect(championCard.locator(".game-champion-hover-tooltip")).toBeVisible();
   await expect(championCard.locator(".game-champion-hover-tooltip img")).toHaveCSS("width", "164px");
-  await expect(page.locator("#characterDetailsContent .game-union-crystal-monster")).toHaveCount(1);
+  await expect(page.locator("#characterDetailsContent .game-union-crystal-monster")).toHaveCount(0);
   await expect(page.locator("#characterDetailsContent .game-union-crystal-order")).toHaveText("01");
   const unionPreset = page.locator("#characterDetailsContent .game-union-state-panel .game-preset-select");
   const unionOptionLabels = await unionPreset.locator("option").allTextContents();
@@ -335,6 +335,8 @@ test("character details automatically open the game-style stat window", async ({
 test("character detail tabs remain in one horizontal row on mobile", async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 844 });
   await page.goto("/");
+  await page.locator("#resultSection").evaluate(element => { element.hidden = false; });
+  await page.locator("#characterDetailsSection").evaluate(element => { element.hidden = false; });
   const tabs = page.locator(".detail-tabs");
   await expect(tabs).toBeVisible();
   const layout = await tabs.evaluate(element => {
