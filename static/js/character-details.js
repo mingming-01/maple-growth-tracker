@@ -1,7 +1,7 @@
 /** MapleStory in-client inspired character detail windows. */
 
 const PRESET_CATEGORY = {
-    itemEquipment: "equipment", hyperStat: "hyperStat", ability: "ability",
+    itemEquipment: "equipment", ability: "ability",
     linkSkill: "link", unionStateStat: "union"
 };
 const REQUIRED_PRESET_KEYS = ["equipment", "ability", "link", "union"];
@@ -166,7 +166,7 @@ function renderStatsWindow(data,selection,mode) {
     extraGrid.appendChild(abilityPanel);
 
     const hyperSource=sourceById(data,"hyperStat");
-    const hyperNumber=selection?.hyperStat??hyperSource?.activePresetNo;
+    const hyperNumber=hyperSource?.activePresetNo??fallbackPreset(hyperSource);
     const hyperData=presetData(hyperSource,hyperNumber);
     const hyperPanel=el("section","game-stat-detail-card");
     hyperPanel.appendChild(el("h4","game-window-title","하이퍼 스탯"));
@@ -247,7 +247,7 @@ function renderStatsSection(data,mode,selection,onModeChange) {
     profile.appendChild(modes);
 
     const selects=el("div","game-preset-select-grid");
-    const selectableCategories=["equipment","hyperStat","ability","link","union"];
+    const selectableCategories=["equipment","ability","union"];
     (data.sources||[]).forEach(source=>{
         const category=PRESET_CATEGORY[source.id];
         if(!selectableCategories.includes(category)||!Array.isArray(source.presets)||!source.presets.length) return;
