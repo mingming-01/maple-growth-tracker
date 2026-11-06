@@ -1,10 +1,23 @@
 """넥슨 Open API 요청과 응답 처리를 담당한다."""
-
-from app import *
+import time
 from threading import Lock
 
+import requests
+from flask import current_app, has_app_context
+
+from tracker.config import Config
+
+BASE_URL = "https://open.api.nexon.com/maplestory/v1"
+NEXON_API_TIMEOUT = (3.05, 10)
+HISTORY_API_MIN_INTERVAL = 0.22
 HISTORY_API_REQUEST_LOCK = Lock()
 _last_history_api_request_at = 0.0
+
+
+def _setting(name, default=None):
+    if has_app_context():
+        return current_app.config.get(name, default)
+    return getattr(Config, name, default)
 
 
 def request_nexon_api(endpoint, params, historical=False):
@@ -18,11 +31,13 @@ def request_nexon_api(endpoint, params, historical=False):
                 time.sleep(HISTORY_API_MIN_INTERVAL - elapsed)
             _last_history_api_request_at = time.monotonic()
 
+    api_key = _setting("NEXON_API_KEY", "")
+    headers = {"x-nxopen-api-key": api_key} if api_key else {}
     return requests.get(
         f"{BASE_URL}/{endpoint}",
-        headers=HEADERS,
+        headers=headers,
         params=params,
-        timeout=NEXON_API_TIMEOUT
+        timeout=NEXON_API_TIMEOUT,
     )
 
 
@@ -44,7 +59,13 @@ def get_basic_character(ocid, target_date=None, historical=False):
     return response.json(), response
 
 
-def get_ranking(target_date, world_name=None, ocid=None, character_class=None, historical=False):
+def get_ranking(
+    target_date,
+    world_name=None,
+    ocid=None,
+    character_class=None,
+    historical=False,
+):
     params = {"date": target_date, "world_type": 0, "page": 1}
     if world_name:
         params["world_name"] = world_name
