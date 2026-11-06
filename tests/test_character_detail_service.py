@@ -18,6 +18,41 @@ class FakeResponse:
 
 
 class CharacterDetailServiceTests(unittest.TestCase):
+    def test_equipment_source_keeps_android_metadata_in_current_data(self):
+        spec = next(
+            item for item in SECTION_SOURCES["equipment"]
+            if item["id"] == "itemEquipment"
+        )
+        payload = {
+            "item_equipment": [{"item_name": "테스트 무기"}],
+            "android_name": "테스트 안드로이드",
+            "android_nickname": "밍득로이드",
+            "android_icon": "https://example.com/android.png",
+            "android_description": "안드로이드 설명",
+            "android_grade": "레전드리",
+        }
+        result = _normalize_source(payload, spec)
+
+        self.assertEqual(result["status"], "available")
+        self.assertEqual(result["currentData"]["android_name"], "테스트 안드로이드")
+        self.assertEqual(result["currentData"]["android_icon"], "https://example.com/android.png")
+        self.assertNotIn("android_name", result["data"])
+
+    def test_character_appearance_fields_are_exposed_in_current_data(self):
+        spec = SECTION_SOURCES["equipment"][0]
+        result = _normalize_source(
+            {
+                "character_hair": {"hair_name": "테스트 헤어", "base_color": "검정"},
+                "character_face": {"face_name": "테스트 성형", "base_color": "갈색"},
+                "character_skin_name": "뽀송 피부",
+            },
+            spec,
+        )
+
+        self.assertEqual(result["currentData"]["character_hair"]["hair_name"], "테스트 헤어")
+        self.assertEqual(result["currentData"]["character_face"]["face_name"], "테스트 성형")
+        self.assertEqual(result["currentData"]["character_skin_name"], "뽀송 피부")
+
     def test_stat_source_extracts_actual_combat_power(self):
         spec = SECTION_SOURCES["stats"][0]
         result = _normalize_source(
