@@ -123,6 +123,19 @@ def get_character_rankings(target_date, world_name, character_class, ocid):
             name: response.status_code if response is not None else None
             for name, (_, response) in zip(names, values)
         }
+        diagnostics = {}
+        for name, (data, response) in zip(names, values):
+            entry_count = None
+            if response is not None and response.status_code == 200:
+                try:
+                    entry_count = len(response.json().get("ranking", []))
+                except (TypeError, ValueError, AttributeError):
+                    entry_count = None
+            diagnostics[name] = {
+                "statusCode": status_codes[name],
+                "returnedEntries": entry_count,
+                "matched": data is not None,
+            }
         result = {
             name: (data.get("ranking") if isinstance(data, dict) else None)
             for name, (data, _) in zip(names, values)
@@ -149,11 +162,18 @@ def get_character_rankings(target_date, world_name, character_class, ocid):
             warnings.append("직업 랭킹 API 직업명 매핑을 찾지 못했습니다.")
         if http_error:
             warnings.append("일부 랭킹 API 요청이 정상 응답하지 않았습니다.")
+        if not has_data and not http_error:
+            counts = ", ".join(
+                f"{name}: HTTP {detail['statusCode']} / {detail['returnedEntries'] if detail['returnedEntries'] is not None else '응답 파싱 불가'}건"
+                for name, detail in diagnostics.items()
+            )
+            warnings.append("공개 랭킹 응답에 캐릭터 항목이 없습니다. " + counts)
 
         result.update({
             "rankingDataStatus": status,
             "rankingDate": date_text,
             "rankingApiStatuses": status_codes,
+            "rankingApiDiagnostics": diagnostics,
             "rankingWarnings": warnings,
         })
         return result
