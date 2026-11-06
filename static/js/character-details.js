@@ -155,7 +155,7 @@ function summaryFor(source,number) {
     if(source.id==="hyperStat") {
         const items=Array.isArray(data.hyper_stat)?data.hyper_stat:[];
         const invested=items.filter(item=>Number(item?.stat_level)>0);
-        const remain=source.data?.["hyper_stat_preset_"+number+"_remain_point"];
+        const remain=data.remain_point;
         return {title:"하이퍼 스탯",detail:invested.length+"개 투자"+(present(remain)?" · 잔여 "+fmt(remain)+"P":""),
             hints:invested.map(item=>(item.stat_type||"스탯")+" Lv."+item.stat_level+(present(item.stat_increase)?" ("+item.stat_increase+")":""))};
     }
@@ -296,7 +296,7 @@ function renderItemTooltip(item) {
     }
     return tip;
 }
-function renderEquipmentSection(data) {
+function renderEquipmentSection(data,onPresetChange=()=>{}) {
     const content=el("div","game-equipment-layout"), source=sourceById(data,"itemEquipment"), setSource=sourceById(data,"setEffect");
     if(!source||source.status==="unavailable") {
         content.appendChild(el("p","game-empty",source?.message||"장비 정보를 조회할 수 없습니다.")); return content;
@@ -305,7 +305,8 @@ function renderEquipmentSection(data) {
     const toolbar=el("div","game-equipment-toolbar");
     toolbar.append(el("span","game-window-eyebrow","EQUIPMENT"),el("h3","game-window-title","장착 장비"));
     if(source.presets?.length>1) toolbar.appendChild(presetSelect(source,"equipment",number,next=>{
-        const updated=renderEquipmentSection({...data,selectedEquipmentPreset:next});
+        onPresetChange(next);
+        const updated=renderEquipmentSection({...data,selectedEquipmentPreset:next},onPresetChange);
         content.replaceChildren(...updated.childNodes);
     }));
     content.appendChild(toolbar);
@@ -801,7 +802,10 @@ export function initCharacterDetails({apiFetch,readApiResponse,onStatsLoaded=()=
     function render(data,name) {
         if(!content) return;
         if(name==="stats") renderStats(data);
-        else if(name==="equipment") content.replaceChildren(renderEquipmentSection(data));
+        else if(name==="equipment") content.replaceChildren(renderEquipmentSection(
+            {...data,selectedEquipmentPreset:selectedNumbers.equipment},
+            next=>{selectedNumbers.equipment=next;profileMode="custom";}
+        ));
         else if(name==="symbols") content.replaceChildren(renderSymbolsSection(data));
         else if(name==="skills") content.replaceChildren(renderSkillsSection(data));
         else if(name==="link") content.replaceChildren(renderLinkSection(data));
