@@ -560,7 +560,7 @@ button:focus-visible,input:focus-visible,select:focus-visible,a:focus-visible { 
   .mgt-character-avatar { width:100%; height:100%; transform:none; }
 }
 @media (max-width:480px) {
-  .mgt-character-avatar-frame { width:104px; height:124px; }
+  .mgt-character-avatar-frame { width:112px; height:124px; }
   .mgt-character-avatar { width:100%; height:100%; transform:none; }
 }
 .game-union-champion-card { position:relative; overflow:visible; }
