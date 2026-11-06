@@ -367,6 +367,11 @@ def _normalize_source(payload, spec):
                     selected["ability_grade"] = (
                         value.get("ability_preset_grade") or value.get("ability_grade")
                     )
+                elif prefix == "hyper_stat_preset_":
+                    selected["hyper_stat"] = value if isinstance(value, list) else []
+                    remain_key = "{}{}_remain_point".format(prefix, number)
+                    if remain_key in payload:
+                        selected["remain_point"] = payload.get(remain_key)
                 else:
                     selected[_preset_data_key(prefix)] = value
         if selected:
