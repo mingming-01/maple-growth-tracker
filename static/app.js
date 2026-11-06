@@ -116,6 +116,20 @@ const favoriteFeedback = document.getElementById("favoriteFeedback");
 const favoriteCurrentButton = document.getElementById("favoriteCurrentButton");
 const favoriteCurrentButtonIcon = document.getElementById("favoriteCurrentButtonIcon");
 const favoriteCurrentButtonLabel = document.getElementById("favoriteCurrentButtonLabel");
+const growthGoalCard = document.getElementById("growthGoalCard");
+const growthGoalForm = document.getElementById("growthGoalForm");
+const growthGoalTargetLevel = document.getElementById("growthGoalTargetLevel");
+const growthGoalTargetDate = document.getElementById("growthGoalTargetDate");
+const growthGoalStatus = document.getElementById("growthGoalStatus");
+const growthGoalProgressPanel = document.getElementById("growthGoalProgressPanel");
+const growthGoalProgressValue = document.getElementById("growthGoalProgressValue");
+const growthGoalProgressFill = document.getElementById("growthGoalProgressFill");
+const growthGoalProgressTrack = document.getElementById("growthGoalProgressTrack");
+const growthGoalPace = document.getElementById("growthGoalPace");
+const growthGoalFeedback = document.getElementById("growthGoalFeedback");
+const growthGoalNotifications = document.getElementById("growthGoalNotifications");
+const clearGrowthGoalButton = document.getElementById("clearGrowthGoalButton");
+const saveGrowthGoalButton = document.getElementById("saveGrowthGoalButton");
 
 const characterDetails = initCharacterDetails({
     apiFetch,
@@ -144,6 +158,7 @@ let currentHistoryRangeStatus = null;
 let currentPeriodSummary = null;
 const STORAGE_KEY = "mapleGrowthTrackerState";
 const FAVORITES_STORAGE_KEY = "mapleGrowthTrackerFavorites";
+const GROWTH_GOALS_STORAGE_KEY = "mapleGrowthTrackerGoals";
 const MAX_FAVORITES = 30;
 const AI_CACHE_STORAGE_KEY = "mapleGrowthTrackerAIResponsesV1";
 const AI_CACHE_MAX_ENTRIES = 40;
@@ -277,6 +292,15 @@ function renderFavoriteList() {
         world.className = "favorite-character-world";
         world.textContent = favorite.worldName || "월드 정보 없음";
         details.append(name, world);
+        const savedGoal = favorite.ocid ? readGrowthGoals()[favorite.ocid] : null;
+        if (savedGoal) {
+            const goalBadge = document.createElement("span");
+            goalBadge.className = "favorite-character-goal";
+            goalBadge.textContent = savedGoal.completedAt
+                ? `목표 Lv.${savedGoal.targetLevel} 달성`
+                : `목표 Lv.${savedGoal.targetLevel}`;
+            details.appendChild(goalBadge);
+        }
         openButton.append(icon, details);
         openButton.addEventListener("click", () => {
             if (!characterNameInput || !searchForm) return;
@@ -330,6 +354,330 @@ function toggleCurrentFavorite() {
     if (!saveFavoriteCharacters(favorites)) return;
     renderFavoriteList();
     showFavoriteFeedback(message);
+}
+
+// 캐릭터별 다음 레벨 목표는 현재 브라우저에만 저장한다.
+function readGrowthGoals() {
+    try {
+        const saved = JSON.parse(localStorage.getItem(GROWTH_GOALS_STORAGE_KEY) || "{}");
+        return saved && typeof saved === "object" && !Array.isArray(saved) ? saved : {};
+    } catch (error) {
+        return {};
+    }
+}
+
+function saveGrowthGoals(goals) {
+    try {
+        localStorage.setItem(GROWTH_GOALS_STORAGE_KEY, JSON.stringify(goals));
+        return true;
+    } catch (error) {
+        showGrowthGoalFeedback("브라우저 저장소를 사용할 수 없어 목표를 저장하지 못했습니다.", true);
+        return false;
+    }
+}
+
+function getGrowthGoalKey(character) {
+    return String(character?.ocid || "").trim();
+}
+
+function getGrowthGoalExperienceRate(character) {
+    const raw = character?.experienceRate;
+    if (raw === null || raw === undefined || raw === "") return null;
+    const value = Number(String(raw).replace("%", ""));
+    return Number.isFinite(value) && value >= 0 && value <= 100 ? value : null;
+}
+
+function showGrowthGoalFeedback(message, isError = false) {
+    if (!growthGoalFeedback) return;
+    growthGoalFeedback.textContent = message;
+    growthGoalFeedback.classList.toggle("is-error", isError);
+    growthGoalFeedback.hidden = !message;
+}
+
+function parseLocalDateNumber(value) {
+    const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(String(value || ""));
+    if (!match) return null;
+    const year = Number(match[1]);
+    const month = Number(match[2]);
+    const day = Number(match[3]);
+    const timestamp = Date.UTC(year, month - 1, day);
+    const parsed = new Date(timestamp);
+    if (
+        parsed.getUTCFullYear() !== year ||
+        parsed.getUTCMonth() !== month - 1 ||
+        parsed.getUTCDate() !== day
+    ) return null;
+    return timestamp;
+}
+
+function getLocalDaysBetween(startDate, endDate) {
+    const start = parseLocalDateNumber(startDate);
+    const end = parseLocalDateNumber(endDate);
+    if (start === null || end === null) return null;
+    return Math.round((end - start) / 86400000);
+}
+
+function getDefaultGrowthGoalDate() {
+    const target = new Date();
+    target.setDate(target.getDate() + 7);
+    return formatLocalISODate(target);
+}
+
+function sendGrowthGoalNotification(goal, title, message) {
+    if (
+        !goal?.notificationsEnabled ||
+        typeof window === "undefined" ||
+        !("Notification" in window) ||
+        window.Notification.permission !== "granted"
+    ) return;
+
+    try {
+        new window.Notification(title, {
+            body: message,
+            tag: `maple-growth-goal-${goal.ocid || goal.targetLevel}`
+        });
+    } catch (error) {
+        // 알림 API가 차단되어도 사이트 안의 목표 상태는 계속 갱신한다.
+    }
+}
+
+function updateGrowthGoalMilestone(character, goal, notify = true) {
+    const currentLevel = Number(character?.level);
+    const targetLevel = Number(goal?.targetLevel);
+    if (!Number.isFinite(currentLevel) || !Number.isFinite(targetLevel)) return goal;
+
+    const previousLevel = Number(goal.lastObservedLevel ?? goal.startLevel);
+    const leveledUp = Number.isFinite(previousLevel) && currentLevel > previousLevel;
+    const newlyCompleted = currentLevel >= targetLevel && !goal.completedAt;
+    const changed = leveledUp || newlyCompleted || !Number.isFinite(previousLevel);
+
+    if (newlyCompleted) {
+        goal.completedAt = new Date().toISOString();
+    }
+    if (changed) {
+        goal.lastObservedLevel = currentLevel;
+        const goals = readGrowthGoals();
+        goals[goal.ocid] = goal;
+        saveGrowthGoals(goals);
+    }
+
+    if (notify && (leveledUp || newlyCompleted)) {
+        const message = newlyCompleted
+            ? `${character.characterName} 캐릭터가 목표 레벨 Lv.${targetLevel}을 달성했습니다.`
+            : `${character.characterName} 캐릭터가 Lv.${currentLevel}로 레벨업했습니다.`;
+        showGrowthGoalFeedback(message);
+        sendGrowthGoalNotification(goal, newlyCompleted ? "성장 목표 달성" : "새로운 레벨업", message);
+    }
+    return goal;
+}
+
+function renderGrowthGoal(character, metrics = null, { notify = false } = {}) {
+    if (!growthGoalCard || !character) return;
+    growthGoalCard.hidden = false;
+
+    const currentLevel = Number(character.level);
+    const currentRate = getGrowthGoalExperienceRate(character);
+    const key = getGrowthGoalKey(character);
+    if (!key || !Number.isFinite(currentLevel)) {
+        growthGoalStatus.textContent = "목표 설정 불가";
+        showGrowthGoalFeedback("캐릭터 식별 정보 또는 레벨 정보를 확인할 수 없어 목표를 설정할 수 없습니다.", true);
+        return;
+    }
+
+    const goals = readGrowthGoals();
+    let goal = goals[key] || null;
+    if (goal) {
+        goal = updateGrowthGoalMilestone(character, goal, notify);
+    }
+
+    const hasGoal = !!goal;
+    const targetLevel = hasGoal ? Number(goal.targetLevel) : currentLevel + 1;
+    if (growthGoalTargetLevel) {
+        growthGoalTargetLevel.textContent = `Lv. ${targetLevel}`;
+    }
+    if (growthGoalTargetDate) {
+        growthGoalTargetDate.min = formatLocalISODate(new Date());
+        growthGoalTargetDate.value = hasGoal
+            ? goal.targetDate
+            : growthGoalTargetDate.value || getDefaultGrowthGoalDate();
+    }
+    if (growthGoalNotifications) {
+        growthGoalNotifications.checked = hasGoal && goal.notificationsEnabled === true;
+    }
+    if (clearGrowthGoalButton) clearGrowthGoalButton.hidden = !hasGoal;
+    if (saveGrowthGoalButton) {
+        saveGrowthGoalButton.textContent = hasGoal
+            ? goal.completedAt ? "다음 목표 설정" : "목표일 변경"
+            : "목표 설정";
+    }
+
+    if (!hasGoal) {
+        if (growthGoalStatus) growthGoalStatus.textContent = "목표 미설정";
+        if (growthGoalProgressPanel) growthGoalProgressPanel.hidden = true;
+        if (growthGoalPace) growthGoalPace.textContent = "목표 날짜를 정하면 필요한 일일 진척률을 계산합니다.";
+        return;
+    }
+
+    const completed = !!goal.completedAt || currentLevel >= targetLevel;
+    const startLevel = Number(goal.startLevel);
+    const startRate = Number(goal.startExperienceRate);
+    let progress = null;
+    if (completed) {
+        progress = 100;
+    } else if (
+        currentLevel === startLevel &&
+        Number.isFinite(currentRate) &&
+        Number.isFinite(startRate) &&
+        startRate >= 0 &&
+        startRate < 100
+    ) {
+        progress = Math.max(0, Math.min(100, ((currentRate - startRate) / (100 - startRate)) * 100));
+    }
+
+    if (growthGoalStatus) {
+        growthGoalStatus.textContent = completed
+            ? "목표 달성"
+            : getLocalDaysBetween(formatLocalISODate(new Date()), goal.targetDate) < 0
+                ? "목표일 경과"
+                : "진행 중";
+    }
+    if (growthGoalProgressPanel) growthGoalProgressPanel.hidden = false;
+    if (growthGoalProgressValue) {
+        growthGoalProgressValue.textContent = progress === null
+            ? "진척률 자료 부족"
+            : `${progress.toFixed(1)}%`;
+    }
+    if (growthGoalProgressFill) {
+        growthGoalProgressFill.style.width = progress === null ? "0%" : `${progress}%`;
+    }
+    if (growthGoalProgressTrack) {
+        growthGoalProgressTrack.setAttribute("aria-valuenow", progress === null ? "0" : String(progress));
+        growthGoalProgressTrack.setAttribute(
+            "aria-valuetext",
+            progress === null ? "목표 진척률 자료 부족" : `${progress.toFixed(1)}%`
+        );
+    }
+
+    if (completed) {
+        if (growthGoalPace) growthGoalPace.textContent = `목표 레벨 Lv. ${targetLevel}을 확인했습니다. 새로운 다음 레벨 목표를 설정할 수 있습니다.`;
+        return;
+    }
+
+    const today = formatLocalISODate(new Date());
+    const daysRemaining = getLocalDaysBetween(today, goal.targetDate);
+    const requiredDailyRate = daysRemaining > 0 && Number.isFinite(currentRate)
+        ? Math.max(0, 100 - currentRate) / daysRemaining
+        : null;
+    const observedDailyRate = Number(metrics?.levelProgress?.dailyProgressRate);
+    if (!growthGoalPace) return;
+    if (daysRemaining === null) {
+        growthGoalPace.textContent = "목표 날짜 형식을 확인할 수 없습니다.";
+    } else if (daysRemaining < 0) {
+        growthGoalPace.textContent = "목표 날짜가 지났습니다. 날짜를 변경해 목표를 이어가세요.";
+    } else if (daysRemaining === 0) {
+        growthGoalPace.textContent = "목표일이 오늘입니다. 현재 경험치 진행률을 확인하세요.";
+    } else if (requiredDailyRate === null) {
+        growthGoalPace.textContent = `목표일까지 ${daysRemaining}일 남았습니다. 현재 경험치 진행률을 확인할 수 없습니다.`;
+    } else if (Number.isFinite(observedDailyRate) && observedDailyRate > 0) {
+        const paceStatus = observedDailyRate >= requiredDailyRate
+            ? "최근 관측 속도가 목표에 필요한 진척률 이상입니다."
+            : "목표를 맞추려면 최근 관측 속도보다 빠른 진척이 필요합니다.";
+        growthGoalPace.textContent =
+            `목표일까지 ${daysRemaining}일 · 필요 진척 ${requiredDailyRate.toFixed(4)}%p/일 · 최근 관측 ${observedDailyRate.toFixed(4)}%p/일. ${paceStatus}`;
+    } else {
+        growthGoalPace.textContent =
+            `목표일까지 ${daysRemaining}일 · 필요한 진척은 약 ${requiredDailyRate.toFixed(4)}%p/일입니다. 비교할 성장 기록이 아직 부족합니다.`;
+    }
+}
+
+async function handleGrowthGoalSubmit(event) {
+    event.preventDefault();
+    if (!currentCharacter) return;
+
+    const key = getGrowthGoalKey(currentCharacter);
+    const currentLevel = Number(currentCharacter.level);
+    const currentRate = getGrowthGoalExperienceRate(currentCharacter);
+    const targetDate = growthGoalTargetDate?.value || "";
+    const today = formatLocalISODate(new Date());
+    if (!key || !Number.isFinite(currentLevel)) {
+        showGrowthGoalFeedback("캐릭터 식별 정보 또는 레벨 정보를 확인할 수 없습니다.", true);
+        return;
+    }
+    if (parseLocalDateNumber(targetDate) === null || getLocalDaysBetween(today, targetDate) < 0) {
+        showGrowthGoalFeedback("오늘 이후의 올바른 목표 날짜를 선택해주세요.", true);
+        return;
+    }
+
+    const goals = readGrowthGoals();
+    const previous = goals[key] || null;
+    const startingNewGoal = !previous ||
+        previous.completedAt ||
+        currentLevel >= Number(previous.targetLevel);
+    const notificationRequested = growthGoalNotifications?.checked === true;
+    let notificationsEnabled = false;
+    let notificationFeedback = "";
+
+    if (notificationRequested) {
+        if (typeof window === "undefined" || !("Notification" in window)) {
+            notificationFeedback = "이 브라우저는 알림을 지원하지 않아 사이트 내 알림만 사용합니다.";
+        } else {
+            let permission = window.Notification.permission;
+            if (permission === "default") {
+                try {
+                    permission = await window.Notification.requestPermission();
+                } catch (error) {
+                    permission = "denied";
+                }
+            }
+            notificationsEnabled = permission === "granted";
+            if (!notificationsEnabled) {
+                notificationFeedback = "브라우저 알림 권한이 없어 사이트 내 알림만 사용합니다.";
+            }
+        }
+    }
+
+    const goal = {
+        ocid: key,
+        characterName: currentCharacter.characterName || "",
+        worldName: currentCharacter.worldName || "",
+        startLevel: startingNewGoal ? currentLevel : Number(previous.startLevel),
+        startExperienceRate: startingNewGoal
+            ? Number.isFinite(currentRate) && currentRate >= 0 && currentRate <= 100 ? currentRate : null
+            : previous.startExperienceRate,
+        targetLevel: startingNewGoal ? currentLevel + 1 : Number(previous.targetLevel),
+        targetDate,
+        lastObservedLevel: currentLevel,
+        notificationsEnabled,
+        createdAt: startingNewGoal ? new Date().toISOString() : previous.createdAt,
+        completedAt: null
+    };
+    goals[key] = goal;
+    if (!saveGrowthGoals(goals)) return;
+
+    renderGrowthGoal(
+        currentCharacter,
+        calculateGrowthMetrics(currentCharacter, currentHistory)
+    );
+    renderFavoriteList();
+    showGrowthGoalFeedback(
+        notificationFeedback || `Lv. ${goal.targetLevel} 달성 목표를 ${targetDate}로 저장했습니다.`
+    );
+}
+
+function clearGrowthGoal() {
+    if (!currentCharacter) return;
+    const key = getGrowthGoalKey(currentCharacter);
+    if (!key) return;
+    const goals = readGrowthGoals();
+    if (!goals[key]) return;
+    delete goals[key];
+    if (!saveGrowthGoals(goals)) return;
+    renderGrowthGoal(
+        currentCharacter,
+        calculateGrowthMetrics(currentCharacter, currentHistory)
+    );
+    renderFavoriteList();
+    showGrowthGoalFeedback("성장 목표를 해제했습니다.");
 }
 
 // 공통 표시 함수
@@ -1607,6 +1955,7 @@ async function handleSearch(event) {
         renderRanking(character, history);
         renderGrowthSummary(character, history);
         renderPrediction(character, history, prediction);
+        renderGrowthGoal(character, metrics, { notify: true });
         renderHistory(currentDisplayHistory);
         renderChart(currentDisplayHistory);
         if (saveImageButton) saveImageButton.disabled = false;
@@ -1682,6 +2031,7 @@ async function refreshVisibleCharacter({ automatic = false } = {}) {
         renderRanking(character);
         renderGrowthSummary(character, history);
         renderPrediction(character, history, prediction);
+        renderGrowthGoal(character, metrics, { notify: true });
         renderHistory(currentDisplayHistory);
         renderChart(currentDisplayHistory);
 
@@ -2056,6 +2406,7 @@ function restoreTrackerState() {
     renderRanking(currentCharacter, currentHistory);
     renderGrowthSummary(currentCharacter, currentHistory);
     renderPrediction(currentCharacter, currentHistory, prediction);
+    renderGrowthGoal(currentCharacter, metrics, { notify: false });
     renderHistory(currentDisplayHistory);
     renderChart(currentDisplayHistory);
 
@@ -2190,6 +2541,8 @@ if (searchForm) searchForm.addEventListener("submit", handleSearch);
 if (comparisonForm) comparisonForm.addEventListener("submit", handleComparison);
 if (comparisonPeriodRangeSelect) comparisonPeriodRangeSelect.addEventListener("change", handleComparisonPeriodChange);
 if (favoriteCurrentButton) favoriteCurrentButton.addEventListener("click", toggleCurrentFavorite);
+if (growthGoalForm) growthGoalForm.addEventListener("submit", handleGrowthGoalSubmit);
+if (clearGrowthGoalButton) clearGrowthGoalButton.addEventListener("click", clearGrowthGoal);
 if (refreshDataButton) refreshDataButton.addEventListener("click", () => refreshVisibleCharacter());
 if (historyRangeSelect) historyRangeSelect.addEventListener("change", handleHistoryRangeChange);
 

@@ -639,3 +639,88 @@ test("character detail tabs remain in one horizontal row on mobile", async ({ pa
   expect(new Set(layout.childTops).size).toBe(1);
   expect(layout.scrollWidth).toBeGreaterThan(layout.clientWidth);
 });
+
+
+test("next-level growth goal persists and alerts when the target level is reached", async ({ page }) => {
+  await page.addInitScript(() => {
+    window.Chart = class { destroy() {} update() {} };
+  });
+
+  let characterLookups = 0;
+  await page.route(/\/api\/character\?/, route => {
+    characterLookups += 1;
+    const level = characterLookups === 1 ? 280 : 281;
+    const experienceRate = characterLookups === 1 ? "30.000" : "0.000";
+    return route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({
+        characterName: "목표테스트", worldName: "크로아", job: "전사", guildName: "테스트",
+        level, experience: 10000, experienceRate,
+        ranking: 1, worldRanking: 1, jobWorldRanking: 1, jobRanking: 1,
+        ocid: "growth-goal-test-ocid",
+        rankingDataStatus: "available", dataStatus: "current",
+        dataAsOf: "2026-11-06T04:00:00+09:00"
+      })
+    });
+  });
+
+  let historyLookups = 0;
+  await page.route(/\/api\/history\?/, route => {
+    historyLookups += 1;
+    const latestLevel = historyLookups === 1 ? 280 : 281;
+    return route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({
+        characterName: "목표테스트", worldName: "크로아", level: latestLevel,
+        history: [
+          { date: "2026-11-05", ranking: 2, level: 280, experience: 9000, experienceChange: null, recordStatus: "available" },
+          { date: "2026-11-06", ranking: 1, level: latestLevel, experience: 10000, experienceChange: latestLevel === 280 ? 1000 : null, levelUp: latestLevel === 281, recordStatus: "available" }
+        ],
+        historyStatus: "complete",
+        historyStorage: { backend: "postgres", status: "saved", savedRecords: 2 },
+        dataStatus: "current", dataAsOf: "2026-11-06T04:00:00+09:00"
+      })
+    });
+  });
+
+  await page.route(/\/api\/ai-analysis/, route => route.fulfill({
+    status: 200,
+    contentType: "application/json",
+    body: JSON.stringify({
+      analysis: "[성장 패턴] 기록을 확인했습니다.\n[성장 변화] 변화가 있습니다.\n[레벨업 분석] 기록을 확인했습니다.\n[성장 전망] 자료를 참고하세요.\n[AI 코멘트] 목표를 이어가세요.",
+      cacheHit: false,
+      growthInsights: null
+    })
+  }));
+
+  await page.goto("/");
+  await page.locator("#characterName").fill("목표테스트");
+  await page.locator("#searchForm button[type='submit']").click();
+
+  const goalCard = page.locator("#growthGoalCard");
+  await expect(goalCard).toBeVisible();
+  await expect(page.locator("#growthGoalTargetLevel")).toHaveText("Lv. 281");
+  await page.locator("#growthGoalTargetDate").fill("2099-12-31");
+  await page.locator("#saveGrowthGoalButton").click();
+
+  const savedGoals = await page.evaluate(() =>
+    JSON.parse(localStorage.getItem("mapleGrowthTrackerGoals") || "{}")
+  );
+  expect(savedGoals["growth-goal-test-ocid"].targetLevel).toBe(281);
+  expect(savedGoals["growth-goal-test-ocid"].targetDate).toBe("2099-12-31");
+  await expect(page.locator("#growthGoalStatus")).toHaveText("진행 중");
+
+  await page.locator("#refreshDataButton").click();
+  await expect(page.locator("#growthGoalStatus")).toHaveText("목표 달성");
+  await expect(page.locator("#growthGoalFeedback")).toContainText("목표 레벨");
+  const completedGoals = await page.evaluate(() =>
+    JSON.parse(localStorage.getItem("mapleGrowthTrackerGoals") || "{}")
+  );
+  expect(completedGoals["growth-goal-test-ocid"].completedAt).toBeTruthy();
+
+  await page.reload();
+  await expect(page.locator("#growthGoalCard")).toBeVisible();
+  await expect(page.locator("#growthGoalStatus")).toHaveText("목표 달성");
+});
