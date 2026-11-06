@@ -1568,21 +1568,37 @@ function renderComparisonPeriod(summary, primaryCharacter, otherCharacter, error
     renderSubject("Secondary", summary?.secondary || null);
 
     if (summary?.primary && summary?.secondary) {
-        const firstGrowth = summary.primary.growth;
-        const secondGrowth = summary.secondary.growth;
-        if (firstGrowth === null || firstGrowth === undefined || secondGrowth === null || secondGrowth === undefined) {
-            comparisonPeriodVerdict.textContent = "확인된 성장 기록이 부족해 증가량을 비교하기 어렵습니다.";
-        } else {
-            const difference = firstGrowth - secondGrowth;
-            if (difference > 0) {
-                comparisonPeriodVerdict.textContent = `${primaryName}의 확인된 증가량이 ${otherName}보다 ${formatTrillion(difference)} 많습니다.`;
-            } else if (difference < 0) {
-                comparisonPeriodVerdict.textContent = `${otherName}의 확인된 증가량이 ${primaryName}보다 ${formatTrillion(Math.abs(difference))} 많습니다.`;
+        const firstPace = summary.primary.levelProgress?.dailyProgressRate;
+        const secondPace = summary.secondary.levelProgress?.dailyProgressRate;
+        const firstAverage = summary.primary.averageGrowth;
+        const secondAverage = summary.secondary.averageGrowth;
+
+        if (Number.isFinite(firstPace) && Number.isFinite(secondPace)) {
+            const difference = firstPace - secondPace;
+            if (Math.abs(difference) < 0.00005) {
+                comparisonPeriodVerdict.textContent = "현재 레벨 기준 일일 진척률은 두 캐릭터가 비슷합니다.";
+            } else if (difference > 0) {
+                comparisonPeriodVerdict.textContent =
+                    `${primaryName}의 현재 레벨 기준 일일 진척률이 ${otherName}보다 ${difference.toFixed(4)}%p 높습니다.`;
             } else {
-                comparisonPeriodVerdict.textContent = "두 캐릭터의 확인된 증가량이 같습니다.";
+                comparisonPeriodVerdict.textContent =
+                    `${otherName}의 현재 레벨 기준 일일 진척률이 ${primaryName}보다 ${Math.abs(difference).toFixed(4)}%p 높습니다.`;
             }
+        } else if (Number.isFinite(firstAverage) && Number.isFinite(secondAverage)) {
+            const difference = firstAverage - secondAverage;
+            if (difference > 0) {
+                comparisonPeriodVerdict.textContent =
+                    `${primaryName}의 관측 일 평균 경험치가 ${otherName}보다 ${formatTrillion(difference)} 많습니다. (레벨 보정 진척률 자료 부족)`;
+            } else if (difference < 0) {
+                comparisonPeriodVerdict.textContent =
+                    `${otherName}의 관측 일 평균 경험치가 ${primaryName}보다 ${formatTrillion(Math.abs(difference))} 많습니다. (레벨 보정 진척률 자료 부족)`;
+            } else {
+                comparisonPeriodVerdict.textContent = "두 캐릭터의 관측 일 평균 경험치가 같습니다. (레벨 보정 진척률 자료 부족)";
+            }
+        } else {
+            comparisonPeriodVerdict.textContent = "확인된 성장 기록이 부족해 성장 속도를 비교하기 어렵습니다.";
         }
-        comparisonPeriodNotice.textContent = `최근 ${days}일의 동일한 날짜 범위입니다. 누락 날짜와 레벨업 전환 구간은 추정하지 않습니다.`;
+        comparisonPeriodNotice.textContent = `최근 ${days}일의 동일한 날짜 범위입니다. 진척률은 각 캐릭터의 현재 레벨 진행률을 이용한 근사치이며, 누락 날짜와 레벨업 전환 구간은 추정하지 않습니다.`;
     } else {
         comparisonPeriodVerdict.textContent = errorMessage || "기간별 비교 자료를 아직 불러오지 못했습니다.";
         comparisonPeriodNotice.textContent = "캐릭터별 저장 기록이 있어야 장기 성장량과 랭킹 변화를 비교할 수 있습니다.";
