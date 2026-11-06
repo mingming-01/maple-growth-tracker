@@ -5,6 +5,7 @@ from unittest.mock import Mock, patch
 
 import requests
 import app as tracker
+from tracker import create_app
 from tracker.controller import character_controller, history_controller
 from tracker.integrations import nexon_api
 from tracker.runtime import get_runtime_state
@@ -13,29 +14,36 @@ from tracker.services import nexon_service
 
 class ApiResilienceTests(unittest.TestCase):
     def setUp(self):
+        self.app = create_app({
+            "TESTING": True,
+            "GROWTH_DATABASE_URL": "",
+            "NEXON_API_KEY": "",
+            "GEMINI_API_KEY": "",
+            "OPENROUTER_API_KEY": "",
+        })
         self.temp_dir = tempfile.TemporaryDirectory()
         self.snapshot_path = Path(self.temp_dir.name) / "snapshots.sqlite3"
-        with tracker.app.app_context():
+        with self.app.app_context():
             self.state = get_runtime_state()
             self.state.snapshot_db_path = str(self.snapshot_path)
             self.state.cache.clear()
             tracker.initialize_snapshot_db()
-        self.client = tracker.app.test_client()
+        self.client = self.app.test_client()
 
     def tearDown(self):
-        with tracker.app.app_context():
+        with self.app.app_context():
             self.state.cache.clear()
         self.temp_dir.cleanup()
 
     def save_snapshot(self, key, value):
-        with tracker.app.app_context():
+        with self.app.app_context():
             tracker.save_api_snapshot(key, value)
 
     def test_nexon_request_has_timeout(self):
         response = Mock(status_code=200)
         response.json.return_value = {"ocid": "test-ocid"}
 
-        with tracker.app.app_context(), patch.object(
+        with self.app.app_context(), patch.object(
             nexon_api, "request_with_retries", return_value=response
         ) as request:
             ocid, _ = nexon_api.get_ocid("테스트캐릭터")
@@ -107,7 +115,7 @@ class ApiResilienceTests(unittest.TestCase):
         self.assertIn("넥슨 API", response.get_data(as_text=True))
 
     def test_force_refresh_bypasses_character_memory_cache(self):
-        with tracker.app.app_context():
+        with self.app.app_context():
             tracker.set_cache(
                 "character:테스트캐릭터",
                 {"characterName": "오래된이름", "level": 250},
@@ -128,7 +136,7 @@ class ApiResilienceTests(unittest.TestCase):
         self.assertIn("넥슨 API", response.get_data(as_text=True))
 
     def test_force_refresh_bypasses_history_memory_cache(self):
-        with tracker.app.app_context():
+        with self.app.app_context():
             tracker.set_cache(
                 "history:테스트캐릭터",
                 {
@@ -157,7 +165,7 @@ class ApiResilienceTests(unittest.TestCase):
         with patch.object(nexon_service, "get_api_class", return_value="테스트직업"), patch.object(
             nexon_service, "get_ranking_snapshot", return_value=(None, empty_response)
         ):
-            with tracker.app.app_context():
+            with self.app.app_context():
                 result = nexon_service.get_character_rankings(
                     target_date="2026-10-27",
                     world_name="테스트월드",
