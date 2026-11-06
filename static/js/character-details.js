@@ -1,7 +1,7 @@
 /** MapleStory in-client inspired character detail windows. */
 
 const PRESET_CATEGORY = {
-    itemEquipment: "equipment", ability: "ability",
+    itemEquipment: "equipment", hyperStat: "hyperStat", ability: "ability",
     linkSkill: "link", unionStateStat: "union"
 };
 const REQUIRED_PRESET_KEYS = ["equipment", "ability", "link", "union"];
@@ -30,13 +30,14 @@ const SLOT_DEFS = [
     ["모자","hat",1,6],["망토","cape",1,7],
     ["상의","top",2,6],["장갑","gloves",2,7],
     ["하의","bottom",3,6],["신발","shoes",3,7],
+    ["헤어","hair",4,3],["성형","faceStyle",4,4],["피부","skin",4,5],
     ["어깨장식","shoulder",4,6],["훈장","medal",4,7],
     ["벨트","belt",5,1],["펜던트 2","pendant2",5,2],
-    ["헤어","hair",5,3],["성형","faceStyle",5,4],["피부","skin",5,5],
-    ["안드로이드","android",5,6],["하트","heart",5,7],
+    ["무기","weapon",5,3],["보조무기","subweapon",5,4],
+    ["엠블렘","emblem",5,5],["안드로이드","android",5,6],["하트","heart",5,7],
     ["포켓","pocket",6,1],["빈 슬롯","empty1",6,2],
-    ["무기","weapon",6,3],["보조무기","subweapon",6,4],
-    ["엠블렘","emblem",6,5],["빈 슬롯","empty5",6,6],["뱃지","badge",6,7]
+    ["빈 슬롯","empty3",6,3],["빈 슬롯","empty4",6,4],
+    ["빈 슬롯","empty5",6,5],["빈 슬롯","empty6",6,6],["뱃지","badge",6,7]
 ];
 
 function el(tag, cls, text) {
@@ -120,7 +121,7 @@ function presetSelect(source,category,selected,onChange) {
     return wrap;
 }
 
-function renderStatsWindow(data,selection,mode) {
+function renderStatsWindow(data,selection,mode,onPresetChange=()=>{}) {
     const panel=el("section","game-stat-window");
     const heading=el("div","game-window-heading");
     heading.append(el("span","game-window-eyebrow","CHARACTER STATUS"),el("h3","game-window-title","능력치"));
@@ -148,10 +149,15 @@ function renderStatsWindow(data,selection,mode) {
 
     const extraGrid=el("div","game-stat-extra-grid");
     const abilitySource=sourceById(data,"ability");
-    const abilityNumber=selection?.ability??abilitySource?.activePresetNo;
+    const abilityNumber=selection?.ability??abilitySource?.activePresetNo??fallbackPreset(abilitySource);
     const abilityData=presetData(abilitySource,abilityNumber);
     const abilityPanel=el("section","game-stat-detail-card");
-    abilityPanel.appendChild(el("h4","game-window-title","어빌리티"));
+    const abilityHeader=el("div","game-stat-detail-card-header");
+    abilityHeader.appendChild(el("h4","game-window-title","어빌리티"));
+    if(abilitySource?.presets?.length>1) abilityHeader.appendChild(presetSelect(
+        abilitySource,"ability",abilityNumber,next=>onPresetChange("ability",next)
+    ));
+    abilityPanel.appendChild(abilityHeader);
     abilityPanel.appendChild(el("span","game-stat-detail-grade",abilityData.ability_grade||abilitySource?.data?.ability_grade||"등급 정보 없음"));
     const abilityRows=Array.isArray(abilityData.ability_info)?abilityData.ability_info:[];
     const abilityList=el("div","game-stat-detail-list");
@@ -166,10 +172,15 @@ function renderStatsWindow(data,selection,mode) {
     extraGrid.appendChild(abilityPanel);
 
     const hyperSource=sourceById(data,"hyperStat");
-    const hyperNumber=hyperSource?.activePresetNo??fallbackPreset(hyperSource);
+    const hyperNumber=selection?.hyperStat??hyperSource?.activePresetNo??fallbackPreset(hyperSource);
     const hyperData=presetData(hyperSource,hyperNumber);
     const hyperPanel=el("section","game-stat-detail-card");
-    hyperPanel.appendChild(el("h4","game-window-title","하이퍼 스탯"));
+    const hyperHeader=el("div","game-stat-detail-card-header");
+    hyperHeader.appendChild(el("h4","game-window-title","하이퍼 스탯"));
+    if(hyperSource?.presets?.length>1) hyperHeader.appendChild(presetSelect(
+        hyperSource,"hyperStat",hyperNumber,next=>onPresetChange("hyperStat",next)
+    ));
+    hyperPanel.appendChild(hyperHeader);
     const hyperRows=Array.isArray(hyperData.hyper_stat)?hyperData.hyper_stat:[];
     const invested=hyperRows.filter(item=>Number(item?.stat_level)>0);
     const hyperGrid=el("div","game-hyper-stat-list");
@@ -230,40 +241,9 @@ function renderPresetSummary(source,number) {
     } else card.appendChild(el("p","game-preset-no-signal","표시할 구성 정보가 없습니다."));
     return card;
 }
-function renderStatsSection(data,mode,selection,onModeChange) {
+function renderStatsSection(data,mode,selection,onPresetChange) {
     const layout=el("div","game-stats-layout");
-    const profile=el("section","game-profile-window");
-    const heading=el("div","game-profile-title-row");
-    heading.append(el("span","game-window-eyebrow","BATTLE PRESET"),el("h3","game-window-title","전투 세팅 조합"));
-    profile.appendChild(heading);
-
-    const modes=el("div","game-profile-mode-row");
-    [["boss","보스 추천"],["hunting","사냥 추천"],["current","게임 적용 상태"],["highest","최고 전투력 기록"]].forEach(([key,label])=>{
-        const button=el("button","game-profile-mode"+(mode===key?" is-active":""),label);
-        button.type="button"; button.setAttribute("aria-pressed",mode===key?"true":"false");
-        button.addEventListener("click",()=>onModeChange(key));
-        modes.appendChild(button);
-    });
-    profile.appendChild(modes);
-
-    const selects=el("div","game-preset-select-grid");
-    const selectableCategories=["equipment","ability","union"];
-    (data.sources||[]).forEach(source=>{
-        const category=PRESET_CATEGORY[source.id];
-        if(!selectableCategories.includes(category)||!Array.isArray(source.presets)||!source.presets.length) return;
-        selects.appendChild(presetSelect(source,category,selection[category],number=>onModeChange("custom",category,number)));
-    });
-    profile.appendChild(selects);
-
-    const recommendation=data.profileRecommendations?.[mode];
-    const confidence=recommendation?.confidence==="high"?"판별 신뢰도 높음":recommendation?.confidence==="medium"?"판별 신호 확인":"판별 신호 부족 · 현재 프리셋 유지";
-    const matched=recommendation?.matchedCategories?.length||0;
-    profile.appendChild(el("p","game-profile-note",mode==="boss"||mode==="hunting"
-        ? confidence+" · "+matched+"개 영역에서 특징 확인"
-        : mode==="custom"?"직접 선택한 프리셋 조합입니다. 게임 내 프리셋은 변경되지 않습니다."
-        :"각 영역의 프리셋 번호는 독립적이며, 인게임에 설정한 별칭을 가져온 값은 아닙니다."));
-    layout.appendChild(profile);
-    layout.appendChild(renderStatsWindow(data,selection,mode));
+    layout.appendChild(renderStatsWindow(data,selection,"current",onPresetChange));
     return layout;
 }
 
@@ -405,8 +385,8 @@ function renderEquipmentSection(data,onPresetChange=()=>{}) {
     content.appendChild(toolbar);
     const items=equippedItems(source,number), board=el("div","game-equipment-board");
     const appearanceSource=sourceById(data,"characterAppearance");
-    const appearance=appearanceSource?.currentData||appearanceSource?.data||{};
-    const equipmentData=source.currentData||source.data||{};
+    const appearance={...(appearanceSource?.data||{}),...(appearanceSource?.currentData||{})};
+    const equipmentData={...(source.data||{}),...(source.currentData||{})};
     const androidName=equipmentData.android_name||equipmentData.android_nickname||"";
     const androidIcon=equipmentData.android_icon||"";
     board.style.display="grid";
@@ -537,7 +517,11 @@ function renderSymbolsSection(data) {
         const requiredValue=symbol.symbol_require_growth_count;
         const growth=Number(growthValue||0);
         const required=Number(requiredValue||0);
-        const isMax=present(requiredValue)&&required<=0;
+        const symbolName=String(symbol.symbol_name||"");
+        const symbolLevel=Number(symbol.symbol_level);
+        const knownMaxLevel=(/아케인/.test(symbolName)&&symbolLevel>=20)||
+            (/어센틱/.test(symbolName)&&symbolLevel>=11);
+        const isMax=(present(requiredValue)&&required<=0)||knownMaxLevel;
         const growthLines=[
             symbol.symbol_description,
             isMax?"성장량 MAX":present(requiredValue)?"성장량 "+fmt(growth)+" / "+fmt(required):"성장량 정보 없음",
@@ -609,7 +593,7 @@ function renderSkillsSection(data) {
 
     const hexaData=hexaStat?.data||{};
     const statPanel=el("section","game-hexa-stat-panel");
-    statPanel.append(el("h3","game-window-title","HEXA 스탯"),el("p","game-sixth-caption","HEXA 1 · HEXA 2 · HEXA 3을 가로 3칸으로 배치했습니다. 각 코어에 마우스를 올리면 세부 능력치를 확인할 수 있습니다."));
+    statPanel.append(el("h3","game-window-title","HEXA 스탯"),el("p","game-sixth-caption","메인 옵션과 서브 옵션 2개, 각 옵션의 레벨을 한 번에 표시합니다."));
 
     const appendStatRow=(title,definitions)=>{
         const groups=definitions.map(([label,key])=>({label,rows:Array.isArray(hexaData[key])?hexaData[key]:[]}));
@@ -622,16 +606,20 @@ function renderSkillsSection(data) {
             column.appendChild(el("strong","game-hexa-stat-column-title",group.label));
             if(group.rows.length) group.rows.forEach(stat=>{
                 const tile=el("article","game-hexa-tile game-hexa-stat-entry");
-                const slot=present(stat.slot_id)?"슬롯 "+(Number(stat.slot_id)+1):null;
-                tile.append(el("span","game-hexa-kind",slot||"스탯 코어"),
-                    el("strong","game-hexa-name",stat.main_stat_name||"메인 스탯"),
-                    el("span","game-hexa-level","Lv. "+(stat.main_stat_level??"—")));
-                addHoverTooltip(tile,"HEXA 스탯 상세",[
-                    (stat.main_stat_name||"메인 스탯")+" · Lv."+(stat.main_stat_level??"—"),
-                    (stat.sub_stat_name_1||"서브 스탯 1")+" · Lv."+(stat.sub_stat_level_1??"—"),
-                    (stat.sub_stat_name_2||"서브 스탯 2")+" · Lv."+(stat.sub_stat_level_2??"—"),
-                    present(stat.stat_grade)?"코어 등급 "+stat.stat_grade:null
-                ]);
+                const options=el("div","game-hexa-stat-options");
+                [
+                    [stat.main_stat_name,stat.main_stat_level],
+                    [stat.sub_stat_name_1,stat.sub_stat_level_1],
+                    [stat.sub_stat_name_2,stat.sub_stat_level_2]
+                ].forEach(([name,level])=>{
+                    if(!present(name)) return;
+                    const option=el("div","game-hexa-stat-option");
+                    option.append(el("span","game-hexa-stat-option-name",name),
+                        el("strong","game-hexa-stat-option-level","Lv. "+(level??"—")));
+                    options.appendChild(option);
+                });
+                if(options.childElementCount) tile.appendChild(options);
+                if(present(stat.stat_grade)) tile.appendChild(el("span","game-hexa-stat-grade","코어 등급 · "+stat.stat_grade));
                 column.appendChild(tile);
             });
             else column.appendChild(el("p","game-empty","정보 없음"));
@@ -958,14 +946,8 @@ export function initCharacterDetails({apiFetch,readApiResponse,onStatsLoaded=()=
         });
     }
     function renderStats(data) {
-        const handleChange=(nextMode,category,number)=>{
-            if(nextMode==="custom") {
-                selectedNumbers[category]=number;
-                profileMode="custom";
-            } else {
-                profileMode=nextMode;
-                selectedNumbers=initialSelection(statsData,nextMode);
-            }
+        const handleChange=(category,number)=>{
+            selectedNumbers[category]=number;
             renderStats(data);
         };
         content.replaceChildren(renderStatsSection(data,profileMode,selectedNumbers,handleChange));
