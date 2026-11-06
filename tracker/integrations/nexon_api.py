@@ -8,7 +8,6 @@ from tracker.config import Config
 from tracker.integrations.http_client import request_with_retries
 
 BASE_URL = "https://open.api.nexon.com/maplestory/v1"
-NEXON_API_TIMEOUT = (3.05, 10)
 HISTORY_API_MIN_INTERVAL = 0.22
 _fallback_rate_limit_lock = Lock()
 _fallback_last_request_at = 0.0
