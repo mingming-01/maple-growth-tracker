@@ -65,8 +65,33 @@ test("AI growth report explains the exact records used as evidence", async ({ pa
     status: 200,
     contentType: "application/json",
     body: JSON.stringify({
-      analysis: "[성장 패턴] 테스트 리포트입니다.\n[성장 변화] 변화가 확인됩니다.\n[레벨업 분석] 확인된 레벨업은 없습니다.\n[성장 전망] 자료를 참고하세요.\n[AI 코멘트] 기록을 이어가세요.",
-      cacheHit: false
+      analysis: "[성장 패턴] 최근 성장 흐름이 개선됐습니다.\n[성장 변화] 주말에 성장이 집중됐습니다.\n[레벨업 분석] 확인된 레벨업은 없습니다.\n[성장 전망] 현재 자료를 참고하세요.\n[AI 코멘트] 기록을 이어가세요.",
+      cacheHit: false,
+      growthInsights: {
+        basis: {
+          referenceDate: "2026-11-06",
+          periodStartDate: "2026-10-24",
+          periodEndDate: "2026-11-06",
+          snapshotStartDate: "2026-10-23",
+          expectedSnapshots: 15,
+          availableSnapshots: 10,
+          missingSnapshots: 5,
+          coveragePercent: 66.7,
+          dataQuality: "medium",
+          dataQualityLabel: "보통"
+        },
+        recentPeriod: { validGrowthIntervals: 5 },
+        previousPeriod: { validGrowthIntervals: 4 },
+        weekOverWeek: {
+          status: "available",
+          averageDailyGrowthChangePercent: 12.5,
+          direction: "increase"
+        },
+        weekdayWeekend: {
+          status: "available",
+          weekendSharePercent: 44.2
+        }
+      }
     })
   }));
 
@@ -77,11 +102,12 @@ test("AI growth report explains the exact records used as evidence", async ({ pa
   const evidence = page.locator("#aiAnalysisEvidence");
   await expect(evidence).toBeVisible();
   await expect(evidence).toContainText("분석에 사용한 기록");
-  await expect(evidence).toContainText("2026.10.31 ~ 2026.11.06");
-  await expect(evidence).toContainText("5 / 7일");
-  await expect(evidence).toContainText("4개");
+  await expect(evidence).toContainText("AI 분석 기준 및 데이터 충실도");
   await expect(evidence).toContainText("2026.11.06");
-  await expect(evidence).toContainText("기록 미확인 2일");
+  await expect(evidence).toContainText("10 / 15일");
+  await expect(evidence).toContainText("보통 · 66.7%");
+  await expect(evidence).toContainText("12.5%");
+  await expect(evidence).toContainText("44.2%");
 
   const evidenceBounds = await evidence.evaluate(element => {
     const rect = element.getBoundingClientRect();

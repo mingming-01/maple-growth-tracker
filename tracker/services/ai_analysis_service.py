@@ -40,7 +40,7 @@ def _generate_gemini_content(client, prompt):
                 time.sleep(delay)
 
 
-def generate_ai_analysis(character, history, computed_metrics=None):
+def generate_ai_analysis(character, history, computed_metrics=None, growth_insights=None):
     gemini_client = get_gemini_client()
     openrouter_api_key = get_runtime_state().openrouter_api_key
 
@@ -77,12 +77,13 @@ def generate_ai_analysis(character, history, computed_metrics=None):
                 "experienceRate": character.get("experienceRate")
             },
             "metrics": computed_metrics,
+            "growthInsights": growth_insights or {},
             "predictionDisplayDate": prediction_date_label,
             "history": growth_data
         }
         prompt = f"""
 너는 메이플스토리 캐릭터의 성장 과정을 해석하는 도우미야.
-아래 데이터는 앱에서 계산했거나 API에서 가져온 사실이야. 새 숫자를 계산하거나 추정하지 말고, 사실을 반복해서 나열하기보다 변화의 특징과 의미를 설명해.
+아래 데이터는 앱에서 계산했거나 API에서 가져온 사실이야. 새 숫자를 계산하거나 추정하지 말고, 앱이 계산한 성장 인사이트의 변화 특징과 의미를 설명해. 최근 7일과 직전 7일의 비교율, 주말 성장 비중 등 제공된 값은 그대로 인용할 수 있지만 다시 계산하지 마.
 성장 요약과 전망 카드에 이미 숫자가 있으므로 레벨, 경험치, 평균·최고·최저 성장량, 랭킹, 소요일 등의 숫자를 리포트에서 되풀이하지 마. 긴 숫자나 괄호 속 원본 수치도 쓰지 마.
 성장 전망에서 날짜를 언급할 때는 predictionDisplayDate 값을 그대로 사용해. 그 날짜를 다시 계산하거나 다른 날짜로 바꾸지 마. 날짜 값이 없으면 날짜를 만들어내지 마.
 기록이 부족하거나 값이 확인되지 않으면 판단하기 어렵다고 자연스럽게 말해. 데이터 부족을 감추거나 없는 사실을 채워 넣지 마.
@@ -129,7 +130,7 @@ def generate_ai_analysis(character, history, computed_metrics=None):
     cached_analysis = get_ai_response_cache(prompt)
     if cached_analysis is not None:
         print("저장된 AI 성장 리포트를 재사용했습니다.")
-        return {"analysis": cached_analysis, "cacheHit": True}
+        return {"analysis": cached_analysis, "cacheHit": True, "growthInsights": growth_insights}
 
     gemini_error = None
 
@@ -141,7 +142,7 @@ def generate_ai_analysis(character, history, computed_metrics=None):
                 expected_date
             )
             set_ai_response_cache(prompt, analysis)
-            return {"analysis": analysis, "cacheHit": False}
+            return {"analysis": analysis, "cacheHit": False, "growthInsights": growth_insights}
         except Exception as error:
             gemini_error = error
             print(f"Gemini 성장 분석 요청에 실패했습니다: {error}")
