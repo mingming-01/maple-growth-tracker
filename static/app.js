@@ -380,6 +380,13 @@ function getGrowthGoalKey(character) {
     return String(character?.ocid || "").trim();
 }
 
+function getGrowthGoalExperienceRate(character) {
+    const raw = character?.experienceRate;
+    if (raw === null || raw === undefined || raw === "") return null;
+    const value = Number(String(raw).replace("%", ""));
+    return Number.isFinite(value) && value >= 0 && value <= 100 ? value : null;
+}
+
 function showGrowthGoalFeedback(message, isError = false) {
     if (!growthGoalFeedback) return;
     growthGoalFeedback.textContent = message;
@@ -469,7 +476,7 @@ function renderGrowthGoal(character, metrics = null, { notify = false } = {}) {
     growthGoalCard.hidden = false;
 
     const currentLevel = Number(character.level);
-    const currentRate = Number(String(character.experienceRate ?? "").replace("%", ""));
+    const currentRate = getGrowthGoalExperienceRate(character);
     const key = getGrowthGoalKey(character);
     if (!key || !Number.isFinite(currentLevel)) {
         growthGoalStatus.textContent = "목표 설정 불가";
@@ -589,7 +596,7 @@ async function handleGrowthGoalSubmit(event) {
 
     const key = getGrowthGoalKey(currentCharacter);
     const currentLevel = Number(currentCharacter.level);
-    const currentRate = Number(String(currentCharacter.experienceRate ?? "").replace("%", ""));
+    const currentRate = getGrowthGoalExperienceRate(currentCharacter);
     const targetDate = growthGoalTargetDate?.value || "";
     const today = formatLocalISODate(new Date());
     if (!key || !Number.isFinite(currentLevel)) {

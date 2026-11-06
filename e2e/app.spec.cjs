@@ -647,7 +647,7 @@ test("next-level growth goal persists and alerts when the target level is reache
   });
 
   let characterLookups = 0;
-  await page.route(/\\/api\\/character\\?/, route => {
+  await page.route(/\/api\/character\?/, route => {
     characterLookups += 1;
     const level = characterLookups === 1 ? 280 : 281;
     const experienceRate = characterLookups === 1 ? "30.000" : "0.000";
@@ -666,7 +666,7 @@ test("next-level growth goal persists and alerts when the target level is reache
   });
 
   let historyLookups = 0;
-  await page.route(/\\/api\\/history\\?/, route => {
+  await page.route(/\/api\/history\?/, route => {
     historyLookups += 1;
     const latestLevel = historyLookups === 1 ? 280 : 281;
     return route.fulfill({
@@ -685,11 +685,11 @@ test("next-level growth goal persists and alerts when the target level is reache
     });
   });
 
-  await page.route(/\\/api\\/ai-analysis/, route => route.fulfill({
+  await page.route(/\/api\/ai-analysis/, route => route.fulfill({
     status: 200,
     contentType: "application/json",
     body: JSON.stringify({
-      analysis: "[성장 패턴] 기록을 확인했습니다.\\n[성장 변화] 변화가 있습니다.\\n[레벨업 분석] 기록을 확인했습니다.\\n[성장 전망] 자료를 참고하세요.\\n[AI 코멘트] 목표를 이어가세요.",
+      analysis: "[성장 패턴] 기록을 확인했습니다.\n[성장 변화] 변화가 있습니다.\n[레벨업 분석] 기록을 확인했습니다.\n[성장 전망] 자료를 참고하세요.\n[AI 코멘트] 목표를 이어가세요.",
       cacheHit: false,
       growthInsights: null
     })
