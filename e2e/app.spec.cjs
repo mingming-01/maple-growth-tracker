@@ -68,8 +68,10 @@ test("character details automatically open the game-style stat window", async ({
       sources: [{
         id: "symbolEquipment", label: "심볼", status: "available",
         currentData: { symbol: [{
-          symbol_name: "테스트 아케인심볼", symbol_level: 20,
+          symbol_name: "테스트 그랜드 어센틱심볼", symbol_level: 11,
           symbol_growth_count: 0, symbol_require_growth_count: null,
+          symbol_force: 150, symbol_str: 15000, symbol_dex: 15000,
+          symbol_int: 15000, symbol_luk: 15000, symbol_hp: 450000,
           symbol_description: "최대 레벨에 도달한 심볼"
         }] },
         data: {}
@@ -90,13 +92,28 @@ test("character details automatically open the game-style stat window", async ({
         {
           id: "itemEquipment", label: "장비", status: "available", activePresetNo: 1,
           currentData: {
-            item_equipment: [],
+            item_equipment: [
+              { item_name: "테스트 무기", item_equipment_slot: "무기", item_icon: "https://example.com/weapon.png" },
+              { item_name: "테스트 보조무기", item_equipment_slot: "보조무기", item_icon: "https://example.com/subweapon.png" }
+            ]
+          },
+          presets: [{ number: 1, data: { item_equipment: [
+            { item_name: "테스트 무기", item_equipment_slot: "무기", item_icon: "https://example.com/weapon.png" },
+            { item_name: "테스트 보조무기", item_equipment_slot: "보조무기", item_icon: "https://example.com/subweapon.png" }
+          ] } }],
+          data: {}
+        },
+        {
+          id: "androidEquipment", label: "안드로이드", status: "available",
+          currentData: {
             android_name: "테스트 안드로이드",
             android_icon: "",
             android_grade: "레전드리",
-            android_gender: "여성"
+            android_gender: "여성",
+            android_hair: { hair_name: "테스트 안드로이드 헤어", base_color: "검정" },
+            android_face: { face_name: "테스트 안드로이드 성형", base_color: "갈색" },
+            android_skin_name: "테스트 안드로이드 피부"
           },
-          presets: [{ number: 1, data: { item_equipment: [] } }],
           data: {}
         },
         {
@@ -293,16 +310,28 @@ test("character details automatically open the game-style stat window", async ({
   await expect(page.locator("#characterDetailsContent .game-stat-detail-card-header .game-preset-select").nth(1)).toHaveValue("1");
 
   await page.locator('[data-detail-tab="symbols"]').click();
-  await expect(page.locator("#characterDetailsContent")).toContainText("테스트 아케인심볼");
+  await expect(page.locator("#characterDetailsContent")).toContainText("테스트 그랜드 어센틱심볼");
   const maxSymbol = page.locator("#characterDetailsContent .game-symbol-tile");
   await maxSymbol.hover();
   await expect(maxSymbol.locator(".game-hover-tooltip")).toContainText("성장량 MAX");
+  await expect(maxSymbol.locator(".game-hover-tooltip")).toContainText("포스 +150");
+  await expect(maxSymbol.locator(".game-hover-tooltip")).toContainText("STR +15,000");
+  await expect(maxSymbol.locator(".game-hover-tooltip")).toContainText("HP +450,000");
 
   await page.locator('[data-detail-tab="equipment"]').click();
   await expect(page.locator("#characterDetailsContent")).toContainText("테스트 헤어");
   await expect(page.locator("#characterDetailsContent")).toContainText("테스트 성형");
   await expect(page.locator("#characterDetailsContent")).toContainText("뽀송 피부");
-  await expect(page.locator("#characterDetailsContent")).toContainText("테스트 안드로이드");
+  const androidSlot = page.locator('#characterDetailsContent [data-slot="android"]');
+  await expect(androidSlot).toContainText("테스트 안드로이드");
+  await androidSlot.hover();
+  const androidTooltip = androidSlot.locator(".game-hover-tooltip");
+  await expect(androidTooltip).toBeVisible();
+  await expect(androidTooltip).toContainText("헤어 · 테스트 안드로이드 헤어");
+  await expect(androidTooltip).toContainText("성형 · 테스트 안드로이드 성형");
+  await expect(androidTooltip).toContainText("피부 · 테스트 안드로이드 피부");
+  await expect(page.locator('#characterDetailsContent [data-slot="weapon"]')).toContainText("테스트 무기");
+  await expect(page.locator('#characterDetailsContent [data-slot="subweapon"]')).toContainText("테스트 보조무기");
   const expectedSlots = {
     ring4: ["4", "1"], pendant1: ["4", "2"], hair: ["4", "3"],
     faceStyle: ["4", "4"], skin: ["4", "5"], shoulder: ["4", "6"], medal: ["4", "7"],
@@ -325,7 +354,7 @@ test("character details automatically open the game-style stat window", async ({
   await expect(page.locator("#characterDetailsContent .game-hexa-stat-columns")).toContainText("크리티컬 데미지");
   await expect(page.locator("#characterDetailsContent .game-hexa-stat-columns")).toContainText("보스 데미지");
   await expect(page.locator("#characterDetailsContent .game-hexa-stat-columns")).toContainText("방어율 무시");
-  await expect(page.locator("#characterDetailsContent .game-hexa-stat-entry")).not.toContainText("슬롯 1");
+  await expect(page.locator("#characterDetailsContent .game-hexa-stat-columns")).not.toContainText("슬롯 1");
 
   await page.locator('[data-detail-tab="union"]').click();
   await expect(page.locator("#characterDetailsContent")).toContainText("유니온 스탯 투자");
@@ -337,7 +366,7 @@ test("character details automatically open the game-style stat window", async ({
   const championCard = page.locator("#characterDetailsContent .game-union-champion-card");
   await championCard.hover();
   await expect(championCard.locator(".game-champion-hover-tooltip")).toBeVisible();
-  await expect(championCard.locator(".game-champion-hover-tooltip img")).toHaveCSS("width", "224px");
+  await expect(championCard.locator(".game-champion-hover-tooltip img")).toHaveCSS("width", "248px");
   await expect(page.locator("#characterDetailsContent .game-union-crystal-grid")).toHaveCSS("grid-template-columns", /repeat\(3,/);
   await expect(page.locator("#characterDetailsContent .game-union-champion-grid")).toHaveCSS("grid-template-columns", /repeat\(3,/);
   await expect(page.locator("#characterDetailsContent .game-union-crystal-monster")).toHaveCount(0);

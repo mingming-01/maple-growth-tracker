@@ -11,7 +11,7 @@ module.exports = defineConfig({
     headless: true,
   },
   webServer: {
-    command: "python -c 'from tracker import create_app; create_app().run(host=\"127.0.0.1\", port=5000, use_reloader=False)'",
+    command: "python scripts/run_e2e_server.py",
     url: "http://127.0.0.1:5000/",
     reuseExistingServer: !process.env.CI,
     timeout: 60000,

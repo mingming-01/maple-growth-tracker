@@ -254,7 +254,8 @@ function equippedItems(source,number) {
 function matchesSlot(item,slot) {
     const actual=String(item?.item_equipment_slot||item?.item_equipment_part||"").replace(/\s/g,"");
     const expected=slot.replace(/\s/g,"");
-    return actual===expected || actual.includes(expected);
+    // "보조무기" contains "무기"; slot matching must be exact.
+    return actual===expected;
 }
 function findEquipmentForSlot(items,slotName,slotKey) {
     if(slotKey.startsWith("empty")) return null;
@@ -386,9 +387,10 @@ function renderEquipmentSection(data,onPresetChange=()=>{}) {
     const items=equippedItems(source,number), board=el("div","game-equipment-board");
     const appearanceSource=sourceById(data,"characterAppearance");
     const appearance={...(appearanceSource?.data||{}),...(appearanceSource?.currentData||{})};
-    const equipmentData={...(source.data||{}),...(source.currentData||{})};
-    const androidName=equipmentData.android_name||equipmentData.android_nickname||"";
-    const androidIcon=equipmentData.android_icon||"";
+    const androidSource=sourceById(data,"androidEquipment");
+    const androidData={...(androidSource?.data||{}),...(androidSource?.currentData||{})};
+    const androidName=androidData.android_name||androidData.android_nickname||"";
+    const androidIcon=androidData.android_icon||"";
     board.style.display="grid";
     board.style.gridTemplateColumns="repeat(7,minmax(0,1fr))";
     board.style.gridTemplateRows="repeat(4,minmax(104px,auto)) repeat(2,minmax(92px,auto))";
@@ -422,10 +424,13 @@ function renderEquipmentSection(data,onPresetChange=()=>{}) {
             }
             slot.append(iconWrap,el("strong","equipment-game-item-name",androidName||item?.item_name||"안드로이드"));
             addHoverTooltip(slot,androidName||"안드로이드",[
-                equipmentData.android_grade? "등급 · "+equipmentData.android_grade:null,
-                equipmentData.android_gender? "성별 · "+equipmentData.android_gender:null,
-                equipmentData.android_ear_sensor? "이어센서 · "+equipmentData.android_ear_sensor:null,
-                equipmentData.android_description
+                androidData.android_grade? "등급 · "+androidData.android_grade:null,
+                androidData.android_gender? "성별 · "+androidData.android_gender:null,
+                androidData.android_ear_sensor? "이어센서 · "+androidData.android_ear_sensor:null,
+                androidData.android_description,
+                androidData.android_hair?.hair_name? "헤어 · "+androidData.android_hair.hair_name:null,
+                androidData.android_face?.face_name? "성형 · "+androidData.android_face.face_name:null,
+                androidData.android_skin_name? "피부 · "+androidData.android_skin_name:null
             ]);
         } else if(item) {
             const icon=image(item.item_icon,item.item_name||slotName,"");
@@ -522,8 +527,16 @@ function renderSymbolsSection(data) {
         const knownMaxLevel=(/아케인/.test(symbolName)&&symbolLevel>=20)||
             (/어센틱/.test(symbolName)&&symbolLevel>=11);
         const isMax=(present(requiredValue)&&required<=0)||knownMaxLevel;
+        const statLines=[
+            ["STR",symbol.symbol_str],["DEX",symbol.symbol_dex],
+            ["INT",symbol.symbol_int],["LUK",symbol.symbol_luk],
+            ["HP",symbol.symbol_hp]
+        ].filter(([,value])=>present(value))
+         .map(([label,value])=>label+" +"+fmt(value));
         const growthLines=[
             symbol.symbol_description,
+            present(symbol.symbol_force)?"포스 +"+fmt(symbol.symbol_force):null,
+            ...statLines,
             isMax?"성장량 MAX":present(requiredValue)?"성장량 "+fmt(growth)+" / "+fmt(required):"성장량 정보 없음",
             isMax?"최대 레벨 달성":present(requiredValue)?"다음 레벨까지 "+fmt(Math.max(0,required-growth))+" 남음":null,
             present(symbol.symbol_drop_rate)?"아이템 드롭률 "+symbol.symbol_drop_rate:null,

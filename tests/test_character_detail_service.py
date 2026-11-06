@@ -22,25 +22,32 @@ class CharacterDetailServiceTests(unittest.TestCase):
     def test_equipment_source_keeps_android_metadata_in_current_data(self):
         spec = next(
             item for item in SECTION_SOURCES["equipment"]
-            if item["id"] == "itemEquipment"
+            if item["id"] == "androidEquipment"
         )
+        self.assertEqual(spec["endpoint"], "character/android-equipment")
         payload = {
-            "item_equipment": [{"item_name": "테스트 무기"}],
             "android_name": "테스트 안드로이드",
             "android_nickname": "밍득로이드",
             "android_icon": "https://example.com/android.png",
             "android_description": "안드로이드 설명",
             "android_grade": "레전드리",
+            "android_hair": {"hair_name": "테스트 안드로이드 헤어"},
+            "android_face": {"face_name": "테스트 안드로이드 성형"},
+            "android_skin_name": "테스트 안드로이드 피부",
         }
         result = _normalize_source(payload, spec)
 
         self.assertEqual(result["status"], "available")
         self.assertEqual(result["currentData"]["android_name"], "테스트 안드로이드")
         self.assertEqual(result["currentData"]["android_icon"], "https://example.com/android.png")
+        self.assertEqual(result["currentData"]["android_hair"]["hair_name"], "테스트 안드로이드 헤어")
+        self.assertEqual(result["currentData"]["android_face"]["face_name"], "테스트 안드로이드 성형")
+        self.assertEqual(result["currentData"]["android_skin_name"], "테스트 안드로이드 피부")
         self.assertNotIn("android_name", result["data"])
 
     def test_character_appearance_fields_are_exposed_in_current_data(self):
         spec = SECTION_SOURCES["equipment"][0]
+        self.assertEqual(spec["endpoint"], "character/beauty-equipment")
         result = _normalize_source(
             {
                 "character_hair": {"hair_name": "테스트 헤어", "base_color": "검정"},
@@ -53,32 +60,6 @@ class CharacterDetailServiceTests(unittest.TestCase):
         self.assertEqual(result["currentData"]["character_hair"]["hair_name"], "테스트 헤어")
         self.assertEqual(result["currentData"]["character_face"]["face_name"], "테스트 성형")
         self.assertEqual(result["currentData"]["character_skin_name"], "뽀송 피부")
-
-    def test_source_cache_is_separated_by_normalization_spec(self):
-        stats_spec = next(
-            item for item in SECTION_SOURCES["stats"] if item["id"] == "itemEquipment"
-        )
-        equipment_spec = next(
-            item for item in SECTION_SOURCES["equipment"] if item["id"] == "itemEquipment"
-        )
-        payload = {
-            "item_equipment": [{"item_name": "테스트 무기"}],
-            "android_name": "테스트 안드로이드",
-            "android_icon": "https://example.com/android.png",
-        }
-        from tracker.services import character_detail_service
-
-        character_detail_service._SOURCE_CACHE.clear()
-        with patch(
-            "tracker.services.character_detail_service.request_nexon_api",
-            return_value=FakeResponse(200, payload),
-        ) as request:
-            stats_result = _fetch_source("cache-test-ocid", stats_spec, force_refresh=True)
-            equipment_result = _fetch_source("cache-test-ocid", equipment_spec)
-
-        self.assertNotIn("android_name", stats_result["currentData"])
-        self.assertEqual(equipment_result["currentData"]["android_name"], "테스트 안드로이드")
-        self.assertEqual(request.call_count, 2)
 
     def test_stat_source_extracts_actual_combat_power(self):
         spec = SECTION_SOURCES["stats"][0]
