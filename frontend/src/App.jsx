@@ -1,231 +1,482 @@
-import { useState } from "react";
-import { getCharacter } from "./services/api.js";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import html2canvas from "html2canvas";
+import { jsPDF } from "jspdf";
+import { getCharacter, getHistory } from "./services/api.js";
+import CharacterDetails from "./components/character/CharacterDetails.jsx";
+import GrowthDashboard from "./features/growth/GrowthDashboard.jsx";
+import { AIReport, GrowthComparison } from "./features/analytics/AnalyticsAndComparison.jsx";
+import {
+  readTrackerState,
+  saveTrackerState,
+  readFavorites,
+  saveFavorites,
+  favoriteKey,
+  readGrowthGoals,
+  MAX_FAVORITE_CHARACTERS
+} from "./lib/storage.js";
+import {
+  calculateAverageGrowth,
+  calculateLevelProgress
+} from "./lib/growth.js";
+
+const WORLD_LOGOS = {
+  "스카니아":"/static/images/worlds/SCANIA.PNG",
+  "베라":"/static/images/worlds/BERA.PNG",
+  "루나":"/static/images/worlds/LUNA.png",
+  "제니스":"/static/images/worlds/ZENITH.png",
+  "크로아":"/static/images/worlds/CROA.png",
+  "유니온":"/static/images/worlds/UNION.png",
+  "엘리시움":"/static/images/worlds/ELYSIUM.png",
+  "이노시스":"/static/images/worlds/ENOSIS.png",
+  "레드":"/static/images/worlds/RED.png",
+  "오로라":"/static/images/worlds/AURORA.PNG",
+  "아케인":"/static/images/worlds/ARCANE.png",
+  "노바":"/static/images/worlds/NOVA.png",
+  "에오스":"/static/images/worlds/EOS.png",
+  "헬리오스":"/static/images/worlds/HELIOS.png",
+  "챌린저스":"/static/images/worlds/CHALLENGERS.png"
+};
 
 function formatNumber(value) {
-  if (value === null || value === undefined || value === "") return "정보 없음";
-  const parsed = Number(String(value).replace(/,/g, ""));
-  return Number.isFinite(parsed) ? parsed.toLocaleString("ko-KR") : String(value);
+  if (value === null || value === undefined || value === "" || !Number.isFinite(Number(value))) return "—";
+  return Number(value).toLocaleString("ko-KR");
 }
 
-function formatRanking(value) {
-  if (value === null || value === undefined || value === "" || Number(value) <= 0) {
-    return "집계 정보 없음";
-  }
-  return formatNumber(value) + "위";
+function formatRate(value) {
+  const number = Number(String(value ?? "").replace("%",""));
+  return Number.isFinite(number) && number >= 0 && number <= 100 ? number : null;
 }
 
-function CharacterResult({ character }) {
+function rankingFallback(status, label) {
+  if (status === "not_ready") return "당일 집계 전";
+  if (status === "unavailable") return "조회 실패";
+  if (status === "partial") return "일부 조회 실패";
+  return label || "랭킹 자료 없음";
+}
+
+function RankingItem({ label, value, status }) {
   return (
-    <section className="character-result" aria-label="캐릭터 조회 결과">
-      <div className="character-identity">
-        <div className="character-avatar">
-          {character.character_image ? (
-            <img
-              src={character.character_image}
-              alt={character.characterName + " 캐릭터 이미지"}
-              referrerPolicy="no-referrer"
-              onError={(event) => {
-                event.currentTarget.style.display = "none";
-              }}
-            />
-          ) : (
-            <span aria-hidden="true">M</span>
-          )}
+    <div className="ranking-item">
+      <span>{label}</span>
+      <strong>{value === null || value === undefined || value === "" ? rankingFallback(status) : formatNumber(value) + "위"}</strong>
+      {value === null || value === undefined || value === "" ? <small>현재 순위 미확인</small> : <small>Nexon 랭킹 API</small>}
+    </div>
+  );
+}
+
+function RankingStatus({ character }) {
+  const status = character.rankingDataStatus;
+  if (status === "available" && [character.ranking,character.worldRanking,character.jobWorldRanking,character.jobRanking].some(value => value !== null && value !== undefined)) {
+    return <p className="mgt-ranking-status is-success">Nexon에서 제공한 현재 랭킹 데이터입니다.</p>;
+  }
+  const message = status === "not_ready"
+    ? "오늘 날짜의 랭킹 집계가 아직 준비되지 않았습니다. 잠시 후 최신 정보 다시 조회를 눌러 확인해주세요."
+    : status === "unavailable"
+      ? "Nexon 랭킹 API 조회에 실패했습니다. 기본 캐릭터 정보는 정상적으로 조회됐으며, 랭킹은 재조회할 수 있습니다."
+      : status === "partial"
+        ? "랭킹 일부 항목을 가져오지 못했습니다. 확인된 순위만 표시하고 나머지는 임의로 채우지 않았습니다."
+        : "현재 응답에서 랭킹을 확인하지 못했습니다. 최신 정보 다시 조회를 눌러 다시 확인해주세요.";
+  return <p className="mgt-ranking-status is-warning" role="status">{message}</p>;
+}
+
+function CharacterProfile({ character, history, onToggleFavorite, isFavorite }) {
+  const rate = formatRate(character.experienceRate);
+  const average = calculateAverageGrowth(history || []);
+  const progress = calculateLevelProgress(character,average);
+  const logo = WORLD_LOGOS[character.worldName];
+  return (
+    <section className="mgt-profile-shell" aria-label="캐릭터 프로필">
+      <div className="mgt-profile-main">
+        <div className="mgt-character-identity">
+          <div className="mgt-character-avatar-frame">
+            {character.character_image
+              ? <img className="mgt-character-avatar" src={character.character_image}
+                  alt={character.characterName + " 캐릭터 아바타"}
+                  referrerPolicy="no-referrer" />
+              : <span className="mgt-avatar-fallback">M</span>}
+          </div>
+          <div className="mgt-character-copy">
+            <span className="mgt-eyebrow">CHARACTER PROFILE</span>
+            <h2>{character.characterName || "이름 정보 없음"}</h2>
+            <div className="mgt-character-meta">
+              {logo && <img src={logo} alt="" className="mgt-world-logo" />}
+              <span>{character.worldName || "월드 정보 없음"}</span>
+              <span>Lv. {formatNumber(character.level)}</span>
+              <span>{character.job || "직업 정보 없음"}</span>
+              <span>{character.guildName || "길드 없음"}</span>
+            </div>
+            <button type="button" className={"mgt-favorite-button " + (isFavorite ? "is-saved" : "")}
+              onClick={onToggleFavorite} aria-pressed={isFavorite}>
+              <span aria-hidden="true">{isFavorite ? "★" : "☆"}</span>
+              {isFavorite ? "관심 캐릭터 해제" : "관심 캐릭터 등록"}
+            </button>
+          </div>
         </div>
-        <div className="character-copy">
-          <span className="eyebrow">CHARACTER PROFILE</span>
-          <h2>{character.characterName || "이름 정보 없음"}</h2>
-          <p>
-            {[character.worldName, character.job, character.guildName]
-              .filter(Boolean)
-              .join(" · ") || "캐릭터 기본 정보"}
+        <div className="mgt-profile-progress">
+          <div className="mgt-progress-top">
+            <div><span className="mgt-stat-label">현재 레벨 진행률</span><strong>{rate === null ? "자료 부족" : rate.toFixed(3)+"%"}</strong></div>
+            <span className="mgt-progress-remaining">{rate === null ? "경험치 진행률 미제공" : "다음 레벨까지 "+(100-rate).toFixed(3)+"%"}</span>
+          </div>
+          <div className="mgt-exp-track" role="progressbar" aria-label="현재 레벨 경험치 진행률"
+            aria-valuemin="0" aria-valuemax="100" aria-valuenow={rate ?? 0}>
+            <span className="mgt-exp-fill" style={{width:(rate ?? 0)+"%"}} />
+          </div>
+          <p className="mgt-progress-note">
+            {progress?.dailyProgressRate != null
+              ? "최근 관측 평균 +" + progress.dailyProgressRate.toFixed(4) + "%p / 일"
+              : "성장 기록이 쌓이면 실제 관측 경험치를 이용해 일일 진척률을 계산합니다."}
           </p>
         </div>
-        <div className="level-pill">
-          <span>LEVEL</span>
-          <strong>{formatNumber(character.level)}</strong>
-        </div>
       </div>
-
-      <div className="profile-divider" />
-
-      <div className="profile-stats">
-        <div className="profile-stat">
-          <span>경험치 진행률</span>
-          <strong>{character.experienceRate ?? "정보 없음"}%</strong>
-          <small>현재 레벨 기준</small>
-        </div>
-        <div className="profile-stat">
-          <span>현재 경험치</span>
-          <strong>{formatNumber(character.experience)}</strong>
-          <small>넥슨 Open API 응답</small>
-        </div>
-        <div className="profile-stat">
-          <span>최고 전투력 기록</span>
-          <strong>{formatNumber(character.bestCombatPower)}</strong>
-          <small>관측된 실제 전투력</small>
-        </div>
+      <div className="mgt-profile-side">
+        <div className="mgt-eyebrow">CHARACTER SNAPSHOT</div>
+        <div className="mgt-snapshot-stat"><span>현재 경험치</span><strong>{formatNumber(character.experience)}</strong></div>
+        <div className="mgt-snapshot-stat"><span>일일 평균 경험치</span><strong>{average === null ? "자료 부족" : formatTrillion(average)}</strong></div>
+        <div className="mgt-snapshot-stat"><span>최고 전투력 기록</span><strong>{formatNumber(character.bestCombatPower)}</strong></div>
+        <p className="mgt-power-caption">
+          {character.bestCombatPowerObservedAt
+            ? "조회 기록 중 최고 · " + new Date(character.bestCombatPowerObservedAt).toLocaleDateString("ko-KR")
+            : "상세 스탯 조회 시 실제 전투력 기록을 확인합니다."}
+        </p>
       </div>
-
-      <div className="ranking-section">
-        <div className="section-heading">
-          <div>
-            <span className="eyebrow">RANKING</span>
-            <h3>캐릭터 랭킹</h3>
-          </div>
-          <span className="section-caption">현재 공개 데이터 기준</span>
+      <div className="mgt-ranking-panel">
+        <div className="mgt-ranking-heading">
+          <div><span className="mgt-eyebrow">RANKING</span><h3>캐릭터 랭킹</h3></div>
+          <span>공개 랭킹 API</span>
         </div>
-        <div className="ranking-grid">
-          <RankingItem label="종합 랭킹" value={character.ranking} />
-          <RankingItem label="월드 랭킹" value={character.worldRanking} />
-          <RankingItem label="직업 · 월드" value={character.jobWorldRanking} />
-          <RankingItem label="직업 전체" value={character.jobRanking} />
+        <div className="mgt-ranking-grid">
+          <RankingItem label="종합 랭킹" value={character.ranking} status={character.rankingDataStatus} />
+          <RankingItem label="월드 랭킹" value={character.worldRanking} status={character.rankingDataStatus} />
+          <RankingItem label="직업 · 월드" value={character.jobWorldRanking} status={character.rankingDataStatus} />
+          <RankingItem label="직업 전체" value={character.jobRanking} status={character.rankingDataStatus} />
         </div>
+        <RankingStatus character={character} />
       </div>
     </section>
   );
 }
 
-function RankingItem({ label, value }) {
+function formatTrillion(value) {
+  if (value === null || value === undefined || !Number.isFinite(Number(value))) return "자료 부족";
+  const n = Number(value) / 1_000_000_000_000;
+  return (Math.abs(n) >= 100 ? n.toFixed(0) : Math.abs(n) >= 10 ? n.toFixed(1) : n.toFixed(2)) + "조";
+}
+
+function FavoritesPanel({ favorites, current, onOpen, onRemove }) {
   return (
-    <div className="ranking-item">
-      <span>{label}</span>
-      <strong>{formatRanking(value)}</strong>
-    </div>
+    <section className="mgt-favorites-panel">
+      <div className="mgt-section-heading">
+        <div><span className="mgt-eyebrow">FAVORITES</span><h2>관심 캐릭터</h2></div>
+        <span>{favorites.length} / {MAX_FAVORITE_CHARACTERS}명</span>
+      </div>
+      {favorites.length ? (
+        <div className="mgt-favorites-list">
+          {favorites.map(item => {
+            const goal = item.ocid ? readGrowthGoals()[item.ocid] : null;
+            return (
+              <article className="mgt-favorite-card" key={favoriteKey(item)}>
+                <button type="button" className="mgt-favorite-open" onClick={() => onOpen(item)}>
+                  <span className="mgt-favorite-star">★</span>
+                  <span className="mgt-favorite-details">
+                    <strong>{item.name}</strong>
+                    <small>{item.worldName || "월드 정보 없음"}</small>
+                    {goal && <small className="mgt-favorite-goal">{goal.completedAt ? `목표 Lv.${goal.targetLevel} 달성` : `목표 Lv.${goal.targetLevel}`}</small>}
+                  </span>
+                </button>
+                <button type="button" className="mgt-favorite-remove" aria-label={item.name+" 관심 목록에서 제거"} onClick={() => onRemove(item)}>×</button>
+              </article>
+            );
+          })}
+        </div>
+      ) : <p className="mgt-favorites-empty">관심 캐릭터를 등록하면 이곳에서 빠르게 다시 조회할 수 있습니다.</p>}
+      {current && <p className="mgt-favorites-note">관심 캐릭터 목록은 기존 브라우저 저장 데이터와 공유됩니다.</p>}
+    </section>
   );
 }
 
 function App() {
-  const [name, setName] = useState("");
-  const [character, setCharacter] = useState(null);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState("");
-  const [lastSearched, setLastSearched] = useState("");
+  const restored = useMemo(() => readTrackerState(), []);
+  const [name,setName] = useState(restored?.character?.characterName || "");
+  const [character,setCharacter] = useState(restored?.character || null);
+  const [history,setHistory] = useState(Array.isArray(restored?.history) ? restored.history : []);
+  const [loading,setLoading] = useState(false);
+  const [error,setError] = useState("");
+  const [historyWarning,setHistoryWarning] = useState("");
+  const [lastSearched,setLastSearched] = useState("");
+  const [favorites,setFavorites] = useState(() => readFavorites());
+  const [favoriteFeedback,setFavoriteFeedback] = useState("");
+  const [exporting,setExporting] = useState("");
+  const resultRef = useRef(null);
 
-  async function handleSearch(event) {
-    event.preventDefault();
-    const query = name.trim();
-    if (!query || loading) return;
+  const isFavorite = useMemo(() => {
+    if (!character) return false;
+    const current = {ocid:String(character.ocid || ""),name:character.characterName,worldName:character.worldName || ""};
+    return favorites.some(item => favoriteKey(item) === favoriteKey(current));
+  },[favorites,character]);
 
+  useEffect(() => {
+    if (!character) return;
+    saveTrackerState({character,history});
+  },[character,history]);
+
+  const persistPatch = useCallback(patch => {
+    saveTrackerState(patch);
+  },[]);
+
+  const onStatsLoaded = useCallback(data => {
+    setCharacter(previous => {
+      if (!previous) return previous;
+      const next = {
+        ...previous,
+        bestCombatPower: data.bestCombatPower ?? previous.bestCombatPower ?? null,
+        bestCombatPowerObservedAt: data.bestCombatPowerObservedAt ?? previous.bestCombatPowerObservedAt ?? null,
+        bestPresetCombination: data.bestPresetCombination ?? previous.bestPresetCombination ?? null
+      };
+      saveTrackerState({character:next});
+      return next;
+    });
+  },[]);
+
+  async function searchName(query) {
+    const target = String(query || "").trim();
+    if (!target || loading) return;
+    setName(target);
     setLoading(true);
     setError("");
-    setCharacter(null);
-
+    setHistoryWarning("");
+    setLastSearched("");
     try {
-      const result = await getCharacter(query);
-      setCharacter(result);
-      setLastSearched(new Date().toLocaleTimeString("ko-KR", {
-        hour: "2-digit",
-        minute: "2-digit"
-      }));
+      const nextCharacter = await getCharacter(target,{refresh:true});
+      let historyResult;
+      try {
+        historyResult = await getHistory(target,{refresh:true});
+      } catch (historyError) {
+        historyResult = {history:[],dataStatus:"unavailable",historyStatus:"unavailable"};
+        setHistoryWarning(historyError.message || "성장 기록을 조회하지 못했습니다. 캐릭터 기본 정보는 표시합니다.");
+      }
+      const records = Array.isArray(historyResult.history) ? historyResult.history : [];
+      nextCharacter.historyStatus = historyResult.historyStatus || null;
+      nextCharacter.historyDataStatus = historyResult.dataStatus || null;
+      nextCharacter.historyDataAsOf = historyResult.dataAsOf || null;
+      nextCharacter.historyStorage = historyResult.historyStorage || null;
+      setCharacter(nextCharacter);
+      setHistory(records);
+      setLastSearched(new Date().toLocaleTimeString("ko-KR",{hour:"2-digit",minute:"2-digit"}));
+      saveTrackerState({
+        character:nextCharacter,
+        history:records,
+        aiAnalysis:null,
+        aiInsights:null,
+        comparison:null,
+        historyRange:7,
+        displayHistory:records,
+        historyRangeStatus:null,
+        periodSummary:null
+      });
     } catch (requestError) {
-      setError(requestError instanceof Error
-        ? requestError.message
-        : "캐릭터 정보를 불러오지 못했습니다.");
+      setError(requestError.message || "캐릭터 정보를 불러오지 못했습니다.");
     } finally {
       setLoading(false);
     }
   }
 
+  async function handleSearch(event) {
+    event.preventDefault();
+    await searchName(name);
+  }
+
+  async function refreshCurrent() {
+    if (character?.characterName) await searchName(character.characterName);
+  }
+
+  function toggleFavorite() {
+    if (!character) return;
+    const current = {
+      ocid:String(character.ocid || ""),
+      name:character.characterName,
+      worldName:character.worldName || ""
+    };
+    const exists = favorites.some(item => favoriteKey(item) === favoriteKey(current));
+    const next = exists
+      ? favorites.filter(item => favoriteKey(item) !== favoriteKey(current))
+      : [current,...favorites].slice(0,MAX_FAVORITE_CHARACTERS);
+    if (!exists && favorites.length >= MAX_FAVORITE_CHARACTERS) {
+      setFavoriteFeedback(`관심 캐릭터는 최대 ${MAX_FAVORITE_CHARACTERS}명까지 저장할 수 있습니다.`);
+      return;
+    }
+    if (!saveFavorites(next)) {
+      setFavoriteFeedback("브라우저 저장소를 사용할 수 없어 관심 캐릭터를 저장하지 못했습니다.");
+      return;
+    }
+    setFavorites(next);
+    setFavoriteFeedback(exists ? `${current.name} 캐릭터를 관심 목록에서 제거했습니다.` : `${current.name} 캐릭터를 관심 목록에 저장했습니다.`);
+  }
+
+  function removeFavorite(item) {
+    const next = favorites.filter(saved => favoriteKey(saved) !== favoriteKey(item));
+    if (!saveFavorites(next)) {
+      setFavoriteFeedback("관심 캐릭터를 제거하지 못했습니다.");
+      return;
+    }
+    setFavorites(next);
+    setFavoriteFeedback(item.name+" 캐릭터를 관심 목록에서 제거했습니다.");
+  }
+
+  async function exportImage() {
+    if (!resultRef.current) return;
+    setExporting("image");
+    try {
+      const canvas = await html2canvas(resultRef.current,{
+        backgroundColor:"#10101a",
+        scale:2,
+        useCORS:true,
+        ignoreElements:element => element.dataset?.exportIgnore === "true"
+      });
+      const link = document.createElement("a");
+      link.download = "maple-growth-"+(character?.characterName || "character")+".png";
+      link.href = canvas.toDataURL("image/png");
+      link.click();
+    } catch (exportError) {
+      setError(exportError.message || "이미지 저장 중 오류가 발생했습니다.");
+    } finally {
+      setExporting("");
+    }
+  }
+
+  async function exportPdf() {
+    if (!resultRef.current) return;
+    setExporting("pdf");
+    try {
+      const canvas = await html2canvas(resultRef.current,{
+        backgroundColor:"#10101a",
+        scale:2,
+        useCORS:true,
+        ignoreElements:element => element.dataset?.exportIgnore === "true"
+      });
+      const imageData = canvas.toDataURL("image/png");
+      const pdf = new jsPDF({orientation:"portrait",unit:"mm",format:"a4"});
+      const pageWidth = pdf.internal.pageSize.getWidth();
+      const pageHeight = pdf.internal.pageSize.getHeight();
+      const margin = 10;
+      const availableWidth = pageWidth - margin * 2;
+      const imageHeight = canvas.height * availableWidth / canvas.width;
+      let heightLeft = imageHeight;
+      let position = margin;
+      pdf.addImage(imageData,"PNG",margin,position,availableWidth,imageHeight);
+      heightLeft -= pageHeight - margin * 2;
+      while (heightLeft > 0) {
+        position = -(imageHeight - heightLeft) + margin;
+        pdf.addPage();
+        pdf.addImage(imageData,"PNG",margin,position,availableWidth,imageHeight);
+        heightLeft -= pageHeight - margin * 2;
+      }
+      pdf.save("maple-growth-"+(character?.characterName || "character")+".pdf");
+    } catch (exportError) {
+      setError(exportError.message || "PDF 저장 중 오류가 발생했습니다.");
+    } finally {
+      setExporting("");
+    }
+  }
+
   return (
-    <div className="app-shell" data-testid="react-preview-ready">
-      <header className="topbar">
-        <a className="brand" href="/" aria-label="기존 Maple Growth Tracker 메인으로 이동">
-          <span className="brand-mark">M</span>
-          <span className="brand-name">MAPLE <b>GROWTH</b></span>
+    <div className="mgt-app-shell" data-testid="react-preview-ready">
+      <header className="mgt-topbar">
+        <a className="mgt-brand" href="/" aria-label="Maple Growth Tracker 메인">
+          <span className="mgt-brand-mark">M</span>
+          <span>MAPLE <b>GROWTH</b></span>
         </a>
-        <nav className="topbar-links" aria-label="상단 메뉴">
-          <a href="/">기존 서비스</a>
+        <nav className="mgt-nav" aria-label="주요 메뉴">
+          <a href="#character">캐릭터</a>
+          <a href="#details">스펙</a>
+          <a href="#growth">성장 기록</a>
+          <a href="#analytics">AI 분석</a>
           <a href="/admin/login">관리자</a>
         </nav>
       </header>
 
-      <main className="page-content">
-        <section className="hero">
-          <div className="hero-copy">
-            <div className="hero-label"><span /> PHASE 7 · REACT PREVIEW</div>
-            <h1>캐릭터의 성장을<br /><em>한눈에</em> 기록하다.</h1>
-            <p>
-              캐릭터 정보를 불러와 성장 흐름을 살펴보는 개인 대시보드입니다.
-              현재는 프런트엔드 전환의 첫 단계로 기본 프로필과 랭킹 조회를 연결했습니다.
-            </p>
+      <main className="mgt-page-content">
+        <section className="mgt-hero">
+          <div>
+            <div className="mgt-hero-label"><span /> CHARACTER GROWTH DASHBOARD</div>
+            <h1>모험가의 성장을<br /><em>기록하고 분석하다.</em></h1>
+            <p>Nexon Open API 기반의 캐릭터 정보, 성장 통계, 스펙과 프리셋을 하나의 대시보드에서 확인하세요.</p>
           </div>
-          <div className="hero-ornament" aria-hidden="true">
-            <div className="orbit orbit-one" />
-            <div className="orbit orbit-two" />
-            <div className="orbit-core">M</div>
-            <span className="spark spark-one">✦</span>
-            <span className="spark spark-two">✧</span>
+          <div className="mgt-hero-ornament" aria-hidden="true">
+            <span className="mgt-orbit mgt-orbit-one" />
+            <span className="mgt-orbit mgt-orbit-two" />
+            <span className="mgt-orbit-core">M</span>
+            <i>✦</i><b>✧</b>
           </div>
         </section>
 
-        <section className="search-panel" aria-labelledby="search-title">
-          <div className="search-heading">
-            <div>
-              <span className="eyebrow">CHARACTER SEARCH</span>
-              <h2 id="search-title">모험가 찾기</h2>
-            </div>
-            <span className="api-indicator"><i /> NEXON OPEN API</span>
+        <FavoritesPanel favorites={favorites} current={character} onOpen={item => searchName(item.name)} onRemove={removeFavorite} />
+
+        <section className="mgt-search-panel" aria-labelledby="mgt-search-title">
+          <div className="mgt-search-heading">
+            <div><span className="mgt-eyebrow">CHARACTER SEARCH</span><h2 id="mgt-search-title">모험가 찾기</h2></div>
+            <span className="mgt-api-indicator"><i /> NEXON OPEN API</span>
           </div>
-          <form className="search-form" onSubmit={handleSearch} data-testid="react-character-search">
+          <form className="mgt-search-form" onSubmit={handleSearch} data-testid="react-character-search">
             <label className="sr-only" htmlFor="react-character-name">캐릭터명</label>
-            <input
-              id="react-character-name"
-              value={name}
-              onChange={(event) => setName(event.target.value)}
-              placeholder="조회할 캐릭터명을 입력하세요"
-              autoComplete="off"
-              maxLength={30}
-            />
-            <button type="submit" disabled={loading || !name.trim()}>
-              {loading ? "조회 중..." : "캐릭터 조회"}
-              <span aria-hidden="true">→</span>
-            </button>
+            <input id="react-character-name" value={name} onChange={event=>setName(event.target.value)}
+              placeholder="조회할 캐릭터명을 입력하세요" autoComplete="off" maxLength={30} />
+            <button type="submit" disabled={loading || !name.trim()}>{loading ? "조회 중..." : "캐릭터 조회"} <span>→</span></button>
           </form>
-          <div className="search-footnote">
-            <span>⌕</span> 넥슨 Open API에서 제공하는 최신 공개 데이터를 조회합니다.
-          </div>
-          {error && <p className="error-message" role="alert">{error}</p>}
+          <div className="mgt-search-footnote">넥슨 Open API에서 최신 공개 데이터를 다시 조회합니다.</div>
+          {error && <p className="mgt-error" role="alert">{error}</p>}
+          {favoriteFeedback && <p className="mgt-feedback" role="status">{favoriteFeedback}</p>}
+          {historyWarning && <p className="mgt-warning" role="status">{historyWarning}</p>}
         </section>
 
-        {loading && (
-          <div className="feedback-panel" role="status">
-            <span className="loading-orb" />
-            캐릭터 정보를 불러오고 있습니다.
-          </div>
-        )}
+        {loading && <div className="mgt-loading" role="status"><span /> 캐릭터 정보를 불러오고 있습니다.</div>}
 
-        {character && !loading && (
+        {character && (
           <>
-            <div className="result-toolbar">
-              <div><span className="live-dot" /> 조회 완료 <span className="muted">· {lastSearched}</span></div>
-              <span>캐릭터 기본 정보</span>
+            <div className="mgt-result-toolbar">
+              <span><i /> 조회 완료{lastSearched ? " · "+lastSearched : ""}</span>
+              <div className="mgt-export-actions" data-export-ignore="true">
+                <button type="button" className="export-button" onClick={refreshCurrent} disabled={loading}>최신 정보 다시 조회</button>
+                <button type="button" className="export-button" onClick={exportImage} disabled={!!exporting}>{exporting === "image" ? "저장 중..." : "이미지 저장"}</button>
+                <button type="button" className="export-button" onClick={exportPdf} disabled={!!exporting}>{exporting === "pdf" ? "생성 중..." : "PDF 저장"}</button>
+              </div>
             </div>
-            <CharacterResult character={character} />
-            <section className="next-stage-panel">
-              <span className="eyebrow">NEXT MIGRATION</span>
-              <h3>성장 기록과 캐릭터 상세 정보는 다음 단계에서 연결합니다.</h3>
-              <p>
-                기존 서비스의 성장 기록, AI 분석, 프리셋, 장비 툴팁은 그대로 보존되어 있습니다.
-                기능별 검증이 끝나는 순서대로 이 화면에 옮길 예정입니다.
-              </p>
-              <a href="/">기존 전체 기능 사용하기 <span aria-hidden="true">↗</span></a>
-            </section>
+
+            <div ref={resultRef} className="mgt-result-content">
+              <div id="character">
+                <CharacterProfile character={character} history={history} onToggleFavorite={toggleFavorite} isFavorite={isFavorite} />
+              </div>
+              <div id="details">
+                <CharacterDetails ocid={character.ocid} onStatsLoaded={onStatsLoaded} />
+              </div>
+              <div id="growth">
+                <GrowthDashboard character={character} history={history} onHistoryChange={setHistory} onPersist={persistPatch} />
+              </div>
+              <div id="analytics">
+                <AIReport character={character} history={history} />
+                <GrowthComparison
+                  character={character}
+                  history={history}
+                  initialState={restored?.comparison}
+                  onSave={persistPatch}
+                />
+              </div>
+            </div>
           </>
         )}
 
-        {!character && !loading && !error && (
-          <section className="empty-state">
-            <div className="empty-emblem">✧</div>
-            <span className="eyebrow">YOUR ADVENTURE LOG</span>
-            <h3>성장 기록을 시작해 보세요.</h3>
-            <p>캐릭터명을 검색하면 현재 레벨과 랭킹 정보를 이곳에서 확인할 수 있습니다.</p>
+        {!character && !loading && (
+          <section className="mgt-empty-state">
+            <span className="mgt-empty-emblem">✧</span>
+            <span className="mgt-eyebrow">YOUR ADVENTURE LOG</span>
+            <h2>성장 기록을 시작해 보세요.</h2>
+            <p>캐릭터를 조회하면 프로필, 실시간 공개 랭킹, 장비·능력치, 성장 기록과 AI 분석이 표시됩니다.</p>
           </section>
         )}
 
-        <footer className="page-footer">
+        <footer className="mgt-footer">
           <span>MAPLE GROWTH TRACKER</span>
-          <span>Powered by NEXON Open API · React Preview</span>
+          <span>Powered by NEXON Open API · Flask · React</span>
+          <a href="/admin/login">관리자</a>
         </footer>
       </main>
     </div>
