@@ -416,6 +416,16 @@ Render에 Flask 애플리케이션으로 배포했습니다.
 - `.env` 대신 Render의 Environment Variables에 위의 환경변수를 등록합니다. (`NEXON_API_KEY`, `GEMINI_API_KEY`, `OPENROUTER_API_KEY`, 관리자 계정 관련 값 등)
 - 관리자 로그는 `GROWTH_DATABASE_URL`이 설정된 경우 Supabase PostgreSQL의 `action_logs` 테이블에 저장합니다. 연결이 없으면 개발용 SQLite를 사용하며, 영구 저장 여부는 관리자 로그 화면의 저장 상태를 확인합니다.
 
+### React 프론트엔드 빌드 및 미리보기
+
+React 전환 브랜치에서는 기존 Flask 백엔드와 `/` 레거시 화면을 유지하면서 `/preview/`에서 React 화면을 검증합니다. Render의 **Build Command**에는 Python 의존성 설치와 Vite 빌드를 함께 실행하도록 설정해야 합니다.
+
+```bash
+pip install -r requirements.txt && npm --prefix frontend install --no-audit --no-fund && npm --prefix frontend run build
+```
+
+빌드 산출물은 `static/react-preview/`에 생성됩니다. 빌드가 수행되지 않으면 `/preview/`는 준비되지 않은 상태(503)를 반환하며, 기존 `/` 화면에는 영향을 주지 않습니다. React 화면의 기능 검증과 운영 배포 확인이 끝나기 전에는 기존 메인 화면을 교체하지 않습니다.
+
 ---
 
 ## 프로젝트에서 배운 점
