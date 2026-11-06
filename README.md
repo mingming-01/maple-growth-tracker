@@ -416,15 +416,24 @@ Render에 Flask 애플리케이션으로 배포했습니다.
 - `.env` 대신 Render의 Environment Variables에 위의 환경변수를 등록합니다. (`NEXON_API_KEY`, `GEMINI_API_KEY`, `OPENROUTER_API_KEY`, 관리자 계정 관련 값 등)
 - 관리자 로그는 `GROWTH_DATABASE_URL`이 설정된 경우 Supabase PostgreSQL의 `action_logs` 테이블에 저장합니다. 연결이 없으면 개발용 SQLite를 사용하며, 영구 저장 여부는 관리자 로그 화면의 저장 상태를 확인합니다.
 
-### React 프론트엔드 빌드 및 미리보기
+### React 프론트엔드 운영 전환
 
-React 전환 브랜치에서는 기존 Flask 백엔드와 `/` 레거시 화면을 유지하면서 `/preview/`에서 React 화면을 검증합니다. Render의 **Build Command**에는 Python 의존성 설치와 Vite 빌드를 함께 실행하도록 설정해야 합니다.
+React/Vite 프론트엔드가 기본 메인 화면입니다. Flask 백엔드, Nexon API, AI 서비스, DB 및 관리자 인증은 그대로 유지합니다.
+
+Render 서비스의 **Build Command**를 다음 명령으로 설정해야 React 정적 파일이 배포됩니다.
 
 ```bash
 pip install -r requirements.txt && npm --prefix frontend install --no-audit --no-fund && npm --prefix frontend run build
 ```
 
-빌드 산출물은 `static/react-preview/`에 생성됩니다. 빌드가 수행되지 않으면 `/preview/`는 준비되지 않은 상태(503)를 반환하며, 기존 `/` 화면에는 영향을 주지 않습니다. React 화면의 기능 검증과 운영 배포 확인이 끝나기 전에는 기존 메인 화면을 교체하지 않습니다.
+- 빌드 산출물은 `static/react-preview/`에 생성됩니다.
+- 빌드 산출물이 존재하면 `/`에서 React 화면을 제공합니다.
+- 빌드 산출물이 아직 없으면 `/`는 기존 Flask 화면으로 자동 폴백합니다. 빌드 누락만으로 운영 메인 페이지가 빈 화면이 되지 않도록 한 안전장치입니다.
+- 기존 Vanilla JS 화면은 `/legacy/`에서 계속 접근할 수 있습니다.
+- `/preview/`는 React 검증용 별도 경로로 유지됩니다.
+- React 빌드의 정적 자산은 `/static/react-preview/`에서 제공하므로 메인 경로와 미리보기 경로에서 동일하게 동작합니다.
+
+Render Build Command 변경 후 재배포하고 `/`, `/preview/`, `/legacy/`를 확인하세요.
 
 ---
 
