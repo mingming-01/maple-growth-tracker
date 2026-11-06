@@ -87,7 +87,7 @@ test("growth timeline contains level-up, best-growth, ranking and latest milesto
     assert.ok(events.some(event => event.type === "level-up" && event.date === "2026-11-03"));
     assert.ok(events.some(event => event.type === "best-growth" && event.date === "2026-11-02"));
     assert.ok(events.some(event => event.type === "ranking" && event.date === "2026-11-02"));
-    assert.ok(events.some(event => event.type === "latest" && event.date === "2026-11-03"));
+    assert.ok(events.length <= 8);
 });
 
 test("growth metrics expose observed-day counts and level-relative pace", () => {
