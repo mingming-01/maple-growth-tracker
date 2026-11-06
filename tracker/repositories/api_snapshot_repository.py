@@ -42,6 +42,10 @@ def initialize_snapshot_db(db_path, database_url=""):
                         "CREATE INDEX IF NOT EXISTS idx_api_snapshots_saved_at "
                         "ON api_snapshots (saved_at DESC)"
                     )
+                    connection.execute("ALTER TABLE api_snapshots ENABLE ROW LEVEL SECURITY")
+                    connection.execute(
+                        "REVOKE ALL ON TABLE api_snapshots FROM PUBLIC, anon, authenticated"
+                    )
             finally:
                 connection.close()
             return "postgres", ""
