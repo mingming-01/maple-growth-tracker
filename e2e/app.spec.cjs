@@ -344,7 +344,7 @@ test("character details automatically open the game-style stat window", async ({
   await expect(page.locator("#characterDetailsContent .game-hexa-stat-columns")).toContainText("크리티컬 데미지");
   await expect(page.locator("#characterDetailsContent .game-hexa-stat-columns")).toContainText("보스 데미지");
   await expect(page.locator("#characterDetailsContent .game-hexa-stat-columns")).toContainText("방어율 무시");
-  await expect(page.locator("#characterDetailsContent .game-hexa-stat-entry")).not.toContainText("슬롯 1");
+  await expect(page.locator("#characterDetailsContent .game-hexa-stat-columns")).not.toContainText("슬롯 1");
 
   await page.locator('[data-detail-tab="union"]').click();
   await expect(page.locator("#characterDetailsContent")).toContainText("유니온 스탯 투자");
