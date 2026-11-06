@@ -435,7 +435,7 @@ function renderLinkSection(data) {
 }
 function unionEffectTile(effect,index) {
     const raw=String(effect??"").trim();
-    const match=raw.match(/^(.+?)\\s+([+-]?\\d+(?:\\.\\d+)?%?)\\s*증가$/);
+    const match=raw.match(new RegExp("^(.+?)\\s+([+-]?\\d+(?:\\.\\d+)?%?)\\s*증가$"));
     const tile=el("article","game-union-state-stat");
     tile.append(
         el("span","game-union-state-index",String(index+1).padStart(2,"0")),
