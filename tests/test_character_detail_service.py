@@ -246,11 +246,11 @@ class CharacterDetailServiceTests(unittest.TestCase):
         }
 
         def fake_request(endpoint, params):
-            self.assertEqual(params.get("ocid"), "sample-ocid")
+            self.assertEqual(params.get("ocid"), "sample-union-ocid")
             return payloads[endpoint]
 
         with patch("tracker.services.character_detail_service.request_nexon_api", side_effect=fake_request):
-            result = get_character_detail_section("sample-ocid", "union")
+            result = get_character_detail_section("sample-union-ocid", "union")
 
         self.assertEqual(result["status"], "available")
         sources = {source["id"]: source for source in result["sources"]}
