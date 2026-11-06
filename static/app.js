@@ -8,7 +8,9 @@ import {
     getRankingChange,
     calculatePrediction,
     formatLocalISODate,
-    calculateGrowthMetrics
+    calculateLevelProgress,
+    calculateGrowthMetrics,
+    buildGrowthTimeline
 } from "./js/growth.js";
 
 const searchForm = document.getElementById("searchForm");
@@ -428,6 +430,26 @@ function renderCharacter(character, history) {
     if (guildName) guildName.textContent = character.guildName || "길드 없음";
     if (levelValue) levelValue.textContent = character.level !== undefined && character.level !== null ? formatNumber(character.level) : "-";
     if (experienceRate) experienceRate.textContent = formatPercent(character.experienceRate);
+    const progressRate = Number(String(character.experienceRate ?? "").replace("%", ""));
+    const progressTrack = document.getElementById("levelProgressTrack");
+    const progressFill = document.getElementById("levelProgressFill");
+    const progressRemaining = document.getElementById("levelProgressRemaining");
+    const progressDaily = document.getElementById("levelProgressDaily");
+    const hasProgress = Number.isFinite(progressRate) && progressRate >= 0 && progressRate <= 100;
+    if (progressTrack) {
+        progressTrack.setAttribute("aria-valuenow", hasProgress ? String(progressRate) : "0");
+        progressTrack.setAttribute("aria-valuetext", hasProgress ? `${progressRate.toFixed(3)}%` : "경험치 진행률 자료 없음");
+    }
+    if (progressFill) progressFill.style.width = hasProgress ? `${progressRate}%` : "0%";
+    if (progressRemaining) {
+        progressRemaining.textContent = hasProgress ? `다음 레벨까지 ${Math.max(0, 100 - progressRate).toFixed(3)}%` : "진행률 자료 없음";
+    }
+    const levelProgress = calculateGrowthMetrics(character, history || []).levelProgress;
+    if (progressDaily) {
+        progressDaily.textContent = levelProgress?.dailyProgressRate !== null && levelProgress?.dailyProgressRate !== undefined
+            ? `최근 관측 평균 +${levelProgress.dailyProgressRate.toFixed(4)}%p / 일`
+            : "성장 기록이 쌓이면 일일 레벨 진척을 계산합니다.";
+    }
     if (averageDailyExperience) {
         const average = history?.length ? calculateAverageGrowth(history) : null;
         averageDailyExperience.textContent = average !== null ? formatTrillion(average) : "-";
@@ -675,32 +697,61 @@ function showAICacheNotice(element, message, type = "info") {
 
 function buildCumulativeExperienceData(history) {
     const sorted = sortHistoryAscending(history);
-    let cumulativeExperience = null;
-    return sorted.map((item, index) => {
-        const currentExperience = item.experience === null || item.experience === undefined
+    let cumulativeExperience = 0;
+    return sorted.map(item => {
+        const hasExperience = item.experience !== null && item.experience !== undefined &&
+            Number.isFinite(Number(item.experience));
+        const isAvailable = !item.recordStatus || item.recordStatus === "available";
+        if (!hasExperience || !isAvailable) return null;
+
+        const change = item.experienceChange === null || item.experienceChange === undefined
             ? NaN
-            : Number(item.experience);
-        if (!Number.isFinite(currentExperience)) {
-            cumulativeExperience = null;
-            return null;
+            : Number(item.experienceChange);
+        // 레벨업 경계와 누락 구간은 추정하지 않고, 확인된 날짜 간 변화만 누적한다.
+        if (Number.isFinite(change) && item.levelUp !== true) {
+            cumulativeExperience += change / 1_000_000_000_000;
         }
-        if (cumulativeExperience === null) {
-            cumulativeExperience = currentExperience / 1_000_000_000_000;
-            return cumulativeExperience;
-        }
-        const previous = sorted[index - 1];
-        const previousExperience = previous?.experience === null || previous?.experience === undefined
-            ? NaN
-            : Number(previous.experience);
-        if (!Number.isFinite(previousExperience)) return cumulativeExperience;
-        if (item.levelUp === true || (Number.isFinite(Number(item.level)) && Number.isFinite(Number(previous?.level)) && Number(item.level) > Number(previous.level))) return cumulativeExperience;
-        const difference = currentExperience - previousExperience;
-        if (difference > 0) cumulativeExperience += difference / 1_000_000_000_000;
         return cumulativeExperience;
     });
 }
 
+function renderGrowthTimeline(history) {
+    const list = document.getElementById("growthTimelineList");
+    if (!list) return;
+    list.replaceChildren();
+    const events = buildGrowthTimeline(history, 8);
+    if (!events.length) {
+        const empty = document.createElement("li");
+        empty.className = "growth-timeline-empty";
+        empty.textContent = "기록이 쌓이면 레벨업과 주요 성장 기록이 여기에 표시됩니다.";
+        list.appendChild(empty);
+        return;
+    }
+    events.forEach(event => {
+        const item = document.createElement("li");
+        item.className = `growth-timeline-item is-${event.type}`;
+        const marker = document.createElement("span");
+        marker.className = "growth-timeline-marker";
+        marker.setAttribute("aria-hidden", "true");
+        const body = document.createElement("div");
+        body.className = "growth-timeline-body";
+        const date = document.createElement("time");
+        date.className = "growth-timeline-date";
+        date.textContent = formatDate(event.date);
+        const title = document.createElement("strong");
+        title.className = "growth-timeline-title";
+        title.textContent = event.title;
+        const description = document.createElement("p");
+        description.className = "growth-timeline-description";
+        description.textContent = event.description;
+        body.append(date, title, description);
+        item.append(marker, body);
+        list.appendChild(item);
+    });
+}
+
 function renderChart(history) {
+    renderGrowthTimeline(history);
     const canvas = document.getElementById("growthChart");
     if (!canvas) return;
     const sorted = sortHistoryAscending(history);
@@ -712,8 +763,10 @@ function renderChart(history) {
     const labels = sorted.map(item => formatShortDate(item.date));
     const experienceData = buildCumulativeExperienceData(sorted);
     const dailyGrowthData = sorted.map(item => {
+        if (item.recordStatus && item.recordStatus !== "available") return null;
+        if (item.experienceChange === null || item.experienceChange === undefined) return null;
         const value = Number(item.experienceChange);
-        return Number.isFinite(value) && value > 0 ? value / 1_000_000_000_000 : null;
+        return Number.isFinite(value) ? value / 1_000_000_000_000 : null;
     });
     const levelUpData = experienceData.map((value, index) => sorted[index]?.levelUp === true ? value : null);
     growthChart = new Chart(canvas.getContext("2d"), {
@@ -721,8 +774,8 @@ function renderChart(history) {
         data: {
             labels,
             datasets: [
-                { label: "누적 경험치", data: experienceData, yAxisID: "experience", borderWidth: 3, tension: 0, pointRadius: 4, pointHoverRadius: 6, fill: false },
-                { label: "일일 상승량", data: dailyGrowthData, yAxisID: "dailyGrowth", borderWidth: 2, borderDash: [7, 6], tension: 0, pointRadius: 3, pointHoverRadius: 5, fill: false },
+                { label: "관측 누적 증가량", data: experienceData, yAxisID: "experience", borderWidth: 3, tension: 0, pointRadius: 4, pointHoverRadius: 6, fill: false },
+                { label: "일일 순증가량", data: dailyGrowthData, yAxisID: "dailyGrowth", borderWidth: 2, borderDash: [7, 6], tension: 0, pointRadius: 3, pointHoverRadius: 5, fill: false },
                 { label: "레벨업", data: levelUpData, yAxisID: "experience", showLine: false, pointStyle: "star", pointRadius: 9, pointHoverRadius: 12, pointBackgroundColor: "#f5c542", pointBorderColor: "#d89f00", pointBorderWidth: 2, borderWidth: 0, fill: false }
             ]
         },
@@ -746,8 +799,8 @@ function renderChart(history) {
                             }
                             const value = context.parsed.y;
                             if (value === null || value === undefined) return "";
-                            if (context.dataset.label === "누적 경험치") return `누적 경험치: ${value.toFixed(1)}조`;
-                            if (context.dataset.label === "일일 상승량") return `일일 상승량: ${value.toFixed(1)}조`;
+                            if (context.dataset.label === "관측 누적 증가량") return `관측 누적 증가량: ${value.toFixed(1)}조`;
+                            if (context.dataset.label === "일일 순증가량") return `일일 순증가량: ${value.toFixed(1)}조`;
                             return "";
                         }
                     }
@@ -756,12 +809,12 @@ function renderChart(history) {
             scales: {
                 experience: {
                     type: "linear", position: "left", beginAtZero: false,
-                    title: { display: true, text: "누적 경험치" },
+                    title: { display: true, text: "관측 누적 증가량" },
                     ticks: { callback: value => `${Number(value).toFixed(0)}조` }
                 },
                 dailyGrowth: {
                     type: "linear", position: "right", beginAtZero: true,
-                    title: { display: true, text: "일일 상승량" },
+                    title: { display: true, text: "일일 순증가량" },
                     grid: { drawOnChartArea: false },
                     ticks: { callback: value => `${Number(value).toFixed(0)}조` }
                 }
@@ -878,24 +931,30 @@ async function collectArchiveRange(days, character, progressElement = null, labe
 function summarizePeriod(history, days) {
     const records = sortHistoryAscending(Array.isArray(history) ? history : []);
     const available = records.filter(item =>
-        item.recordStatus === "available" &&
+        (!item.recordStatus || item.recordStatus === "available") &&
         item.experience !== null &&
         item.experience !== undefined &&
         Number.isFinite(Number(item.experience))
     );
-    const confirmedChanges = records.filter(item =>
-        item.recordStatus === "available" &&
-        item.experienceChange !== null &&
-        item.experienceChange !== undefined &&
-        Number.isFinite(Number(item.experienceChange))
-    );
+    const confirmedChanges = records
+        .map(item => ({
+            item,
+            value: item.experienceChange === null || item.experienceChange === undefined
+                ? null
+                : Number(item.experienceChange)
+        }))
+        .filter(entry => (!entry.item.recordStatus || entry.item.recordStatus === "available") &&
+            entry.value !== null && Number.isFinite(entry.value));
     const growth = confirmedChanges.length
-        ? confirmedChanges.reduce((sum, item) => sum + Number(item.experienceChange), 0)
+        ? confirmedChanges.reduce((sum, item) => sum + item.value, 0)
         : null;
     const averageGrowth = growth !== null ? growth / confirmedChanges.length : null;
+    const positiveChanges = confirmedChanges.filter(entry => entry.value > 0);
+    const bestGrowth = positiveChanges.reduce((best, entry) =>
+        !best || entry.value > best.value ? entry : best, null);
 
     const ranked = records.filter(item =>
-        item.recordStatus === "available" &&
+        (!item.recordStatus || item.recordStatus === "available") &&
         item.ranking !== null &&
         item.ranking !== undefined &&
         Number.isFinite(Number(item.ranking))
@@ -903,6 +962,12 @@ function summarizePeriod(history, days) {
     const rankingChange = ranked.length >= 2
         ? Number(ranked[0].ranking) - Number(ranked[ranked.length - 1].ranking)
         : null;
+    const levelUps = records.filter((item, index) => {
+        const previousLevel = Number(records[index - 1]?.level);
+        const currentLevel = Number(item.level);
+        return item.levelUp === true ||
+            (Number.isFinite(previousLevel) && Number.isFinite(currentLevel) && currentLevel > previousLevel);
+    });
 
     const availableDays = records.filter(item => item.recordStatus === "available").length;
     const notReadyDays = records.filter(item => item.recordStatus === "not_ready").length;
@@ -917,6 +982,13 @@ function summarizePeriod(history, days) {
         growth,
         confirmedChangeDays: confirmedChanges.length,
         averageGrowth,
+        bestDailyGrowth: bestGrowth?.value ?? null,
+        bestDailyGrowthDate: bestGrowth?.item.date ?? null,
+        growthDays: positiveChanges.length,
+        zeroGrowthDays: confirmedChanges.filter(entry => entry.value === 0).length,
+        negativeGrowthDays: confirmedChanges.filter(entry => entry.value < 0).length,
+        levelUpCount: levelUps.length,
+        levelUpDates: levelUps.map(item => item.date),
         rankingChange,
         availableDays,
         notReadyDays,
@@ -931,21 +1003,24 @@ function buildPeriodSummary(currentData, previousData, previousUnavailable = fal
     summary.endDate = currentData.endDate || summary.endDate;
     summary.previousUnavailable = previousUnavailable;
     summary.previousGrowth = null;
+    summary.previousAverageGrowth = null;
     summary.previousGrowthSamples = 0;
     summary.comparisonPercent = null;
 
     if (previousData) {
         const previous = summarizePeriod(previousData.history, previousData.days);
         summary.previousGrowth = previous.growth;
+        summary.previousAverageGrowth = previous.averageGrowth;
         summary.previousGrowthSamples = previous.confirmedChangeDays;
+        // 기록 누락으로 관측일 수가 다를 수 있으므로 총합이 아닌 관측 구간 평균으로 비교한다.
         if (
-            summary.growth !== null &&
-            previous.growth !== null &&
-            previous.confirmedChangeDays > 0 &&
-            Math.abs(previous.growth) > 0
+            summary.averageGrowth !== null &&
+            previous.averageGrowth !== null &&
+            previous.averageGrowth !== 0 &&
+            previous.confirmedChangeDays > 0
         ) {
             summary.comparisonPercent = (
-                (summary.growth - previous.growth) / Math.abs(previous.growth)
+                (summary.averageGrowth - previous.averageGrowth) / Math.abs(previous.averageGrowth)
             ) * 100;
         }
     }
@@ -974,7 +1049,7 @@ function renderPeriodSummary(summary) {
     }
     if (periodGrowthDetail) {
         periodGrowthDetail.textContent = summary.confirmedChangeDays
-            ? `연속 기록 ${summary.confirmedChangeDays}일의 증가량 합계`
+            ? `연속 관측 ${summary.confirmedChangeDays}개 구간의 순증가량 합계`
             : "연속된 날짜의 증가량을 확인할 수 없습니다.";
     }
 
@@ -986,7 +1061,7 @@ function renderPeriodSummary(summary) {
     }
     if (periodAverageDetail) {
         periodAverageDetail.textContent = summary.confirmedChangeDays
-            ? `증가량 확인 ${summary.confirmedChangeDays}일 기준`
+            ? `변화 확인 ${summary.confirmedChangeDays}개 구간 기준`
             : "비교 가능한 일일 변화 기록이 없습니다.";
     }
 
@@ -1022,8 +1097,8 @@ function renderPeriodSummary(summary) {
     if (periodComparisonDetail) {
         if (summary.previousUnavailable) {
             periodComparisonDetail.textContent = "직전 기간 기록을 불러오지 못했습니다.";
-        } else if (summary.previousGrowth !== null && summary.previousGrowthSamples > 0) {
-            periodComparisonDetail.textContent = `직전 확인 증가량 ${formatTrillion(summary.previousGrowth)}`;
+        } else if (summary.previousAverageGrowth !== null && summary.previousGrowthSamples > 0) {
+            periodComparisonDetail.textContent = `직전 관측 구간 평균 ${formatTrillion(summary.previousAverageGrowth)}`;
         } else {
             periodComparisonDetail.textContent = "직전 기간의 연속 기록이 부족합니다.";
         }
@@ -1036,11 +1111,31 @@ function renderPeriodSummary(summary) {
         periodCoverageDetail.textContent =
             `API 미제공 ${summary.notReadyDays}일 · 미수집 ${summary.notCollectedDays}일`;
     }
+
+    const bestValue = document.getElementById("periodBestGrowthValue");
+    const bestDetail = document.getElementById("periodBestGrowthDetail");
+    const activeValue = document.getElementById("periodActiveDaysValue");
+    const activeDetail = document.getElementById("periodActiveDaysDetail");
+    const levelUpValue = document.getElementById("periodLevelUpsValue");
+    const levelUpDetail = document.getElementById("periodLevelUpsDetail");
+    if (bestValue) bestValue.textContent = summary.bestDailyGrowth === null ? "자료 부족" : formatTrillion(summary.bestDailyGrowth);
+    if (bestDetail) bestDetail.textContent = summary.bestDailyGrowthDate
+        ? `최고 성장일 · ${formatDate(summary.bestDailyGrowthDate)}`
+        : "확인된 양수 성장 기록이 없습니다.";
+    if (activeValue) activeValue.textContent = `${summary.growthDays}일`;
+    if (activeDetail) activeDetail.textContent =
+        `정체 ${summary.zeroGrowthDays}일 · 감소 ${summary.negativeGrowthDays}일`;
+    if (levelUpValue) levelUpValue.textContent = `${summary.levelUpCount}회`;
+    if (levelUpDetail) levelUpDetail.textContent = summary.levelUpDates.length
+        ? summary.levelUpDates.map(formatDate).join(" · ")
+        : "기간 내 레벨업 기록 없음";
+
     if (periodSummaryFootnote) {
         periodSummaryFootnote.textContent =
-            "증가량은 연속된 날짜에서 확인된 경험치 변화만 합산합니다. 미수집 날짜와 레벨업으로 경험치 기준이 바뀐 구간은 계산에서 제외되므로 실제 전체 성장량보다 작게 표시될 수 있습니다.";
+            "평균은 실제 변화량을 확인한 날짜 간 구간 기준입니다. 미수집 날짜는 0으로 간주하지 않으며, 레벨업 경계는 경험치 기준이 초기화되므로 증가량 합계에서 제외합니다.";
     }
 }
+
 
 async function loadHistoryRange(days) {
     const selectedDays = [7, 30, 90].includes(Number(days)) ? Number(days) : 7;
@@ -1409,6 +1504,11 @@ async function refreshVisibleCharacter({ automatic = false } = {}) {
     }
 }
 
+function formatLevelPace(value) {
+    if (value === null || value === undefined || !Number.isFinite(Number(value))) return "자료 부족";
+    return `+${Number(value).toFixed(4)}%p / 일`;
+}
+
 function formatRankingChange(value) {
     if (value === null || value === undefined) return "기록 없음";
     if (value > 0) return `▲ ${formatNumber(value)}위 상승`;
@@ -1446,7 +1546,11 @@ function renderComparisonPeriod(summary, primaryCharacter, otherCharacter, error
         );
         setText(
             `comparisonPeriod${prefix}Detail`,
-            subject ? `변화 확인 ${subject.confirmedChangeDays}일 · API 미제공 ${subject.notReadyDays}일 · 미수집 ${subject.notCollectedDays}일` : ""
+            subject ? `변화 확인 ${subject.confirmedChangeDays}개 구간 · API 미제공 ${subject.notReadyDays}일 · 미수집 ${subject.notCollectedDays}일` : ""
+        );
+        setText(
+            `comparisonPeriod${prefix}LevelPace`,
+            subject?.levelProgress ? formatLevelPace(subject.levelProgress.dailyProgressRate) : "자료 부족"
         );
     };
 
@@ -1486,11 +1590,11 @@ async function fetchComparisonPeriodSummary(otherCharacter, days) {
     const secondaryData = await collectArchiveRange(
         days, otherCharacter, comparisonPeriodNotice, "비교 캐릭터 기록"
     );
-    return {
-        days,
-        primary: summarizePeriod(primaryData.history, days),
-        secondary: summarizePeriod(secondaryData.history, days)
-    };
+    const primary = summarizePeriod(primaryData.history, days);
+    const secondary = summarizePeriod(secondaryData.history, days);
+    primary.levelProgress = calculateLevelProgress(currentCharacter, primary.averageGrowth);
+    secondary.levelProgress = calculateLevelProgress(otherCharacter, secondary.averageGrowth);
+    return { days, primary, secondary };
 }
 
 async function handleComparisonPeriodChange() {
@@ -1534,6 +1638,7 @@ function renderComparisonCharacter(prefix, character, metrics) {
         ExpRate: formatPercent(character.experienceRate),
         Daily: formatTrillion(metrics.latestDailyGrowth),
         Average: formatTrillion(metrics.averageDailyGrowth),
+        LevelPace: formatLevelPace(metrics.levelProgress?.dailyProgressRate),
         Weekly: formatTrillion(metrics.sevenDayGrowth),
         Ranking: formatRankingChange(metrics.rankingChange),
         Prediction: getPredictionLabel(metrics)
