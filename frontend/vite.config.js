@@ -4,11 +4,12 @@ import { fileURLToPath, URL } from "node:url";
 
 const frontendRoot = fileURLToPath(new URL(".", import.meta.url));
 const previewOutput = fileURLToPath(new URL("../static/react-preview/", import.meta.url));
+const isProductionBuild = process.env.NODE_ENV === "production";
 
 export default defineConfig({
   root: frontendRoot,
   plugins: [react()],
-  base: "/static/react-preview/",
+  base: isProductionBuild ? "/static/react-preview/" : "/",
   server: {
     host: "127.0.0.1",
     port: 5173,
