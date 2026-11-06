@@ -437,7 +437,10 @@ function renderCharacter(character, history) {
     if (guildName) guildName.textContent = character.guildName || "길드 없음";
     if (levelValue) levelValue.textContent = character.level !== undefined && character.level !== null ? formatNumber(character.level) : "-";
     if (experienceRate) experienceRate.textContent = formatPercent(character.experienceRate);
-    const progressRate = Number(String(character.experienceRate ?? "").replace("%", ""));
+    const progressValue = character.experienceRate;
+    const progressRate = progressValue === null || progressValue === undefined || progressValue === ""
+        ? NaN
+        : Number(String(progressValue).replace("%", ""));
     const progressTrack = document.getElementById("levelProgressTrack");
     const progressFill = document.getElementById("levelProgressFill");
     const progressRemaining = document.getElementById("levelProgressRemaining");
