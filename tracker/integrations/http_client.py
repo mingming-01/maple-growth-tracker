@@ -55,7 +55,7 @@ def request_with_retries(
 
         try:
             response = request_func(url, timeout=timeout, **kwargs)
-        except requests.RequestException:
+        except (requests.Timeout, requests.ConnectionError):
             if attempt >= attempts:
                 raise
             delay = min(max_backoff, backoff_factor * (2 ** (attempt - 1)))
