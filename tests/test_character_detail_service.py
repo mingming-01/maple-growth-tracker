@@ -311,7 +311,10 @@ class CharacterDetailServiceTests(unittest.TestCase):
             self.assertEqual(params.get("ocid"), "sample-union-ocid")
             return payloads[endpoint]
 
-        with patch("tracker.services.character_detail_service.request_nexon_api", side_effect=fake_request):
+        with patch("tracker.services.character_detail_service.request_nexon_api", side_effect=fake_request), patch(
+            "tracker.services.character_detail_service._fetch_champion_image",
+            return_value=None,
+        ):
             result = get_character_detail_section("sample-union-ocid", "union")
 
         self.assertEqual(result["status"], "available")
@@ -328,6 +331,28 @@ class CharacterDetailServiceTests(unittest.TestCase):
         self.assertEqual(
             sources["unionChampion"]["currentData"]["union_champion"][0]["champion_grade"],
             "SSS",
+        )
+
+    def test_champion_image_enrichment_resolves_character_image(self):
+        from tracker.services.character_detail_service import _enrich_champion_images
+
+        source = {
+            "currentData": {
+                "union_champion": [{
+                    "champion_name": "밍득",
+                    "champion_grade": "SSS",
+                    "champion_class": "아크메이지(썬,콜)",
+                }]
+            }
+        }
+        with patch(
+            "tracker.services.character_detail_service._fetch_champion_image",
+            return_value="https://example.com/character.png",
+        ):
+            result = _enrich_champion_images(source)
+        self.assertEqual(
+            result["currentData"]["union_champion"][0]["character_image"],
+            "https://example.com/character.png",
         )
 
     def test_unknown_section_is_rejected(self):
