@@ -85,7 +85,6 @@ export function AIReport({ character, history }) {
   const [analysis,setAnalysis] = useState("");
   const [loading,setLoading] = useState(false);
   const [error,setError] = useState("");
-  const [notice,setNotice] = useState("");
 
   const metrics = useMemo(() => {
     const prediction = calculatePrediction(character,history || []);
@@ -97,12 +96,9 @@ export function AIReport({ character, history }) {
     setLoading(true);
     setError("");
     const signature = buildReportSignature(character,history,metrics);
-    const cached = !force ? getCachedAI("growth-report-v2",signature) : null;
+    const cached = !force ? getCachedAI("growth-report-v3",signature) : null;
     if (cached?.analysis) {
       setAnalysis(cached.analysis);
-      setInsights(cached.growthInsights);
-      setNotice("저장된 분석과 분석 근거를 재사용했습니다. AI 모델을 다시 호출하지 않았습니다.");
-      setUpdatedAt(new Date().toLocaleString("ko-KR"));
       setLoading(false);
       return;
     }
@@ -110,15 +106,9 @@ export function AIReport({ character, history }) {
       const result = await postAiAnalysis(character.characterName,metrics,history);
       if (!result.analysis) throw new Error("AI 분석 결과가 비어 있습니다.");
       setAnalysis(result.analysis);
-      setInsights(result.growthInsights || null);
-      saveCachedAI("growth-report-v2",signature,result.analysis,result.growthInsights || null);
-      setNotice(result.cacheHit
-        ? "서버에 저장된 분석을 재사용했습니다. AI 모델을 다시 호출하지 않았습니다."
-        : "새 분석을 생성했습니다. 동일 데이터는 브라우저와 서버의 캐시를 재사용합니다.");
-      setUpdatedAt(new Date().toLocaleString("ko-KR"));
+      saveCachedAI("growth-report-v3",signature,result.analysis,result.growthInsights || null);
     } catch (requestError) {
       setError(requestError.message || "AI 성장 분석을 불러오지 못했습니다.");
-      setNotice("이번 분석은 완료되지 않아 캐시에 저장하지 않았습니다.");
     } finally {
       setLoading(false);
     }
@@ -127,7 +117,6 @@ export function AIReport({ character, history }) {
   useEffect(() => {
     setAnalysis("");
     setError("");
-    setNotice("");
     run();
   },[run]);
 
@@ -141,7 +130,6 @@ export function AIReport({ character, history }) {
       </div>
       <div className="ai-analysis-card">
         <div className="ai-analysis-actions">
-          <span className="ai-analysis-cache-note">{notice}</span>
           <button className="export-button" type="button" onClick={() => run({force:true})} disabled={loading}>
             {loading ? "분석 중..." : "AI 다시 분석"}
           </button>
