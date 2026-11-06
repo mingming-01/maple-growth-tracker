@@ -197,7 +197,7 @@ function renderStatsSection(data,mode,selection,onModeChange) {
     const selects=el("div","game-preset-select-grid");
     (data.sources||[]).forEach(source=>{
         const category=PRESET_CATEGORY[source.id];
-        if(!category||!Array.isArray(source.presets)||!source.presets.length) return;
+        if(!["hyperStat","ability","union"].includes(category)||!Array.isArray(source.presets)||!source.presets.length) return;
         selects.appendChild(presetSelect(source,category,selection[category],number=>onModeChange("custom",category,number)));
     });
     profile.appendChild(selects);
@@ -216,7 +216,7 @@ function renderStatsSection(data,mode,selection,onModeChange) {
     const grid=el("div","game-selected-build-grid");
     (data.sources||[]).forEach(source=>{
         const category=PRESET_CATEGORY[source.id];
-        if(category) grid.appendChild(renderPresetSummary(source,selection[category]));
+        if(["hyperStat","ability","union"].includes(category)) grid.appendChild(renderPresetSummary(source,selection[category]));
     });
     builds.appendChild(grid); layout.appendChild(builds);
     return layout;
