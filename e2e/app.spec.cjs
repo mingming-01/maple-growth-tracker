@@ -23,6 +23,189 @@ test("admin logs require an authenticated session", async ({ page }) => {
   await expect(page.locator("input[name='csrf_token']")).toHaveValue(/.+/);
 });
 
+
+test("AI growth report explains the exact records used as evidence", async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.addInitScript(() => {
+    window.Chart = class { destroy() {} update() {} };
+  });
+
+  const timestamp = "2026-11-06T04:00:00+09:00";
+  await page.route(/\/api\/character\?/, route => route.fulfill({
+    status: 200,
+    contentType: "application/json",
+    body: JSON.stringify({
+      characterName: "근거테스트", worldName: "크로아", job: "전사", guildName: "테스트",
+      level: 280, experience: 1300, experienceRate: "30.000",
+      ranking: 1, worldRanking: 1, jobWorldRanking: 1, jobRanking: 1,
+      ocid: "evidence-test-ocid", rankingDataStatus: "available",
+      dataStatus: "current", dataAsOf: timestamp
+    })
+  }));
+  await page.route(/\/api\/history\?/, route => route.fulfill({
+    status: 200,
+    contentType: "application/json",
+    body: JSON.stringify({
+      characterName: "근거테스트", worldName: "크로아", level: 280,
+      history: [
+        { date: "2026-10-31", ranking: 7, level: 280, experience: 100, experienceChange: null, recordStatus: "available" },
+        { date: "2026-11-01", ranking: 6, level: 280, experience: 300, experienceChange: 200, recordStatus: "available" },
+        { date: "2026-11-02", ranking: null, level: null, experience: null, experienceChange: null, recordStatus: "not_ready" },
+        { date: "2026-11-03", ranking: 5, level: 280, experience: 700, experienceChange: 400, recordStatus: "available" },
+        { date: "2026-11-04", ranking: null, level: null, experience: null, experienceChange: null, recordStatus: "not_collected" },
+        { date: "2026-11-05", ranking: 4, level: 280, experience: 1000, experienceChange: 300, recordStatus: "available" },
+        { date: "2026-11-06", ranking: 3, level: 280, experience: 1300, experienceChange: 300, recordStatus: "available" }
+      ],
+      historyStatus: "complete",
+      historyStorage: { backend: "postgres", status: "saved", savedRecords: 5 },
+      dataStatus: "current", dataAsOf: timestamp
+    })
+  }));
+  await page.route(/\/api\/ai-analysis/, route => route.fulfill({
+    status: 200,
+    contentType: "application/json",
+    body: JSON.stringify({
+      analysis: "[성장 패턴] 테스트 리포트입니다.\n[성장 변화] 변화가 확인됩니다.\n[레벨업 분석] 확인된 레벨업은 없습니다.\n[성장 전망] 자료를 참고하세요.\n[AI 코멘트] 기록을 이어가세요.",
+      cacheHit: false
+    })
+  }));
+
+  await page.goto("/");
+  await page.locator("#characterName").fill("근거테스트");
+  await page.locator("#searchForm button[type='submit']").click();
+
+  const evidence = page.locator("#aiAnalysisEvidence");
+  await expect(evidence).toBeVisible();
+  await expect(evidence).toContainText("분석에 사용한 기록");
+  await expect(evidence).toContainText("2026.10.31 ~ 2026.11.06");
+  await expect(evidence).toContainText("5 / 7일");
+  await expect(evidence).toContainText("4개");
+  await expect(evidence).toContainText("2026.11.06");
+  await expect(evidence).toContainText("기록 미확인 2일");
+
+  const evidenceBounds = await evidence.evaluate(element => {
+    const rect = element.getBoundingClientRect();
+    return { left: rect.left, right: rect.right, viewportWidth: window.innerWidth };
+  });
+  expect(evidenceBounds.left).toBeGreaterThanOrEqual(0);
+  expect(evidenceBounds.right).toBeLessThanOrEqual(evidenceBounds.viewportWidth);
+
+  await page.reload();
+  await expect(page.locator("#aiAnalysisEvidence")).toBeVisible();
+  await expect(page.locator("#aiAnalysisEvidence")).toContainText("5 / 7일");
+});
+
+test("30-day growth chart and browser-saved favorite characters work", async ({ page }) => {
+  await page.addInitScript(() => {
+    window.Chart = class {
+      constructor(context, config) { window.__latestChartConfig = config; }
+      destroy() {}
+      update() {}
+    };
+  });
+
+  const timestamp = "2026-11-06T04:00:00+09:00";
+  await page.route(/\/api\/character\?/, route => route.fulfill({
+    status: 200,
+    contentType: "application/json",
+    body: JSON.stringify({
+      characterName: "페이즈4테스트", worldName: "크로아", job: "전사", guildName: "테스트",
+      level: 280, experience: 1300, experienceRate: "30.000",
+      ranking: 1, worldRanking: 1, jobWorldRanking: 1, jobRanking: 1,
+      ocid: "phase4-test-ocid", rankingDataStatus: "available",
+      dataStatus: "current", dataAsOf: timestamp
+    })
+  }));
+  await page.route(/\/api\/history\?/, route => route.fulfill({
+    status: 200,
+    contentType: "application/json",
+    body: JSON.stringify({
+      characterName: "페이즈4테스트", worldName: "크로아", level: 280,
+      history: [
+        { date: "2026-11-05", ranking: 2, level: 280, experience: 1200, experienceChange: null, recordStatus: "available" },
+        { date: "2026-11-06", ranking: 1, level: 280, experience: 1300, experienceChange: 100, recordStatus: "available" }
+      ],
+      historyStatus: "complete",
+      historyStorage: { backend: "postgres", status: "saved", savedRecords: 2 },
+      dataStatus: "current", dataAsOf: timestamp
+    })
+  }));
+  await page.route(/\/api\/ai-analysis/, route => route.fulfill({
+    status: 200,
+    contentType: "application/json",
+    body: JSON.stringify({ analysis: "[성장 패턴] 테스트", cacheHit: false })
+  }));
+
+  const archiveCalls = [];
+  await page.route(/\/api\/history\/archive\?/, async route => {
+    const url = new URL(route.request().url());
+    const days = Number(url.searchParams.get("days"));
+    const endDate = url.searchParams.get("end") || "2026-11-06";
+    const collecting = url.searchParams.get("collect") === "1";
+    const offset = Number(url.searchParams.get("offset") || 0);
+    const limit = Number(url.searchParams.get("limit") || 10);
+    archiveCalls.push({ days, endDate, collecting, offset, limit });
+
+    const [year, month, day] = endDate.split("-").map(Number);
+    const endUtc = Date.UTC(year, month - 1, day);
+    const history = Array.from({ length: days }, (_, index) => {
+      const date = new Date(endUtc - (days - index - 1) * 86400000).toISOString().slice(0, 10);
+      return {
+        date,
+        ranking: 5000 - index,
+        level: 280,
+        experience: 1000000 + index * 1000,
+        experienceChange: index === 0 ? null : (endDate === "2026-11-06" ? 1000 : 500),
+        recordStatus: "available",
+        levelUp: false
+      };
+    });
+
+    return route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({
+        ocid: "phase4-test-ocid",
+        days,
+        startDate: history[0].date,
+        endDate: history[history.length - 1].date,
+        history,
+        availableDays: days,
+        notReadyDays: 0,
+        notCollectedDays: 0,
+        collection: collecting ? {
+          offset, limit, checkedDays: limit, savedRecords: limit,
+          availableRecords: limit, noDataRecords: 0,
+          remainingDays: Math.max(0, days - offset - limit)
+        } : null,
+        storageBackend: "postgres",
+        persistentStorage: true
+      })
+    });
+  });
+
+  await page.goto("/");
+  await page.locator("#characterName").fill("페이즈4테스트");
+  await page.locator("#searchForm button[type='submit']").click();
+  await expect(page.locator("#resultSection")).toBeVisible();
+
+  await page.locator("#favoriteCurrentButton").click();
+  await expect(page.locator("#favoriteList .favorite-item")).toHaveCount(1);
+  await expect(page.locator("#favoriteList")).toContainText("페이즈4테스트");
+  const savedFavorites = await page.evaluate(() =>
+    JSON.parse(localStorage.getItem("mapleGrowthTrackerFavorites") || "[]")
+  );
+  expect(savedFavorites).toHaveLength(1);
+  expect(savedFavorites[0].ocid).toBe("phase4-test-ocid");
+
+  await page.locator("#historyRangeSelect").selectOption("30");
+  await expect(page.locator("#periodSummarySection")).toBeVisible();
+  await expect.poll(() => page.evaluate(() => window.__latestChartConfig?.data?.labels?.length)).toBe(30);
+  await expect(page.locator("#periodSummaryRange")).toContainText("직전 30일");
+  expect(archiveCalls.filter(call => call.collecting)).toHaveLength(3);
+  expect(archiveCalls.some(call => !call.collecting && call.endDate === "2026-10-07")).toBe(true);
+});
+
 test("character details automatically open the game-style stat window", async ({ page }) => {
   await page.addInitScript(() => {
     window.Chart = class { destroy() {} update() {} };

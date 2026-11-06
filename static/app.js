@@ -91,6 +91,7 @@ const periodSummaryFootnote = document.getElementById("periodSummaryFootnote");
 const aiAnalysisLoading = document.getElementById("aiAnalysisLoading");
 const aiAnalysisError = document.getElementById("aiAnalysisError");
 const aiAnalysisResult = document.getElementById("aiAnalysisResult");
+const aiAnalysisEvidence = document.getElementById("aiAnalysisEvidence");
 const aiGrowthPattern = document.getElementById("aiGrowthPattern");
 const aiGrowthChange = document.getElementById("aiGrowthChange");
 const aiLevelUp = document.getElementById("aiLevelUp");
@@ -571,8 +572,83 @@ function renderHistory(history) {
     });
 }
 
+// AI 리포트가 실제로 사용한 성장 기록의 범위와 품질을 표시한다.
+function renderAIAnalysisEvidence(history) {
+    if (!aiAnalysisEvidence) return;
+
+    const records = sortHistoryAscending(Array.isArray(history) ? history : []);
+    aiAnalysisEvidence.replaceChildren();
+    if (!records.length) {
+        aiAnalysisEvidence.hidden = true;
+        return;
+    }
+
+    const hasFiniteValue = value =>
+        value !== null &&
+        value !== undefined &&
+        value !== "" &&
+        Number.isFinite(Number(value));
+    const isConfirmedRecord = item =>
+        (!item.recordStatus || item.recordStatus === "available") &&
+        hasFiniteValue(item.level) &&
+        hasFiniteValue(item.experience);
+
+    const confirmedRecords = records.filter(isConfirmedRecord);
+    const confirmedChanges = records.filter(item =>
+        isConfirmedRecord(item) && hasFiniteValue(item.experienceChange)
+    );
+    const latestConfirmed = confirmedRecords[confirmedRecords.length - 1] || null;
+    const missingDays = records.length - confirmedRecords.length;
+    const firstDate = records[0]?.date || null;
+    const lastDate = records[records.length - 1]?.date || null;
+    const rangeLabel = firstDate && lastDate
+        ? firstDate === lastDate
+            ? formatDate(firstDate)
+            : `${formatDate(firstDate)} ~ ${formatDate(lastDate)}`
+        : "날짜 정보 없음";
+
+    const heading = document.createElement("strong");
+    heading.className = "ai-analysis-evidence-heading";
+    heading.textContent = "분석에 사용한 기록";
+
+    const grid = document.createElement("div");
+    grid.className = "ai-analysis-evidence-grid";
+
+    const items = [
+        ["분석 대상 기간", rangeLabel],
+        ["확인된 성장 기록", `${confirmedRecords.length} / ${records.length}일`],
+        ["변화량 확인 구간", `${confirmedChanges.length}개`],
+        ["최근 정상 기록", latestConfirmed ? formatDate(latestConfirmed.date) : "확인 기록 없음"]
+    ];
+
+    items.forEach(([labelText, valueText]) => {
+        const item = document.createElement("div");
+        item.className = "ai-analysis-evidence-item";
+
+        const label = document.createElement("span");
+        label.className = "ai-analysis-evidence-label";
+        label.textContent = labelText;
+
+        const value = document.createElement("strong");
+        value.className = "ai-analysis-evidence-value";
+        value.textContent = valueText;
+
+        item.append(label, value);
+        grid.appendChild(item);
+    });
+
+    const note = document.createElement("p");
+    note.className = "ai-analysis-evidence-note";
+    note.textContent = missingDays > 0
+        ? `기록 미확인 ${missingDays}일은 임의로 채우지 않았으며, 확인된 날짜 사이의 변화만 분석 근거로 사용했습니다.`
+        : "API에서 확인된 날짜별 기록만 분석 근거로 사용했습니다.";
+
+    aiAnalysisEvidence.append(heading, grid, note);
+    aiAnalysisEvidence.hidden = false;
+}
+
 // AI 성장 리포트
-function renderAIAnalysis(analysis) {
+function renderAIAnalysis(analysis, history = currentHistory) {
     if (!aiAnalysisResult) return;
     const sections = {
         growthPattern: "",
@@ -610,6 +686,7 @@ function renderAIAnalysis(analysis) {
     if (aiLevelUp) aiLevelUp.textContent = sections.levelUp || "-";
     if (aiGrowthOutlook) aiGrowthOutlook.textContent = sections.growthOutlook || "-";
     if (aiJudgement) aiJudgement.textContent = sections.judgement || "-";
+    renderAIAnalysisEvidence(history);
     if (aiAnalysisLoading) aiAnalysisLoading.hidden = true;
     if (aiAnalysisError) aiAnalysisError.hidden = true;
     aiAnalysisResult.hidden = false;
@@ -1365,7 +1442,7 @@ async function runAIReport(name, character, history, sharedMetrics) {
         const signature = buildGrowthReportSignature(name, character, history, metrics);
         const cachedAnalysis = getCachedAIAnalysis("growth-report-v1", signature);
         if (cachedAnalysis) {
-            renderAIAnalysis(cachedAnalysis);
+            renderAIAnalysis(cachedAnalysis, history);
             showAICacheNotice(aiAnalysisCacheNotice, "저장된 분석을 재사용했습니다. AI 모델을 다시 호출하지 않았습니다.");
             saveTrackerState({ character, history, metrics, aiAnalysis: cachedAnalysis });
             return;
@@ -1374,7 +1451,7 @@ async function runAIReport(name, character, history, sharedMetrics) {
         const result = await searchAIAnalysis(name, metrics);
         const analysis = result.analysis;
         saveCachedAIAnalysis("growth-report-v1", signature, analysis);
-        renderAIAnalysis(analysis);
+        renderAIAnalysis(analysis, history);
 
         const notice = result.cacheHit
             ? "서버에 저장된 분석을 재사용했습니다. AI 모델을 다시 호출하지 않았습니다."
@@ -1903,7 +1980,7 @@ function restoreTrackerState() {
     syncHomeView();
 
     if (state.aiAnalysis) {
-        renderAIAnalysis(state.aiAnalysis);
+        renderAIAnalysis(state.aiAnalysis, state.history || currentHistory);
     }
 
     const comparison = state.comparison;
