@@ -1,13 +1,9 @@
 from flask import jsonify, request, render_template, redirect, url_for, session, current_app, has_app_context
 from functools import wraps
 from werkzeug.exceptions import HTTPException
-from werkzeug.security import check_password_hash
 import hashlib
-import hmac
-import json
 import os
 import re
-import secrets
 import sqlite3
 import time
 from datetime import date, datetime, timedelta
@@ -16,11 +12,6 @@ from zoneinfo import ZoneInfo
 
 import psycopg
 from psycopg.rows import dict_row
-import requests
-from tracker.domain.growth_calculations import (
-    calculate_archive_history_changes,
-    calculate_recent_history_changes,
-)
 from tracker.repositories.growth_history_store import GrowthHistoryStore
 from tracker.services.growth_history_service import GrowthHistoryService
 from tracker.repositories.api_snapshot_repository import (
@@ -32,9 +23,7 @@ from google import genai
 
 
 # 변경되지 않는 도메인 상수만 모듈 상수로 유지한다.
-BASE_URL = "https://open.api.nexon.com/maplestory/v1"
 KOREA_TIMEZONE = ZoneInfo("Asia/Seoul")
-HISTORY_API_MIN_INTERVAL = 0.22
 HISTORY_BACKFILL_BATCH_SIZE = 10
 CHARACTER_CACHE_TTL = 300
 HISTORY_CACHE_TTL = 1800
