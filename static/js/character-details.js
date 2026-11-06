@@ -829,7 +829,7 @@ export function initCharacterDetails({apiFetch,readApiResponse,onStatsLoaded=()=
         activeSection=name; updateTabs(name);
         const key=currentOcid+":"+name, cached=!force?cache.get(key):null;
         if(cached) {
-            if(name==="stats") {
+            if(name==="stats" && statsData!==cached) {
                 statsData=cached; profileMode=cached.defaultProfile||profileMode;
                 selectedNumbers=initialSelection(cached,profileMode);
             }
