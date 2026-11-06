@@ -1,35 +1,39 @@
-# React preview
+# React frontend
 
-This frontend is an isolated Phase 7 migration surface. It does not replace the Flask-rendered page at / and does not mount React into the legacy page.
+The React/Vite dashboard is the primary frontend when the production build exists. Flask continues to own the backend APIs, Nexon integrations, AI services, persistence, and admin authentication.
 
 ## Local development
 
-Run the Flask application in one terminal:
+Run Flask in one terminal:
 
     python app.py
 
-Install the frontend dependencies and start Vite in another terminal:
+Install frontend dependencies and start Vite in another terminal:
 
     npm --prefix frontend install
     npm --prefix frontend run dev
 
-Open http://127.0.0.1:5173. Vite proxies /api, /static, and /admin requests to the Flask server at http://127.0.0.1:5000. Set FLASK_API_PROXY_TARGET to override that backend address.
+Open http://127.0.0.1:5173. Vite proxies `/api`, `/static`, and `/admin` requests to Flask at http://127.0.0.1:5000. Set `FLASK_API_PROXY_TARGET` to override the backend address.
 
-## Flask preview route
+## Production build and routes
 
-Build the frontend bundle:
+Build the frontend:
 
     npm --prefix frontend run build
 
-The build is written to static/react-preview. Flask serves it at /preview/ and its assets below that path. The build directory is generated output and is intentionally not committed.
+The build is written to `static/react-preview/`. In production builds, assets use the absolute `/static/react-preview/` base path, so the same output works when Flask serves the app at both `/` and `/preview/`.
 
-When no build is present, /preview/ returns a clear 503 page rather than silently changing or replacing the existing main page.
+- `/`: serves React when `static/react-preview/index.html` exists; otherwise safely falls back to the legacy Flask page.
+- `/preview/`: serves the React dashboard for verification and comparison.
+- `/legacy/`: preserves the previous Vanilla JS interface.
+
+For Render, use this Build Command:
+
+    pip install -r requirements.txt && npm --prefix frontend install --no-audit --no-fund && npm --prefix frontend run build
 
 ## Migration boundaries
 
-- The existing / route continues to render templates/index.html and use static/app.js.
-- React owns only its own #root element on the isolated preview page.
-- Flask remains responsible for API requests, Nexon integrations, growth calculations, persistence, AI providers, and admin authentication.
-- The React API client uses same-origin credentials and relative /api paths. Local Vite uses a development proxy, so CORS is not required.
-- Existing sessionStorage and localStorage keys are not cleared, renamed, or rewritten by this preview foundation. Their schemas must be explicitly mapped and tested before future React features start reading or writing them.
-- The legacy page, including its detailed character preset and tooltip interactions, remains available until feature parity and regression tests are complete.
+- React owns its own root element and does not mount into the legacy page.
+- Flask APIs and server-side integrations remain the source of truth.
+- Existing sessionStorage/localStorage keys and schemas are preserved for page state, favorites, growth goals, and AI response cache.
+- Keep `/legacy/` available until the production URL has been verified and the migration is accepted.
