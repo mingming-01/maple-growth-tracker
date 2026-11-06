@@ -191,19 +191,21 @@ test("character details automatically open the game-style stat window", async ({
   await expect(page.locator("#characterDetailsContent")).toContainText("현재 적용 중인 실제 전투력");
   expect(detailRequests.stats).toBe(1);
 
-  await expect(page.locator("#characterDetailsContent .game-preset-select")).toHaveCount(3);
-  await expect(page.locator("#characterDetailsContent")).not.toContainText("하이퍼 스탯");
-  await expect(page.locator("#characterDetailsContent .game-selected-build-window")).toContainText("보스 프리셋 장비");
-  await expect(page.locator("#characterDetailsContent .game-selected-build-window")).not.toContainText("어빌리티");
+  await expect(page.locator("#characterDetailsContent .game-preset-select")).toHaveCount(5);
+  await expect(page.locator("#characterDetailsContent .game-stat-grid")).toContainText("STR");
+  await expect(page.locator("#characterDetailsContent")).toContainText("어빌리티");
+  await expect(page.locator("#characterDetailsContent")).toContainText("하이퍼 스탯");
+  await expect(page.locator("#characterDetailsContent .game-selected-build-window")).toHaveCount(0);
+  await expect(page.locator("#characterDetailsContent")).not.toContainText("보스 프리셋 장비");
 
-  const equipmentPreset = page.locator("#characterDetailsContent .game-preset-select").nth(1);
+  const equipmentPreset = page.locator("#characterDetailsContent .game-preset-select").nth(2);
   await expect(equipmentPreset).toHaveValue("1");
   await equipmentPreset.selectOption("2");
-  await expect(page.locator("#characterDetailsContent .game-selected-build-window")).toContainText("사냥 프리셋 장비");
+  await expect(equipmentPreset).toHaveValue("2");
 
   await page.locator('[data-detail-tab="stats"]').click();
   expect(detailRequests.stats).toBe(1);
-  await expect(page.locator("#characterDetailsContent .game-preset-select").nth(1)).toHaveValue("2");
+  await expect(page.locator("#characterDetailsContent .game-preset-select").nth(2)).toHaveValue("2");
 
   await page.locator('[data-detail-tab="union"]').click();
   await expect(page.locator("#characterDetailsContent")).toContainText("유니온 스탯 투자");
