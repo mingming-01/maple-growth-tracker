@@ -68,85 +68,86 @@ def get_api_class(character_class):
 
 
 def get_character_rankings(target_date, world_name, character_class, ocid):
-    """전체·월드·직업·직업 월드 랭킹을 병렬 조회해 결과 상태를 합친다."""
-    result = {
-        "ranking": None,
-        "worldRanking": None,
-        "jobWorldRanking": None,
-        "jobRanking": None,
-        "rankingDataStatus": "not_ready",
-    }
+    """전체·월드·직업·직업 월드 랭킹을 조회한다.
+
+    랭킹 데이터는 당일 집계가 아직 게시되지 않을 수 있으므로,
+    당일 결과가 완전히 비어 있는 경우에만 직전 2일을 순서대로 확인한다.
+    인증·호출 제한 등 날짜와 무관한 오류는 과거 날짜 재시도로 숨기지 않는다.
+    """
+    from datetime import datetime, timedelta
+
     api_class = get_api_class(character_class)
+    try:
+        requested_date = datetime.strptime(target_date, "%Y-%m-%d").date()
+    except (TypeError, ValueError):
+        requested_date = datetime.now(ZoneInfo("Asia/Seoul")).date()
 
-    def fetch_overall():
-        return get_ranking_snapshot(target_date=target_date, ocid=ocid)
+    def fetch_for_date(date_value):
+        date_text = date_value.isoformat()
 
-    def fetch_world():
-        return get_ranking_snapshot(
-            target_date=target_date, world_name=world_name, ocid=ocid
-        )
+        def fetch_overall():
+            return get_ranking_snapshot(target_date=date_text, ocid=ocid)
 
-    def fetch_job_world():
-        if not api_class:
-            return None, None
-        return get_ranking_snapshot(
-            target_date=target_date,
-            world_name=world_name,
-            character_class=api_class,
-            ocid=ocid,
-        )
+        def fetch_world():
+            return get_ranking_snapshot(
+                target_date=date_text, world_name=world_name, ocid=ocid
+            )
 
-    def fetch_job():
-        if not api_class:
-            return None, None
-        return get_ranking_snapshot(
-            target_date=target_date,
-            character_class=api_class,
-            ocid=ocid,
-        )
+        def fetch_job_world():
+            if not api_class:
+                return None, None
+            return get_ranking_snapshot(
+                target_date=date_text,
+                world_name=world_name,
+                character_class=api_class,
+                ocid=ocid,
+            )
 
-    with ThreadPoolExecutor(max_workers=4) as executor:
-        futures = [
-            executor.submit(fetch_overall),
-            executor.submit(fetch_world),
-            executor.submit(fetch_job_world),
-            executor.submit(fetch_job),
-        ]
-        overall_data, overall_response = futures[0].result()
-        world_data, world_response = futures[1].result()
-        job_world_data, job_world_response = futures[2].result()
-        job_data, job_response = futures[3].result()
+        def fetch_job():
+            if not api_class:
+                return None, None
+            return get_ranking_snapshot(
+                target_date=date_text, character_class=api_class, ocid=ocid
+            )
 
-    if overall_data:
-        result["ranking"] = overall_data.get("ranking")
-    if world_data:
-        result["worldRanking"] = world_data.get("ranking")
-    if job_world_data:
-        result["jobWorldRanking"] = job_world_data.get("ranking")
-    if job_data:
-        result["jobRanking"] = job_data.get("ranking")
+        with ThreadPoolExecutor(max_workers=4) as executor:
+            futures = [
+                executor.submit(fetch_overall),
+                executor.submit(fetch_world),
+                executor.submit(fetch_job_world),
+                executor.submit(fetch_job),
+            ]
+            values = [future.result() for future in futures]
 
-    responses = [
-        response
-        for response in (
-            overall_response,
-            world_response,
-            job_world_response,
-            job_response,
-        )
-        if response is not None
-    ]
-    has_data = any((overall_data, world_data, job_world_data, job_data))
-    has_error = any(response.status_code != 200 for response in responses)
+        names = ("ranking", "worldRanking", "jobWorldRanking", "jobRanking")
+        result = {name: (data.get("ranking") if data else None)
+                  for name, (data, _) in zip(names, values)}
+        responses = [response for _, response in values if response is not None]
+        has_data = any(result.values())
+        has_error = any(response.status_code != 200 for response in responses)
+        if has_data and has_error:
+            status = "partial"
+        elif has_data:
+            status = "available"
+        elif has_error:
+            status = "unavailable"
+        else:
+            status = "empty"
 
-    if has_data and has_error:
-        result["rankingDataStatus"] = "partial"
-    elif has_data:
-        result["rankingDataStatus"] = "available"
-    elif has_error:
-        result["rankingDataStatus"] = "unavailable"
+        result.update({
+            "rankingDataStatus": status,
+            "rankingDate": date_text,
+            "rankingApiStatuses": [response.status_code for response in responses],
+        })
+        return result
 
-    return result
+    # 오늘자 집계가 아직 게시되지 않았을 때만 직전 날짜로 대체한다.
+    for days_ago in range(0, 3):
+        candidate = fetch_for_date(requested_date - timedelta(days=days_ago))
+        if candidate["rankingDataStatus"] != "empty":
+            return candidate
+
+    return candidate
 
 
 def is_temporary_nexon_failure(response):
