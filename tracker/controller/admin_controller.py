@@ -51,7 +51,7 @@ def admin_login():
             session.clear()
             session["admin_authenticated"] = True
             session["csrf_token"] = secrets.token_urlsafe(32)
-            return redirect(url_for("admin_logs"))
+            return redirect(url_for("admin.admin_logs"))
         else:
             error = "아이디 또는 비밀번호를 확인해주세요."
 
