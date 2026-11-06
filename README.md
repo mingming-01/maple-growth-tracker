@@ -212,7 +212,7 @@ maple-growth-tracker/
 │   ├── __init__.py                # create_app 공개
 │   ├── application.py             # Flask Application Factory 및 Blueprint 등록
 │   ├── config.py                  # 환경변수 기반 설정
-│   ├── runtime.py                 # 공통 캐시·로그·요청 처리 유틸리티와 런타임 초기화
+│   ├── runtime.py                 # 앱별 런타임 상태와 공통 캐시·로그 처리
 │   │
 │   ├── controller/                # 기능별 Flask Blueprint와 HTTP 요청 처리
 │   │   ├── page_controller.py
@@ -223,14 +223,18 @@ maple-growth-tracker/
 │   │
 │   ├── domain/                    # Flask 및 외부 API에 독립적인 성장 계산 규칙
 │   │   └── growth_calculations.py
-│   ├── services/                  # AI 성장 분석·비교 등 애플리케이션 서비스
+│   ├── services/                  # 캐릭터 조회·성장 기록·AI 기능의 애플리케이션 서비스
+│   │   ├── nexon_service.py
+│   │   ├── growth_history_service.py
 │   │   └── ai_analysis_service.py
 │   ├── repositories/              # PostgreSQL·SQLite 저장소 접근
 │   │   ├── growth_history_store.py
 │   │   └── api_snapshot_repository.py
-│   └── integrations/              # 외부 API 연동
+│   └── integrations/              # 외부 API 연동과 공통 HTTP 재시도 정책
 │       ├── nexon_api.py
-│       └── ai_provider.py
+│       ├── ai_provider.py
+│       └── http_client.py
+│
 │
 ├── templates/                     # 메인·관리자 화면
 ├── static/                        # JavaScript·CSS·이미지·직업 매핑
