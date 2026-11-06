@@ -220,12 +220,15 @@ class CharacterDetailServiceTests(unittest.TestCase):
             spec,
         )
         self.assertEqual(result["status"], "available")
-        self.assertEqual(result["data"]["character_hair"]["hair_name"], "테스트 헤어")
-        self.assertEqual(result["data"]["character_face"]["face_name"], "테스트 성형")
-        self.assertEqual(result["data"]["character_skin_name"], "뽀송 피부")
+        self.assertEqual(result["currentData"]["character_hair"]["hair_name"], "테스트 헤어")
+        self.assertEqual(result["currentData"]["character_face"]["face_name"], "테스트 성형")
+        self.assertEqual(result["currentData"]["character_skin_name"], "뽀송 피부")
 
     def test_item_equipment_preset_payload_is_normalized_to_slot_key(self):
-        spec = SECTION_SOURCES["equipment"][0]
+        spec = next(
+            source for source in SECTION_SOURCES["equipment"]
+            if source["id"] == "itemEquipment"
+        )
         result = _normalize_source({
             "preset_no": 2,
             "item_equipment_preset_1": [{"item_equipment_slot": "모자", "item_name": "테스트 모자"}],
