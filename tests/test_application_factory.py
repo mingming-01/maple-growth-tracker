@@ -1,5 +1,6 @@
 """Flask application factory and blueprint registration tests."""
 import unittest
+from pathlib import Path
 
 from tracker import create_app
 
@@ -61,7 +62,12 @@ class ApplicationFactoryTests(unittest.TestCase):
 
         response = app.test_client().get("/")
         self.assertEqual(response.status_code, 200)
-        self.assertIn("MAPLE GROWTH TRACKER", response.get_data(as_text=True))
+        response_html = response.get_data(as_text=True)
+        react_build = Path(app.static_folder) / "react-preview" / "index.html"
+        if react_build.is_file():
+            self.assertIn("/static/react-preview/assets/", response_html)
+        else:
+            self.assertIn("MAPLE GROWTH TRACKER", response_html)
 
 
 if __name__ == "__main__":
