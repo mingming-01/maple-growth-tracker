@@ -447,3 +447,12 @@ Render에 Flask 애플리케이션으로 배포했습니다.
 AI 요청 카운터와 로그인 잠금은 현재 앱 인스턴스의 메모리에서 관리합니다. 프로세스 재시작 또는 다중 인스턴스에서 누적되지 않으므로, 실제 과금 상한은 Gemini/OpenRouter 공급자 계정의 예산 제한과 함께 설정해야 합니다. 운영 환경(`RENDER=true` 또는 `FLASK_ENV=production`)에서는 `ADMIN_PASSWORD_HASH` 사용이 필요하며 `ADMIN_PASSWORD` 평문 대체는 비활성화됩니다. `FLASK_SECRET_KEY`에는 고정된 32자 이상의 값을 설정하세요.
 
 브라우저 스모크 테스트는 `npm install`, `npx playwright install --with-deps chromium`, `npx playwright test`로 실행할 수 있습니다. 상세 제한과 미지원 범위는 `docs/PHASE1_HARDENING.md`를 참고하세요.
+
+
+## Phase 3 캐릭터 상세 정보
+
+캐릭터 검색 결과에서 상세 정보 탭을 선택하면 스탯, 장비, 링크 스킬, 유니온 정보를 별도로 불러옵니다. 상세 조회는 지연 로딩 방식이며, 일부 Nexon API가 실패해도 기본 캐릭터 검색과 성장 분석은 계속 사용할 수 있습니다.
+
+각 영역은 API가 반환하는 현재 적용 프리셋을 기본으로 선택하고, 응답에 포함된 다른 프리셋도 개별 선택해 볼 수 있습니다. 전투력은 Nexon API가 반환하는 현재 적용 상태의 값을 표시하며, 비활성 프리셋의 전투력이나 환산 점수는 근거 없이 추정하지 않습니다.
+
+상세 API 경로, 프리셋 처리 규칙, 데이터 한계는 [Phase 3 캐릭터 상세 정보 문서](docs/PHASE3_CHARACTER_DETAILS.md)를 참고하세요.
