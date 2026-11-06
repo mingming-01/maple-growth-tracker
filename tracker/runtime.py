@@ -10,7 +10,6 @@ import re
 import secrets
 import sqlite3
 import time
-from concurrent.futures import ThreadPoolExecutor
 from datetime import date, datetime, timedelta
 from threading import Lock
 from zoneinfo import ZoneInfo
@@ -30,7 +29,6 @@ from tracker.repositories.api_snapshot_repository import (
     load_api_snapshot as load_api_snapshot_for_path,
 )
 from google import genai
-from tracker.integrations.nexon_api import get_ocid, get_basic_character, get_ranking
 
 
 # 변경되지 않는 도메인 상수만 모듈 상수로 유지한다.
@@ -360,105 +358,12 @@ def with_data_status(data, status, saved_at=None):
     return result
 
 
-def is_temporary_nexon_failure(response):
-    if response is None:
-        return True
-    return response.status_code in (408, 425, 429) or response.status_code >= 500
-
-
 def stale_snapshot_response(cache_key, error_message):
     snapshot, saved_at = load_api_snapshot(cache_key)
     if snapshot is not None:
         return jsonify(with_data_status(snapshot, "stale", saved_at)), 200
     return jsonify({"error": error_message}), 503
 
-
-def get_api_class(character_class):
-    jobs_path = os.path.join(current_app.root_path, "static", "jobs.json")
-    try:
-        with open(jobs_path, "r", encoding="utf-8") as file:
-            jobs_data = json.load(file)
-    except Exception:
-        print("jobs.json 로드에 실패했습니다.")
-        return None
-    return jobs_data.get(character_class)
-
-
-def get_character_rankings(target_date, world_name, character_class, ocid):
-    result = {
-        "ranking": None,
-        "worldRanking": None,
-        "jobWorldRanking": None,
-        "jobRanking": None,
-        "rankingDataStatus": "not_ready"
-    }
-    api_class = get_api_class(character_class)
-
-    def fetch_overall():
-        return get_ranking(target_date=target_date, ocid=ocid)
-
-    def fetch_world():
-        return get_ranking(target_date=target_date, world_name=world_name, ocid=ocid)
-
-    def fetch_job_world():
-        if not api_class:
-            return None, None
-        return get_ranking(
-            target_date=target_date,
-            world_name=world_name,
-            character_class=api_class,
-            ocid=ocid
-        )
-
-    def fetch_job():
-        if not api_class:
-            return None, None
-        return get_ranking(
-            target_date=target_date,
-            character_class=api_class,
-            ocid=ocid
-        )
-
-    with ThreadPoolExecutor(max_workers=4) as executor:
-        futures = [
-            executor.submit(fetch_overall),
-            executor.submit(fetch_world),
-            executor.submit(fetch_job_world),
-            executor.submit(fetch_job)
-        ]
-        overall_data, overall_response = futures[0].result()
-        world_data, world_response = futures[1].result()
-        job_world_data, job_world_response = futures[2].result()
-        job_data, job_response = futures[3].result()
-
-    if overall_data:
-        result["ranking"] = overall_data.get("ranking")
-    if world_data:
-        result["worldRanking"] = world_data.get("ranking")
-    if job_world_data:
-        result["jobWorldRanking"] = job_world_data.get("ranking")
-    if job_data:
-        result["jobRanking"] = job_data.get("ranking")
-
-    responses = [
-        response for response in (
-            overall_response, world_response, job_world_response, job_response
-        ) if response is not None
-    ]
-    has_data = any((overall_data, world_data, job_world_data, job_data))
-    has_error = any(response.status_code != 200 for response in responses)
-
-    if has_data and has_error:
-        result["rankingDataStatus"] = "partial"
-    elif has_data:
-        result["rankingDataStatus"] = "available"
-    elif has_error:
-        result["rankingDataStatus"] = "unavailable"
-    else:
-        # 빈 랭킹 목록은 해당 날짜의 랭킹이 아직 준비되지 않았다는 뜻일 수 있다.
-        result["rankingDataStatus"] = "not_ready"
-
-    return result
 
 def sanitize_ai_text(value, expected_date=None):
     """모델 응답의 마크다운과 내부 표현을 정리해 일반 문장만 화면에 전달한다."""
