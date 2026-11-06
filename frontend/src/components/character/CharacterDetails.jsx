@@ -145,33 +145,33 @@ function DetailTooltip({
     };
   }, [open, visible.length]);
 
-  if (!visible.length && !tooltipContent) return children || null;
+  const hasTooltip = visible.length > 0 || Boolean(tooltipContent);
 
   return (
     <Wrapper
       {...wrapperProps}
       ref={triggerRef}
       className={className}
-      data-tooltip-trigger="true"
-      role="button"
-      tabIndex={0}
-      aria-label={title ? title + " 상세 정보" : "상세 정보"}
-      aria-expanded={open}
+      data-tooltip-trigger={hasTooltip ? "true" : undefined}
+      role={hasTooltip ? "button" : undefined}
+      tabIndex={hasTooltip ? 0 : undefined}
+      aria-label={hasTooltip ? (title ? title + " 상세 정보" : "상세 정보") : undefined}
+      aria-expanded={hasTooltip ? open : undefined}
       onPointerEnter={event => {
-        if (event.pointerType === "mouse") setOpen(true);
+        if (hasTooltip && event.pointerType === "mouse") setOpen(true);
       }}
       onPointerLeave={event => {
-        if (event.pointerType === "mouse") setOpen(false);
+        if (hasTooltip && event.pointerType === "mouse") setOpen(false);
       }}
       onPointerDown={event => {
-        if (event.pointerType === "touch") {
+        if (hasTooltip && event.pointerType === "touch") {
           event.preventDefault();
           setOpen(value => !value);
         }
       }}
       onBlur={() => setOpen(false)}
       onKeyDown={event => {
-        if (event.key === "Enter" || event.key === " ") {
+        if (hasTooltip && (event.key === "Enter" || event.key === " ")) {
           event.preventDefault();
           setOpen(value => !value);
         }
