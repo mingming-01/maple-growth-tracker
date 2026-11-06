@@ -231,23 +231,18 @@ test("React admin panel logs in through Flask session and filters protected oper
   await expect(page.getByRole("heading", { name: "관리자 로그인" })).toBeVisible();
   await page.getByLabel("관리자 아이디").fill("admin");
   await page.getByLabel("비밀번호").fill("test-password");
-  const observedAdminResponses = [];
+  let adminLogsResponse = null;
   page.on("response", response => {
     const url = new URL(response.url());
-    if (url.pathname.startsWith("/admin/")) {
-      observedAdminResponses.push({ path: url.pathname, status: response.status() });
+    if (url.pathname === "/admin/api/logs" && response.status() === 200) {
+      adminLogsResponse = response;
     }
   });
   await page.getByRole("button", { name: "로그인" }).click();
 
   await expect(page.getByRole("heading", { name: "관리자 로그" })).toBeVisible();
-  await expect.poll(() => observedAdminResponses.some(item => item.path === "/admin/api/logs" && item.status === 200))
-    .toBe(true);
-  const logsResponse = await page.waitForResponse(response => {
-    const url = new URL(response.url());
-    return url.pathname === "/admin/api/logs" && response.status() === 200;
-  }, { timeout: 5000 });
-  const logsPayload = await logsResponse.json();
+  await expect.poll(() => Boolean(adminLogsResponse)).toBe(true);
+  const logsPayload = await adminLogsResponse.json();
   expect(logsPayload.logs.map(item => item.character_name)).toContain("밍득");
   expect(logsPayload.logs.map(item => item.error_type)).toContain("http_5xx");
   await expect(page.locator(".mgt-admin-table tbody tr").filter({ hasText: "밍득" })).toBeVisible();
