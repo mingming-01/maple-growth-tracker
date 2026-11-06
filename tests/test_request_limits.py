@@ -114,7 +114,8 @@ class RequestLimitTests(unittest.TestCase):
             "password": "legacy-plaintext",
         })
         self.assertIn("ADMIN_PASSWORD_HASH", response.get_data(as_text=True))
-        self.assertNotIn("admin_authenticated", dict(client.session_transaction()))
+        with client.session_transaction() as session:
+            self.assertNotIn("admin_authenticated", session)
 
     def test_admin_lockout_can_be_cleared_after_successful_authentication(self):
         app = self.make_app()
