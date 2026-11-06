@@ -5,6 +5,7 @@ import {
     buildGrowthTimeline,
     calculateAverageGrowth,
     calculateGrowthMetrics,
+    calculateAdvancedGrowthInsights,
     calculateLevelProgress,
     calculateWeeklyGrowth,
     getDailyGrowth,
@@ -107,4 +108,98 @@ test("growth metrics expose observed-day counts and level-relative pace", () => 
     assert.equal(metrics.averageDailyGrowth, 80 / 3);
     assert.equal(metrics.sevenDayGrowth, 80);
     assert.equal(metrics.levelProgress.dailyProgressRate, (80 / 3 / 1000) * 100);
+});
+
+
+test("advanced growth insights compare period averages without recalculating source values", () => {
+    const history = [
+        { date: "2026-11-01", recordStatus: "available", level: 280, experience: 100, experienceChange: null },
+        { date: "2026-11-02", recordStatus: "available", level: 280, experience: 120, experienceChange: 20 },
+        { date: "2026-11-03", recordStatus: "available", level: 280, experience: 140, experienceChange: 20 },
+        { date: "2026-11-04", recordStatus: "available", level: 280, experience: 180, experienceChange: 40 },
+        { date: "2026-11-05", recordStatus: "available", level: 280, experience: 220, experienceChange: 40 }
+    ];
+    const insights = calculateAdvancedGrowthInsights(history, {
+        days: 5,
+        averageGrowth: 30,
+        confirmedChangeDays: 4,
+        previousAverageGrowth: 25,
+        previousGrowthSamples: 4,
+        previousUnavailable: false
+    });
+
+    assert.equal(insights.analysisPeriod.days, 5);
+    assert.equal(insights.dataQuality.confirmedDays, 5);
+    assert.equal(insights.dataQuality.coveragePercent, 100);
+    assert.equal(insights.periodComparison.status, "available");
+    assert.equal(insights.periodComparison.direction, "increased");
+    assert.equal(insights.periodComparison.changePercent, 20);
+    assert.equal(insights.periodComparison.currentAverageGrowth, 30);
+    assert.equal(insights.periodComparison.previousAverageGrowth, 25);
+});
+
+test("advanced growth insights classify weekday and weekend observations by ISO date", () => {
+    const history = [
+        { date: "2026-11-02", recordStatus: "available", experience: 100, experienceChange: null },
+        { date: "2026-11-03", recordStatus: "available", experience: 110, experienceChange: 10 },
+        { date: "2026-11-04", recordStatus: "available", experience: 130, experienceChange: 20 },
+        { date: "2026-11-05", recordStatus: "available", experience: 160, experienceChange: 30 },
+        { date: "2026-11-06", recordStatus: "available", experience: 200, experienceChange: 40 },
+        { date: "2026-11-07", recordStatus: "available", experience: 250, experienceChange: 50 },
+        { date: "2026-11-08", recordStatus: "available", experience: 300, experienceChange: 50 }
+    ];
+    const insights = calculateAdvancedGrowthInsights(history);
+
+    assert.equal(insights.weekdayWeekend.sufficientSamples, true);
+    assert.equal(insights.weekdayWeekend.weekday.observedDays, 4);
+    assert.equal(insights.weekdayWeekend.weekday.averageGrowth, 25);
+    assert.equal(insights.weekdayWeekend.weekend.observedDays, 2);
+    assert.equal(insights.weekdayWeekend.weekend.averageGrowth, 50);
+    assert.equal(insights.weekdayWeekend.weekendPositiveGrowthSharePercent, 50);
+});
+
+test("advanced growth insights report missing records and avoid unsupported comparisons", () => {
+    const history = [
+        { date: "2026-11-01", recordStatus: "available", level: 280, experience: 100, experienceChange: null },
+        { date: "2026-11-02", recordStatus: "not_ready", level: null, experience: null, experienceChange: null },
+        { date: "2026-11-03", recordStatus: "available", level: 280, experience: 120, experienceChange: 20 },
+        { date: "2026-11-04", recordStatus: "not_collected", level: null, experience: null, experienceChange: null }
+    ];
+    const insights = calculateAdvancedGrowthInsights(history, {
+        days: 4,
+        averageGrowth: 20,
+        confirmedChangeDays: 1,
+        previousAverageGrowth: 0,
+        previousGrowthSamples: 3,
+        previousUnavailable: false
+    });
+
+    assert.equal(insights.dataQuality.confirmedDays, 2);
+    assert.equal(insights.dataQuality.missingDays, 2);
+    assert.equal(insights.dataQuality.coveragePercent, 50);
+    assert.equal(insights.dataQuality.level, "medium");
+    assert.equal(insights.periodComparison.status, "available");
+    assert.equal(insights.periodComparison.direction, "increased");
+    assert.equal(insights.periodComparison.changePercent, null);
+    assert.equal(insights.growthTrend.direction, "insufficient_data");
+    assert.equal(insights.weekdayWeekend.sufficientSamples, false);
+});
+
+test("advanced growth insights mark an unavailable previous period explicitly", () => {
+    const history = [
+        { date: "2026-11-01", recordStatus: "available", experience: 100, experienceChange: null },
+        { date: "2026-11-02", recordStatus: "available", experience: 120, experienceChange: 20 }
+    ];
+    const insights = calculateAdvancedGrowthInsights(history, {
+        days: 2,
+        averageGrowth: 20,
+        confirmedChangeDays: 1,
+        previousAverageGrowth: null,
+        previousGrowthSamples: 0,
+        previousUnavailable: true
+    });
+
+    assert.equal(insights.periodComparison.status, "unavailable");
+    assert.equal(insights.periodComparison.direction, "insufficient_data");
+    assert.equal(insights.periodComparison.changePercent, null);
 });
