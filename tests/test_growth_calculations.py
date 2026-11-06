@@ -5,6 +5,7 @@ from pathlib import Path
 from unittest.mock import Mock, patch
 
 import app as tracker
+from tracker import create_app
 from tracker.controller import history_controller
 from tracker.repositories.growth_history_store import GrowthHistoryStore
 from tracker.runtime import get_runtime_state
@@ -15,6 +16,13 @@ class GrowthCalculationBehaviorTests(unittest.TestCase):
     """현재 7일·장기 기록 계산 동작을 고정하는 테스트."""
 
     def setUp(self):
+        self.app = create_app({
+            "TESTING": True,
+            "GROWTH_DATABASE_URL": "",
+            "NEXON_API_KEY": "",
+            "GEMINI_API_KEY": "",
+            "OPENROUTER_API_KEY": "",
+        })
         self.temp_dir = tempfile.TemporaryDirectory()
         self.today = tracker.datetime.now(tracker.KOREA_TIMEZONE).date()
         self.store = GrowthHistoryStore(
@@ -22,7 +30,7 @@ class GrowthCalculationBehaviorTests(unittest.TestCase):
         )
         self.store.initialize()
 
-        with tracker.app.app_context():
+        with self.app.app_context():
             self.state = get_runtime_state()
             self.state.growth_history_repository = self.store
             self.state.growth_history_service = GrowthHistoryService(self.store)
@@ -33,10 +41,10 @@ class GrowthCalculationBehaviorTests(unittest.TestCase):
             tracker.initialize_snapshot_db()
             tracker.initialize_log_db()
 
-        self.client = tracker.app.test_client()
+        self.client = self.app.test_client()
 
     def tearDown(self):
-        with tracker.app.app_context():
+        with self.app.app_context():
             self.state.cache.clear()
         self.temp_dir.cleanup()
 
