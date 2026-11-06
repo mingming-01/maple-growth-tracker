@@ -459,3 +459,37 @@ button:disabled { cursor: wait; opacity: 0.65; }
     .favorites-heading { align-items: flex-start; }
     .favorite-list { grid-template-columns: 1fr; }
 }
+
+
+/* Phase 2: level-relative progress, period insights and growth timeline */
+.level-progress-stat { padding: 0 16px; }
+.level-progress-heading { display: flex; align-items: baseline; justify-content: center; flex-wrap: wrap; gap: 8px; }
+.level-progress-remaining { color: #858394; font-size: 11px; font-weight: 750; }
+.level-progress-track { height: 9px; margin: 12px auto 8px; overflow: hidden; border-radius: 999px; background: #eceaf4; }
+.level-progress-fill { display: block; width: 0; height: 100%; border-radius: inherit; background: linear-gradient(90deg, #8b79f4, #5f50cf); transition: width .35s ease; }
+.level-progress-daily { margin: 0; color: #7a748f; font-size: 10px; line-height: 1.5; }
+.period-summary-extra-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; margin-top: 10px; }
+.period-summary-extra-card { display: flex; flex-direction: column; gap: 7px; min-width: 0; padding: 14px 15px; border: 1px solid #e9e8f0; border-radius: 14px; background: #fff; }
+.period-summary-extra-value { color: #302c49; font-size: 18px; font-weight: 900; overflow-wrap: anywhere; }
+.growth-timeline-section { margin-top: 18px; padding: 20px 22px; border: 1px solid #e9e8f0; border-radius: 18px; background: #fff; }
+.growth-timeline-heading { display: flex; align-items: flex-end; justify-content: space-between; gap: 12px; margin-bottom: 14px; }
+.growth-timeline-heading h3 { margin: 0; color: #302c49; font-size: 16px; font-weight: 900; }
+.growth-timeline-heading p { margin: 0; color: #898697; font-size: 11px; line-height: 1.5; }
+.growth-timeline-list { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0 24px; margin: 0; padding: 0; list-style: none; }
+.growth-timeline-item { position: relative; display: flex; gap: 12px; min-width: 0; padding: 10px 0 13px; border-top: 1px solid #f0eef5; }
+.growth-timeline-marker { flex: none; width: 10px; height: 10px; margin-top: 5px; border: 2px solid #8171e8; border-radius: 50%; background: #fff; box-shadow: 0 0 0 3px #f2efff; }
+.growth-timeline-item.is-level-up .growth-timeline-marker { border-color: #d39c22; background: #f8d56c; box-shadow: 0 0 0 3px #fff7df; }
+.growth-timeline-item.is-best-growth .growth-timeline-marker { border-color: #399b68; box-shadow: 0 0 0 3px #eaf7ef; }
+.growth-timeline-item.is-ranking .growth-timeline-marker { border-color: #4a86c5; box-shadow: 0 0 0 3px #edf5fd; }
+.growth-timeline-body { display: grid; gap: 3px; min-width: 0; }
+.growth-timeline-date { color: #9994a7; font-size: 10px; font-weight: 750; }
+.growth-timeline-title { color: #37334d; font-size: 12px; font-weight: 900; }
+.growth-timeline-description { margin: 0; color: #858394; font-size: 11px; line-height: 1.5; overflow-wrap: anywhere; }
+.growth-timeline-empty { grid-column: 1 / -1; padding: 14px 0; color: #9994a7; font-size: 12px; text-align: center; }
+@media (max-width: 620px) {
+    .period-summary-extra-grid { grid-template-columns: 1fr; gap: 8px; }
+    .growth-timeline-section { padding: 17px 15px; }
+    .growth-timeline-heading { align-items: flex-start; flex-direction: column; }
+    .growth-timeline-list { grid-template-columns: 1fr; }
+    .level-progress-stat { padding: 0 8px; }
+}
