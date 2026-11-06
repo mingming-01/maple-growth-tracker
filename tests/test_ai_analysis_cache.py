@@ -2,35 +2,39 @@ import unittest
 from unittest.mock import Mock, patch
 
 import app as tracker
-from tracker.services import ai_analysis_service
+from tracker.runtime import get_runtime_state
 
 
 class AIResponseCacheTests(unittest.TestCase):
     def setUp(self):
-        self.cache_patch = patch.dict(tracker.AI_RESPONSE_CACHE, {}, clear=True)
-        self.cache_patch.start()
+        with tracker.app.app_context():
+            self.state = get_runtime_state()
+            self.state.ai_response_cache.clear()
 
     def tearDown(self):
-        self.cache_patch.stop()
+        with tracker.app.app_context():
+            self.state.ai_response_cache.clear()
 
     def test_cache_reuses_only_the_same_prompt(self):
-        tracker.set_ai_response_cache("prompt A", "저장된 분석")
+        with tracker.app.app_context():
+            tracker.set_ai_response_cache("prompt A", "저장된 분석")
 
-        self.assertEqual(tracker.get_ai_response_cache("prompt A"), "저장된 분석")
-        self.assertIsNone(tracker.get_ai_response_cache("prompt B"))
+            self.assertEqual(tracker.get_ai_response_cache("prompt A"), "저장된 분석")
+            self.assertIsNone(tracker.get_ai_response_cache("prompt B"))
 
     def test_expired_cache_entry_is_removed(self):
-        with patch.object(tracker.time, "time", return_value=1000):
-            tracker.set_ai_response_cache("prompt", "오래된 분석")
+        with tracker.app.app_context():
+            with patch.object(tracker.time, "time", return_value=1000):
+                tracker.set_ai_response_cache("prompt", "오래된 분석")
 
-        with patch.object(
-            tracker.time,
-            "time",
-            return_value=1000 + tracker.AI_RESPONSE_CACHE_TTL + 1,
-        ):
-            self.assertIsNone(tracker.get_ai_response_cache("prompt"))
+            with patch.object(
+                tracker.time,
+                "time",
+                return_value=1000 + tracker.AI_RESPONSE_CACHE_TTL + 1,
+            ):
+                self.assertIsNone(tracker.get_ai_response_cache("prompt"))
 
-        self.assertEqual(tracker.AI_RESPONSE_CACHE, {})
+            self.assertEqual(self.state.ai_response_cache, {})
 
     def test_growth_report_reuses_successful_model_response(self):
         client = Mock()
@@ -64,9 +68,9 @@ class AIResponseCacheTests(unittest.TestCase):
             "prediction": {"estimatedDate": "2026-11-01"},
         }
 
-        with patch.object(ai_analysis_service, "gemini_client", client), patch.object(
-            tracker, "OPENROUTER_API_KEY", ""
-        ):
+        with tracker.app.app_context():
+            self.state.gemini_client = client
+            self.state.openrouter_api_key = ""
             first = tracker.generate_ai_analysis(character, history, metrics)
             second = tracker.generate_ai_analysis(character, history, metrics)
 
@@ -121,9 +125,9 @@ class AIResponseCacheTests(unittest.TestCase):
             }],
         }
 
-        with patch.object(ai_analysis_service, "gemini_client", client), patch.object(
-            tracker, "OPENROUTER_API_KEY", ""
-        ):
+        with tracker.app.app_context():
+            self.state.gemini_client = client
+            self.state.openrouter_api_key = ""
             first = tracker.generate_ai_comparison(primary, comparison)
             second = tracker.generate_ai_comparison(primary, comparison)
 
@@ -161,9 +165,9 @@ class AIResponseCacheTests(unittest.TestCase):
             "history": [],
         }
 
-        with patch.object(ai_analysis_service, "gemini_client", client), patch.object(
-            tracker, "OPENROUTER_API_KEY", ""
-        ):
+        with tracker.app.app_context():
+            self.state.gemini_client = client
+            self.state.openrouter_api_key = ""
             first = tracker.generate_ai_comparison(primary, comparison)
             primary["character"]["dataAsOf"] = "2026-10-27T10:10:00+09:00"
             second = tracker.generate_ai_comparison(primary, comparison)
