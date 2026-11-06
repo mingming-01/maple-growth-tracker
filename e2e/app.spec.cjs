@@ -139,13 +139,19 @@ test("character details automatically open the game-style stat window", async ({
         {
           id: "ability", label: "어빌리티", status: "available", activePresetNo: 1,
           currentData: { ability_info: [{ ability_value: "보스 몬스터 공격 시 데미지 +20%" }] },
-          presets: [{ number: 1, purpose: "boss", data: { ability_info: [{ ability_value: "보스 몬스터 공격 시 데미지 +20%" }] } }],
+          presets: [
+            { number: 1, purpose: "boss", data: { ability_grade: "레전드리", ability_info: [{ ability_value: "보스 몬스터 공격 시 데미지 +20%" }] } },
+            { number: 2, purpose: "hunting", data: { ability_grade: "유니크", ability_info: [{ ability_value: "메소 획득량 +20%" }] } }
+          ],
           data: {}
         },
         {
           id: "itemEquipment", label: "장비 프리셋", status: "available", activePresetNo: 1,
           currentData: { item_equipment: [] },
-          presets: [{ number: 1, purpose: "unknown", data: { item_equipment: [] } }],
+          presets: [
+            { number: 1, purpose: "unknown", data: { item_equipment: [{ item_name: "보스 프리셋 장비", item_equipment_slot: "무기" }] } },
+            { number: 2, purpose: "unknown", data: { item_equipment: [{ item_name: "사냥 프리셋 장비", item_equipment_slot: "무기" }] } }
+          ],
           data: {}
         },
         {
@@ -185,11 +191,16 @@ test("character details automatically open the game-style stat window", async ({
   await expect(page.locator("#characterDetailsContent")).toContainText("현재 적용 중인 실제 전투력");
   expect(detailRequests.stats).toBe(1);
 
-  await expect(page.locator("#characterDetailsContent .game-preset-select")).toHaveCount(3); 
+  await expect(page.locator("#characterDetailsContent .game-preset-select")).toHaveCount(4); 
   const hyperPreset = page.locator("#characterDetailsContent .game-preset-select").first();
   await expect(hyperPreset).toHaveValue("2");
   await hyperPreset.selectOption("1");
   await expect(page.locator("#characterDetailsContent")).toContainText("크리티컬 데미지");
+
+  const equipmentPreset = page.locator("#characterDetailsContent .game-preset-select").nth(2);
+  await expect(equipmentPreset).toHaveValue("1");
+  await equipmentPreset.selectOption("2");
+  await expect(page.locator("#characterDetailsContent .game-selected-build-window")).toContainText("사냥 프리셋 장비");
 
   await page.locator('[data-detail-tab="stats"]').click();
   expect(detailRequests.stats).toBe(1);
@@ -199,7 +210,10 @@ test("character details automatically open the game-style stat window", async ({
   await expect(page.locator("#characterDetailsContent")).toContainText("주황버섯");
   await expect(page.locator("#characterDetailsContent")).toContainText("테스트캐릭터");
   await expect(page.locator("#characterDetailsContent")).toContainText("SSS");
+  await expect(page.locator("#characterDetailsContent .game-union-crystal-monster")).toHaveCount(1);
   const unionPreset = page.locator("#characterDetailsContent .game-union-state-panel .game-preset-select");
+  const unionOptionLabels = await unionPreset.locator("option").allTextContents();
+  expect(unionOptionLabels.every(label => !/보스|사냥/.test(label))).toBe(true);
   await expect(unionPreset).toHaveValue("2");
   await unionPreset.selectOption("1");
   await expect(page.locator("#characterDetailsContent")).toContainText("경험치 획득량");
