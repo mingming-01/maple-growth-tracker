@@ -1,4 +1,4 @@
-"""Browser-side API transport and JSON response handling."""
+/** Browser-side API transport and JSON response handling. */
 
 export function apiFetch(url, options = {}) {
     return window.fetch(url, options);
