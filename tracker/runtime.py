@@ -359,7 +359,7 @@ def save_api_snapshot(cache_key, data):
     )
 
 
-def record_best_combat_power(ocid, combat_power, preset_numbers=None, observed_at=None):
+def record_best_combat_power(ocid, combat_power, preset_numbers=None, observed_at=None, preset_signatures=None):
     """조회한 실제 전투력의 최고 관측값과 당시 프리셋 번호를 보존한다."""
     try:
         value = int(float(str(combat_power).replace(",", "").strip()))
@@ -373,11 +373,12 @@ def record_best_combat_power(ocid, combat_power, preset_numbers=None, observed_a
             previous_value = int(existing.get("value") or 0)
         except (TypeError, ValueError):
             previous_value = 0
-        if value >= previous_value:
+        if value > previous_value or not existing.get("value"):
             existing = {
                 "value": value,
                 "observedAt": observed_at or datetime.now(KOREA_TIMEZONE).isoformat(timespec="seconds"),
-                "presetNumbers": preset_numbers or existing.get("presetNumbers"),
+                "presetNumbers": preset_numbers,
+                "presetSignatures": preset_signatures,
             }
             save_api_snapshot(key, existing)
     return existing or None

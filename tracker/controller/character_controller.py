@@ -18,7 +18,6 @@ from tracker.runtime import (
     save_api_snapshot,
     set_cache,
     stale_snapshot_response,
-    record_best_combat_power,
     with_data_status,
 )
 
@@ -86,15 +85,13 @@ def get_character():
         "rankingExperience": basic["character_exp"],
         "ocid": ocid,
         "rankingDataStatus": character_rankings["rankingDataStatus"],
-        "currentCombatPower": (character_rankings.get("combatPower") or {}).get("value"),
     }
-    best_power = record_best_combat_power(
-        ocid, result["currentCombatPower"],
-        observed_at=(character_rankings.get("combatPower") or {}).get("observedAt"),
-    )
-    result["bestCombatPower"] = best_power.get("value") if best_power else None
-    result["bestCombatPowerObservedAt"] = best_power.get("observedAt") if best_power else None
-    result["bestPresetCombination"] = best_power.get("presetNumbers") if best_power else None
+    best_power, _ = load_api_snapshot(f"combat-power-best:{ocid}")
+    best_power = best_power if isinstance(best_power, dict) else {}
+    result["bestCombatPower"] = best_power.get("value")
+    result["bestCombatPowerObservedAt"] = best_power.get("observedAt")
+    result["bestPresetCombination"] = None
+
 
     data_status = "partial" if character_rankings["rankingDataStatus"] in ("partial", "unavailable") else "current"
     saved_at = datetime.now().astimezone().isoformat(timespec="seconds")

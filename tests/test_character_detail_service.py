@@ -47,7 +47,7 @@ class CharacterDetailServiceTests(unittest.TestCase):
         self.assertEqual(result["activePresetNo"], 2)
         self.assertEqual([item["number"] for item in result["presets"]], [1, 2])
         self.assertEqual(
-            result["presets"][1]["data"]["hyper_stat_preset_2"][0]["stat_level"],
+            result["presets"][1]["data"]["hyper_stat"][0]["stat_level"],
             10,
         )
 
@@ -64,8 +64,8 @@ class CharacterDetailServiceTests(unittest.TestCase):
         )
         self.assertEqual(result["activePresetNo"], 3)
         self.assertEqual(len(result["presets"]), 1)
-        self.assertIn("union_raider_preset_3", result["presets"][0]["data"])
-        self.assertIn("union_block_preset_3", result["presets"][0]["data"])
+        self.assertIn("union_raider", result["presets"][0]["data"])
+        self.assertIn("union_block", result["presets"][0]["data"])
         self.assertIn("union_occupied_stat", result["data"])
 
     def test_section_returns_partial_when_one_detail_api_fails(self):
@@ -93,9 +93,9 @@ class CharacterDetailServiceTests(unittest.TestCase):
 
     def test_preset_classifier_uses_option_signals_and_keeps_ambiguous_unknown(self):
         from tracker.services.character_detail_service import _classify_preset
-        self.assertEqual(_classify_preset({"ability_value": "보스 몬스터 공격 시 데미지 +20%"})["purpose"], "boss")
-        self.assertEqual(_classify_preset({"ability_value": "메소 획득량 +20%"})["purpose"], "hunting")
-        self.assertEqual(_classify_preset({"stat_type": "STR"})["purpose"], "unknown")
+        self.assertEqual(_classify_preset("ability", {"ability_value": "보스 몬스터 공격 시 데미지 +20%"})["purpose"], "boss")
+        self.assertEqual(_classify_preset("ability", {"ability_value": "메소 획득량 +20%"})["purpose"], "hunting")
+        self.assertEqual(_classify_preset("hyperStat", {"stat_type": "STR"})["purpose"], "unknown")
 
     def test_skills_section_requests_sixth_job_skills_and_hexa_data(self):
         payloads = {
@@ -112,6 +112,51 @@ class CharacterDetailServiceTests(unittest.TestCase):
             result = get_character_detail_section("sample-ocid", "skills")
         self.assertEqual(result["status"], "available")
         self.assertEqual([source["id"] for source in result["sources"]], ["skill6", "hexaMatrix", "hexaStat"])
+
+    def test_item_equipment_preset_payload_is_normalized_to_slot_key(self):
+        spec = SECTION_SOURCES["equipment"][0]
+        result = _normalize_source({
+            "preset_no": 2,
+            "item_equipment_preset_1": [{"item_equipment_slot": "모자", "item_name": "테스트 모자"}],
+            "item_equipment_preset_2": [{"item_equipment_slot": "무기", "item_name": "테스트 무기"}],
+        }, spec)
+        self.assertEqual(result["activePresetNo"], 2)
+        self.assertEqual(result["presets"][0]["data"]["item_equipment"][0]["item_name"], "테스트 모자")
+        self.assertEqual(result["presets"][1]["data"]["item_equipment"][0]["item_name"], "테스트 무기")
+
+    def test_link_preset_combines_equipped_and_owned_link_skills(self):
+        spec = SECTION_SOURCES["stats"][4]
+        result = _normalize_source({
+            "use_preset_no": 1,
+            "character_link_skill_preset_1": [{"skill_name": "소울 컨트랙트"}],
+            "character_owned_link_skill_preset_1": {"skill_name": "데몬스 퓨리"},
+        }, spec)
+        preset = result["presets"][0]
+        self.assertEqual(preset["data"]["character_link_skill"][0]["skill_name"], "소울 컨트랙트")
+        self.assertEqual(preset["data"]["character_owned_link_skill"]["skill_name"], "데몬스 퓨리")
+        self.assertEqual(preset["bossScore"], 6)
+
+    def test_profile_recommendation_combines_equipment_link_and_hyper_signals(self):
+        from tracker.services.character_detail_service import recommend_preset_profiles
+        sources = [
+            {"id": "itemEquipment", "activePresetNo": 1, "presets": [
+                {"number": 1, "bossScore": 0, "huntingScore": 4},
+                {"number": 2, "bossScore": 4, "huntingScore": 0},
+            ]},
+            {"id": "linkSkill", "activePresetNo": 1, "presets": [
+                {"number": 1, "bossScore": 0, "huntingScore": 3},
+                {"number": 2, "bossScore": 6, "huntingScore": 0},
+            ]},
+            {"id": "hyperStat", "activePresetNo": 1, "presets": [
+                {"number": 1, "bossScore": 0, "huntingScore": 4},
+                {"number": 2, "bossScore": 5, "huntingScore": 0},
+            ]},
+        ]
+        result = recommend_preset_profiles(sources)
+        self.assertEqual(result["boss"]["presetNumbers"]["equipment"], 2)
+        self.assertEqual(result["boss"]["presetNumbers"]["link"], 2)
+        self.assertEqual(result["boss"]["presetNumbers"]["hyperStat"], 2)
+        self.assertEqual(result["hunting"]["presetNumbers"]["equipment"], 1)
 
     def test_unknown_section_is_rejected(self):
         with self.assertRaises(ValueError):
