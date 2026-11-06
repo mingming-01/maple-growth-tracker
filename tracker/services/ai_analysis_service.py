@@ -4,11 +4,11 @@ import time
 from datetime import date
 
 from tracker.integrations.ai_provider import request_openrouter, should_use_openrouter
+from tracker.services.ai_text_service import sanitize_ai_text
 from tracker.runtime import (
     get_ai_response_cache,
     get_gemini_client,
     get_runtime_state,
-    sanitize_ai_text,
     set_ai_response_cache,
 )
 
