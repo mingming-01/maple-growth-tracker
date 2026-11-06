@@ -24,6 +24,7 @@ test("React preview refreshes ranking data and restores the full-size profile pr
     contentType: "application/json",
     body: JSON.stringify({
       characterName: "프리뷰테스트",
+      ocid: "react-preview-test-ocid",
       character_image: null,
       worldName: "크로아",
       job: "아크메이지(불,독)",
