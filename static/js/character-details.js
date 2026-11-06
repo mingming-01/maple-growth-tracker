@@ -349,11 +349,13 @@ function renderEquipmentSection(data,onPresetChange=()=>{}) {
     board.style.gridTemplateColumns="repeat(7,minmax(0,1fr))";
     board.style.gridTemplateRows="repeat(4,minmax(104px,auto)) repeat(2,minmax(92px,auto))";
     SLOT_DEFS.forEach(([slotName,slotKey,row,column])=>{
-        const appearanceFields={
-            hair:["character_hair","hair_name"],faceStyle:["character_face","face_name"],skin:["character_skin_name","skin_name"]
-        };
-        const appearanceValue=appearanceFields[slotKey]
-            ? appearanceFields[slotKey].map(key=>appearance[key]).find(present) : null;
+        const appearanceFields={hair:"character_hair",faceStyle:"character_face",skin:"character_skin_name"};
+        const rawAppearance=appearanceFields[slotKey]?appearance[appearanceFields[slotKey]]:null;
+        const appearanceValue=slotKey==="hair"
+            ? (rawAppearance?.hair_name||rawAppearance?.name||rawAppearance)
+            : slotKey==="faceStyle"
+                ? (rawAppearance?.face_name||rawAppearance?.name||rawAppearance)
+                : (rawAppearance?.skin_name||rawAppearance?.name||rawAppearance);
         const item=findEquipmentForSlot(items,slotName,slotKey);
         const hasAppearance=present(appearanceValue);
         const slot=el("div","equipment-game-slot"+((item||hasAppearance)?" is-equipped":" is-empty"));
