@@ -4,15 +4,17 @@ from datetime import date
 
 from tracker.integrations.ai_provider import request_openrouter, should_use_openrouter
 from tracker.runtime import (
-    OPENROUTER_API_KEY,
-    gemini_client,
     get_ai_response_cache,
+    get_gemini_client,
+    get_runtime_state,
     sanitize_ai_text,
     set_ai_response_cache,
 )
 
 
 def generate_ai_analysis(character, history, computed_metrics=None):
+    gemini_client = get_gemini_client()
+    openrouter_api_key = get_runtime_state().openrouter_api_key
 
     growth_data = [
         {
@@ -122,7 +124,7 @@ def generate_ai_analysis(character, history, computed_metrics=None):
             if not should_use_openrouter(error):
                 return {"error": "AI 분석을 불러오지 못했습니다."}
 
-    if OPENROUTER_API_KEY:
+    if openrouter_api_key:
         try:
             response_text = request_openrouter(prompt)
             print("OpenRouter로 성장 분석을 처리했습니다.")
@@ -142,6 +144,9 @@ def generate_ai_analysis(character, history, computed_metrics=None):
 
 
 def generate_ai_comparison(primary, comparison):
+    gemini_client = get_gemini_client()
+    openrouter_api_key = get_runtime_state().openrouter_api_key
+
     def prepare_subject(subject):
         character = subject["character"]
         metrics = subject["metrics"]
@@ -209,7 +214,7 @@ def generate_ai_comparison(primary, comparison):
             if not should_use_openrouter(error):
                 return {"error": "AI 성장 분석을 불러오지 못했습니다."}
 
-    if OPENROUTER_API_KEY:
+    if openrouter_api_key:
         try:
             response_text = request_openrouter(prompt)
             print("OpenRouter로 성장 비교 분석을 처리했습니다.")
