@@ -365,6 +365,14 @@ test("character details automatically open the game-style stat window", async ({
   await expect(page.locator("#characterDetailsContent .game-champion-hover-tooltip img")).toHaveCount(1);
   const championCard = page.locator("#characterDetailsContent .game-union-champion-card");
   await championCard.hover();
+  const tooltipDebug = await championCard.evaluate(card => ({
+    hovered: card.matches(":hover"),
+    describedBy: card.getAttribute("aria-describedby"),
+    childTooltip: Boolean(card.querySelector(".game-champion-hover-tooltip")),
+    bodyTooltip: Boolean(document.querySelector("body > .game-champion-hover-tooltip"))
+  }));
+  console.log("Union champion tooltip state:", tooltipDebug);
+  await expect(championCard).toHaveAttribute("aria-describedby", /union-champion-tooltip/);
   const championTooltip = page.locator("body > .game-champion-hover-tooltip");
   await expect(championTooltip).toBeVisible();
   await expect(championTooltip).toHaveCSS("position", "fixed");

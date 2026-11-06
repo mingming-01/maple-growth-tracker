@@ -848,10 +848,10 @@ function attachViewportTooltip(trigger,tooltip,id) {
         else hide();
     };
 
-    trigger.addEventListener("mouseenter",()=>{hovered=true;sync();});
-    trigger.addEventListener("mouseleave",()=>{hovered=false;sync();});
-    trigger.addEventListener("focus",()=>{focused=true;sync();});
-    trigger.addEventListener("blur",()=>{focused=false;sync();});
+    trigger.addEventListener("pointerenter",()=>{hovered=true;sync();});
+    trigger.addEventListener("pointerleave",()=>{hovered=false;sync();});
+    trigger.addEventListener("focusin",()=>{focused=true;sync();});
+    trigger.addEventListener("focusout",()=>{focused=false;sync();});
 }
 
 function renderUnionChampions(championSource,content) {
