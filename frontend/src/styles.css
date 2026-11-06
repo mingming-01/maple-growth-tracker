@@ -542,3 +542,68 @@ button:focus-visible,input:focus-visible,select:focus-visible,a:focus-visible { 
   .react-equipment-board .equipment-game-slot { min-height: 94px; }
   .react-equipment-board .react-detail-tooltip-body { width: min(220px, calc(100vw - 28px)); }
 }
+
+
+/* Final responsive character portrait and union champion avatar tooltip rules */
+.mgt-character-avatar-frame { overflow:hidden; }
+.mgt-character-avatar {
+  width:100%;
+  height:100%;
+  max-width:100%;
+  object-fit:contain;
+  object-position:center;
+  transform:none;
+  image-rendering:auto;
+}
+@media (max-width:760px) {
+  .mgt-character-avatar-frame { width:148px; height:148px; aspect-ratio:1; }
+  .mgt-character-avatar { width:100%; height:100%; transform:none; }
+}
+@media (max-width:480px) {
+  .mgt-character-avatar-frame { width:104px; height:124px; }
+  .mgt-character-avatar { width:100%; height:100%; transform:none; }
+}
+.game-union-champion-card { position:relative; overflow:visible; }
+.game-union-champion-avatar-tooltip { position:relative; display:flex; justify-content:center; margin:7px 0; z-index:2; }
+.game-union-champion-avatar-tooltip summary {
+  display:inline-flex;
+  align-items:center;
+  justify-content:center;
+  min-height:30px;
+  padding:5px 10px;
+  border:1px solid rgba(169,149,255,.25);
+  border-radius:8px;
+  color:#cbbfff;
+  background:rgba(132,105,240,.12);
+  cursor:pointer;
+  list-style:none;
+  touch-action:manipulation;
+}
+.game-union-champion-avatar-tooltip summary::-webkit-details-marker { display:none; }
+.game-union-champion-avatar-tooltip .react-detail-tooltip-body {
+  display:none;
+  position:absolute;
+  left:50%;
+  bottom:calc(100% + 8px);
+  width:150px;
+  max-height:none;
+  margin:0;
+  padding:10px;
+  transform:translateX(-50%);
+  text-align:center;
+  z-index:20;
+}
+.game-union-champion-avatar-tooltip[open] .react-detail-tooltip-body,
+.game-union-champion-avatar-tooltip:hover .react-detail-tooltip-body,
+.game-union-champion-avatar-tooltip:focus-within .react-detail-tooltip-body { display:block; }
+.game-union-champion-tooltip-avatar {
+  display:block;
+  width:112px;
+  height:112px;
+  margin:0 auto 7px;
+  object-fit:contain;
+}
+.game-union-champion-avatar-tooltip .react-detail-tooltip-body strong { margin:0; }
+@media (hover:none), (pointer:coarse) {
+  .game-union-champion-avatar-tooltip summary { min-height:34px; }
+}
