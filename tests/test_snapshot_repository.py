@@ -4,7 +4,7 @@ import tempfile
 import unittest
 from datetime import datetime, timezone
 from pathlib import Path
-from unittest.mock import Mock, patch
+from unittest.mock import MagicMock, patch
 
 import psycopg
 
@@ -37,9 +37,9 @@ class ApiSnapshotRepositoryTests(unittest.TestCase):
 
     @patch("tracker.repositories.api_snapshot_repository.psycopg.connect")
     def test_postgres_snapshot_round_trip(self, connect):
-        init_connection = Mock()
-        save_connection = Mock()
-        load_connection = Mock()
+        init_connection = MagicMock()
+        save_connection = MagicMock()
+        load_connection = MagicMock()
         for connection in (init_connection, save_connection, load_connection):
             connection.__enter__.return_value = connection
             connection.__exit__.return_value = False
