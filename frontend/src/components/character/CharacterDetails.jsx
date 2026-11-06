@@ -654,10 +654,13 @@ export default function CharacterDetails({ ocid, onStatsLoaded }) {
     let cancelled = false;
     if (cached) {
       setData(cached);
+      setError("");
+      setLoading(false);
       if (tab === "stats") onStatsLoaded?.(cached);
       return () => { cancelled = true; };
     }
 
+    setData(null);
     setLoading(true);
     setError("");
     setNotice("");
