@@ -114,17 +114,40 @@ def get_history():
                     "experience": ranking_data.get("character_exp"),
                     "recordStatus": "available"
                 }
-            if response is not None and response.status_code == 200:
-                # 빈 응답으로 같은 날 앞서 저장한 정상 스냅샷을 덮어쓰지 않는다.
-                if saved and saved.get("recordStatus") == "available":
+            # 랭킹 API에서 해당 캐릭터를 찾지 못해도 기본 정보 API의 날짜별
+            # 스냅샷에는 레벨·경험치가 존재할 수 있으므로 보조 조회한다.
+            basic_data, basic_response = get_basic_character_snapshot(
+                ocid,
+                target_date=date_string if target_date < today else None,
+                historical=True
+            )
+            if basic_data:
+                level = basic_data.get("character_level")
+                experience = basic_data.get("character_exp")
+                if level is not None and experience is not None:
                     return {
                         "date": date_string,
-                        "ranking": saved.get("ranking"),
-                        "level": saved.get("level"),
-                        "experience": saved.get("experience"),
-                        "recordStatus": "available",
-                        "_fromStore": True
+                        "ranking": None,
+                        "level": level,
+                        "experience": experience,
+                        "recordStatus": "available"
                     }
+
+            # 빈 응답으로 같은 날 앞서 저장한 정상 스냅샷을 덮어쓰지 않는다.
+            if saved and saved.get("recordStatus") == "available":
+                return {
+                    "date": date_string,
+                    "ranking": saved.get("ranking"),
+                    "level": saved.get("level"),
+                    "experience": saved.get("experience"),
+                    "recordStatus": "available",
+                    "_fromStore": True
+                }
+
+            if (
+                response is not None and response.status_code == 200
+                and basic_response is not None and basic_response.status_code == 200
+            ):
                 return {
                     "date": date_string,
                     "ranking": None,
@@ -132,13 +155,18 @@ def get_history():
                     "experience": None,
                     "recordStatus": "not_ready"
                 }
+
+            retryable = (
+                is_temporary_nexon_failure(response)
+                or is_temporary_nexon_failure(basic_response)
+            )
             return {
                 "date": date_string,
                 "ranking": None,
                 "level": None,
                 "experience": None,
                 "recordStatus": "unavailable",
-                "retryable": is_temporary_nexon_failure(response)
+                "retryable": retryable
             }
 
         dates = [today - timedelta(days=i) for i in range(7)]
