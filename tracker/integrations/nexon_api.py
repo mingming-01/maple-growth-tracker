@@ -2,7 +2,6 @@
 import time
 from threading import Lock
 
-import requests
 from flask import current_app, has_app_context
 
 from tracker.config import Config
