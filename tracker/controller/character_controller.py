@@ -4,7 +4,9 @@ from datetime import datetime
 import requests
 from flask import Blueprint, jsonify, request
 
-from tracker.integrations.nexon_api import get_basic_character, get_ocid
+from tracker.services.nexon_service import (
+    resolve_character,
+)
 from tracker.runtime import (
     CHARACTER_CACHE_TTL,
     KOREA_TIMEZONE,
@@ -40,7 +42,7 @@ def get_character():
         ))
 
     try:
-        ocid, response = get_ocid(character_name)
+        ocid, basic, response = resolve_character(character_name)
         if not ocid:
             if is_temporary_nexon_failure(response):
                 return stale_snapshot_response(
@@ -48,7 +50,6 @@ def get_character():
                 )
             return jsonify({"error": "캐릭터 정보를 찾을 수 없거나 조회할 수 없습니다."}), response.status_code
 
-        basic, response = get_basic_character(ocid)
         if not basic:
             if is_temporary_nexon_failure(response):
                 return stale_snapshot_response(
