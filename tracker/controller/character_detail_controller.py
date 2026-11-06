@@ -45,7 +45,7 @@ def get_character_details():
             "hyperStat": "hyperStat",
             "ability": "ability",
             "linkSkill": "link",
-            "unionRaider": "union",
+            "unionStateStat": "union",
         }
         required_keys = set(preset_keys.values())
         actual_numbers = {
