@@ -62,11 +62,22 @@ class NexonServiceTests(unittest.TestCase):
             "2026-11-07", "크로아", "히어로", "ocid-value"
         )
 
-        self.assertEqual(result["rankingDataStatus"], "partial")
+        # The historical snapshot contains successful 200 responses for all
+        # four ranking filters. Equal ordinal values alone are inconclusive,
+        # so keep the job ranks rather than downgrading the snapshot to partial.
+        self.assertEqual(result["rankingDataStatus"], "available")
         self.assertEqual(result["rankingDate"], "2026-11-06")
         self.assertEqual(result["ranking"], 123)
-        self.assertIsNone(result["jobWorldRanking"])
-        self.assertIsNone(result["jobRanking"])
+        self.assertEqual(result["jobWorldRanking"], 123)
+        self.assertEqual(result["jobRanking"], 123)
+        self.assertEqual(
+            result["rankingApiDiagnostics"]["jobWorldRanking"]["classFilterFallback"],
+            "same-rank-inconclusive",
+        )
+        self.assertEqual(
+            result["rankingApiDiagnostics"]["jobRanking"]["classFilterFallback"],
+            "same-rank-inconclusive",
+        )
         self.assertEqual(get_ranking.call_count, 10)
 
     @patch("tracker.services.nexon_service.get_api_class", return_value="마법사-아크메이지(썬,콜)")
