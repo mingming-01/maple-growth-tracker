@@ -40,7 +40,7 @@ def _generate_gemini_content(client, prompt):
                 time.sleep(delay)
 
 
-def generate_ai_analysis(character, history, computed_metrics=None, growth_insights=None):
+def generate_ai_analysis(character, history, computed_metrics=None, growth_insights=None, analysis_context=None):
     gemini_client = get_gemini_client()
     openrouter_api_key = get_runtime_state().openrouter_api_key
 
@@ -78,6 +78,7 @@ def generate_ai_analysis(character, history, computed_metrics=None, growth_insig
             },
             "metrics": computed_metrics,
             "growthInsights": growth_insights or {},
+            "selectedPeriod": analysis_context or {"periodDays": 7, "periodSummary": None},
             "predictionDisplayDate": prediction_date_label,
             "history": growth_data
         }
@@ -92,6 +93,8 @@ def generate_ai_analysis(character, history, computed_metrics=None, growth_insig
 - 날짜는 predictionDisplayDate가 존재할 때에만 성장 전망에서 그대로 사용해. 날짜가 없거나 예측이 성립하지 않으면 특정 날짜를 만들어내지 말고 '현재 기록만으로는 예상하기 어렵습니다'라고 설명해.
 - 데이터가 부족하거나 비교 가능한 기록이 없으면 그 사실을 솔직하게 말해. 기록이 적은데도 '꾸준한 성장', '성장세 향상', '높은 신뢰도'라고 단정하지 마.
 - 레벨업은 실제 기록에서 확인된 경우에만 언급해. 주말·평일, 플레이 시간, 플레이 방식, 접속 빈도는 데이터가 직접 뒷받침하지 않으면 추측하지 마.
+- selectedPeriod.periodDays와 selectedPeriod.periodSummary가 있으면 해당 선택 기간의 기록 요약을 우선 분석해. 이전 기간 요약이 없거나 표본이 부족하면 비교를 단정하지 마.
+- 선택 기간 요약의 평균·기록 충실도·성장일 수는 제공된 값만 사용하고 다시 계산하지 마. 선택 기간이 30일 또는 90일이면 growthInsights의 7일 비교를 선택 기간 전체의 결과처럼 설명하지 마.
 - 근거 없는 칭찬, 응원 문구, 과장된 전망, 같은 뜻의 문장 반복을 피하고 담백하고 친근한 어조를 사용해.
 - 내부 모델명, API, Python, Gemini, OpenRouter, 프롬프트, 계산 근거, 데이터 필드명 등 서비스 구현 정보는 절대 언급하지 마.
 - '분석 근거를 재사용했다'거나 'AI 모델을 호출하지 않았다' 같은 시스템 상태도 리포트 본문에 쓰지 마.
