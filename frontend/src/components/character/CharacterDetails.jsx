@@ -839,7 +839,13 @@ function symbolFirstValue(symbol, keys) {
 function symbolGrowthComplete(symbol) {
   const required = optionNumber(symbol?.symbol_require_growth_count);
   const current = optionNumber(symbol?.symbol_growth_count);
-  return required !== null && (required === 0 || (current !== null && current >= required));
+  const name = String(symbol?.symbol_name || "");
+  const level = Number(symbol?.symbol_level);
+  const knownMaxLevel = (/아케인/.test(name) && level >= 20) ||
+    (/어센틱/.test(name) && level >= 11);
+  return knownMaxLevel || (
+    required !== null && (required === 0 || (current !== null && current >= required))
+  );
 }
 
 function extractSymbolSpecialStats(symbol) {
@@ -869,17 +875,18 @@ function SymbolsTab({ data }) {
               ["INT", symbol.symbol_int], ["LUK", symbol.symbol_luk], ["HP", symbol.symbol_hp]
             ].filter(([, value]) => hasValue(value));
             const isGrandAuthentic = /그랜드\s*어센틱/.test(String(symbol.symbol_name || ""));
-            const rawSpecialStats = isGrandAuthentic ? [
-              ["경험치", ["symbol_exp_rate", "symbol_experience_rate", "symbol_exp"]],
-              ["드롭률", ["symbol_drop_rate", "symbol_item_drop_rate"]],
-              ["메획", ["symbol_meso_rate", "symbol_meso_acquisition_rate"]]
-            ].map(([label, keys]) => [label, symbolFirstValue(symbol, keys)])
-              .filter(([, value]) => hasValue(value)) : [];
             const descriptionSpecialStats = isGrandAuthentic
               ? extractSymbolSpecialStats(symbol) : [];
-            const specialStats = rawSpecialStats.length
-              ? rawSpecialStats
-              : descriptionSpecialStats;
+            const specialStatFromDescription = label =>
+              descriptionSpecialStats.find(([descriptionLabel]) => descriptionLabel === label)?.[1];
+            const specialStats = isGrandAuthentic ? [
+              ["경험치", symbolFirstValue(symbol, ["symbol_exp_rate", "symbol_experience_rate", "symbol_exp"])
+                ?? specialStatFromDescription("경험치")],
+              ["드롭률", symbolFirstValue(symbol, ["symbol_drop_rate", "symbol_item_drop_rate"])
+                ?? specialStatFromDescription("드롭률")],
+              ["메획", symbolFirstValue(symbol, ["symbol_meso_rate", "symbol_meso_acquisition_rate"])
+                ?? specialStatFromDescription("메획")]
+            ].filter(([, value]) => hasValue(value)) : [];
             const force = symbol.symbol_force;
             const maxed = symbolGrowthComplete(symbol);
             const growthLine = maxed
@@ -893,7 +900,10 @@ function SymbolsTab({ data }) {
               ...stats.map(([key, value]) => key + " +" + numberText(value)),
               ...specialStats.map(([label, value]) => label + " " +
                 (String(value).includes("%") ? value : String(value) + "%")),
-              growthLine
+              growthLine,
+              maxed ? "최대 레벨 달성" : hasValue(symbol.symbol_require_growth_count)
+                ? "다음 레벨까지 " + numberText(Math.max(0, optionNumber(symbol.symbol_require_growth_count) - (optionNumber(symbol.symbol_growth_count) || 0))) + " 남음"
+                : null
             ];
             return (
               <DetailTooltip
