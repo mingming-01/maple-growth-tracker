@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import Chart from "chart.js/auto";
-import { buildLevelUpMarkers } from "./growthChartData.js";
+import { buildLevelUpMarkers, buildExperienceChartSeries, dailyGrowthSegmentDash } from "./growthChartData.js";
 import {
   getHistoryArchive
 } from "../../services/api.js";
@@ -411,17 +411,7 @@ export default function GrowthDashboard({ character, history, onHistoryChange, o
     }
     const sorted = sortHistoryAscending(displayHistory);
     if (!sorted.length) return undefined;
-    const daily = sorted.map(item => {
-      if (item.recordStatus && item.recordStatus !== "available") return null;
-      const value = Number(item.experienceChange);
-      return item.experienceChange === null || item.experienceChange === undefined || !Number.isFinite(value)
-        ? null : value / 1_000_000_000_000;
-    });
-    let running = 0;
-    const cumulative = daily.map(value => {
-      if (value !== null) running += value;
-      return value === null ? null : running;
-    });
+    const { daily, cumulative } = buildExperienceChartSeries(sorted);
     // Keep level-up events visible even when that date has no EXP delta
     // or the chart has not observed a cumulative value yet.
     const levelUps = buildLevelUpMarkers(sorted, cumulative);
@@ -430,8 +420,8 @@ export default function GrowthDashboard({ character, history, onHistoryChange, o
       data: {
         labels: sorted.map(item => String(item.date || "").slice(5)),
         datasets: [
-          { label:"관측 누적 증가량",data:cumulative,yAxisID:"experience",borderWidth:3,tension:0,pointRadius:3,pointHoverRadius:6,fill:false },
-          { label:"일일 순증가량",data:daily,yAxisID:"dailyGrowth",borderWidth:2,borderDash:[7,6],tension:0,pointRadius:2,pointHoverRadius:5,fill:false },
+          { label:"총 경험치 증가량",data:cumulative,yAxisID:"experience",borderColor:"#36a2eb",backgroundColor:"#36a2eb",borderWidth:3,tension:0,pointRadius:3,pointHoverRadius:6,fill:false },
+          { label:"일일 경험치 증가량",data:daily,yAxisID:"dailyGrowth",borderColor:"#ff6384",backgroundColor:"#ff6384",borderWidth:2,segment:{borderDash:dailyGrowthSegmentDash},tension:0,pointRadius:2,pointHoverRadius:5,fill:false },
           { label:"레벨업",data:levelUps,yAxisID:"experience",showLine:false,pointStyle:"star",pointRadius:8,pointHoverRadius:10,pointBackgroundColor:"#f5c542",borderWidth:0 }
         ]
       },
@@ -457,8 +447,8 @@ export default function GrowthDashboard({ character, history, onHistoryChange, o
               return item?.levelUp ? label + " ★" : label;
             }
           }},
-          experience:{type:"linear",position:"left",title:{display:true,text:"관측 누적 증가량"},ticks:{callback:value=>Number(value).toFixed(0)+"조"}},
-          dailyGrowth:{type:"linear",position:"right",beginAtZero:true,title:{display:true,text:"일일 순증가량"},grid:{drawOnChartArea:false},ticks:{callback:value=>Number(value).toFixed(0)+"조"}}
+          experience:{type:"linear",position:"left",title:{display:true,text:"총 경험치 증가량"},ticks:{callback:value=>Number(value).toFixed(0)+"조"}},
+          dailyGrowth:{type:"linear",position:"right",beginAtZero:true,title:{display:true,text:"일일 경험치 증가량"},grid:{drawOnChartArea:false},ticks:{callback:value=>Number(value).toFixed(0)+"조"}}
         }
       }
     });
@@ -548,7 +538,7 @@ export default function GrowthDashboard({ character, history, onHistoryChange, o
 
       <section className="section">
         <div className="section-header history-chart-header">
-          <div><h2 className="section-title">성장 추이</h2><p className="section-description">관측 누적 증가량과 일일 순증가량, 레벨업을 함께 표시합니다.</p></div>
+          <div><h2 className="section-title">성장 추이</h2><p className="section-description">첫날의 실제 경험치를 기준으로 한 총 경험치 증가량과 일일 경험치 증가량, 레벨업을 표시합니다.</p></div>
           <label className="history-range-control">기록 범위
             <select className="history-range-select" value={range} onChange={event => changeRange(Number(event.target.value))} disabled={busy}>
               <option value="7">최근 7일</option><option value="30">저장 기록 30일</option><option value="90">저장 기록 90일</option>
