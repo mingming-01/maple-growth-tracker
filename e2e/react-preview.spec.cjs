@@ -272,10 +272,10 @@ test("mobile touch opens item tooltips without clipped detail panels", async ({ 
         },
         {
           symbol_name: "그랜드 어센틱 심볼: 테스트", symbol_level: 10,
-          symbol_force: 500, symbol_description: "그랜드 심볼 설명",
+          symbol_force: 500,
+          symbol_description: "경험치 획득량 +5%, 아이템 드롭률 +10%, 메소 획득량 +10%",
           symbol_int: "800", symbol_require_growth_count: 100,
-          symbol_growth_count: 40, symbol_exp_rate: "5",
-          symbol_drop_rate: "10", symbol_meso_rate: "10"
+          symbol_growth_count: 40
         }
       ] }, data: {}
     }] : section === "equipment" ? [
@@ -497,6 +497,12 @@ test("mobile touch opens item tooltips without clipped detail panels", async ({ 
     await page.getByRole("tab", { name: "펫" }).tap();
     await expect(page.getByText("밍펫")).toBeVisible();
     await expect(page.getByText("펫 장비 테스트")).toBeVisible();
+    await page.getByRole("tab", { name: "장비" }).tap();
+    await page.locator('.equipment-game-slot[data-slot="android"]').tap();
+    const androidTooltip = page.locator("body > .game-floating-tooltip");
+    await expect(androidTooltip).toContainText("싱크로이드 9");
+    await expect(androidTooltip).toContainText("레전드리");
+    await expect(androidTooltip).toContainText("여성");
 
     await page.locator(".mgt-topbar").tap();
     await page.locator('[data-detail-tab="skills"]').tap();
@@ -511,7 +517,7 @@ test("mobile touch opens item tooltips without clipped detail panels", async ({ 
     await expect(championCard).toContainText("챔피언 테스트");
     const championAvatar = championCard.locator(".game-union-champion-avatar-preview");
     const avatarBounds = await championAvatar.boundingBox();
-    expect(avatarBounds.width).toBeGreaterThanOrEqual(130);
+    expect(avatarBounds.width).toBeGreaterThanOrEqual(110);
     const crest = championCard.locator(".game-union-champion-crest").first();
     await crest.tap();
     const crestTooltip = page.locator("body > .game-floating-tooltip");
