@@ -702,7 +702,12 @@ function EquipmentTab({ data, selected, onSelect }) {
                                   : value < 0
                                     ? "− " + numberText(Math.abs(value))
                                     : "+ " + numberText(value);
-                                return <small key={part.source} className={"is-" + part.source}>{formatted}</small>;
+                                return (
+                                  <React.Fragment key={part.source}>
+                                    <small className={"is-" + part.source}>{formatted}</small>
+                                    {index < option.breakdown.filter(entry => entry.value !== 0).length - 1 ? " " : ""}
+                                  </React.Fragment>
+                                );
                               })})
                             </span>
                           )}
