@@ -189,8 +189,8 @@
   flex-direction:column;
   align-items:center;
   min-width:0;
-  padding:18px 14px 16px;
-  gap:7px;
+  padding:16px 13px 14px;
+  gap:8px;
   border:1px solid rgba(173,163,206,.2);
   border-radius:16px;
   background:
@@ -199,83 +199,40 @@
   box-shadow:inset 0 1px 0 rgba(255,255,255,.045),0 9px 22px rgba(0,0,0,.18);
 }
 .game-union-champion-card-head { width:100%; display:flex; align-items:center; justify-content:space-between; gap:8px; }
-.game-union-champion-level { color:#e5d4ad; font-size:11px; font-weight:900; }
+.game-union-champion-level { color:#d9c9a9; font-size:10px; font-weight:900; }
 .game-union-champion-avatar {
   display:grid;
   place-items:center;
   width:100%;
-  min-height:202px;
-  margin:7px 0 2px;
-  border:1px solid rgba(190,173,255,.14);
-  border-radius:15px;
+  min-height:196px;
+  margin:5px 0 1px;
+  border:1px solid rgba(190,173,255,.12);
+  border-radius:14px;
   background:radial-gradient(ellipse at 50% 38%,rgba(121,100,181,.2),rgba(13,13,23,.1) 72%);
 }
 .game-union-champion-avatar-preview {
   display:block;
-  width:190px;
-  height:190px;
+  width:184px;
+  height:184px;
   max-width:100%;
   border-radius:14px;
   object-fit:contain;
-  transform:scale(1.08);
-  filter:drop-shadow(0 9px 14px rgba(0,0,0,.42));
+  filter:drop-shadow(0 8px 13px rgba(0,0,0,.4));
 }
-.game-union-champion-name { color:#f5f0ff; font-size:13px; font-weight:950; text-align:center; }
-.game-union-champion-class { color:#b8b1ca; font-size:10px; text-align:center; }
+.game-union-champion-name { color:#f0ebf6; font-size:12px; font-weight:900; text-align:center; }
+.game-union-champion-class { color:#a7a0b6; font-size:9px; text-align:center; }
 .game-union-champion-badges {
   display:flex;
   flex-wrap:wrap;
   justify-content:center;
-  gap:7px;
+  align-items:center;
+  gap:6px;
   width:100%;
-  margin-top:10px;
-  padding:11px 9px 9px;
-  border:1px solid rgba(124,202,225,.16);
-  border-radius:12px;
-  background:linear-gradient(180deg,rgba(52,103,125,.13),rgba(11,32,46,.22));
+  margin-top:7px;
+  padding:0;
+  border:0;
+  background:none;
 }
-.game-union-champion-crest {
-  display:grid;
-  place-items:center;
-  width:43px;
-  height:52px;
-  padding:4px;
-  border:1px solid rgba(145,221,238,.7);
-  border-radius:6px 6px 12px 12px;
-  color:#e8fcff;
-  background:linear-gradient(165deg,#62c5d7 0%,#237f9e 55%,#14566f 56%,#102e43 100%);
-  clip-path:polygon(0 0,100% 0,100% 77%,50% 100%,0 77%);
-  box-shadow:inset 0 0 0 2px rgba(226,251,255,.18),0 4px 10px rgba(0,0,0,.32);
-  cursor:help;
-}
-.game-union-champion-crest-glyph {
-  display:grid;
-  place-items:center;
-  width:32px;
-  height:32px;
-  border:1px solid rgba(226,250,255,.78);
-  border-radius:7px;
-  color:#f0fdff;
-  background:rgba(7,57,79,.56);
-  font-size:19px;
-  font-weight:950;
-  text-shadow:0 1px 4px rgba(0,0,0,.45);
-}
-.game-union-champion-card-head { width:100%; display:flex; align-items:center; justify-content:space-between; gap:8px; }
-.game-union-champion-level { color:#d9c9a9; font-size:10px; font-weight:900; }
-.game-union-champion-avatar { display:grid; place-items:center; width:100%; min-height:144px; margin:5px 0 2px; }
-.game-union-champion-avatar-preview {
-  display:block;
-  width:136px;
-  height:136px;
-  max-width:100%;
-  border-radius:14px;
-  object-fit:contain;
-  filter:drop-shadow(0 7px 12px rgba(0,0,0,.38));
-}
-.game-union-champion-name { color:#f0ebf6; font-size:12px; font-weight:900; }
-.game-union-champion-class { color:#a7a0b6; font-size:9px; }
-.game-union-champion-badges { display:flex; flex-wrap:wrap; justify-content:center; gap:5px; width:100%; margin-top:9px; }
 .game-union-champion-crest {
   display:grid;
   place-items:center;
@@ -303,7 +260,6 @@
   font-weight:900;
   text-shadow:0 1px 4px rgba(0,0,0,.45);
 }
-.game-union-champion-total-list { display:flex; flex-wrap:wrap; gap:7px; align-items:center; }
 @media(max-width:760px) {
   .game-appearance-grid { grid-template-columns:1fr; }
   .game-cash-toolbar { align-items:flex-start; flex-direction:column; }
