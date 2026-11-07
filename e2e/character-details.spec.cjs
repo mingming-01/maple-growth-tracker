@@ -250,7 +250,32 @@ test("mobile touch opens item tooltips without clipped detail panels", async ({ 
     await expect(weapon).toHaveAttribute("aria-label", "테스트 무기 상세 정보");
     await expect(weapon.locator(".equipment-game-icon-frame img")).toBeAttached();
 
-    // Capture the native event separately from React's controlled open state.
+    // Capture input at document level as well as on the expected target. This
+    // distinguishes a missing React handler from a coordinate/input-routing issue.
+    await page.evaluate(() => {
+      window.__weaponDocumentEvents = [];
+      for (const type of ["pointerdown", "pointerup", "touchstart", "touchend", "mousedown", "mouseup", "click"]) {
+        document.addEventListener(type, event => {
+          const describe = node => ({
+            tag: node?.tagName || null,
+            className: typeof node?.className === "string" ? node.className : node?.className?.baseVal || null,
+            slot: node?.closest?.("[data-slot]")?.getAttribute("data-slot") || null
+          });
+          window.__weaponDocumentEvents.push({
+            type,
+            pointerType: event.pointerType || null,
+            clientX: event.clientX ?? event.changedTouches?.[0]?.clientX ?? null,
+            clientY: event.clientY ?? event.changedTouches?.[0]?.clientY ?? null,
+            target: describe(event.target),
+            hit: describe(document.elementFromPoint(
+              event.clientX ?? event.changedTouches?.[0]?.clientX ?? 0,
+              event.clientY ?? event.changedTouches?.[0]?.clientY ?? 0
+            )),
+            scrollY: window.scrollY
+          });
+        }, true);
+      }
+    });
     await weapon.evaluate(element => {
       window.__weaponTouchEvents = [];
       for (const type of ["pointerdown", "pointerup", "touchstart", "touchend", "click", "focus", "blur"]) {
@@ -272,6 +297,15 @@ test("mobile touch opens item tooltips without clipped detail panels", async ({ 
       trigger: element.getAttribute("data-tooltip-trigger"),
       label: element.getAttribute("aria-label"),
       events: window.__weaponTouchEvents || [],
+      documentEvents: window.__weaponDocumentEvents || [],
+      viewport: {
+        innerWidth: window.innerWidth,
+        innerHeight: window.innerHeight,
+        scrollX: window.scrollX,
+        scrollY: window.scrollY,
+        devicePixelRatio: window.devicePixelRatio,
+        maxTouchPoints: navigator.maxTouchPoints
+      },
       tooltipCount: document.querySelectorAll("body > .game-floating-tooltip").length
     }));
     expect(touchState.expanded, JSON.stringify(touchState)).toBe("true");
