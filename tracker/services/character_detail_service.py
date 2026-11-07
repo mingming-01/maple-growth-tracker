@@ -427,18 +427,18 @@ _CHAMPION_IMAGE_CACHE_LOCK = Lock()
 _CHAMPION_IMAGE_CACHE_TTL = 43200
 
 
-def _fetch_champion_image(character_name):
-    """챔피언 캐릭터의 공식 기본 이미지 URL을 조회하고 12시간 캐시한다."""
+def _fetch_champion_profile(character_name):
+    """챔피언 캐릭터의 공식 이미지·직업·레벨을 조회하고 12시간 캐시한다."""
     name = str(character_name or "").strip()
     if not name:
-        return None
+        return {}
     now = time.monotonic()
     with _CHAMPION_IMAGE_CACHE_LOCK:
         cached = _CHAMPION_IMAGE_CACHE.get(name)
         if cached and cached["expires_at"] > now:
-            return cached["image"]
+            return dict(cached.get("profile") or {})
 
-    image_url = None
+    profile = {}
     try:
         id_response = request_nexon_api("id", {"character_name": name})
         if id_response.status_code == 200:
@@ -446,20 +446,31 @@ def _fetch_champion_image(character_name):
             if ocid:
                 basic_response = request_nexon_api("character/basic", {"ocid": ocid})
                 if basic_response.status_code == 200:
-                    image_url = (basic_response.json() or {}).get("character_image")
+                    basic = basic_response.json() or {}
+                    profile = {
+                        "character_image": basic.get("character_image"),
+                        "character_level": basic.get("character_level"),
+                        "character_class": basic.get("character_class"),
+                        "character_world_name": basic.get("world_name"),
+                    }
     except (requests.RequestException, ValueError, TypeError):
-        image_url = None
+        profile = {}
 
     with _CHAMPION_IMAGE_CACHE_LOCK:
         _CHAMPION_IMAGE_CACHE[name] = {
-            "image": image_url,
+            "profile": profile,
             "expires_at": time.monotonic() + _CHAMPION_IMAGE_CACHE_TTL,
         }
-    return image_url
+    return profile
+
+
+def _fetch_champion_image(character_name):
+    """기존 호출부 호환성을 유지하는 캐릭터 이미지 조회 함수."""
+    return _fetch_champion_profile(character_name).get("character_image")
 
 
 def _enrich_champion_images(source):
-    """유니온 챔피언 카드에 공식 캐릭터 외형 URL을 보강한다."""
+    """유니온 챔피언 카드에 공식 이미지와 공개 캐릭터 정보를 보강한다."""
     current = source.get("currentData") or {}
     champions = current.get("union_champion")
     if not isinstance(champions, list) or not champions:
@@ -468,20 +479,26 @@ def _enrich_champion_images(source):
     missing = [
         champion for champion in champions
         if isinstance(champion, dict)
-        and not champion.get("character_image")
         and champion.get("champion_name")
+        and any(not champion.get(field) for field in (
+            "character_image", "character_level", "character_class"
+        ))
     ]
     if not missing:
         return source
 
     with ThreadPoolExecutor(max_workers=min(3, len(missing))) as executor:
-        images = list(executor.map(
-            lambda champion: _fetch_champion_image(champion.get("champion_name")),
+        profiles = list(executor.map(
+            lambda champion: _fetch_champion_profile(champion.get("champion_name")),
             missing,
         ))
-    for champion, image_url in zip(missing, images):
-        if image_url:
-            champion["character_image"] = image_url
+    for champion, profile in zip(missing, profiles):
+        for field in (
+            "character_image", "character_level",
+            "character_class", "character_world_name"
+        ):
+            if not champion.get(field) and profile.get(field) is not None:
+                champion[field] = profile[field]
     return source
 
 
