@@ -12,7 +12,7 @@ test("mobile touch opens item tooltips without clipped detail panels", async ({ 
     status: 200,
     contentType: "application/json",
     body: JSON.stringify({
-      characterName: "터치테스트", ocid: "mobile-tooltip-ocid",
+      characterName: "상세정보확장테스트", ocid: "mobile-details-expanded-ocid",
       worldName: "크로아", job: "아크메이지", level: 280,
       experience: 123456, experienceRate: "41.250",
       ranking: 10, worldRanking: 20, jobWorldRanking: 30, jobRanking: 40,
@@ -33,7 +33,7 @@ test("mobile touch opens item tooltips without clipped detail panels", async ({ 
           symbol_name: "아케인심볼: 소멸의 여로", symbol_level: 20,
           symbol_force: 300, symbol_description: "심볼 설명 터치 확인",
           symbol_str: "500", symbol_require_growth_count: 100,
-          symbol_growth_count: 100
+          symbol_growth_count: 50
         },
         {
           symbol_name: "그랜드 어센틱 심볼: 테스트", symbol_level: 10,
@@ -194,13 +194,13 @@ test("mobile touch opens item tooltips without clipped detail panels", async ({ 
 
   try {
     await page.goto("/preview/");
-    await page.getByLabel("캐릭터명").fill("터치테스트");
+    await page.getByLabel("캐릭터명").fill("상세정보확장테스트");
     await page.getByRole("button", { name: /캐릭터 조회/ }).tap();
-    await expect(page.getByRole("heading", { name: "터치테스트" })).toBeVisible();
+    await expect(page.getByRole("heading", { name: "상세정보확장테스트" })).toBeVisible();
 
     await expect(page.getByText("프리셋 조합 추천")).toHaveCount(0);
     await page.locator('[data-detail-tab="symbols"]').tap();
-    const symbol = page.locator(".game-symbol-tile[data-tooltip-trigger='true']");
+    const symbol = page.getByRole("button", { name: "아케인심볼: 소멸의 여로 상세 정보" });
     await expect(symbol).toBeVisible();
     await symbol.tap();
     const tooltip = page.locator("body > .game-floating-tooltip");
