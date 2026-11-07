@@ -81,7 +81,7 @@ function equipmentTotalOptions(item) {
     ["bonus", "추옵", item?.item_add_option]
   ];
   if (!Object.keys(values).length) {
-    for (const [, source] of sources) {
+    for (const [, , source] of sources) {
       if (!source || typeof source !== "object") continue;
       for (const [key, raw] of Object.entries(source)) {
         const value = optionNumber(raw);
@@ -1149,18 +1149,7 @@ function UnionTab({ data, selected, onSelect }) {
             const className = item.character_class || item.champion_class || "직업 정보 없음";
             const badgeInfo = Array.isArray(item.champion_badge_info) ? item.champion_badge_info : [];
             return (
-              <DetailTooltip
-                as="article"
-                className="game-union-champion-card game-tooltip-trigger"
-                key={index}
-                title={championName}
-                lines={[
-                  "직업 · " + className,
-                  hasValue(level) ? "레벨 · Lv. " + level : null,
-                  "등급 · " + (item.champion_grade || "정보 없음"),
-                  hasValue(item.champion_slot) ? "챔피언 슬롯 · " + item.champion_slot : null
-                ]}
-              >
+              <article className="game-union-champion-card" key={index}>
                 <div className="game-union-champion-card-head">
                   <span className={"game-union-grade-badge grade-"+String(item.champion_grade||"").toLowerCase()}>{item.champion_grade || "—"}</span>
                   <span className="game-union-champion-level">{hasValue(level) ? "Lv."+level : "Lv.—"}</span>
@@ -1168,12 +1157,24 @@ function UnionTab({ data, selected, onSelect }) {
                 <div className="game-union-champion-avatar">
                   {apiImage(item.character_image,championName,"game-union-champion-avatar-preview")}
                 </div>
-                <strong className="game-union-champion-name">{championName}</strong>
+                <DetailTooltip
+                  as="div"
+                  className="game-union-champion-info-trigger game-tooltip-trigger"
+                  title={championName}
+                  lines={[
+                    "직업 · " + className,
+                    hasValue(level) ? "레벨 · Lv. " + level : null,
+                    "등급 · " + (item.champion_grade || "정보 없음"),
+                    hasValue(item.champion_slot) ? "챔피언 슬롯 · " + item.champion_slot : null
+                  ]}
+                >
+                  <strong className="game-union-champion-name">{championName}</strong>
+                </DetailTooltip>
                 <span className="game-union-champion-class">{className}</span>
                 <div className="game-union-champion-badges" aria-label="챔피언 휘장">
                   {badgeInfo.map((badge,badgeIndex) => renderCrest(badge,badgeIndex,"champion-"+index))}
                 </div>
-              </DetailTooltip>
+              </article>
             );
           }) : <Empty>등록된 유니온 챔피언이 없습니다.</Empty>}
         </div>
