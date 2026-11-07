@@ -119,7 +119,7 @@ export function AIReport({ character, history, analysisHistory = history, period
     }
     setNotice("");
     try {
-      const result = await postAiAnalysis(character.characterName,metrics,analysisHistory,analysisContext);
+      const result = await postAiAnalysis(character.characterName,metrics,analysisHistory,analysisContext,{forceRefresh:force});
       if (!result.analysis) throw new Error("AI 분석 결과가 비어 있습니다.");
       setAnalysis(result.analysis);
       setNotice("");
