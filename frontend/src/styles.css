@@ -666,5 +666,3 @@ button:focus-visible,input:focus-visible,select:focus-visible,a:focus-visible { 
   .game-floating-tooltip { padding:11px 12px; max-height:min(420px,72vh); }
   .game-floating-tooltip .game-equipment-tooltip-icon { width:56px !important; height:56px !important; }
 }
-
-
