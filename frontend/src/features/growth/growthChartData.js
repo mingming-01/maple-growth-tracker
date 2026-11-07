@@ -2,14 +2,14 @@
  * Build a dedicated Chart.js dataset for level-up markers.
  * A level-up can be a valid event even when that day's EXP delta is unavailable.
  */
-export function buildLevelUpMarkers(records, cumulative) {
-  let lastKnownCumulative = null;
+export function buildLevelUpMarkers(records, experienceValues) {
+  let lastKnownExperience = null;
   return records.map((item, index) => {
-    const value = cumulative[index];
+    const value = experienceValues[index];
     if (value !== null && value !== undefined && Number.isFinite(Number(value))) {
-      lastKnownCumulative = Number(value);
+      lastKnownExperience = Number(value);
     }
-    return item?.levelUp === true ? (lastKnownCumulative ?? 0) : null;
+    return item?.levelUp === true ? (lastKnownExperience ?? 0) : null;
   });
 }
 
