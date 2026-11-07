@@ -67,7 +67,7 @@ function parseAnalysis(analysis) {
   return sections;
 }
 
-function buildReportSignature(character, history, metrics) {
+function buildReportSignature(character, history, metrics, analysisContext = {}) {
   return stableStringify({
     name:character.characterName,
     ocid:character.ocid,
@@ -76,7 +76,8 @@ function buildReportSignature(character, history, metrics) {
     experienceRate:character.experienceRate,
     ranking:character.ranking,
     history,
-    metrics
+    metrics,
+    analysisContext
   });
 }
 
@@ -95,7 +96,8 @@ export function AIReport({ character, history, periodDays = 7, periodSummary = n
     if (!character?.characterName || !Array.isArray(history)) return;
     setLoading(true);
     setError("");
-    const signature = buildReportSignature(character,history,metrics);
+    const analysisContext = { periodDays:[7,30,90].includes(Number(periodDays)) ? Number(periodDays) : 7, periodSummary:periodSummary || null };
+    const signature = buildReportSignature(character,history,metrics,analysisContext);
     const cached = !force ? getCachedAI("growth-report-v3",signature) : null;
     if (cached?.analysis) {
       setAnalysis(cached.analysis);
@@ -103,7 +105,6 @@ export function AIReport({ character, history, periodDays = 7, periodSummary = n
       return;
     }
     try {
-      const analysisContext = { periodDays:[7,30,90].includes(Number(periodDays)) ? Number(periodDays) : 7, periodSummary:periodSummary || null };
       const result = await postAiAnalysis(character.characterName,metrics,history,analysisContext);
       if (!result.analysis) throw new Error("AI 분석 결과가 비어 있습니다.");
       setAnalysis(result.analysis);
