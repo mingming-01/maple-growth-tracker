@@ -81,7 +81,7 @@ function buildReportSignature(character, history, metrics) {
 }
 
 
-export function AIReport({ character, history }) {
+export function AIReport({ character, history, periodDays = 7, periodSummary = null }) {
   const [analysis,setAnalysis] = useState("");
   const [loading,setLoading] = useState(false);
   const [error,setError] = useState("");
@@ -103,7 +103,8 @@ export function AIReport({ character, history }) {
       return;
     }
     try {
-      const result = await postAiAnalysis(character.characterName,metrics,history);
+      const analysisContext = { periodDays:[7,30,90].includes(Number(periodDays)) ? Number(periodDays) : 7, periodSummary:periodSummary || null };
+      const result = await postAiAnalysis(character.characterName,metrics,history,analysisContext);
       if (!result.analysis) throw new Error("AI 분석 결과가 비어 있습니다.");
       setAnalysis(result.analysis);
       saveCachedAI("growth-report-v3",signature,result.analysis,result.growthInsights || null);
@@ -112,7 +113,7 @@ export function AIReport({ character, history }) {
     } finally {
       setLoading(false);
     }
-  },[character,history,metrics]);
+  },[character,history,metrics,periodDays,periodSummary]);
 
   useEffect(() => {
     setAnalysis("");
@@ -126,9 +127,18 @@ export function AIReport({ character, history }) {
     <section className="section">
       <div className="section-header">
         <h2 className="section-title">AI 성장 리포트</h2>
-        <p className="section-description">최근 성장 기록을 바탕으로 변화와 흐름을 정리했습니다.</p>
+        <p className="section-description">선택한 {periodDays}일의 실제 저장 기록을 바탕으로 변화와 흐름을 정리했습니다.</p>
       </div>
       <div className="ai-analysis-card">
+        {periodDays > 7 && periodSummary && <div className="ai-analysis-period-evidence" data-testid="ai-analysis-period-evidence">
+          <strong>분석 근거 · 최근 {periodDays}일</strong>
+          <div className="ai-analysis-period-grid">
+            <span>기록 충실도 <b>{Number.isFinite(Number(periodSummary.coveragePercent)) ? Number(periodSummary.coveragePercent).toFixed(1)+"%" : "자료 부족"}</b></span>
+            <span>확인된 성장 구간 <b>{periodSummary.confirmedChangeDays ?? 0}일</b></span>
+            <span>평균 일일 성장량 <b>{periodSummary.averageGrowth == null ? "자료 부족" : (Number(periodSummary.averageGrowth)/1_000_000_000_000).toFixed(2)+"조"}</b></span>
+            <span>직전 동일 기간 평균 <b>{periodSummary.previousSummary?.averageGrowth == null ? "자료 부족" : (Number(periodSummary.previousSummary.averageGrowth)/1_000_000_000_000).toFixed(2)+"조"}</b></span>
+          </div>
+        </div>}
         <div className="ai-analysis-actions">
           <button className="export-button" type="button" onClick={() => run({force:true})} disabled={loading}>
             {loading ? "분석 중..." : "AI 다시 분석"}
