@@ -518,6 +518,13 @@ test("mobile touch opens item tooltips without clipped detail panels", async ({ 
     const championAvatar = championCard.locator(".game-union-champion-avatar-preview");
     const avatarBounds = await championAvatar.boundingBox();
     expect(avatarBounds.width).toBeGreaterThanOrEqual(110);
+    await championAvatar.tap();
+    const championTooltip = page.locator("body > .game-floating-tooltip");
+    await expect(championTooltip).toContainText("직업 · 아크메이지(썬,콜)");
+    await expect(championTooltip).toContainText("레벨 · Lv. 298");
+    await expect(championTooltip.locator("img")).toHaveCount(0);
+    await page.locator(".mgt-topbar").tap();
+
     const crest = championCard.locator(".game-union-champion-crest").first();
     await crest.tap();
     const crestTooltip = page.locator("body > .game-floating-tooltip");
