@@ -289,7 +289,10 @@ test("30-day AI report reuses cache without automatic LLM calls and only regener
         averageGrowth: 2000000000000, previousSummary: null
       }
     }));
-    localStorage.removeItem("mapleGrowthTrackerAIResponsesV1");
+    if (!sessionStorage.getItem("periodCacheE2eInitialized")) {
+      localStorage.removeItem("mapleGrowthTrackerAIResponsesV1");
+      sessionStorage.setItem("periodCacheE2eInitialized", "1");
+    }
   }, { character, history });
 
   let aiCalls = 0;
