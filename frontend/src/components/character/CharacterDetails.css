@@ -259,3 +259,37 @@
 
 .game-union-champion-avatar-trigger { cursor:help; }
 .game-union-champion-avatar-trigger:focus-visible { outline:2px solid #8ccfe6; outline-offset:3px; border-radius:14px; }
+
+
+/* Keep preset controls from overlaying the touch targets in the equipment grid. */
+.game-equipment-preset-toolbar {
+  display:flex;
+  justify-content:flex-end;
+  align-items:center;
+  min-width:0;
+  min-height:38px;
+  margin:0 0 8px;
+  position:relative;
+  z-index:0;
+}
+.game-equipment-preset-toolbar .game-preset-select-wrap {
+  display:flex;
+  align-items:center;
+  gap:8px;
+  min-width:0;
+}
+.game-equipment-preset-toolbar .game-preset-select-label { white-space:nowrap; }
+.game-equipment-preset-toolbar .game-preset-select { width:150px; max-width:100%; }
+.react-equipment-board { position:relative; z-index:0; }
+.react-equipment-board .equipment-game-slot { scroll-margin-top:120px; }
+@media(max-width:760px) {
+  .game-equipment-toolbar { display:flex; flex-wrap:wrap; min-height:34px; }
+  .game-equipment-preset-toolbar { justify-content:stretch; margin-bottom:10px; }
+  .game-equipment-preset-toolbar .game-preset-select-wrap {
+    display:grid;
+    grid-template-columns:auto minmax(0,1fr);
+    width:100%;
+  }
+  .game-equipment-preset-toolbar .game-preset-select { width:100%; min-width:0; }
+  .react-equipment-board .equipment-game-slot { scroll-margin-top:132px; }
+}
