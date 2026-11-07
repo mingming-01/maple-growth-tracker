@@ -293,3 +293,47 @@
   .game-equipment-preset-toolbar .game-preset-select { width:100%; min-width:0; }
   .react-equipment-board .equipment-game-slot { scroll-margin-top:132px; }
 }
+
+
+/* Keep mobile equipment hit targets above adjacent layout controls. */
+.game-equipment-subtabs {
+  position:relative;
+  z-index:0;
+}
+.react-equipment-board {
+  position:relative;
+  z-index:1;
+  isolation:isolate;
+  grid-auto-flow:row;
+  align-items:stretch;
+}
+.react-equipment-board .equipment-game-slot {
+  z-index:1;
+  scroll-margin-top:0;
+}
+.react-equipment-board .equipment-game-slot:focus,
+.react-equipment-board .equipment-game-slot:focus-visible {
+  z-index:3;
+}
+@media (max-width:760px) {
+  .react-equipment-board {
+    grid-auto-rows:minmax(90px,auto);
+  }
+  .react-equipment-board .equipment-game-slot {
+    grid-area:auto !important;
+    min-width:0;
+    min-height:90px;
+    scroll-margin-top:0;
+  }
+}
+@media (max-width:480px) {
+  .react-equipment-board {
+    grid-template-columns:repeat(3,minmax(0,1fr));
+    grid-auto-rows:minmax(82px,auto);
+    gap:6px;
+  }
+  .react-equipment-board .equipment-game-slot {
+    min-height:82px;
+    padding:5px 2px;
+  }
+}
