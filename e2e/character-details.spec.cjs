@@ -244,9 +244,37 @@ test("mobile touch opens item tooltips without clipped detail panels", async ({ 
     });
     expect(weaponTapPoint.top).toBeGreaterThan(90);
     expect(weaponTapPoint.hitSlot, JSON.stringify(weaponTapPoint)).toBe("weapon");
+
+    // Confirm the API-backed weapon item is actually attached before testing touch.
+    await expect(weapon).toHaveAttribute("data-tooltip-trigger", "true");
+    await expect(weapon).toHaveAttribute("aria-label", "테스트 무기 상세 정보");
+    await expect(weapon.locator(".equipment-game-icon-frame img")).toBeAttached();
+
+    // Capture the native event separately from React's controlled open state.
+    await weapon.evaluate(element => {
+      window.__weaponTouchEvents = [];
+      for (const type of ["pointerdown", "pointerup", "touchstart", "touchend", "click", "focus", "blur"]) {
+        element.addEventListener(type, event => {
+          window.__weaponTouchEvents.push({
+            type,
+            pointerType: event.pointerType || null,
+            target: event.target?.className?.baseVal || event.target?.className || event.target?.tagName || null
+          });
+        }, true);
+      }
+    });
+
     // Send a real touch at the verified hit-test coordinate; locator.tap() performs
     // a second automatic scroll which can move this target under neighboring slots.
     await page.touchscreen.tap(weaponTapPoint.x, weaponTapPoint.y);
+    const touchState = await weapon.evaluate(element => ({
+      expanded: element.getAttribute("aria-expanded"),
+      trigger: element.getAttribute("data-tooltip-trigger"),
+      label: element.getAttribute("aria-label"),
+      events: window.__weaponTouchEvents || [],
+      tooltipCount: document.querySelectorAll("body > .game-floating-tooltip").length
+    }));
+    expect(touchState.expanded, JSON.stringify(touchState)).toBe("true");
     const equipmentTooltip = page.locator("body > .game-floating-tooltip");
     await expect(equipmentTooltip.locator(".game-equipment-tooltip-star")).toHaveText("★ 22");
     await expect(equipmentTooltip.locator(".game-equipment-tooltip-icon")).toBeVisible();
