@@ -1174,22 +1174,21 @@ function UnionTab({ data, selected, onSelect }) {
                   <span className={"game-union-grade-badge grade-"+String(item.champion_grade||"").toLowerCase()}>{item.champion_grade || "—"}</span>
                   <span className="game-union-champion-level">{hasValue(level) ? "Lv."+level : "Lv.—"}</span>
                 </div>
-                <div className="game-union-champion-avatar">
-                  {apiImage(item.character_image,championName,"game-union-champion-avatar-preview")}
-                </div>
                 <DetailTooltip
                   as="div"
-                  className="game-union-champion-info-trigger game-tooltip-trigger"
+                  className="game-union-champion-avatar game-union-champion-avatar-trigger game-tooltip-trigger"
                   title={championName}
                   lines={[
                     "직업 · " + className,
                     hasValue(level) ? "레벨 · Lv. " + level : null,
+                    hasValue(item.character_world_name) ? "월드 · " + item.character_world_name : null,
                     "등급 · " + (item.champion_grade || "정보 없음"),
                     hasValue(item.champion_slot) ? "챔피언 슬롯 · " + item.champion_slot : null
                   ]}
                 >
-                  <strong className="game-union-champion-name">{championName}</strong>
+                  {apiImage(item.character_image,championName,"game-union-champion-avatar-preview")}
                 </DetailTooltip>
+                <strong className="game-union-champion-name">{championName}</strong>
                 <span className="game-union-champion-class">{className}</span>
                 <div className="game-union-champion-badges" aria-label="챔피언 휘장">
                   {badgeInfo.map((badge,badgeIndex) => renderCrest(badge,badgeIndex,"champion-"+index))}
