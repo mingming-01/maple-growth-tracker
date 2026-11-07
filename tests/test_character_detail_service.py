@@ -61,6 +61,32 @@ class CharacterDetailServiceTests(unittest.TestCase):
         self.assertEqual(result["currentData"]["character_face"]["face_name"], "테스트 성형")
         self.assertEqual(result["currentData"]["character_skin_name"], "뽀송 피부")
 
+    def test_equipment_section_includes_cash_item_and_pet_sources(self):
+        specs = {source["id"]: source for source in SECTION_SOURCES["equipment"]}
+        self.assertEqual(specs["cashItemEquipment"]["endpoint"], "character/cashitem-equipment")
+        self.assertEqual(specs["petEquipment"]["endpoint"], "character/pet-equipment")
+        cash = _normalize_source({
+            "preset_no": 2,
+            "character_look_mode": "COORDINATION",
+            "cash_item_equipment_base": [{"cash_item_name": "착용 캐시 장비"}],
+            "cash_item_equipment_preset_1": [{"cash_item_name": "외형 프리셋 1"}],
+            "cash_item_equipment_preset_2": [{"cash_item_name": "외형 프리셋 2"}],
+        }, specs["cashItemEquipment"])
+        self.assertEqual(cash["activePresetNo"], 2)
+        self.assertEqual(cash["currentData"]["character_look_mode"], "COORDINATION")
+        self.assertEqual(
+            cash["presets"][1]["data"]["cash_item_equipment"][0]["cash_item_name"],
+            "외형 프리셋 2",
+        )
+        pet = _normalize_source({
+            "pet_1_name": "테스트 펫",
+            "pet_1_nickname": "밍펫",
+            "pet_1_icon": "https://example.com/pet.png",
+            "pet_1_equipment": [{"item_name": "펫 장비"}],
+        }, specs["petEquipment"])
+        self.assertEqual(pet["currentData"]["pet_1_nickname"], "밍펫")
+        self.assertEqual(pet["currentData"]["pet_1_equipment"][0]["item_name"], "펫 장비")
+
     def test_stat_source_extracts_actual_combat_power(self):
         spec = SECTION_SOURCES["stats"][0]
         result = _normalize_source(
