@@ -96,8 +96,11 @@ export function calculateDailyExperienceRateChanges(history) {
         if (previousLevel === null || currentLevel === null || previousLevel !== currentLevel) continue;
         if (current.levelUp === true) continue;
 
-        changes[current.date] = toFiniteNumber(current.experienceRate) -
+        const change = toFiniteNumber(current.experienceRate) -
             toFiniteNumber(previous.experienceRate);
+        // Same-level MapleStory EXP progress should not decrease. A negative
+        // delta indicates inconsistent/corrected snapshots, not negative growth.
+        if (change >= 0) changes[current.date] = change;
     }
 
     return changes;
