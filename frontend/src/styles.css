@@ -666,3 +666,246 @@ button:focus-visible,input:focus-visible,select:focus-visible,a:focus-visible { 
   .game-floating-tooltip { padding:11px 12px; max-height:min(420px,72vh); }
   .game-floating-tooltip .game-equipment-tooltip-icon { width:56px !important; height:56px !important; }
 }
+
+
+/* Character detail refinements: game-like information hierarchy and compact nested views. */
+.game-floating-tooltip {
+  max-height:none !important;
+  overflow:visible !important;
+  width:min(390px,calc(100vw - 24px));
+  max-width:calc(100vw - 24px);
+  overscroll-behavior:contain;
+}
+.game-floating-tooltip .game-equipment-tooltip-topline {
+  align-items:flex-start;
+  gap:8px 14px;
+  flex-wrap:wrap;
+}
+.game-floating-tooltip .game-equipment-tooltip-topline span:first-child { color:#e7e8ed; }
+.game-floating-tooltip .game-equipment-tooltip-topline span:last-child { margin-left:auto; color:#a9b9d0; white-space:nowrap; }
+.game-floating-tooltip .game-equipment-tooltip-star {
+  justify-self:end;
+  display:block;
+  margin-top:-4px;
+  text-align:right;
+}
+.game-floating-tooltip .game-equipment-tooltip-section-title strong { color:#f0f1f3; }
+.game-floating-tooltip .game-equipment-tooltip-stat b { color:#f5f6f8; }
+.game-floating-tooltip .game-equipment-tooltip-stat small { font-size:9px; font-weight:750; white-space:nowrap; }
+.game-floating-tooltip .game-equipment-tooltip-stat small.is-base { color:#f0f1f3; }
+.game-floating-tooltip .game-equipment-tooltip-stat small.is-starforce { color:#f0c85a; }
+.game-floating-tooltip .game-equipment-tooltip-stat small.is-scroll { color:#c39af5; }
+.game-floating-tooltip .game-equipment-tooltip-stat small.is-bonus { color:#88d59b; }
+.game-equipment-tooltip-rings {
+  display:grid;
+  gap:5px;
+  padding:8px 10px;
+  border:1px solid rgba(104,185,218,.22);
+  border-radius:8px;
+  background:rgba(43,120,151,.1);
+}
+.game-equipment-tooltip-rings>strong { margin:0; color:#9edcf0; font-size:10px; }
+.game-equipment-tooltip-rings>div { display:flex; flex-wrap:wrap; gap:6px; }
+.game-equipment-tooltip-rings span {
+  padding:4px 7px;
+  border:1px solid rgba(125,191,213,.18);
+  border-radius:6px;
+  color:#d9edf5;
+  background:rgba(6,19,28,.28);
+  font-size:9px;
+}
+.equipment-game-icon-frame { position:relative; }
+.equipment-game-ring-level {
+  position:absolute;
+  left:2px;
+  bottom:2px;
+  padding:2px 4px;
+  border-radius:4px;
+  color:#d8eaff;
+  background:rgba(11,20,32,.9);
+  font-size:8px;
+  font-weight:900;
+}
+.equipment-ring-companion-count {
+  position:absolute;
+  top:1px;
+  right:1px;
+  min-width:18px;
+  padding:2px 4px;
+  border:1px solid rgba(127,202,229,.48);
+  border-radius:10px;
+  color:#c4f0ff;
+  background:#173444;
+  font-size:8px;
+  font-weight:900;
+}
+.game-equipment-subtabs {
+  display:flex;
+  flex-wrap:wrap;
+  gap:7px;
+  margin:0 0 13px;
+  padding-bottom:9px;
+  border-bottom:1px solid rgba(160,151,190,.14);
+}
+.game-equipment-subtabs button {
+  min-height:34px;
+  padding:0 14px;
+  border:1px solid #3c3850;
+  border-radius:9px;
+  color:#b7b0c9;
+  background:#201e2d;
+  font-size:11px;
+  font-weight:800;
+}
+.game-equipment-subtabs button.is-active {
+  border-color:rgba(115,177,218,.5);
+  color:#d7f0ff;
+  background:linear-gradient(135deg,rgba(54,120,157,.24),rgba(44,40,67,.9));
+  box-shadow:inset 0 0 0 1px rgba(115,177,218,.08);
+}
+.game-subpanel-heading { display:flex; align-items:center; justify-content:space-between; gap:12px; }
+.game-cosmetics-panel { display:grid; gap:14px; }
+.game-cosmetics-appearance,.game-cash-equipment-panel,.game-pet-panel {
+  padding:14px;
+  border:1px solid #39354d;
+  border-radius:13px;
+  background:linear-gradient(145deg,rgba(35,33,49,.96),rgba(27,26,39,.98));
+}
+.game-appearance-grid { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:9px; margin-top:12px; }
+.game-appearance-item {
+  display:flex;
+  align-items:flex-start;
+  gap:10px;
+  min-width:0;
+  padding:11px;
+  border:1px solid rgba(171,162,204,.15);
+  border-radius:10px;
+  background:rgba(255,255,255,.025);
+}
+.game-appearance-symbol {
+  display:grid;
+  place-items:center;
+  flex:none;
+  width:34px;
+  height:34px;
+  border:1px solid rgba(130,184,212,.22);
+  border-radius:9px;
+  color:#a8d9f0;
+  background:rgba(65,127,158,.13);
+  font-size:17px;
+}
+.game-appearance-item>div { display:grid; gap:4px; min-width:0; }
+.game-appearance-item strong { color:#e5e1ef; font-size:11px; overflow-wrap:anywhere; }
+.game-appearance-item small { color:#a29bb4; font-size:9px; }
+.game-cosmetic-overline { display:block; margin-top:4px; color:#9993a9; font-size:9px; }
+.game-cosmetic-note { margin:10px 0 0; color:#9993a9; font-size:10px; line-height:1.6; }
+.game-cash-toolbar { align-items:flex-start; }
+.game-cosmetic-list-title { margin:14px 0 8px; color:#bfb8d2; font-size:10px; }
+.game-cosmetic-grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(108px,1fr)); gap:8px; }
+.game-cosmetic-item {
+  display:grid;
+  justify-items:center;
+  gap:6px;
+  min-width:0;
+  padding:9px 7px;
+  border:1px solid rgba(173,163,206,.15);
+  border-radius:9px;
+  background:rgba(255,255,255,.025);
+  text-align:center;
+}
+.game-cosmetic-item-icon { display:grid; place-items:center; width:54px; height:54px; border-radius:9px; background:rgba(255,255,255,.035); }
+.game-cosmetic-item-icon img { width:48px; height:48px; object-fit:contain; }
+.game-cosmetic-item strong { color:#e5e1ef; font-size:10px; overflow-wrap:anywhere; }
+.game-cosmetic-item>span:last-child { color:#9892a8; font-size:9px; }
+.game-pet-grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(230px,1fr)); gap:10px; margin-top:12px; }
+.game-pet-card {
+  min-width:0;
+  padding:13px;
+  border:1px solid rgba(173,163,206,.16);
+  border-radius:11px;
+  background:rgba(255,255,255,.025);
+}
+.game-pet-card-heading { display:flex; align-items:center; gap:11px; }
+.game-pet-icon { display:grid; place-items:center; flex:none; width:58px; height:58px; border:1px solid #45405a; border-radius:10px; background:#171623; }
+.game-pet-icon img { width:50px; height:50px; object-fit:contain; }
+.game-pet-card-heading>div { display:grid; gap:4px; min-width:0; }
+.game-pet-card-heading strong { color:#e9e4f6; font-size:12px; }
+.game-pet-card-heading span { color:#9c95ae; font-size:9px; }
+.game-pet-description { color:#b6b0c4; font-size:10px; line-height:1.55; }
+.game-pet-card h5 { margin:12px 0 6px; color:#bfb8d2; font-size:10px; }
+.game-pet-equipment-list { display:flex; flex-wrap:wrap; gap:6px; }
+.game-pet-equipment-list span { padding:5px 7px; border:1px solid rgba(135,179,203,.16); border-radius:6px; color:#d2d9e3; background:rgba(66,121,150,.08); font-size:9px; }
+.game-pet-equipment-list small { color:#8f899f; font-size:9px; }
+.game-symbol-growth {
+  max-width:100%;
+  margin-top:5px;
+  color:#aaa4b8;
+  font-size:9px;
+  text-align:center;
+}
+.game-symbol-growth.is-max {
+  padding:3px 8px;
+  border:1px solid rgba(109,193,153,.35);
+  border-radius:20px;
+  color:#9de0b9;
+  background:rgba(63,151,106,.12);
+  font-weight:900;
+}
+.game-symbol-special-summary { display:block; margin-top:5px; color:#c9b4f4; font-size:8px; text-align:center; }
+.game-symbol-tile.is-maxed { border-color:rgba(109,193,153,.42); box-shadow:inset 0 0 0 1px rgba(109,193,153,.08); }
+.game-union-champion-card { display:flex; flex-direction:column; align-items:center; padding:13px 10px 12px; gap:4px; }
+.game-union-champion-card-head { width:100%; display:flex; align-items:center; justify-content:space-between; gap:8px; }
+.game-union-champion-level { color:#d9c9a9; font-size:10px; font-weight:900; }
+.game-union-champion-avatar { display:grid; place-items:center; width:100%; min-height:144px; margin:5px 0 2px; }
+.game-union-champion-avatar-preview {
+  display:block;
+  width:136px;
+  height:136px;
+  max-width:100%;
+  border-radius:14px;
+  object-fit:contain;
+  filter:drop-shadow(0 7px 12px rgba(0,0,0,.38));
+}
+.game-union-champion-name { color:#f0ebf6; font-size:12px; font-weight:900; }
+.game-union-champion-class { color:#a7a0b6; font-size:9px; }
+.game-union-champion-badges { display:flex; flex-wrap:wrap; justify-content:center; gap:5px; width:100%; margin-top:9px; }
+.game-union-champion-crest {
+  display:grid;
+  place-items:center;
+  width:34px;
+  height:43px;
+  padding:3px;
+  border:1px solid rgba(124,202,225,.56);
+  border-radius:4px 4px 9px 9px;
+  color:#ddfbff;
+  background:linear-gradient(165deg,#4aa9c3 0%,#126b8d 58%,#07516d 59%,#10364c 100%);
+  clip-path:polygon(0 0,100% 0,100% 77%,50% 100%,0 77%);
+  box-shadow:inset 0 0 0 2px rgba(226,251,255,.13),0 2px 6px rgba(0,0,0,.28);
+  cursor:help;
+}
+.game-union-champion-crest-glyph {
+  display:grid;
+  place-items:center;
+  width:25px;
+  height:25px;
+  border:1px solid rgba(226,250,255,.72);
+  border-radius:5px;
+  color:#f0fdff;
+  background:rgba(7,57,79,.48);
+  font-size:15px;
+  font-weight:900;
+  text-shadow:0 1px 4px rgba(0,0,0,.45);
+}
+.game-union-champion-total-list { display:flex; flex-wrap:wrap; gap:7px; align-items:center; }
+@media(max-width:760px) {
+  .game-appearance-grid { grid-template-columns:1fr; }
+  .game-cash-toolbar { align-items:flex-start; flex-direction:column; }
+  .game-union-champion-avatar { min-height:126px; }
+  .game-union-champion-avatar-preview { width:118px; height:118px; }
+}
+@media(max-width:480px) {
+  .game-floating-tooltip { width:calc(100vw - 24px); max-height:none !important; overflow:visible !important; }
+  .game-equipment-subtabs button { flex:1; }
+  .game-appearance-item { padding:9px; }
+  .game-union-champion-crest { width:31px; height:40px; }
+}
