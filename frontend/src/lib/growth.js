@@ -59,6 +59,53 @@ export function getRankingChange(history) {
     return ranked[ranked.length - 2] - ranked[ranked.length - 1];
 }
 
+// Calculate same-level percentage-point changes only across consecutive calendar days.
+export function calculateDailyExperienceRateChanges(history) {
+    const sorted = sortHistoryAscending(history);
+    const changes = {};
+
+    const hasValidRate = item => {
+        if (!item || (item.recordStatus && item.recordStatus !== "available")) return false;
+        const rate = toFiniteNumber(item.experienceRate);
+        return rate !== null && rate >= 0 && rate <= 100;
+    };
+    const isNextCalendarDay = (previousDate, currentDate) => {
+        const parse = value => {
+            const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(String(value || ""));
+            if (!match) return null;
+            const [, year, month, day] = match;
+            const timestamp = Date.UTC(Number(year), Number(month) - 1, Number(day));
+            const date = new Date(timestamp);
+            return date.getUTCFullYear() === Number(year) &&
+                date.getUTCMonth() === Number(month) - 1 &&
+                date.getUTCDate() === Number(day) ? timestamp : null;
+        };
+        const previous = parse(previousDate);
+        const current = parse(currentDate);
+        return previous !== null && current !== null && current - previous === 86400000;
+    };
+
+    for (let index = 1; index < sorted.length; index += 1) {
+        const previous = sorted[index - 1];
+        const current = sorted[index];
+        if (!hasValidRate(previous) || !hasValidRate(current)) continue;
+        if (!isNextCalendarDay(previous.date, current.date)) continue;
+
+        const previousLevel = toFiniteNumber(previous.level);
+        const currentLevel = toFiniteNumber(current.level);
+        if (previousLevel === null || currentLevel === null || previousLevel !== currentLevel) continue;
+        if (current.levelUp === true) continue;
+
+        const change = toFiniteNumber(current.experienceRate) -
+            toFiniteNumber(previous.experienceRate);
+        // Same-level MapleStory EXP progress should not decrease. A negative
+        // delta indicates inconsistent/corrected snapshots, not negative growth.
+        if (change >= 0) changes[current.date] = change;
+    }
+
+    return changes;
+}
+
 export function calculateLevelProgress(character, averageDailyGrowth = null) {
     if (!character) return null;
     const currentRate = toFiniteNumber(character.experienceRate);

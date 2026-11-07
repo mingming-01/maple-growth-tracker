@@ -126,11 +126,15 @@ function isSeedRing(item) {
 }
 
 function seedRingLevel(item) {
-  // Nexon이 구조화된 ring_level 값을 제공하면 장비명 문자열보다 우선한다.
+  // Nexon Open API의 장비별 특수 반지 레벨 필드는 special_ring_level이다.
+  // 기존 캐시/호환 데이터의 ring_level 별칭도 후순위로 지원한다.
   // 아이템 이름의 숫자는 실제 시드링 레벨이 아닌 강화/표기 정보일 수 있다.
   const candidates = [
+    item?.special_ring_level,
     item?.ring_level,
+    item?.item_base_option?.special_ring_level,
     item?.item_base_option?.ring_level,
+    item?.item_special_option?.special_ring_level,
     item?.item_special_option?.ring_level
   ];
   const explicit = candidates

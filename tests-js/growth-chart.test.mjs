@@ -2,6 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 
 import {
+  detectLevelUpEvents,
   buildLevelUpMarkers,
   buildExperienceChartSeries,
   dailyGrowthSegmentDash
@@ -20,7 +21,7 @@ test("places level-up marker on the last known cumulative value when event EXP i
   );
 });
 
-test("keeps an early level-up marker visible before any cumulative EXP value exists", () => {
+test("does not invent a chart coordinate before any cumulative EXP value exists", () => {
   const records = [
     { date: "2026-09-22", levelUp: false },
     { date: "2026-09-23", levelUp: true }
@@ -40,6 +41,23 @@ test("uses the latest known cumulative value for consecutive level-up events", (
   assert.deepEqual(
     buildLevelUpMarkers(records, [2.5, null, null, 2.8]),
     [null, 2.5, 2.5, null]
+  );
+});
+
+test("detects level-up days by comparing the recorded level when no flag is supplied", () => {
+  const records = [
+    { date: "2026-11-01", level: 280 },
+    { date: "2026-11-02", level: 280 },
+    { date: "2026-11-03", level: 281 },
+    { date: "2026-11-04", level: null },
+    { date: "2026-11-05", level: 282 },
+    { date: "2026-11-06", level: 282, levelUp: true }
+  ];
+
+  assert.deepEqual(detectLevelUpEvents(records), [false, false, true, false, true, true]);
+  assert.deepEqual(
+    buildLevelUpMarkers(records, [1, 1.2, null, null, 1.25, null]),
+    [null, null, 1.2, null, 1.25, 1.25]
   );
 });
 
@@ -98,10 +116,10 @@ test("dashes only the daily EXP segment whose current day has zero growth", () =
 
 test("carries the last known total across a level-up without inventing cross-level EXP", () => {
   const records = [
-    { date: "2026-11-02", recordStatus: "available", experience: 1_000_000_000_000, experienceChange: null },
-    { date: "2026-11-03", recordStatus: "available", experience: 1_100_000_000_000, experienceChange: 100_000_000_000 },
-    { date: "2026-11-04", recordStatus: "available", experience: 20_000_000, experienceChange: null, levelUp: true },
-    { date: "2026-11-05", recordStatus: "available", experience: 120_000_000, experienceChange: 100_000_000 }
+    { date: "2026-11-02", level: 280, recordStatus: "available", experience: 1_000_000_000_000, experienceChange: null },
+    { date: "2026-11-03", level: 280, recordStatus: "available", experience: 1_100_000_000_000, experienceChange: 100_000_000_000 },
+    { date: "2026-11-04", level: 281, recordStatus: "available", experience: 20_000_000, experienceChange: null },
+    { date: "2026-11-05", level: 281, recordStatus: "available", experience: 120_000_000, experienceChange: 100_000_000 }
   ];
 
   const series = buildExperienceChartSeries(records);
