@@ -75,13 +75,14 @@ function optionNumber(value) {
 function equipmentTotalOptions(item) {
   const total = item?.item_total_option;
   let values = total && typeof total === "object" ? { ...total } : {};
+  const sources = [
+    ["base", item?.item_base_option],
+    ["scroll", item?.item_etc_option],
+    ["bonus", item?.item_add_option],
+    ["starforce", item?.item_starforce_option]
+  ];
   if (!Object.keys(values).length) {
-    for (const source of [
-      item?.item_base_option,
-      item?.item_etc_option,
-      item?.item_add_option,
-      item?.item_starforce_option
-    ]) {
+    for (const [, source] of sources) {
       if (!source || typeof source !== "object") continue;
       for (const [key, raw] of Object.entries(source)) {
         const value = optionNumber(raw);
@@ -95,7 +96,11 @@ function equipmentTotalOptions(item) {
     const value = optionNumber(values[key]);
     if (value === null || value === 0) return [];
     const amount = (value > 0 ? "+" : "") + numberText(value) + suffix;
-    return [{ label, value: amount }];
+    const breakdown = sources.map(([sourceName, source]) => ({
+      source: sourceName,
+      value: optionNumber(source?.[key]) || 0
+    }));
+    return [{ label, value: amount, breakdown }];
   });
 }
 
@@ -441,33 +446,64 @@ function EquipmentTab({ data, selected, onSelect }) {
             android.android_grade, android.android_gender, android.android_description,
             android.android_hair?.hair_name, android.android_face?.face_name, android.android_skin_name
           ] : [];
+          const requiredLevel = optionNumber(item?.item_base_option?.base_equipment_level);
+          const levelIncrease = optionNumber(item?.equipment_level_increase);
           const tooltipContent = item ? (
             <div className="game-equipment-tooltip">
-              <div className="game-equipment-tooltip-heading">
-                <strong>{title || slotName}</strong>
-                <span>★ {item.starforce ?? item.item_starforce ?? 0}</span>
+              <div className="game-equipment-tooltip-topline">
+                <span>{item.item_equipment_slot || slotName}</span>
+                <span className="game-equipment-tooltip-star">★ {item.starforce ?? item.item_starforce ?? 0}</span>
               </div>
-              <div className="game-equipment-tooltip-total">
-                {totalOptions.length ? totalOptions.map(option => (
-                  <div className="game-equipment-tooltip-stat" key={option.label}>
-                    <span>{option.label}</span><b>{option.value}</b>
-                  </div>
-                )) : <p className="game-equipment-tooltip-empty">합산 옵션 정보가 없습니다.</p>}
+              <div className="game-equipment-tooltip-heading">
+                {apiImage(item.item_icon, title, "game-equipment-tooltip-icon")}
+                <div className="game-equipment-tooltip-title-wrap">
+                  <strong>{title || slotName}</strong>
+                  <span className="game-equipment-tooltip-meta">
+                    {requiredLevel ? "요구 레벨 Lv. " + requiredLevel + (levelIncrease ? " (+" + levelIncrease + ")" : "") : "현재 장착 장비"}
+                  </span>
+                </div>
+              </div>
+              <div className="game-equipment-tooltip-section">
+                <div className="game-equipment-tooltip-section-title">
+                  <strong>능력치 합계</strong><span>기본 · 주문서 · 추가 · 스타포스</span>
+                </div>
+                <div className="game-equipment-tooltip-total">
+                  {totalOptions.length ? totalOptions.map(option => (
+                    <div className="game-equipment-tooltip-stat" key={option.label}>
+                      <span>{option.label}</span>
+                      <div className="game-equipment-tooltip-stat-values">
+                        <b>{option.value}</b>
+                        <small>{option.breakdown.some(part => part.value !== 0)
+                          ? "(" + option.breakdown.map(part => numberText(part.value)).join(" · ") + ")"
+                          : ""}</small>
+                      </div>
+                    </div>
+                  )) : <p className="game-equipment-tooltip-empty">합산 옵션 정보가 없습니다.</p>}
+                </div>
               </div>
               <div className="game-equipment-tooltip-potential">
-                <strong>잠재능력</strong>
+                <div className="game-equipment-tooltip-section-title">
+                  <strong>잠재능력</strong>
+                  <span>{item.potential_option_grade || "등급 정보 없음"}</span>
+                </div>
                 {potentialOptions.normal.length ? (
-                  <div><span className="game-equipment-tooltip-subtitle">잠재 옵션</span>
-                    {potentialOptions.normal.map((value, optionIndex) => <p key={optionIndex}>{value}</p>)}
+                  <div className="game-equipment-tooltip-potential-group">
+                    <span className="game-equipment-tooltip-subtitle">잠재 옵션</span>
+                    {potentialOptions.normal.map((value, optionIndex) => (
+                      <p key={optionIndex}><i />{value}</p>
+                    ))}
                   </div>
                 ) : null}
                 {potentialOptions.additional.length ? (
-                  <div><span className="game-equipment-tooltip-subtitle">에디셔널 잠재 옵션</span>
-                    {potentialOptions.additional.map((value, optionIndex) => <p key={optionIndex}>{value}</p>)}
+                  <div className="game-equipment-tooltip-potential-group is-additional">
+                    <span className="game-equipment-tooltip-subtitle">에디셔널 잠재 옵션 · {item.additional_potential_option_grade || "등급 정보 없음"}</span>
+                    {potentialOptions.additional.map((value, optionIndex) => (
+                      <p key={optionIndex}><i />{value}</p>
+                    ))}
                   </div>
                 ) : null}
                 {!potentialOptions.normal.length && !potentialOptions.additional.length
-                  ? <p>잠재능력 정보가 없습니다.</p> : null}
+                  ? <p className="game-equipment-tooltip-empty">잠재능력 정보가 없습니다.</p> : null}
               </div>
             </div>
           ) : null;

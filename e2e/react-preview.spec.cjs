@@ -275,12 +275,13 @@ test("mobile touch opens item tooltips without clipped detail panels", async ({ 
       currentData: { item_equipment: [{
         item_name: "테스트 무기", item_equipment_slot: "무기",
         item_icon: "https://example.com/weapon.png",
-        starforce: "22",
+        starforce: "22", equipment_level_increase: 10,
+        potential_option_grade: "레전드리", additional_potential_option_grade: "에픽",
         item_total_option: {
           str: "500", dex: "20", attack_power: "350",
           boss_damage: "40", ignore_monster_armor: "20"
         },
-        item_base_option: { attack_power: "200" },
+        item_base_option: { base_equipment_level: 250, attack_power: "200" },
         item_etc_option: { attack_power: "50" },
         item_add_option: { attack_power: "60" },
         item_starforce_option: { attack_power: "40" },
@@ -290,12 +291,13 @@ test("mobile touch opens item tooltips without clipped detail panels", async ({ 
       presets: [{ number: 1, data: { item_equipment: [{
         item_name: "테스트 무기", item_equipment_slot: "무기",
         item_icon: "https://example.com/weapon.png",
-        starforce: "22",
+        starforce: "22", equipment_level_increase: 10,
+        potential_option_grade: "레전드리", additional_potential_option_grade: "에픽",
         item_total_option: {
           str: "500", dex: "20", attack_power: "350",
           boss_damage: "40", ignore_monster_armor: "20"
         },
-        item_base_option: { attack_power: "200" },
+        item_base_option: { base_equipment_level: 250, attack_power: "200" },
         item_etc_option: { attack_power: "50" },
         item_add_option: { attack_power: "60" },
         item_starforce_option: { attack_power: "40" },
@@ -350,11 +352,15 @@ test("mobile touch opens item tooltips without clipped detail panels", async ({ 
     await expect(weapon).toBeVisible();
     await weapon.tap();
     const equipmentTooltip = page.locator("body > .game-floating-tooltip");
-    await expect(equipmentTooltip.locator(".game-equipment-tooltip-heading span")).toHaveText("★ 22");
+    await expect(equipmentTooltip.locator(".game-equipment-tooltip-star")).toHaveText("★ 22");
+    await expect(equipmentTooltip.locator(".game-equipment-tooltip-icon")).toBeVisible();
+    await expect(equipmentTooltip).toContainText("요구 레벨 Lv. 250 (+10)");
+    await expect(equipmentTooltip).toContainText("기본 · 주문서 · 추가 · 스타포스");
     await expect(equipmentTooltip).toContainText("STR");
     await expect(equipmentTooltip).toContainText("+500");
     await expect(equipmentTooltip).toContainText("공격력");
     await expect(equipmentTooltip).toContainText("+350");
+    await expect(equipmentTooltip).toContainText("(200 · 50 · 60 · 40)");
     await expect(equipmentTooltip).toContainText("잠재능력");
     await expect(equipmentTooltip).toContainText("보스 몬스터 공격 시 데미지 +40%");
     await expect(equipmentTooltip).toContainText("에디셔널 잠재 옵션");
