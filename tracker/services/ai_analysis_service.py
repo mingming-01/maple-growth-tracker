@@ -141,6 +141,7 @@ def generate_ai_analysis(character, history, computed_metrics=None, growth_insig
         if isinstance(prediction, dict):
             expected_date = prediction.get("estimatedDate")
 
+    # 사용자가 명시적으로 재분석을 요청한 경우에만 서버 캐시도 건너뛴다.
     cached_analysis = None if force_refresh else get_ai_response_cache(prompt)
     if cached_analysis is not None:
         print("저장된 AI 성장 리포트를 재사용했습니다.")
