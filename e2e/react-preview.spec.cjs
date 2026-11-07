@@ -278,23 +278,6 @@ test("30-day AI report reuses cache without automatic LLM calls and only regener
     { date: "2026-10-20", level: 280, experience: 1000, experienceChange: null, ranking: 12350, recordStatus: "available" },
     { date: "2026-10-21", level: 280, experience: 1200, experienceChange: 200, ranking: 12345, recordStatus: "available" }
   ];
-  await page.addInitScript(({ character, history }) => {
-    sessionStorage.setItem("mapleGrowthTrackerState", JSON.stringify({
-      character,
-      history,
-      historyRange: 30,
-      displayHistory: history,
-      periodSummary: {
-        days: 30, coveragePercent: 80, confirmedChangeDays: 12,
-        averageGrowth: 2000000000000, previousSummary: null
-      }
-    }));
-    if (!sessionStorage.getItem("periodCacheE2eInitialized")) {
-      localStorage.removeItem("mapleGrowthTrackerAIResponsesV1");
-      sessionStorage.setItem("periodCacheE2eInitialized", "1");
-    }
-  }, { character, history });
-
   let aiCalls = 0;
   let submittedPayload = null;
   await page.route("**/api/character-details?*", route => route.fulfill({
@@ -317,6 +300,20 @@ test("30-day AI report reuses cache without automatic LLM calls and only regener
   });
 
   await page.goto("/preview/");
+  await page.evaluate(({ character, history }) => {
+    sessionStorage.setItem("mapleGrowthTrackerState", JSON.stringify({
+      character,
+      history,
+      historyRange: 30,
+      displayHistory: history,
+      periodSummary: {
+        days: 30, coveragePercent: 80, confirmedChangeDays: 12,
+        averageGrowth: 2000000000000, previousSummary: null
+      }
+    }));
+    localStorage.removeItem("mapleGrowthTrackerAIResponsesV1");
+  }, { character, history });
+  await page.reload();
   await expect(page.getByRole("heading", { name: "기간캐시테스트" })).toBeVisible();
   await expect(page.getByText(/최근 30일 분석의 저장 결과가 없습니다/)).toBeVisible();
   await expect.poll(() => aiCalls).toBe(0);
