@@ -166,7 +166,7 @@ def _find_character_in_filtered_ranking(
                 if entry_world != filter_world:
                     last_details["worldMismatchEntries"] += 1
                     last_details["filterVerification"] = "world-mismatch"
-                    return None, response, last_details}
+                    return None, response, last_details
 
         last_details["filterVerified"] = True
         last_details["filterVerification"] = "verified"
