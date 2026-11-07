@@ -91,24 +91,32 @@ export function dailyGrowthSegmentDash(context) {
  * Build a dedicated Chart.js dataset for level-up markers.
  * A level-up can be a valid event even when that day's EXP delta is unavailable.
  */
+export function detectLevelUpEvents(records) {
+  let lastKnownLevel = null;
+  return records.map(item => {
+    const parsedLevel = item?.level === null || item?.level === undefined || item?.level === ""
+      ? null
+      : Number(item.level);
+    const currentLevel = Number.isFinite(parsedLevel) ? parsedLevel : null;
+    const detected = item?.levelUp === true ||
+      (lastKnownLevel !== null && currentLevel !== null && currentLevel > lastKnownLevel);
+    if (currentLevel !== null) lastKnownLevel = currentLevel;
+    return detected;
+  });
+}
+
+/**
+ * Build a dedicated Chart.js dataset for level-up markers.
+ * A level-up can be a valid event even when that day's EXP delta is unavailable.
+ */
 export function buildLevelUpMarkers(records, cumulative) {
   let lastKnownCumulative = null;
-  let lastKnownLevel = null;
-
+  const events = detectLevelUpEvents(records);
   return records.map((item, index) => {
     const value = cumulative[index];
     if (value !== null && value !== undefined && Number.isFinite(Number(value))) {
       lastKnownCumulative = Number(value);
     }
-
-    const parsedLevel = item?.level === null || item?.level === undefined || item?.level === ""
-      ? null
-      : Number(item.level);
-    const currentLevel = Number.isFinite(parsedLevel) ? parsedLevel : null;
-    const detectedLevelUp = item?.levelUp === true ||
-      (lastKnownLevel !== null && currentLevel !== null && currentLevel > lastKnownLevel);
-
-    if (currentLevel !== null) lastKnownLevel = currentLevel;
-    return detectedLevelUp ? lastKnownCumulative : null;
+    return events[index] ? lastKnownCumulative : null;
   });
 }
