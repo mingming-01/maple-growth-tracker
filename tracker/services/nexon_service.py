@@ -210,10 +210,26 @@ def get_character_rankings(
                     entry_count = len(response.json().get("ranking", []))
                 except (TypeError, ValueError, AttributeError):
                     entry_count = None
+            error_code = None
+            error_message = None
+            if response is not None and response.status_code >= 400:
+                try:
+                    error_payload = response.json()
+                except (TypeError, ValueError, AttributeError):
+                    error_payload = {}
+                if isinstance(error_payload, dict):
+                    error_detail = error_payload.get("error", error_payload)
+                    if isinstance(error_detail, dict):
+                        error_code = error_detail.get("name") or error_detail.get("code")
+                        error_message = error_detail.get("message")
+                    elif error_detail:
+                        error_message = str(error_detail)
             diagnostics[name] = {
                 "statusCode": response.status_code if response is not None else None,
                 "returnedEntries": entry_count,
                 "matched": data is not None,
+                "errorCode": str(error_code)[:80] if error_code else None,
+                "errorMessage": str(error_message)[:240] if error_message else None,
             }
 
         diagnostics["jobWorldRanking"].update(job_world_details)
@@ -270,8 +286,22 @@ def get_character_rankings(
 
     for days_ago in range(0, 3):
         candidate = fetch_for_date(requested_date - timedelta(days=days_ago))
-        if candidate["rankingDataStatus"] != "empty":
-            return candidate
+        if candidate["rankingDataStatus"] == "empty":
+            continue
+
+        # 랭킹 집계일 당일에는 공개 API가 아직 날짜를 허용하지 않아
+        # HTTP 400을 반환할 수 있다. 이 경우에만 직전 집계일을 재시도한다.
+        # 401/403 등 인증·권한 오류는 날짜를 바꿔도 해결되지 않으므로 즉시 반환한다.
+        status_codes = [
+            status for status in candidate["rankingApiStatuses"].values()
+            if status is not None
+        ]
+        all_bad_request = bool(status_codes) and all(
+            status == 400 for status in status_codes
+        )
+        if all_bad_request and days_ago < 2:
+            continue
+        return candidate
 
     candidate["rankingDataStatus"] = "not_ready"
     candidate["rankingWarnings"].append(

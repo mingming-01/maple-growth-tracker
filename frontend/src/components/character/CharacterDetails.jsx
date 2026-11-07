@@ -1,5 +1,5 @@
 import "./CharacterDetails.css";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { Fragment, useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { getCharacterDetails } from "../../services/api.js";
 
@@ -694,15 +694,22 @@ function EquipmentTab({ data, selected, onSelect }) {
                         <div className="game-equipment-tooltip-stat-values">
                           <b>{option.value}</b>
                           {option.breakdown.filter(part => part.value !== 0).length > 0 && (
-                            <small className="game-equipment-tooltip-stat-breakdown">
+                            <span className="game-equipment-tooltip-stat-breakdown">
                               ({option.breakdown.filter(part => part.value !== 0).map((part,index) => {
                                 const value = Number(part.value);
-                                if (index === 0) return numberText(value);
-                                return value < 0
-                                  ? "− " + numberText(Math.abs(value))
-                                  : "+ " + numberText(value);
-                              }).join(" ")})
-                            </small>
+                                const formatted = index === 0
+                                  ? numberText(value)
+                                  : value < 0
+                                    ? "− " + numberText(Math.abs(value))
+                                    : "+ " + numberText(value);
+                                return (
+                                  <Fragment key={part.source}>
+                                    <small className={"is-" + part.source}>{formatted}</small>
+                                    {index < option.breakdown.filter(entry => entry.value !== 0).length - 1 ? " " : ""}
+                                  </Fragment>
+                                );
+                              })})
+                            </span>
                           )}
                         </div>
                       </div>

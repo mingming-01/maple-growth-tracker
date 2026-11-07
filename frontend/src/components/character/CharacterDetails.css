@@ -22,6 +22,7 @@
 .game-floating-tooltip .game-equipment-tooltip-section-title strong { color:#f0f1f3; }
 .game-floating-tooltip .game-equipment-tooltip-stat b { color:#f5f6f8; }
 .game-floating-tooltip .game-equipment-tooltip-stat small { font-size:9px; font-weight:750; white-space:nowrap; }
+.game-floating-tooltip .game-equipment-tooltip-stat-breakdown small + small { margin-left:4px; }
 .game-floating-tooltip .game-equipment-tooltip-stat small.is-base { color:#f0f1f3; }
 .game-floating-tooltip .game-equipment-tooltip-stat small.is-starforce { color:#f0c85a; }
 .game-floating-tooltip .game-equipment-tooltip-stat small.is-scroll { color:#c39af5; }
