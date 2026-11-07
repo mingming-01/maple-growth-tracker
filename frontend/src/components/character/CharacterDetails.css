@@ -309,7 +309,8 @@
 }
 .react-equipment-board .equipment-game-slot {
   z-index:1;
-  scroll-margin-top:0;
+  /* Keep touch targets clear of the sticky app header after programmatic scrolling. */
+  scroll-margin-top:160px;
 }
 .react-equipment-board .equipment-game-slot:focus,
 .react-equipment-board .equipment-game-slot:focus-visible {
@@ -323,7 +324,7 @@
     grid-area:auto !important;
     min-width:0;
     min-height:90px;
-    scroll-margin-top:0;
+    scroll-margin-top:160px;
   }
 }
 @media (max-width:480px) {
@@ -335,5 +336,6 @@
   .react-equipment-board .equipment-game-slot {
     min-height:82px;
     padding:5px 2px;
+    scroll-margin-top:160px;
   }
 }
