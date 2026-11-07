@@ -264,8 +264,13 @@ class GrowthHistoryApiTests(unittest.TestCase):
         self.assertEqual(response.status_code, 200)
         get_ranking.assert_called_once()
         self.assertTrue(get_ranking.call_args.kwargs["historical"])
-        get_basic.assert_called_once()
-        self.assertTrue(get_basic.call_args.kwargs["historical"])
+        self.assertEqual(get_basic.call_count, 2)
+        self.assertTrue(all(call.kwargs["historical"] for call in get_basic.call_args_list))
+        self.assertNotIn("target_date", get_basic.call_args_list[0].kwargs)
+        self.assertEqual(
+            get_basic.call_args_list[1].kwargs["target_date"],
+            target_date.isoformat(),
+        )
         saved = self.store.get_records("test-ocid", target_date, target_date)
         self.assertEqual(saved[0]["recordStatus"], "available")
         self.assertEqual(saved[0]["experience"], 654321)
@@ -355,7 +360,9 @@ class GrowthHistoryApiTests(unittest.TestCase):
                 "recordStatus": "available",
                 "level": 279,
                 "experience": 10000 + offset,
-                "ranking": 500 + offset
+                "ranking": 500 + offset,
+                # This test covers reuse of fully checked historical records.
+                "experienceRateChecked": True
             }
             for offset in range(1, 7)
         ]
