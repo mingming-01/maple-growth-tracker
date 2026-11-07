@@ -76,10 +76,10 @@ function equipmentTotalOptions(item) {
   const total = item?.item_total_option;
   let values = total && typeof total === "object" ? { ...total } : {};
   const sources = [
-    ["base", item?.item_base_option],
-    ["scroll", item?.item_etc_option],
-    ["bonus", item?.item_add_option],
-    ["starforce", item?.item_starforce_option]
+    ["base", "기본", item?.item_base_option],
+    ["starforce", "스타포스", item?.item_starforce_option],
+    ["scroll", "주문서", item?.item_etc_option],
+    ["bonus", "추옵", item?.item_add_option]
   ];
   if (!Object.keys(values).length) {
     for (const [, source] of sources) {
@@ -96,8 +96,9 @@ function equipmentTotalOptions(item) {
     const value = optionNumber(values[key]);
     if (value === null || value === 0) return [];
     const amount = (value > 0 ? "+" : "") + numberText(value) + suffix;
-    const breakdown = sources.map(([sourceName, source]) => ({
+    const breakdown = sources.map(([sourceName, label, source]) => ({
       source: sourceName,
+      label,
       value: optionNumber(source?.[key]) || 0
     }));
     return [{ label, value: amount, breakdown }];
@@ -112,6 +113,59 @@ function equipmentPotentialOptions(item) {
     item?.additional_potential_option_3
   ].filter(hasValue);
   return { normal, additional };
+}
+
+function equipmentIsStarforce(item) {
+  const value = optionNumber(item?.starforce ?? item?.item_starforce);
+  return value !== null && value > 0;
+}
+
+function isSeedRing(item) {
+  const name = String(item?.item_name || "");
+  return /리스트레인트\s*링|컨티뉴어스\s*링|웨폰퍼프\s*링|리스크테이커\s*링|크라이시스\s*링|레벨퍼프\s*링|얼티메이덤\s*링/.test(name);
+}
+
+function seedRingLevel(item) {
+  const explicit = item?.ring_level ?? item?.item_level;
+  if (hasValue(explicit) && Number.isFinite(Number(explicit))) return Number(explicit);
+  const text = [item?.item_name, item?.item_description, item?.item_equipment_part]
+    .filter(hasValue).join(" ");
+  const match = text.match(/(?:Lv\.?|레벨\s*)\s*(\d+)/i);
+  return match ? Number(match[1]) : null;
+}
+
+function equipmentCategory(key, item) {
+  if (["hat", "top", "bottom", "cape", "gloves", "shoes", "shoulder"].includes(key)) return "방어구";
+  if (key === "weapon") return "무기";
+  if (["subweapon", "emblem"].includes(key)) return "보조 장비";
+  if (/^ring|pendant|face|eye|ear|belt|pocket|badge|medal|heart/.test(key)) return "장신구";
+  return item?.item_equipment_category || "장비";
+}
+
+function equipmentJobRequirement(item) {
+  const base = item?.item_base_option || {};
+  const value = base.base_equipment_job ?? item?.base_equipment_job ?? item?.item_equipment_job;
+  if (Array.isArray(value)) return value.filter(hasValue).join(" · ");
+  return hasValue(value) ? String(value) : null;
+}
+
+function appearanceColors(value) {
+  if (!value || typeof value !== "object") return [];
+  return [
+    ["기본 색상", value.base_color],
+    ["믹스 색상", value.mix_color],
+    ["믹스 비율", hasValue(value.mix_rate) ? value.mix_rate + "%" : null]
+  ].filter(([, item]) => hasValue(item));
+}
+
+function badgeGlyph(stat, index = 0) {
+  const value = String(stat || "");
+  if (/경험치/.test(value)) return "✦";
+  if (/공격력|마력|보스|최종 데미지/.test(value)) return "⚔";
+  if (/드롭|아이템/.test(value)) return "⬡";
+  if (/메소|획득/.test(value)) return "◈";
+  if (/크리티컬|데미지/.test(value)) return "✧";
+  return ["✦", "⚔", "◈", "✧", "⬡"][index % 5];
 }
 
 function apiImage(url, alt, className = "") {
@@ -161,23 +215,32 @@ function DetailTooltip({
   const [open, setOpen] = useState(false);
   const [position, setPosition] = useState(null);
   const triggerRef = useRef(null);
+  const tooltipRef = useRef(null);
   const Wrapper = as;
 
   function updatePosition() {
     const element = triggerRef.current;
     if (!element || typeof window === "undefined") return;
     const rect = element.getBoundingClientRect();
-    const width = Math.min(280, Math.max(180, window.innerWidth - 24));
-    const estimatedHeight = Math.min(280, Math.max(88, visible.length * 24 + 42));
-    let top = rect.bottom + 8;
-    if (top + estimatedHeight > window.innerHeight - 12) {
-      top = Math.max(12, rect.top - estimatedHeight - 8);
-    }
+    const width = Math.min(390, Math.max(180, window.innerWidth - 24));
+    const measuredHeight = tooltipRef.current?.getBoundingClientRect().height;
+    const estimatedHeight = measuredHeight || Math.min(520, Math.max(100, visible.length * 22 + 110));
+    const below = window.innerHeight - rect.bottom - 20;
+    const above = rect.top - 20;
+    let top = below >= estimatedHeight || below >= above
+      ? rect.bottom + 8
+      : rect.top - estimatedHeight - 8;
+    top = Math.max(12, Math.min(top, window.innerHeight - estimatedHeight - 12));
     const left = Math.max(
       12,
       Math.min(rect.left + rect.width / 2 - width / 2, window.innerWidth - width - 12)
     );
-    setPosition({ top, left, width });
+    setPosition(previous => previous &&
+      Math.abs(previous.top - top) < 1 &&
+      Math.abs(previous.left - left) < 1 &&
+      Math.abs(previous.width - width) < 1
+        ? previous
+        : { top, left, width });
   }
 
   useEffect(() => {
@@ -201,7 +264,7 @@ function DetailTooltip({
       window.removeEventListener("resize", updatePosition);
       window.removeEventListener("scroll", updatePosition, true);
     };
-  }, [open, visible.length]);
+  }, [open, position, visible.length, Boolean(tooltipContent)]);
 
   const hasTooltip = visible.length > 0 || Boolean(tooltipContent);
 
@@ -237,6 +300,7 @@ function DetailTooltip({
       {children}
       {open && position && createPortal(
         <div
+          ref={tooltipRef}
           className="game-floating-tooltip"
           role="tooltip"
           style={{ top: position.top, left: position.left, width: position.width }}
@@ -273,9 +337,6 @@ function StatsTab({ data, selected, onSelect }) {
   const stat = sourceOf(data, "stat");
   const ability = sourceOf(data, "ability");
   const hyper = sourceOf(data, "hyperStat");
-  const equipment = sourceOf(data, "itemEquipment");
-  const link = sourceOf(data, "linkSkill");
-  const union = sourceOf(data, "unionStateStat");
   const selectedAbility = selected.ability ?? fallbackPreset(ability);
   const selectedHyper = selected.hyperStat ?? fallbackPreset(hyper);
   const power = stat?.combatPower;
@@ -347,36 +408,6 @@ function StatsTab({ data, selected, onSelect }) {
             )) : <Empty>투자된 하이퍼 스탯이 없습니다.</Empty>}
           </div>
           <DataState source={hyper} />
-        </section>
-        <section className="game-stat-detail-card">
-          <div className="game-stat-detail-card-header">
-            <h4 className="game-window-title">프리셋 조합 추천</h4>
-            <span className="game-window-eyebrow">PROFILE</span>
-          </div>
-          <div className="react-profile-buttons">
-            <button type="button" onClick={() => applyProfile("current")}>현재 적용</button>
-            <button type="button" onClick={() => applyProfile("boss")}>보스 추천</button>
-            <button type="button" onClick={() => applyProfile("hunting")}>사냥 추천</button>
-            <button type="button" onClick={() => applyProfile("highest")}>최고 전투력 기록</button>
-          </div>
-          <p className="game-stat-source-note">
-            프리셋 선택은 조회 화면만 변경합니다. 비활성 조합의 실제 전투력과 최종 합산 능력치는 API에서 제공되지 않아 임의 계산하지 않습니다.
-          </p>
-          <div className="game-stat-detail-list">
-            {Object.entries({
-              장비: equipment, 어빌리티: ability, 링크: link, 유니온: union
-            }).map(([label, source]) => source && (
-              <div className="game-stat-detail-row" key={label}>
-                <span className="game-stat-detail-name">{label}</span>
-                <strong className="game-stat-detail-value">
-                  활성 프리셋 {source.activePresetNo ?? "확인 불가"}
-                </strong>
-              </div>
-            ))}
-          </div>
-          <p className="game-stat-source-note">
-            보스 추천 신뢰도: {recommendations.boss?.confidence || "자료 부족"} · 사냥 추천 신뢰도: {recommendations.hunting?.confidence || "자료 부족"}
-          </p>
         </section>
       </section>
     </div>
