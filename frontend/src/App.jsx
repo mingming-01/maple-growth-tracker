@@ -102,6 +102,8 @@ function RankingStatus({ character }) {
                 {({ranking:"종합",worldRanking:"월드",jobWorldRanking:"직업·월드",jobRanking:"직업"})[key] || key}
                 {" · HTTP "}{item.statusCode ?? "응답 없음"}
                 {" · 항목 "}{item.returnedEntries ?? "확인 불가"}건
+                {item.errorCode ? " · " + item.errorCode : ""}
+                {item.errorMessage ? " · " + item.errorMessage : ""}
               </span>
             ))}
           </div>
