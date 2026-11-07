@@ -126,20 +126,23 @@ function isSeedRing(item) {
 }
 
 function seedRingLevel(item) {
-  // 장비명에 명시된 레벨을 우선한다. 설명문 안의 다른 숫자를
-  // 시드링 레벨로 오인해 표시하는 일을 막는다.
-  const name = String(item?.item_name || "");
-  const nameMatch = name.match(/(?:Lv\.?\s*(\d+)|(\d+)\s*레벨|레벨\s*(\d+))/i);
-  const namedLevel = nameMatch?.[1] || nameMatch?.[2] || nameMatch?.[3];
-  if (namedLevel) return Number(namedLevel);
-
+  // Nexon이 구조화된 ring_level 값을 제공하면 장비명 문자열보다 우선한다.
+  // 아이템 이름의 숫자는 실제 시드링 레벨이 아닌 강화/표기 정보일 수 있다.
   const candidates = [
     item?.ring_level,
     item?.item_base_option?.ring_level,
     item?.item_special_option?.ring_level
   ];
-  const explicit = candidates.find(value => hasValue(value) && Number.isFinite(Number(value)));
-  return explicit === undefined ? null : Number(explicit);
+  const explicit = candidates
+    .map(optionNumber)
+    .find(value => value !== null && value > 0);
+  if (explicit !== undefined) return explicit;
+
+  // 구조화된 레벨 필드가 없을 때만 이름의 명시적인 레벨 표기를 사용한다.
+  const name = String(item?.item_name || "");
+  const nameMatch = name.match(/(?:Lv\.?\s*(\d+)|(\d+)\s*레벨|레벨\s*(\d+))/i);
+  const namedLevel = nameMatch?.[1] || nameMatch?.[2] || nameMatch?.[3];
+  return namedLevel ? Number(namedLevel) : null;
 }
 
 function equipmentCategory(key, item) {
