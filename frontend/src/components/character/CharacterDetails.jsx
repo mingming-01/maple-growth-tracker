@@ -703,10 +703,10 @@ function EquipmentTab({ data, selected, onSelect }) {
                                     ? "− " + numberText(Math.abs(value))
                                     : "+ " + numberText(value);
                                 return (
-                                  <React.Fragment key={part.source}>
+                                  <Fragment key={part.source}>
                                     <small className={"is-" + part.source}>{formatted}</small>
                                     {index < option.breakdown.filter(entry => entry.value !== 0).length - 1 ? " " : ""}
-                                  </React.Fragment>
+                                  </Fragment>
                                 );
                               })})
                             </span>
