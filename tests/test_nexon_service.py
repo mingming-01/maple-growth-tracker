@@ -245,7 +245,7 @@ class NexonServiceTests(unittest.TestCase):
     @patch("tracker.services.nexon_service.get_api_class", return_value="히어로")
     @patch("tracker.services.nexon_service.get_ranking_snapshot")
     @patch("tracker.integrations.nexon_api.get_ranking_page")
-    def test_global_job_rank_matches_name_without_requiring_world_name(
+    def test_global_job_rank_matches_name_and_world_without_world_filter(
         self, get_ranking_page, get_ranking_snapshot, _get_api_class
     ):
         response = Mock(status_code=200)
@@ -332,7 +332,9 @@ class NexonServiceTests(unittest.TestCase):
 
                 self.assertEqual(result["jobWorldRanking"], 7)
                 self.assertEqual(result["jobRanking"], 7)
-                world_call, global_call = get_ranking_page.call_args_list
+                calls = get_ranking_page.call_args_list
+                world_call = next(call for call in calls if call.kwargs["world_name"] == world)
+                global_call = next(call for call in calls if call.kwargs["world_name"] is None)
                 self.assertEqual(world_call.kwargs["world_name"], world)
                 self.assertIsNone(global_call.kwargs["world_name"])
                 self.assertEqual(world_call.kwargs["character_class"], job)
