@@ -4,6 +4,7 @@ import assert from "node:assert/strict";
 import {
     buildGrowthTimeline,
     calculateAverageGrowth,
+    calculateDailyExperienceRateChanges,
     calculateGrowthMetrics,
     calculateLevelProgress,
     calculateWeeklyGrowth,
@@ -41,6 +42,27 @@ test("ranking change uses the latest two valid ranking observations", () => {
     ];
 
     assert.equal(getRankingChange(history), 30);
+});
+
+test("daily level progress change compares only consecutive dates within the same level", () => {
+    const history = [
+        { date: "2026-11-01", level: 280, recordStatus: "available", experienceRate: "10.000" },
+        { date: "2026-11-02", level: 280, recordStatus: "available", experienceRate: "10.750" },
+        { date: "2026-11-03", level: 280, recordStatus: "available", experienceRate: "10.750" },
+        { date: "2026-11-04", level: 281, levelUp: true, recordStatus: "available", experienceRate: "0.125" },
+        { date: "2026-11-05", level: 281, recordStatus: "available", experienceRate: "0.625" },
+        { date: "2026-11-07", level: 281, recordStatus: "available", experienceRate: "1.000" },
+        { date: "2026-11-08", level: 281, recordStatus: "not_collected", experienceRate: null },
+        { date: "2026-11-09", level: 281, recordStatus: "available", experienceRate: "1.500" },
+        { date: "2026-11-10", level: 281, recordStatus: "available", experienceRate: "0.250" }
+    ];
+
+    assert.deepEqual(calculateDailyExperienceRateChanges(history), {
+        "2026-11-02": 0.75,
+        "2026-11-03": 0,
+        "2026-11-05": 0.5,
+        "2026-11-10": -1.25
+    });
 });
 
 test("level progress converts average EXP to percentage points of the current level", () => {
