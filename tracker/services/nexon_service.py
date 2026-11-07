@@ -138,7 +138,7 @@ def get_character_rankings(target_date, world_name, character_class, ocid):
                     and base_rank is not None
                     and str(candidate_rank) == str(base_rank)
                 )
-                if candidate is None or is_duplicate:
+                if is_duplicate or (candidate is None and base_rank is not None):
                     fallback_data, fallback_response = get_ranking_snapshot(
                         target_date=date_text,
                         world_name=filtered_world,
