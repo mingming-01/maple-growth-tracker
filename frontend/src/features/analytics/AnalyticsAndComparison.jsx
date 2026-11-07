@@ -82,7 +82,7 @@ function buildReportSignature(character, history, metrics, analysisContext = {})
 }
 
 
-export function AIReport({ character, history, periodDays = 7, periodSummary = null }) {
+export function AIReport({ character, history, analysisHistory = history, periodDays = 7, periodSummary = null }) {
   const [analysis,setAnalysis] = useState("");
   const [loading,setLoading] = useState(false);
   const [error,setError] = useState("");
@@ -93,11 +93,11 @@ export function AIReport({ character, history, periodDays = 7, periodSummary = n
   },[character,history]);
 
   const run = useCallback(async ({ force = false } = {}) => {
-    if (!character?.characterName || !Array.isArray(history)) return;
+    if (!character?.characterName || !Array.isArray(history) || !Array.isArray(analysisHistory)) return;
     setLoading(true);
     setError("");
     const analysisContext = { periodDays:[7,30,90].includes(Number(periodDays)) ? Number(periodDays) : 7, periodSummary:periodSummary || null };
-    const signature = buildReportSignature(character,history,metrics,analysisContext);
+    const signature = buildReportSignature(character,analysisHistory,metrics,analysisContext);
     const cached = !force ? getCachedAI("growth-report-v3",signature) : null;
     if (cached?.analysis) {
       setAnalysis(cached.analysis);
@@ -105,7 +105,7 @@ export function AIReport({ character, history, periodDays = 7, periodSummary = n
       return;
     }
     try {
-      const result = await postAiAnalysis(character.characterName,metrics,history,analysisContext);
+      const result = await postAiAnalysis(character.characterName,metrics,analysisHistory,analysisContext);
       if (!result.analysis) throw new Error("AI 분석 결과가 비어 있습니다.");
       setAnalysis(result.analysis);
       saveCachedAI("growth-report-v3",signature,result.analysis,result.growthInsights || null);
@@ -114,7 +114,7 @@ export function AIReport({ character, history, periodDays = 7, periodSummary = n
     } finally {
       setLoading(false);
     }
-  },[character,history,metrics,periodDays,periodSummary]);
+  },[character,history,analysisHistory,metrics,periodDays,periodSummary]);
 
   useEffect(() => {
     setAnalysis("");
