@@ -131,7 +131,9 @@ class GrowthHistoryApiTests(unittest.TestCase):
                 "recordStatus": "available",
                 "level": 280,
                 "experience": 123456,
-                "ranking": 321
+                "ranking": 321,
+                "experienceRate": 12.345,
+                "experienceRateChecked": True
             }]
         )
         with self.app.app_context():
@@ -361,6 +363,7 @@ class GrowthHistoryApiTests(unittest.TestCase):
                 "level": 279,
                 "experience": 10000 + offset,
                 "ranking": 500 + offset,
+                "experienceRate": None if offset in (1, 2) else 12.345,
                 "experienceRateChecked": offset != 1,
             }
             for offset in range(1, 7)
@@ -396,9 +399,13 @@ class GrowthHistoryApiTests(unittest.TestCase):
         requested_dates = {call.kwargs["target_date"] for call in get_ranking.call_args_list}
         self.assertEqual(
             requested_dates,
-            {today.isoformat(), (today - timedelta(days=1)).isoformat()},
+            {
+                today.isoformat(),
+                (today - timedelta(days=1)).isoformat(),
+                (today - timedelta(days=2)).isoformat(),
+            },
         )
-        self.assertEqual(get_ranking.call_count, 2)
+        self.assertEqual(get_ranking.call_count, 3)
         refreshed = self.store.get_records(
             "test-ocid", today - timedelta(days=1), today - timedelta(days=1)
         )
@@ -414,6 +421,7 @@ class GrowthHistoryApiTests(unittest.TestCase):
                 "level": 279,
                 "experience": 10000 + offset,
                 "ranking": 500 + offset,
+                "experienceRate": 12.345,
                 # This test covers reuse of fully checked historical records.
                 "experienceRateChecked": True
             }
