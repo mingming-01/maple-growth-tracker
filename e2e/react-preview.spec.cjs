@@ -275,55 +275,85 @@ test("30-day AI report reuses cache without automatic LLM calls and only regener
     rankingDataStatus: "available"
   };
   const history = [
-    { date: "2026-10-20", level: 280, experience: 1000, experienceChange: null, ranking: 12350, recordStatus: "available" },
-    { date: "2026-10-21", level: 280, experience: 1200, experienceChange: 200, ranking: 12345, recordStatus: "available" }
+    { date: "2026-11-04", level: 280, experience: 1000, experienceChange: null, recordStatus: "available" },
+    { date: "2026-11-05", level: 280, experience: 1200, experienceChange: 200, recordStatus: "available" },
+    { date: "2026-11-06", level: 280, experience: 1300, experienceChange: 100, recordStatus: "available" }
   ];
-  let aiCalls = 0;
-  let submittedPayload = null;
+  await page.route("**/api/character?*", route => route.fulfill({
+    status: 200, contentType: "application/json", body: JSON.stringify(character)
+  }));
+  await page.route("**/api/history?*", route => route.fulfill({
+    status: 200, contentType: "application/json",
+    body: JSON.stringify({ history, historyStatus: "complete", historyStorage: { backend: "postgres", status: "saved" } })
+  }));
   await page.route("**/api/character-details?*", route => route.fulfill({
-    status: 200,
-    contentType: "application/json",
+    status: 200, contentType: "application/json",
     body: JSON.stringify({ section: "stats", status: "available", sources: [] })
   }));
+  await page.route(/\/api\/history\/archive\?/, async route => {
+    const url = new URL(route.request().url());
+    const days = Number(url.searchParams.get("days"));
+    const endDate = url.searchParams.get("end") || "2026-11-06";
+    const collecting = url.searchParams.get("collect") === "1";
+    const offset = Number(url.searchParams.get("offset") || 0);
+    const limit = Number(url.searchParams.get("limit") || 10);
+    const [year, month, day] = endDate.split("-").map(Number);
+    const endUtc = Date.UTC(year, month - 1, day);
+    const records = Array.from({ length: days }, (_, index) => ({
+      date: new Date(endUtc - (days - index - 1) * 86400000).toISOString().slice(0, 10),
+      ranking: 5000 - index,
+      level: 280,
+      experience: 1000000 + index * 1000,
+      experienceChange: index === 0 ? null : 1000,
+      recordStatus: "available",
+      levelUp: false
+    }));
+    await route.fulfill({
+      status: 200, contentType: "application/json",
+      body: JSON.stringify({
+        ocid: character.ocid, days, startDate: records[0].date, endDate: records[records.length - 1].date,
+        history: records, availableDays: days, notReadyDays: 0, notCollectedDays: 0,
+        collection: collecting ? {
+          offset, limit, checkedDays: limit, savedRecords: limit,
+          availableRecords: limit, noDataRecords: 0,
+          remainingDays: Math.max(0, days - offset - limit)
+        } : null,
+        storageBackend: "postgres", persistentStorage: true
+      })
+    });
+  });
+
+  let aiCalls = 0;
+  let submittedPayload = null;
   await page.route("**/api/ai-analysis?*", async route => {
     aiCalls += 1;
     submittedPayload = route.request().postDataJSON();
     await route.fulfill({
-      status: 200,
-      contentType: "application/json",
+      status: 200, contentType: "application/json",
       body: JSON.stringify({
         analysis: "[성장 패턴] 기간 분석 테스트 결과입니다.\\n[성장 변화] 선택 기간 기록을 확인했습니다.\\n[레벨업 분석] 확인할 기록이 부족합니다.\\n[성장 전망] 자료가 부족합니다.\\n[AI 코멘트] 테스트 리포트입니다.",
-        cacheHit: false,
-        growthInsights: {}
+        cacheHit: false, growthInsights: {}
       })
     });
   });
 
   await page.goto("/preview/");
-  await page.evaluate(({ character, history }) => {
-    sessionStorage.setItem("mapleGrowthTrackerState", JSON.stringify({
-      character,
-      history,
-      historyRange: 30,
-      displayHistory: history,
-      periodSummary: {
-        days: 30, coveragePercent: 80, confirmedChangeDays: 12,
-        averageGrowth: 2000000000000, previousSummary: null
-      }
-    }));
-    localStorage.removeItem("mapleGrowthTrackerAIResponsesV1");
-  }, { character, history });
-  await page.reload();
+  await page.getByLabel("캐릭터명").fill("기간캐시테스트");
+  await page.getByRole("button", { name: /캐릭터 조회/ }).click();
   await expect(page.getByRole("heading", { name: "기간캐시테스트" })).toBeVisible();
+  await expect.poll(() => aiCalls).toBe(1);
+  aiCalls = 0;
+
+  await page.locator(".history-range-control select").selectOption("30");
   await expect(page.getByText(/최근 30일 분석의 저장 결과가 없습니다/)).toBeVisible();
-  await expect.poll(() => aiCalls).toBe(0);
+  expect(aiCalls).toBe(0);
 
   await page.getByRole("button", { name: "AI 다시 분석" }).click();
   await expect(page.getByText("기간 분석 테스트 결과입니다.")).toBeVisible();
   expect(aiCalls).toBe(1);
   expect(submittedPayload.analysisContext.periodDays).toBe(30);
   expect(submittedPayload.forceRefresh).toBe(true);
-  expect(submittedPayload.history).toHaveLength(2);
+  expect(submittedPayload.history).toHaveLength(30);
 
   await page.reload();
   await expect(page.getByText("기간 분석 테스트 결과입니다.")).toBeVisible();
