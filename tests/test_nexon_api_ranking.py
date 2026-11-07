@@ -61,5 +61,28 @@ class NexonRankingRequestTests(unittest.TestCase):
         self.assertNotIn("ocid", params)
 
 
+    @patch("tracker.integrations.nexon_api.request_nexon_api")
+    def test_global_job_ranking_omits_world_but_keeps_character_class(self, request_api):
+        response = Mock(status_code=200)
+        response.json.return_value = {"ranking": []}
+        request_api.return_value = response
+
+        rows, returned_response = get_ranking_page(
+            target_date="2026-11-07",
+            world_name=None,
+            character_class="아크메이지(썬,콜)",
+            page=3,
+        )
+
+        self.assertEqual(rows, [])
+        self.assertIs(returned_response, response)
+        endpoint, params = request_api.call_args.args[:2]
+        self.assertEqual(endpoint, "ranking/overall")
+        self.assertEqual(params["character_class"], "아크메이지(썬,콜)")
+        self.assertNotIn("world_name", params)
+        self.assertNotIn("ocid", params)
+        self.assertEqual(params["page"], 3)
+
+
 if __name__ == "__main__":
     unittest.main()
