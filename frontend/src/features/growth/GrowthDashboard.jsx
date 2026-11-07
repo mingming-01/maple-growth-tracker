@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import Chart from "chart.js/auto";
-import { buildLevelUpMarkers, buildExperienceChartSeries, dailyGrowthSegmentDash } from "./growthChartData.js";
+import { detectLevelUpEvents, buildLevelUpMarkers, buildExperienceChartSeries, dailyGrowthSegmentDash } from "./growthChartData.js";
 import {
   getHistoryArchive
 } from "../../services/api.js";
@@ -417,8 +417,9 @@ export default function GrowthDashboard({ character, history, onHistoryChange, o
     const sorted = sortHistoryAscending(displayHistory);
     if (!sorted.length) return undefined;
     const { daily, cumulative } = buildExperienceChartSeries(sorted);
-    // Keep level-up events visible even when that date has no EXP delta
-    // or the chart has not observed a cumulative value yet.
+    // The history API provides daily levels rather than a levelUp flag.
+    // Detect level changes locally so the yellow star is drawn on actual events.
+    const levelUpEvents = detectLevelUpEvents(sorted);
     const levelUps = buildLevelUpMarkers(sorted, cumulative);
     chartRef.current = new Chart(canvasRef.current.getContext("2d"), {
       type: "line",
@@ -436,7 +437,8 @@ export default function GrowthDashboard({ character, history, onHistoryChange, o
           label(context) {
             if (context.dataset.label === "레벨업") {
               const current = sorted[context.dataIndex];
-              const previous = sorted[context.dataIndex - 1];
+              const previous = sorted.slice(0, context.dataIndex).reverse()
+                .find(item => item?.level !== null && item?.level !== undefined && Number.isFinite(Number(item.level)));
               return "⭐ 레벨업 · Lv. " + (previous?.level ?? "—") + " → " + (current?.level ?? "—");
             }
             return context.parsed.y === null ? "" : context.dataset.label + ": " + context.parsed.y.toFixed(2) + "조";
@@ -447,9 +449,10 @@ export default function GrowthDashboard({ character, history, onHistoryChange, o
             autoSkip:false,maxRotation:0,minRotation:0,
             callback(value,index) {
               const item = sorted[index];
-              if (index % 3 !== 0 && item?.levelUp !== true) return "";
+              const isLevelUp = levelUpEvents[index] === true;
+              if (index % 3 !== 0 && !isLevelUp) return "";
               const label = String(item?.date || "").slice(5);
-              return item?.levelUp ? label + " ★" : label;
+              return isLevelUp ? label + " ★" : label;
             }
           }},
           experience:{type:"linear",position:"left",title:{display:true,text:"총 경험치 증가량"},ticks:{callback:value=>Number(value).toFixed(0)+"조"}},
