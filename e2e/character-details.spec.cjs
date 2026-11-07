@@ -229,7 +229,7 @@ test("mobile touch opens item tooltips without clipped detail panels", async ({ 
     await page.locator('[data-detail-tab="equipment"]').tap();
     const weapon = page.locator('.equipment-game-slot[data-slot="weapon"]');
     await expect(weapon).toBeVisible();
-    await weapon.evaluate(element => element.scrollIntoView({ block: "center", inline: "center" }));
+    await weapon.evaluate(element => element.scrollIntoView({ block: "center", inline: "center", behavior: "instant" }));
     await weapon.tap();
     const equipmentTooltip = page.locator("body > .game-floating-tooltip");
     await expect(equipmentTooltip.locator(".game-equipment-tooltip-star")).toHaveText("★ 22");
@@ -262,7 +262,7 @@ test("mobile touch opens item tooltips without clipped detail panels", async ({ 
     await expect(page.locator("body > .game-floating-tooltip .game-equipment-tooltip-star")).toHaveCount(0);
     await page.locator(".mgt-topbar").tap();
     const seedRing = page.locator('.equipment-game-slot[data-slot="ring1"]');
-    await seedRing.evaluate(element => element.scrollIntoView({ block: "center", inline: "center" }));
+    await seedRing.evaluate(element => element.scrollIntoView({ block: "center", inline: "center", behavior: "instant" }));
     await seedRing.tap();
     await expect(page.locator("body > .game-floating-tooltip")).toContainText("시드링 구성");
     await expect(page.locator("body > .game-floating-tooltip")).toContainText("리스트레인트 링 4레벨 · Lv. 4");
@@ -278,7 +278,7 @@ test("mobile touch opens item tooltips without clipped detail panels", async ({ 
     await expect(page.getByText("펫 장비 테스트")).toBeVisible();
     await page.getByRole("tab", { name: "장비" }).tap();
     const androidSlot = page.locator('.equipment-game-slot[data-slot="android"]');
-    await androidSlot.evaluate(element => element.scrollIntoView({ block: "center", inline: "center" }));
+    await androidSlot.evaluate(element => element.scrollIntoView({ block: "center", inline: "center", behavior: "instant" }));
     await androidSlot.tap();
     const androidTooltip = page.locator("body > .game-floating-tooltip");
     await expect(androidTooltip).toContainText("싱크로이드 9");
