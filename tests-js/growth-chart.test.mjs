@@ -21,7 +21,7 @@ test("places level-up marker on the last known cumulative value when event EXP i
   );
 });
 
-test("keeps an early level-up marker visible before any cumulative EXP value exists", () => {
+test("does not invent a chart coordinate before any cumulative EXP value exists", () => {
   const records = [
     { date: "2026-09-22", levelUp: false },
     { date: "2026-09-23", levelUp: true }
