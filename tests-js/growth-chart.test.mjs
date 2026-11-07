@@ -2,6 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 
 import {
+  detectLevelUpEvents,
   buildLevelUpMarkers,
   buildExperienceChartSeries,
   dailyGrowthSegmentDash
@@ -40,6 +41,23 @@ test("uses the latest known cumulative value for consecutive level-up events", (
   assert.deepEqual(
     buildLevelUpMarkers(records, [2.5, null, null, 2.8]),
     [null, 2.5, 2.5, null]
+  );
+});
+
+test("detects level-up days by comparing the recorded level when no flag is supplied", () => {
+  const records = [
+    { date: "2026-11-01", level: 280 },
+    { date: "2026-11-02", level: 280 },
+    { date: "2026-11-03", level: 281 },
+    { date: "2026-11-04", level: null },
+    { date: "2026-11-05", level: 282 },
+    { date: "2026-11-06", level: 282, levelUp: true }
+  ];
+
+  assert.deepEqual(detectLevelUpEvents(records), [false, false, true, false, true, true]);
+  assert.deepEqual(
+    buildLevelUpMarkers(records, [1, 1.2, null, null, 1.25, null]),
+    [null, null, 1.2, null, 1.25, 1.25]
   );
 });
 
