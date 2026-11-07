@@ -183,7 +183,84 @@
 }
 .game-symbol-special-summary { display:block; margin-top:5px; color:#c9b4f4; font-size:8px; text-align:center; }
 .game-symbol-tile.is-maxed { border-color:rgba(109,193,153,.42); box-shadow:inset 0 0 0 1px rgba(109,193,153,.08); }
-.game-union-champion-card { display:flex; flex-direction:column; align-items:center; padding:13px 10px 12px; gap:4px; }
+.game-union-champion-card {
+  position:relative;
+  display:flex;
+  flex-direction:column;
+  align-items:center;
+  min-width:0;
+  padding:18px 14px 16px;
+  gap:7px;
+  border:1px solid rgba(173,163,206,.2);
+  border-radius:16px;
+  background:
+    radial-gradient(ellipse at 50% 18%,rgba(104,87,158,.22),transparent 58%),
+    linear-gradient(160deg,rgba(34,31,51,.96),rgba(20,19,31,.98));
+  box-shadow:inset 0 1px 0 rgba(255,255,255,.045),0 9px 22px rgba(0,0,0,.18);
+}
+.game-union-champion-card-head { width:100%; display:flex; align-items:center; justify-content:space-between; gap:8px; }
+.game-union-champion-level { color:#e5d4ad; font-size:11px; font-weight:900; }
+.game-union-champion-avatar {
+  display:grid;
+  place-items:center;
+  width:100%;
+  min-height:202px;
+  margin:7px 0 2px;
+  border:1px solid rgba(190,173,255,.14);
+  border-radius:15px;
+  background:radial-gradient(ellipse at 50% 38%,rgba(121,100,181,.2),rgba(13,13,23,.1) 72%);
+}
+.game-union-champion-avatar-preview {
+  display:block;
+  width:190px;
+  height:190px;
+  max-width:100%;
+  border-radius:14px;
+  object-fit:contain;
+  transform:scale(1.08);
+  filter:drop-shadow(0 9px 14px rgba(0,0,0,.42));
+}
+.game-union-champion-name { color:#f5f0ff; font-size:13px; font-weight:950; text-align:center; }
+.game-union-champion-class { color:#b8b1ca; font-size:10px; text-align:center; }
+.game-union-champion-badges {
+  display:flex;
+  flex-wrap:wrap;
+  justify-content:center;
+  gap:7px;
+  width:100%;
+  margin-top:10px;
+  padding:11px 9px 9px;
+  border:1px solid rgba(124,202,225,.16);
+  border-radius:12px;
+  background:linear-gradient(180deg,rgba(52,103,125,.13),rgba(11,32,46,.22));
+}
+.game-union-champion-crest {
+  display:grid;
+  place-items:center;
+  width:43px;
+  height:52px;
+  padding:4px;
+  border:1px solid rgba(145,221,238,.7);
+  border-radius:6px 6px 12px 12px;
+  color:#e8fcff;
+  background:linear-gradient(165deg,#62c5d7 0%,#237f9e 55%,#14566f 56%,#102e43 100%);
+  clip-path:polygon(0 0,100% 0,100% 77%,50% 100%,0 77%);
+  box-shadow:inset 0 0 0 2px rgba(226,251,255,.18),0 4px 10px rgba(0,0,0,.32);
+  cursor:help;
+}
+.game-union-champion-crest-glyph {
+  display:grid;
+  place-items:center;
+  width:32px;
+  height:32px;
+  border:1px solid rgba(226,250,255,.78);
+  border-radius:7px;
+  color:#f0fdff;
+  background:rgba(7,57,79,.56);
+  font-size:19px;
+  font-weight:950;
+  text-shadow:0 1px 4px rgba(0,0,0,.45);
+}
 .game-union-champion-card-head { width:100%; display:flex; align-items:center; justify-content:space-between; gap:8px; }
 .game-union-champion-level { color:#d9c9a9; font-size:10px; font-weight:900; }
 .game-union-champion-avatar { display:grid; place-items:center; width:100%; min-height:144px; margin:5px 0 2px; }
@@ -230,14 +307,16 @@
 @media(max-width:760px) {
   .game-appearance-grid { grid-template-columns:1fr; }
   .game-cash-toolbar { align-items:flex-start; flex-direction:column; }
-  .game-union-champion-avatar { min-height:126px; }
-  .game-union-champion-avatar-preview { width:118px; height:118px; }
+  .game-union-champion-card { padding:15px 12px 13px; }
+  .game-union-champion-avatar { min-height:176px; }
+  .game-union-champion-avatar-preview { width:164px; height:164px; }
 }
 @media(max-width:480px) {
   .game-floating-tooltip { width:calc(100vw - 24px); max-height:none !important; overflow:visible !important; }
   .game-equipment-subtabs button { flex:1; }
   .game-appearance-item { padding:9px; }
-  .game-union-champion-crest { width:31px; height:40px; }
+  .game-union-champion-crest { width:39px; height:48px; }
+  .game-union-champion-crest-glyph { width:29px; height:29px; font-size:17px; }
 }
 
 .game-equipment-tooltip-rings span {
