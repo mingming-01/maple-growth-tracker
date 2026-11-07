@@ -98,6 +98,6 @@ export function buildLevelUpMarkers(records, cumulative) {
     if (value !== null && value !== undefined && Number.isFinite(Number(value))) {
       lastKnownCumulative = Number(value);
     }
-    return item?.levelUp === true ? (lastKnownCumulative ?? 0) : null;
+    return item?.levelUp === true ? lastKnownCumulative : null;
   });
 }
