@@ -89,8 +89,7 @@ export function dailyGrowthSegmentDash(context) {
 }
 
 /**
- * Build a dedicated Chart.js dataset for level-up markers.
- * A level-up can be a valid event even when that day's EXP delta is unavailable.
+ * Detect level-up days from explicit flags or an increase in the observed level.
  */
 export function detectLevelUpEvents(records) {
   let lastKnownLevel = null;
