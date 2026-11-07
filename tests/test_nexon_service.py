@@ -318,6 +318,11 @@ class NexonServiceTests(unittest.TestCase):
                     "ocid": "target-ocid",
                     "character_name": "대상캐릭터",
                     "world_name": world,
+                    "class_name": (
+                        "마법사" if job == "아크메이지(썬,콜)"
+                        else "전사" if job == "히어로"
+                        else "레지스탕스"
+                    ),
                     "sub_class_name": job,
                     "ranking": 7,
                 }
