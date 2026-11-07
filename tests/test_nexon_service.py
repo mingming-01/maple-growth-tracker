@@ -232,7 +232,7 @@ class NexonServiceTests(unittest.TestCase):
     @patch("tracker.services.nexon_service.get_api_class", return_value="히어로")
     @patch("tracker.services.nexon_service.get_ranking_snapshot")
     @patch("tracker.integrations.nexon_api.get_ranking_page")
-    def test_global_job_rank_matches_name_without_requiring_world_name(
+    def test_global_job_rank_name_fallback_matches_target_world(
         self, get_ranking_page, get_ranking_snapshot, _get_api_class
     ):
         response = Mock(status_code=200)
