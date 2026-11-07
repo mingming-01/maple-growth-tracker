@@ -93,11 +93,22 @@ export function dailyGrowthSegmentDash(context) {
  */
 export function buildLevelUpMarkers(records, cumulative) {
   let lastKnownCumulative = null;
+  let lastKnownLevel = null;
+
   return records.map((item, index) => {
     const value = cumulative[index];
     if (value !== null && value !== undefined && Number.isFinite(Number(value))) {
       lastKnownCumulative = Number(value);
     }
-    return item?.levelUp === true ? lastKnownCumulative : null;
+
+    const parsedLevel = item?.level === null || item?.level === undefined || item?.level === ""
+      ? null
+      : Number(item.level);
+    const currentLevel = Number.isFinite(parsedLevel) ? parsedLevel : null;
+    const detectedLevelUp = item?.levelUp === true ||
+      (lastKnownLevel !== null && currentLevel !== null && currentLevel > lastKnownLevel);
+
+    if (currentLevel !== null) lastKnownLevel = currentLevel;
+    return detectedLevelUp ? lastKnownCumulative : null;
   });
 }
