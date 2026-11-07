@@ -428,8 +428,8 @@ export default function GrowthDashboard({ character, history, onHistoryChange, o
       }
       // 레벨업 날짜는 경험치 변화량을 계산할 수 없지만 이벤트 자체는
       // 직전까지 확인된 누적값에 고정해 그래프에서 별도 마커로 보존한다.
-      return item.levelUp === true && lastKnownCumulative !== null
-        ? lastKnownCumulative
+      return item.levelUp === true
+        ? (lastKnownCumulative ?? 0)
         : null;
     });
     chartRef.current = new Chart(canvasRef.current.getContext("2d"), {
