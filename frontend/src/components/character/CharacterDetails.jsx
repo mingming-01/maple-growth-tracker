@@ -685,7 +685,7 @@ function EquipmentTab({ data, selected, onSelect }) {
                 )}
                 <div className="game-equipment-tooltip-section">
                   <div className="game-equipment-tooltip-section-title">
-                    <strong>스탯</strong><span>합계와 구성 수치</span>
+                    <strong>스탯</strong><span>기본 · 스타포스 · 주문서 · 추옵</span>
                   </div>
                   <div className="game-equipment-tooltip-total">
                     {totalOptions.length ? totalOptions.map(option => (

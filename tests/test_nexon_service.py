@@ -229,5 +229,44 @@ class NexonServiceTests(unittest.TestCase):
 
 
 
+    @patch("tracker.services.nexon_service.get_api_class", return_value="히어로")
+    @patch("tracker.services.nexon_service.get_ranking_snapshot")
+    @patch("tracker.integrations.nexon_api.get_ranking_page")
+    def test_global_job_rank_matches_name_without_requiring_world_name(
+        self, get_ranking_page, get_ranking_snapshot, _get_api_class
+    ):
+        response = Mock(status_code=200)
+        response.json.return_value = {"ranking": [{"ranking": 2278}]}
+        get_ranking_snapshot.side_effect = [
+            ({"ranking": 2278}, response),
+            ({"ranking": 374}, response),
+        ]
+        global_entry = {
+            "character_name": "밍득",
+            "world_name": "크로아",
+            "ranking": 79,
+        }
+        world_entry = {
+            "character_name": "밍득",
+            "world_name": "크로아",
+            "ranking": 9,
+        }
+        get_ranking_page.side_effect = [
+            ([world_entry], response),
+            ([global_entry], response),
+        ]
+
+        result = nexon_service.get_character_rankings(
+            "2026-11-07", "크로아", "히어로", "ocid-value", "밍득"
+        )
+
+        self.assertEqual(result["jobWorldRanking"], 9)
+        self.assertEqual(result["jobRanking"], 79)
+        self.assertEqual(result["rankingDataStatus"], "available")
+        self.assertEqual(
+            get_ranking_page.call_args_list[1].kwargs["world_name"], None
+        )
+
+
 if __name__ == "__main__":
     unittest.main()
