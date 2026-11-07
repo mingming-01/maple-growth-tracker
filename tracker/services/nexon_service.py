@@ -124,11 +124,15 @@ def _find_character_in_filtered_ranking(
             if entry_ocid:
                 matches = str(entry_ocid) == str(ocid)
             else:
-                matches = (
-                    str(entry.get("character_name") or "").casefold()
-                    == str(character_name or "").casefold()
-                    and str(entry.get("world_name") or "") == str(world_name or "")
-                )
+                # Nexon의 공개 랭킹 목록 응답에는 OCID가 없는 경우가 있다.
+                # 전체 직업 랭킹(world_name=None)에서는 월드 조건을 적용하지 않고,
+                # 특정 월드 랭킹에서만 월드까지 확인한다.
+                entry_name = str(entry.get("character_name") or "").strip().casefold()
+                target_name = str(character_name or "").strip().casefold()
+                entry_world = str(entry.get("world_name") or "").strip()
+                matches = bool(target_name and entry_name == target_name)
+                if matches and world_name:
+                    matches = entry_world == str(world_name).strip()
             if matches:
                 last_details["matched"] = True
                 return entry, response, last_details
