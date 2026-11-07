@@ -396,7 +396,7 @@ class CharacterDetailServiceTests(unittest.TestCase):
 
         with patch("tracker.services.character_detail_service.request_nexon_api", side_effect=fake_request), patch(
             "tracker.services.character_detail_service._fetch_champion_profile",
-            return_value=None,
+            return_value={},
         ):
             result = get_character_detail_section("sample-union-ocid", "union")
 
