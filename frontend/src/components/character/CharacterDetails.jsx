@@ -129,8 +129,9 @@ function seedRingLevel(item) {
   if (hasValue(explicit) && Number.isFinite(Number(explicit))) return Number(explicit);
   const text = [item?.item_name, item?.item_description, item?.item_equipment_part]
     .filter(hasValue).join(" ");
-  const match = text.match(/(?:Lv\.?|레벨\s*)\s*(\d+)/i);
-  return match ? Number(match[1]) : null;
+  const match = text.match(/(?:Lv\.?\s*(\d+)|레벨\s*(\d+)|(\d+)\s*레벨)/i);
+  const level = match?.[1] || match?.[2] || match?.[3];
+  return level ? Number(level) : null;
 }
 
 function equipmentCategory(key, item) {
@@ -663,7 +664,8 @@ function EquipmentTab({ data, selected, onSelect }) {
                     <div>
                       {seedRings.map((ring, index) => (
                         <span key={index}>
-                          {ring.item_name || "시드링"}{seedRingLevel(ring) ? " · Lv. " + seedRingLevel(ring) : ""}
+                          {apiImage(ring.item_icon, ring.item_name || "시드링", "game-equipment-tooltip-ring-icon")}
+                          <em>{ring.item_name || "시드링"}{seedRingLevel(ring) ? " · Lv. " + seedRingLevel(ring) : ""}</em>
                         </span>
                       ))}
                     </div>
