@@ -103,6 +103,7 @@ def _find_character_in_filtered_ranking(
     last_response = None
     total_entries = 0
     class_metadata_entries = 0
+    class_metadata_missing_entries = 0
     target_name = _normalize_ranking_label(character_name)
     target_world = _normalize_ranking_label(
         target_world_name if target_world_name is not None else world_name
@@ -120,6 +121,7 @@ def _find_character_in_filtered_ranking(
         "matched": False,
         "pageLimitReached": False,
         "filterVerification": "pending",
+        "filterUnverified": False,
         "targetWorldName": target_world_name if target_world_name is not None else world_name,
     }
     if not api_class:
@@ -155,6 +157,7 @@ def _find_character_in_filtered_ranking(
         # 반환하는 경우를 잡기 위해, 응답에 세부 직업명이 있으면 페이지 전체를 검사한다.
         for entry in entries:
             if not isinstance(entry, dict):
+                class_metadata_missing_entries += 1
                 continue
             entry_class = _ranking_entry_class(entry)
             if entry_class:
@@ -166,6 +169,8 @@ def _find_character_in_filtered_ranking(
                         "mismatchedClass": entry_class,
                     })
                     return None, response, last_details
+            else:
+                class_metadata_missing_entries += 1
 
         for entry in entries:
             if not isinstance(entry, dict):
@@ -184,12 +189,18 @@ def _find_character_in_filtered_ranking(
                     and entry_world == target_world
                 )
             if matches:
+                # 직업 정보가 없는 payload에서는 필터 적용 여부를 독립 검증할 수 없다.
+                # 잘못된 전체/월드 순위를 직업 순위로 노출하지 않도록 fail closed 한다.
+                if class_metadata_entries != total_entries or class_metadata_missing_entries:
+                    last_details.update({
+                        "filterVerification": (
+                            "partial" if class_metadata_entries else "not_exposed"
+                        ),
+                        "filterUnverified": True,
+                    })
+                    return None, response, last_details
                 last_details["matched"] = True
-                last_details["filterVerification"] = (
-                    "verified" if class_metadata_entries == total_entries and total_entries
-                    else "partial" if class_metadata_entries
-                    else "not_exposed"
-                )
+                last_details["filterVerification"] = "verified"
                 return entry, response, last_details
 
         if not entries:
@@ -221,6 +232,7 @@ def _should_retry_filtered_ranking_date(candidate):
             and not detail.get("matched")
             and not detail.get("pageLimitReached")
             and not detail.get("filterMismatch")
+            and not detail.get("filterUnverified")
         ):
             return True
     return False
@@ -353,6 +365,12 @@ def get_character_rankings(
         )
         if filter_mismatch:
             warnings.append("직업 랭킹 응답에 요청한 직업과 다른 항목이 포함되어 해당 순위를 제외했습니다.")
+        filter_unverified = any(
+            diagnostics[name].get("filterUnverified")
+            for name in ("jobWorldRanking", "jobRanking")
+        )
+        if filter_unverified:
+            warnings.append("직업 랭킹 응답에 세부 직업 정보가 없어 필터 적용 여부를 검증할 수 없어 해당 순위를 제외했습니다.")
         if http_error:
             warnings.append("일부 랭킹 API 요청이 정상 응답하지 않았습니다.")
         if not has_data and not http_error:
