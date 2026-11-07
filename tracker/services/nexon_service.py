@@ -6,6 +6,8 @@ from zoneinfo import ZoneInfo
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
+MAX_FILTERED_RANKING_PAGES = 25
+
 from flask import current_app, has_app_context
 
 from tracker.integrations.nexon_api import (
@@ -89,6 +91,7 @@ def _find_character_in_filtered_ranking(
         "returnedEntries": 0,
         "filterUsed": api_class,
         "matched": False,
+        "pageLimitReached": False,
     }
     if not api_class:
         return None, None, last_details
@@ -96,7 +99,7 @@ def _find_character_in_filtered_ranking(
     # jobs.json의 매핑값이 Nexon API character_class 계약값이다.
     # UI 직업명(character_class)을 두 번째 필터로 재시도하면 같은 직업을
     # 중복 조회하거나, 지원되지 않는 필터값 때문에 불필요한 오류가 발생한다.
-    for page in range(1, 6):
+    for page in range(1, MAX_FILTERED_RANKING_PAGES + 1):
         entries, response = get_ranking_page(
             target_date=target_date,
             world_name=world_name,
@@ -132,6 +135,9 @@ def _find_character_in_filtered_ranking(
 
         if not entries:
             break
+    else:
+        # Do not silently report a missing rank when the scan stopped at its safety cap.
+        last_details["pageLimitReached"] = True
 
     return None, last_response, last_details
 
