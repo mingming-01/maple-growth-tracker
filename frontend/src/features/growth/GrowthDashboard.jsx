@@ -618,9 +618,9 @@ export default function GrowthDashboard({ character, history, onHistoryChange, o
                             <span>{rate.toFixed(3)}%</span>
                             {Number.isFinite(rateChange) && (
                               <small className={"history-level-progress-change " + (
-                                rateChange > 0 ? "is-positive" : rateChange < 0 ? "is-negative" : "is-neutral"
+                                rateChange > 0 ? "is-positive" : "is-neutral"
                               )}>
-                                {rateChange > 0 ? "+" : rateChange < 0 ? "−" : ""}{Math.abs(rateChange).toFixed(3)}%p
+                                {rateChange > 0 ? "+" : ""}{rateChange.toFixed(3)}%p
                               </small>
                             )}
                           </span>
