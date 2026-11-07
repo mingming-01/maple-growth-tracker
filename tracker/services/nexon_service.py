@@ -69,6 +69,11 @@ def get_api_class(character_class):
     return jobs_data.get(character_class)
 
 
+def _normalize_ranking_text(value):
+    """랭킹 응답의 직업명·월드명을 비교하기 위한 정규화."""
+    return str(value or "").strip().casefold()
+
+
 def _find_character_in_filtered_ranking(
     target_date,
     world_name,
@@ -78,27 +83,36 @@ def _find_character_in_filtered_ranking(
     ocid,
     historical=False,
 ):
-    """직업·월드 필터 목록을 페이지 단위로 조회해 대상 캐릭터의 순위를 찾는다.
+    """직업 필터 목록의 직업/월드 조건을 검증한 뒤 대상 캐릭터 순위를 찾는다.
 
-    OCID를 ranking/overall 요청에 함께 보내면 직업/월드 목록이 아니라
-    해당 캐릭터의 단건 결과만 반환될 수 있으므로, 필터 목록 자체에서 찾는다.
+    직업 필터 파라미터를 전달했다는 사실만으로는 필터 적용을 보장할 수 없다.
+    반환된 모든 행의 character_class를 확인하고, 월드 필터 조회에서는
+    모든 행의 world_name도 확인한다. 검증할 수 없는 목록은 순위로 사용하지 않는다.
     """
     from tracker.integrations.nexon_api import get_ranking_page
 
+    expected_class = _normalize_ranking_text(character_class)
+    expected_world = _normalize_ranking_text(world_name)
+    target_name = _normalize_ranking_text(character_name)
     last_response = None
+    total_returned_entries = 0
     last_details = {
         "pagesScanned": 0,
         "returnedEntries": 0,
         "filterUsed": api_class,
+        "expectedCharacterClass": character_class,
         "matched": False,
+        "filterVerified": False,
+        "filterVerification": "not-checked",
+        "classMismatchEntries": 0,
+        "worldMismatchEntries": 0,
+        "unverifiableEntries": 0,
         "pageLimitReached": False,
     }
-    if not api_class:
+    if not api_class or not expected_class:
+        last_details["filterVerification"] = "missing-expected-class"
         return None, None, last_details
 
-    # jobs.json의 매핑값이 Nexon API character_class 계약값이다.
-    # UI 직업명(character_class)을 두 번째 필터로 재시도하면 같은 직업을
-    # 중복 조회하거나, 지원되지 않는 필터값 때문에 불필요한 오류가 발생한다.
     for page in range(1, MAX_FILTERED_RANKING_PAGES + 1):
         entries, response = get_ranking_page(
             target_date=target_date,
@@ -108,43 +122,81 @@ def _find_character_in_filtered_ranking(
             historical=historical,
         )
         last_response = response
-        last_details = {
-            "pagesScanned": page,
-            "returnedEntries": len(entries),
-            "filterUsed": api_class,
-            "matched": False,
-        }
+        total_returned_entries += len(entries)
+        last_details["pagesScanned"] = page
+        last_details["returnedEntries"] = total_returned_entries
         if response is None or response.status_code != 200:
+            last_details["filterVerification"] = "request-failed"
             return None, response, last_details
 
+        if not entries:
+            last_details["filterVerification"] = "empty-result"
+            break
+
+        # 요청 파라미터가 서버에서 무시되거나 일부만 적용된 응답을
+        # 대상 캐릭터를 찾았다는 이유만으로 정상 직업 랭킹으로 취급하지 않는다.
         for entry in entries:
             if not isinstance(entry, dict):
-                continue
+                last_details["unverifiableEntries"] += 1
+                last_details["filterVerification"] = "invalid-ranking-entry"
+                return None, response, last_details
+
+            entry_class = _normalize_ranking_text(entry.get("character_class"))
+            if not entry_class:
+                last_details["unverifiableEntries"] += 1
+                last_details["filterVerification"] = "missing-character-class"
+                return None, response, last_details
+            if entry_class != expected_class:
+                last_details["classMismatchEntries"] += 1
+                last_details["filterVerification"] = "class-mismatch"
+                return None, response, last_details
+
+            # 직업/월드 목록은 월드 필터까지 서버 응답에서 검증한다.
+            # 직업/전체 목록은 여러 월드가 섞이는 것이 정상이다.
+            if expected_world:
+                entry_world = _normalize_ranking_text(entry.get("world_name"))
+                if not entry_world:
+                    last_details["unverifiableEntries"] += 1
+                    last_details["filterVerification"] = "missing-world-name"
+                    return None, response, last_details
+                if entry_world != expected_world:
+                    last_details["worldMismatchEntries"] += 1
+                    last_details["filterVerification"] = "world-mismatch"
+                    return None, response, last_details
+
+        last_details["filterVerified"] = True
+        last_details["filterVerification"] = "verified"
+
+        for entry in entries:
             entry_ocid = entry.get("ocid") or entry.get("character_ocid")
-            if entry_ocid:
+            entry_name = _normalize_ranking_text(entry.get("character_name"))
+            entry_world = _normalize_ranking_text(entry.get("world_name"))
+
+            if entry_ocid and ocid:
                 matches = str(entry_ocid) == str(ocid)
+                # OCID가 일치하더라도 프로필의 월드와 다르면 오래되었거나
+                # 잘못된 데이터를 대상으로 판단하지 않는다.
+                if matches and expected_world and entry_world != expected_world:
+                    matches = False
             else:
-                # Nexon의 공개 랭킹 목록 응답에는 OCID가 없는 경우가 있다.
-                # 전체 직업 랭킹(world_name=None)에서는 월드 조건을 적용하지 않고,
-                # 특정 월드 랭킹에서만 월드까지 확인한다.
-                entry_name = str(entry.get("character_name") or "").strip().casefold()
-                target_name = str(character_name or "").strip().casefold()
-                entry_world = str(entry.get("world_name") or "").strip()
-                matches = bool(target_name and entry_name == target_name)
-                if matches and world_name:
-                    matches = entry_world == str(world_name).strip()
+                # 직업/전체 목록에는 여러 월드의 동명이인이 존재할 수 있다.
+                # 전체 직업 목록을 조회하더라도 대상 식별에는 월드가 필요하다.
+                matches = bool(
+                    target_name
+                    and entry_name == target_name
+                    and expected_world
+                    and entry_world == expected_world
+                )
+
             if matches:
                 last_details["matched"] = True
                 return entry, response, last_details
 
-        if not entries:
-            break
     else:
-        # Do not silently report a missing rank when the scan stopped at its safety cap.
+        # 25페이지를 모두 읽었는데도 대상이 없으면 안전 상한에 도달한 것이다.
         last_details["pageLimitReached"] = True
 
     return None, last_response, last_details
-
 
 def get_character_rankings(
     target_date, world_name, character_class, ocid, character_name=None
@@ -266,7 +318,7 @@ def get_character_rankings(
         if mapping_missing:
             warnings.append("직업 랭킹 API 직업명 매핑을 찾지 못했습니다.")
         if filtered_rank_missing:
-            warnings.append("동일 직업 랭킹 목록에서 해당 캐릭터를 찾지 못했습니다.")
+            warnings.append("동일 직업 랭킹 목록에서 해당 캐릭터를 찾지 못했거나 직업·월드 필터 검증에 실패했습니다.")
         if http_error:
             warnings.append("일부 랭킹 API 요청이 정상 응답하지 않았습니다.")
         if not has_data and not http_error:

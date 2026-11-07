@@ -16,7 +16,7 @@ class NexonRankingRequestTests(unittest.TestCase):
             target_date="2026-11-06",
             world_name="크로아",
             ocid="test-ocid",
-            character_class="전사-히어로",
+            character_class="아크메이지(썬,콜)",
         )
 
         self.assertEqual(result["ranking"], 123)
@@ -29,7 +29,7 @@ class NexonRankingRequestTests(unittest.TestCase):
         self.assertEqual(params["page"], 1)
         self.assertEqual(params["world_name"], "크로아")
         self.assertEqual(params["ocid"], "test-ocid")
-        self.assertEqual(params["character_class"], "전사-히어로")
+        self.assertEqual(params["character_class"], "아크메이지(썬,콜)")
         self.assertNotIn("class", params)
 
     @patch("tracker.integrations.nexon_api.request_nexon_api")
@@ -46,7 +46,7 @@ class NexonRankingRequestTests(unittest.TestCase):
         rows, returned_response = get_ranking_page(
             target_date="2026-11-06",
             world_name="크로아",
-            character_class="전사-히어로",
+            character_class="아크메이지(썬,콜)",
             page=1,
         )
 
@@ -56,7 +56,7 @@ class NexonRankingRequestTests(unittest.TestCase):
         endpoint, params = request_api.call_args.args[:2]
         self.assertEqual(endpoint, "ranking/overall")
         self.assertEqual(params["world_name"], "크로아")
-        self.assertEqual(params["character_class"], "전사-히어로")
+        self.assertEqual(params["character_class"], "아크메이지(썬,콜)")
         self.assertEqual(params["page"], 1)
         self.assertNotIn("ocid", params)
 
