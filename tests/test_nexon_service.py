@@ -45,141 +45,152 @@ class NexonServiceTests(unittest.TestCase):
 
     @patch("tracker.services.nexon_service.get_api_class", return_value="전사-히어로")
     @patch("tracker.services.nexon_service.get_ranking_snapshot")
-    def test_ranking_lookup_falls_back_when_today_has_no_published_data(
-        self, get_ranking, _get_api_class
+    @patch("tracker.integrations.nexon_api.get_ranking_page")
+    def test_job_world_and_global_ranks_are_found_in_filtered_lists(
+        self, get_ranking_page, get_ranking_snapshot, _get_api_class
     ):
-        empty_response = Mock(status_code=200)
-        available_response = Mock(status_code=200)
+        base_response = Mock(status_code=200)
+        base_response.json.return_value = {"ranking": [{"ranking": 2278}]}
+        get_ranking_snapshot.side_effect = [
+            ({"ranking": 2278}, base_response),
+            ({"ranking": 374}, base_response),
+        ]
 
-        def ranking_side_effect(target_date, **kwargs):
-            if target_date == "2026-11-07":
-                return None, empty_response
-            return {"ranking": 123}, available_response
+        def page_result(target_rank):
+            response = Mock(status_code=200)
+            response.json.return_value = {"ranking": [{
+                "ocid": "ocid-value",
+                "character_name": "밍득",
+                "world_name": "크로아",
+                "ranking": target_rank,
+            }]}
+            return [{
+                "ocid": "ocid-value",
+                "character_name": "밍득",
+                "world_name": "크로아",
+                "ranking": target_rank,
+            }], response
 
-        get_ranking.side_effect = ranking_side_effect
+        get_ranking_page.side_effect = [
+            page_result(9),   # same world + same class
+            page_result(79),  # all worlds + same class
+        ]
 
         result = nexon_service.get_character_rankings(
-            "2026-11-07", "크로아", "히어로", "ocid-value"
+            "2026-11-07", "크로아", "히어로", "ocid-value", "밍득"
         )
 
-        # The historical snapshot contains successful 200 responses for all
-        # four ranking filters. Equal ordinal values alone are inconclusive,
-        # so keep the job ranks rather than downgrading the snapshot to partial.
+        self.assertEqual(result["ranking"], 2278)
+        self.assertEqual(result["worldRanking"], 374)
+        self.assertEqual(result["jobWorldRanking"], 9)
+        self.assertEqual(result["jobRanking"], 79)
         self.assertEqual(result["rankingDataStatus"], "available")
-        self.assertEqual(result["rankingDate"], "2026-11-06")
-        self.assertEqual(result["ranking"], 123)
-        self.assertEqual(result["jobWorldRanking"], 123)
-        self.assertEqual(result["jobRanking"], 123)
-        self.assertEqual(
-            result["rankingApiDiagnostics"]["jobWorldRanking"]["classFilterFallback"],
-            "same-rank-inconclusive",
-        )
-        self.assertEqual(
-            result["rankingApiDiagnostics"]["jobRanking"]["classFilterFallback"],
-            "same-rank-inconclusive",
-        )
-        self.assertEqual(get_ranking.call_count, 10)
 
-    @patch("tracker.services.nexon_service.get_api_class", return_value="마법사-아크메이지(썬,콜)")
-    @patch("tracker.services.nexon_service.get_ranking_snapshot")
-    def test_job_rank_retries_with_basic_character_class_when_mapped_filter_is_ignored(
-        self, get_ranking, _get_api_class
-    ):
-        def result(rank):
-            response = Mock(status_code=200)
-            response.json.return_value = {"ranking": [{"ranking": rank}]}
-            return {"ranking": rank}, response
-
-        def ranking_side_effect(target_date, world_name=None, ocid=None, character_class=None, historical=False):
-            if character_class == "마법사-아크메이지(썬,콜)":
-                return result(374 if world_name else 2278)
-            if character_class == "아크메이지(썬,콜)":
-                return result(9 if world_name else 79)
-            return result(374 if world_name else 2278)
-
-        get_ranking.side_effect = ranking_side_effect
-
-        rankings = nexon_service.get_character_rankings(
-            "2026-11-07",
-            "크로아",
-            "아크메이지(썬,콜)",
-            "character-ocid",
-        )
-
-        self.assertEqual(rankings["worldRanking"], 374)
-        self.assertEqual(rankings["ranking"], 2278)
-        self.assertEqual(rankings["jobWorldRanking"], 9)
-        self.assertEqual(rankings["jobRanking"], 79)
-        self.assertEqual(
-            rankings["rankingApiDiagnostics"]["jobWorldRanking"]["classFilterFallback"],
-            "basic-character-class",
-        )
-        self.assertEqual(
-            rankings["rankingApiDiagnostics"]["jobRanking"]["classFilterFallback"],
-            "basic-character-class",
-        )
-        self.assertEqual(rankings["rankingDataStatus"], "available")
-        self.assertEqual(get_ranking.call_count, 6)
+        world_call, global_call = get_ranking_page.call_args_list
+        self.assertEqual(world_call.kwargs["world_name"], "크로아")
+        self.assertEqual(global_call.kwargs["world_name"], None)
+        self.assertEqual(world_call.kwargs["character_class"], "전사-히어로")
+        self.assertEqual(global_call.kwargs["character_class"], "전사-히어로")
+        # Filtered ranking list queries must not include the OCID single-character filter.
+        self.assertNotIn("ocid", world_call.kwargs)
+        self.assertNotIn("ocid", global_call.kwargs)
 
     @patch("tracker.services.nexon_service.get_api_class", return_value="전사-히어로")
     @patch("tracker.services.nexon_service.get_ranking_snapshot")
-    def test_equal_overall_and_job_rank_is_not_misclassified_as_failed(
-        self, get_ranking, _get_api_class
+    @patch("tracker.integrations.nexon_api.get_ranking_page")
+    def test_filtered_job_rank_paginates_until_target_ocid_is_found(
+        self, get_ranking_page, get_ranking_snapshot, _get_api_class
+    ):
+        base_response = Mock(status_code=200)
+        base_response.json.return_value = {"ranking": [{"ranking": 123}]}
+        get_ranking_snapshot.return_value = ({"ranking": 123}, base_response)
+
+        empty_response = Mock(status_code=200)
+        empty_response.json.return_value = {"ranking": [{"ocid": "other", "ranking": 1}]}
+        target_response = Mock(status_code=200)
+        target_response.json.return_value = {"ranking": [{
+            "ocid": "ocid-value", "ranking": 201,
+        }]}
+
+        get_ranking_page.side_effect = [
+            ([{"ocid": "other", "ranking": 1}], empty_response),
+            ([{"ocid": "ocid-value", "ranking": 201}], target_response),
+            ([{"ocid": "ocid-value", "ranking": 201}], target_response),
+        ]
+
+        result = nexon_service.get_character_rankings(
+            "2026-11-07", "크로아", "히어로", "ocid-value", "밍득"
+        )
+
+        self.assertEqual(result["jobWorldRanking"], 201)
+        self.assertEqual(result["jobRanking"], 201)
+        self.assertEqual(
+            result["rankingApiDiagnostics"]["jobWorldRanking"]["pagesScanned"], 2
+        )
+        self.assertEqual(get_ranking_page.call_args_list[0].kwargs["page"], 1)
+        self.assertEqual(get_ranking_page.call_args_list[1].kwargs["page"], 2)
+
+    @patch("tracker.services.nexon_service.get_api_class", return_value="전사-히어로")
+    @patch("tracker.services.nexon_service.get_ranking_snapshot")
+    @patch("tracker.integrations.nexon_api.get_ranking_page")
+    def test_equal_ordinal_job_rank_is_kept_when_found_in_filtered_list(
+        self, get_ranking_page, get_ranking_snapshot, _get_api_class
     ):
         response = Mock(status_code=200)
         response.json.return_value = {"ranking": [{"ranking": 123}]}
-        get_ranking.return_value = ({"ranking": 123}, response)
+        get_ranking_snapshot.return_value = ({"ranking": 123}, response)
+        entry = {"ocid": "ocid-value", "ranking": 123}
+        get_ranking_page.return_value = ([entry], response)
 
         result = nexon_service.get_character_rankings(
-            "2026-11-07", "크로아", "히어로", "ocid-value"
+            "2026-11-07", "크로아", "히어로", "ocid-value", "밍득"
         )
 
-        self.assertEqual(result["rankingDataStatus"], "available")
-        self.assertEqual(result["ranking"], 123)
-        self.assertEqual(result["worldRanking"], 123)
         self.assertEqual(result["jobWorldRanking"], 123)
         self.assertEqual(result["jobRanking"], 123)
-        self.assertEqual(
-            result["rankingApiDiagnostics"]["jobWorldRanking"]["classFilterFallback"],
-            "same-rank-inconclusive",
-        )
-        self.assertEqual(
-            result["rankingApiDiagnostics"]["jobRanking"]["classFilterFallback"],
-            "same-rank-inconclusive",
-        )
+        self.assertEqual(result["rankingDataStatus"], "available")
 
     @patch("tracker.services.nexon_service.get_api_class", return_value="전사-히어로")
     @patch("tracker.services.nexon_service.get_ranking_snapshot")
+    @patch("tracker.integrations.nexon_api.get_ranking_page")
     def test_ranking_lookup_marks_three_empty_days_as_not_ready(
-        self, get_ranking, _get_api_class
+        self, get_ranking_page, get_ranking_snapshot, _get_api_class
     ):
-        get_ranking.return_value = (None, Mock(status_code=200))
+        get_ranking_snapshot.return_value = (None, Mock(status_code=200))
+        empty_response = Mock(status_code=200)
+        empty_response.json.return_value = {"ranking": []}
+        get_ranking_page.return_value = ([], empty_response)
 
         result = nexon_service.get_character_rankings(
-            "2026-11-07", "크로아", "히어로", "ocid-value"
+            "2026-11-07", "크로아", "히어로", "ocid-value", "밍득"
         )
 
         self.assertEqual(result["rankingDataStatus"], "not_ready")
         self.assertEqual(result["rankingDate"], "2026-11-05")
-        self.assertEqual(get_ranking.call_count, 12)
+        self.assertEqual(get_ranking_snapshot.call_count, 6)
+        self.assertEqual(get_ranking_page.call_count, 6)
         self.assertTrue(result["rankingWarnings"])
-
 
     @patch("tracker.services.nexon_service.get_api_class", return_value="전사-히어로")
     @patch("tracker.services.nexon_service.get_ranking_snapshot")
+    @patch("tracker.integrations.nexon_api.get_ranking_page")
     def test_ranking_lookup_does_not_hide_authentication_errors_with_old_dates(
-        self, get_ranking, _get_api_class
+        self, get_ranking_page, get_ranking_snapshot, _get_api_class
     ):
         unauthorized = Mock(status_code=403)
-        get_ranking.return_value = (None, unauthorized)
+        unauthorized.json.return_value = {"ranking": []}
+        get_ranking_snapshot.return_value = (None, unauthorized)
+        get_ranking_page.return_value = ([], unauthorized)
 
         result = nexon_service.get_character_rankings(
-            "2026-11-07", "크로아", "히어로", "ocid-value"
+            "2026-11-07", "크로아", "히어로", "ocid-value", "밍득"
         )
 
         self.assertEqual(result["rankingDataStatus"], "unavailable")
         self.assertEqual(result["rankingDate"], "2026-11-07")
-        self.assertEqual(get_ranking.call_count, 4)
+        self.assertEqual(get_ranking_snapshot.call_count, 2)
+        self.assertEqual(get_ranking_page.call_count, 2)
+
 
 
 if __name__ == "__main__":

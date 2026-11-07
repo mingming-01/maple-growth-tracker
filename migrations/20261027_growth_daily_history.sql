@@ -14,6 +14,12 @@ CREATE TABLE IF NOT EXISTS growth_daily_snapshots (
     PRIMARY KEY (ocid, snapshot_date)
 );
 
+ALTER TABLE growth_daily_snapshots
+    ADD COLUMN IF NOT EXISTS experience_rate NUMERIC(7, 4);
+
+ALTER TABLE growth_daily_snapshots
+    ADD COLUMN IF NOT EXISTS experience_rate_checked BOOLEAN NOT NULL DEFAULT FALSE;
+
 CREATE INDEX IF NOT EXISTS idx_growth_daily_name_date
     ON growth_daily_snapshots (character_name, snapshot_date DESC);
 

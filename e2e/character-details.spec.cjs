@@ -69,14 +69,14 @@ test("mobile touch opens item tooltips without clipped detail panels", async ({ 
             additional_potential_option_1: "공격력 +12%"
           },
           {
-            item_name: "리스트레인트 링 4레벨", item_equipment_slot: "반지 1",
+            item_name: "리스트레인트 링 4레벨", ring_level: 6, item_equipment_slot: "반지 1",
             item_equipment_part: "반지", item_icon: "https://example.com/ring1.png",
             item_base_option: { base_equipment_level: 150, base_equipment_job: ["전 직업"] }
           },
           {
             item_name: "컨티뉴어스 링 4레벨", item_equipment_slot: "반지 2",
             item_equipment_part: "반지", item_icon: "https://example.com/ring2.png",
-            item_base_option: { base_equipment_level: 150, base_equipment_job: ["전 직업"] }
+            item_base_option: { base_equipment_level: 150, base_equipment_job: ["전 직업"], ring_level: 6 }
           },
           {
             item_name: "테스트 얼굴 장식", item_equipment_slot: "얼굴장식",
@@ -103,14 +103,14 @@ test("mobile touch opens item tooltips without clipped detail panels", async ({ 
             additional_potential_option_1: "공격력 +12%"
           },
           {
-            item_name: "리스트레인트 링 4레벨", item_equipment_slot: "반지 1",
+            item_name: "리스트레인트 링 4레벨", ring_level: 6, item_equipment_slot: "반지 1",
             item_equipment_part: "반지", item_icon: "https://example.com/ring1.png",
             item_base_option: { base_equipment_level: 150, base_equipment_job: ["전 직업"] }
           },
           {
             item_name: "컨티뉴어스 링 4레벨", item_equipment_slot: "반지 2",
             item_equipment_part: "반지", item_icon: "https://example.com/ring2.png",
-            item_base_option: { base_equipment_level: 150, base_equipment_job: ["전 직업"] }
+            item_base_option: { base_equipment_level: 150, base_equipment_job: ["전 직업"], ring_level: 6 }
           },
           {
             item_name: "테스트 얼굴 장식", item_equipment_slot: "얼굴장식",
@@ -251,17 +251,22 @@ test("mobile touch opens item tooltips without clipped detail panels", async ({ 
     await expect(equipmentTooltip.locator(".game-equipment-tooltip-star")).toHaveText("★ 22");
     await expect(equipmentTooltip.locator(".game-equipment-tooltip-icon")).toBeVisible();
     await expect(equipmentTooltip).toContainText("요구 레벨 Lv. 250 (+10)");
-    await expect(equipmentTooltip).toContainText("합계 · 기본 · 스타포스 · 주문서 · 추옵");
+    await expect(equipmentTooltip).toContainText("합계와 구성 수치");
+    await expect(equipmentTooltip).not.toContainText("기본");
+    await expect(equipmentTooltip).not.toContainText("스타포스");
+    await expect(equipmentTooltip).not.toContainText("주문서");
+    await expect(equipmentTooltip).not.toContainText("추옵");
     await expect(equipmentTooltip).toContainText("착용 직업 마법사");
     await expect(equipmentTooltip).toContainText("무기 · 무기");
     await expect(equipmentTooltip).toContainText("STR");
     await expect(equipmentTooltip).toContainText("+500");
     await expect(equipmentTooltip).toContainText("공격력");
     await expect(equipmentTooltip).toContainText("+350");
-    await expect(equipmentTooltip.locator(".game-equipment-tooltip-stat small.is-base")).toContainText("기본 200");
-    await expect(equipmentTooltip.locator(".game-equipment-tooltip-stat small.is-starforce")).toContainText("스타포스 40");
-    await expect(equipmentTooltip.locator(".game-equipment-tooltip-stat small.is-scroll")).toContainText("주문서 50");
-    await expect(equipmentTooltip.locator(".game-equipment-tooltip-stat small.is-bonus")).toContainText("추옵 60");
+    await expect(equipmentTooltip.locator(".game-equipment-tooltip-stat-breakdown")).toContainText("(200 + 40 + 50 + 60)");
+    await expect(equipmentTooltip).not.toContainText("기본 200");
+    await expect(equipmentTooltip).not.toContainText("스타포스 40");
+    await expect(equipmentTooltip).not.toContainText("주문서 50");
+    await expect(equipmentTooltip).not.toContainText("추옵 60");
     await expect(equipmentTooltip).toContainText("잠재능력");
     await expect(equipmentTooltip).toContainText("보스 몬스터 공격 시 데미지 +40%");
     await expect(equipmentTooltip).toContainText("에디셔널 잠재 옵션");
@@ -281,8 +286,8 @@ test("mobile touch opens item tooltips without clipped detail panels", async ({ 
     await seedRing.evaluate(element => element.scrollIntoView({ block: "center", inline: "center", behavior: "instant" }));
     await seedRing.tap();
     await expect(page.locator("body > .game-floating-tooltip")).toContainText("시드링 구성");
-    await expect(page.locator("body > .game-floating-tooltip")).toContainText("리스트레인트 링 4레벨 · Lv. 4");
-    await expect(page.locator("body > .game-floating-tooltip")).toContainText("컨티뉴어스 링 4레벨 · Lv. 4");
+    await expect(page.locator("body > .game-floating-tooltip")).toContainText("리스트레인트 링 4레벨 · Lv. 6");
+    await expect(page.locator("body > .game-floating-tooltip")).toContainText("컨티뉴어스 링 4레벨 · Lv. 6");
     await page.locator(".mgt-topbar").tap();
 
     await page.getByRole("tab", { name: "치장" }).tap();
@@ -314,7 +319,10 @@ test("mobile touch opens item tooltips without clipped detail panels", async ({ 
     await expect(championCard).toContainText("챔피언 테스트");
     const championAvatar = championCard.locator(".game-union-champion-avatar-preview");
     const avatarBounds = await championAvatar.boundingBox();
-    expect(avatarBounds.width).toBeGreaterThanOrEqual(110);
+    expect(avatarBounds.width).toBeGreaterThanOrEqual(150);
+    const crestStrip = championCard.locator(".game-union-champion-badges");
+    expect(await crestStrip.evaluate(element => getComputedStyle(element).padding)).toBe("0px");
+    expect(await crestStrip.evaluate(element => getComputedStyle(element).borderTopWidth)).toBe("0px");
     await championAvatar.tap();
     const championTooltip = page.locator("body > .game-floating-tooltip");
     await expect(championTooltip).toContainText("직업 · 아크메이지(썬,콜)");
@@ -327,6 +335,12 @@ test("mobile touch opens item tooltips without clipped detail panels", async ({ 
     const crestTooltip = page.locator("body > .game-floating-tooltip");
     await expect(crestTooltip).toContainText("보스 몬스터 공격 시 데미지 +1%");
     await expect(crestTooltip.locator("img")).toHaveCount(0);
+    await page.locator(".mgt-topbar").tap();
+
+    // Verify the desktop layout uses the larger avatar size as well.
+    await page.setViewportSize({ width: 1440, height: 900 });
+    const desktopAvatarBounds = await championAvatar.boundingBox();
+    expect(desktopAvatarBounds.width).toBeGreaterThanOrEqual(180);
 
     const scrollState = await page.evaluate(() => ({
       scrollHeight: document.documentElement.scrollHeight,

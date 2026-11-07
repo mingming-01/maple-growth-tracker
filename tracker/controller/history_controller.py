@@ -90,6 +90,11 @@ def get_history():
                     saved is not None
                     and saved.get("recordStatus") == "unavailable"
                 )
+                or (
+                    saved is not None
+                    and saved.get("recordStatus") == "available"
+                    and not saved.get("experienceRateChecked", False)
+                )
             )
 
             if saved and not should_check_api:
@@ -98,6 +103,8 @@ def get_history():
                     "ranking": saved.get("ranking"),
                     "level": saved.get("level"),
                     "experience": saved.get("experience"),
+                    "experienceRate": saved.get("experienceRate"),
+                    "experienceRateChecked": saved.get("experienceRateChecked", False),
                     "recordStatus": saved.get("recordStatus"),
                     "_fromStore": True
                 }
@@ -108,11 +115,30 @@ def get_history():
                 ocid=ocid
             )
             if ranking_data:
+                experience_rate = ranking_data.get("character_exp_rate")
+                rate_checked = experience_rate is not None
+                if experience_rate is None:
+                    if target_date == today:
+                        rate_data, rate_response = basic, response
+                    else:
+                        try:
+                            rate_data, rate_response = get_basic_character_snapshot(
+                                ocid, target_date=date_string, historical=True
+                            )
+                        except requests.RequestException:
+                            rate_data, rate_response = None, None
+                    if rate_data:
+                        experience_rate = rate_data.get("character_exp_rate")
+                    rate_checked = bool(
+                        rate_response is not None and rate_response.status_code == 200
+                    )
                 return {
                     "date": date_string,
                     "ranking": ranking_data.get("ranking"),
                     "level": ranking_data.get("character_level"),
                     "experience": ranking_data.get("character_exp"),
+                    "experienceRate": experience_rate,
+                    "experienceRateChecked": rate_checked,
                     "recordStatus": "available"
                 }
 
@@ -125,6 +151,8 @@ def get_history():
                         "ranking": saved.get("ranking"),
                         "level": saved.get("level"),
                         "experience": saved.get("experience"),
+                        "experienceRate": saved.get("experienceRate"),
+                        "experienceRateChecked": saved.get("experienceRateChecked", False),
                         "recordStatus": "available",
                         "_fromStore": True
                     }
@@ -133,6 +161,8 @@ def get_history():
                     "ranking": None,
                     "level": None,
                     "experience": None,
+                    "experienceRate": None,
+                    "experienceRateChecked": False,
                     "recordStatus": "unavailable",
                     "retryable": True
                 }
@@ -155,6 +185,10 @@ def get_history():
                         "ranking": None,
                         "level": level,
                         "experience": experience,
+                        "experienceRate": basic_data.get("character_exp_rate"),
+                        "experienceRateChecked": bool(
+                            basic_response is not None and basic_response.status_code == 200
+                        ),
                         "recordStatus": "available"
                     }
 
@@ -165,6 +199,8 @@ def get_history():
                     "ranking": saved.get("ranking"),
                     "level": saved.get("level"),
                     "experience": saved.get("experience"),
+                    "experienceRate": saved.get("experienceRate"),
+                    "experienceRateChecked": saved.get("experienceRateChecked", False),
                     "recordStatus": "available",
                     "_fromStore": True
                 }
@@ -178,6 +214,8 @@ def get_history():
                     "ranking": None,
                     "level": None,
                     "experience": None,
+                    "experienceRate": None,
+                    "experienceRateChecked": bool(basic_response is not None and basic_response.status_code == 200),
                     "recordStatus": "not_ready"
                 }
 
@@ -190,6 +228,8 @@ def get_history():
                 "ranking": None,
                 "level": None,
                 "experience": None,
+                "experienceRate": None,
+                "experienceRateChecked": False,
                 "recordStatus": "unavailable",
                 "retryable": retryable
             }
@@ -287,11 +327,29 @@ def fetch_historical_record(ocid, world_name, target_date, today):
         level = ranking_data.get("character_level")
         experience = ranking_data.get("character_exp")
         if level is not None and experience is not None:
+            experience_rate = ranking_data.get("character_exp_rate")
+            rate_checked = experience_rate is not None
+            if experience_rate is None:
+                try:
+                    rate_data, rate_response = get_basic_character_snapshot(
+                        ocid,
+                        target_date=date_text if target_date < today else None,
+                        historical=True
+                    )
+                except requests.RequestException:
+                    rate_data, rate_response = None, None
+                if rate_data:
+                    experience_rate = rate_data.get("character_exp_rate")
+                rate_checked = bool(
+                    rate_response is not None and rate_response.status_code == 200
+                )
             return {
                 "date": date_text,
                 "ranking": ranking_data.get("ranking"),
                 "level": level,
                 "experience": experience,
+                "experienceRate": experience_rate,
+                "experienceRateChecked": rate_checked,
                 "recordStatus": "available"
             }
 
@@ -314,6 +372,10 @@ def fetch_historical_record(ocid, world_name, target_date, today):
                 "ranking": ranking_data.get("ranking") if ranking_data else None,
                 "level": level,
                 "experience": experience,
+                "experienceRate": basic_data.get("character_exp_rate"),
+                "experienceRateChecked": bool(
+                    basic_response is not None and basic_response.status_code == 200
+                ),
                 "recordStatus": "available"
             }
 
@@ -407,6 +469,10 @@ def get_history_archive():
             target_date for target_date in batch_dates
             if target_date.isoformat() not in stored_by_date
             or stored_by_date[target_date.isoformat()].get("recordStatus") == "not_ready"
+            or (
+                stored_by_date[target_date.isoformat()].get("recordStatus") == "available"
+                and not stored_by_date[target_date.isoformat()].get("experienceRateChecked", False)
+            )
         ]
         fetched_records = []
 
@@ -457,6 +523,8 @@ def get_history_archive():
                 "ranking": saved.get("ranking"),
                 "level": saved.get("level"),
                 "experience": saved.get("experience"),
+                "experienceRate": saved.get("experienceRate"),
+                "experienceRateChecked": saved.get("experienceRateChecked", False),
                 "recordStatus": saved.get("recordStatus"),
                 "recordSource": "stored"
             })
@@ -466,6 +534,8 @@ def get_history_archive():
                 "ranking": None,
                 "level": None,
                 "experience": None,
+                "experienceRate": None,
+                "experienceRateChecked": False,
                 "recordStatus": "not_collected",
                 "recordSource": None
             })

@@ -58,11 +58,25 @@ class GrowthHistoryStore:
                             level INTEGER,
                             experience NUMERIC(30, 0),
                             ranking INTEGER,
+                            experience_rate NUMERIC(7, 4),
+                            experience_rate_checked BOOLEAN NOT NULL DEFAULT FALSE,
                             record_status TEXT NOT NULL
                                 CHECK (record_status IN ('available', 'not_ready')),
                             recorded_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
                             PRIMARY KEY (ocid, snapshot_date)
                         )
+                        """
+                    )
+                    connection.execute(
+                        """
+                        ALTER TABLE growth_daily_snapshots
+                        ADD COLUMN IF NOT EXISTS experience_rate NUMERIC(7, 4)
+                        """
+                    )
+                    connection.execute(
+                        """
+                        ALTER TABLE growth_daily_snapshots
+                        ADD COLUMN IF NOT EXISTS experience_rate_checked BOOLEAN NOT NULL DEFAULT FALSE
                         """
                     )
                     connection.execute(
@@ -91,6 +105,8 @@ class GrowthHistoryStore:
                             level INTEGER,
                             experience NUMERIC,
                             ranking INTEGER,
+                            experience_rate REAL,
+                            experience_rate_checked INTEGER NOT NULL DEFAULT 0,
                             record_status TEXT NOT NULL
                                 CHECK (record_status IN ('available', 'not_ready')),
                             recorded_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -98,6 +114,20 @@ class GrowthHistoryStore:
                         )
                         """
                     )
+                    columns = {
+                        row[1] for row in connection.execute(
+                            "PRAGMA table_info(growth_daily_snapshots)"
+                        ).fetchall()
+                    }
+                    if "experience_rate" not in columns:
+                        connection.execute(
+                            "ALTER TABLE growth_daily_snapshots ADD COLUMN experience_rate REAL"
+                        )
+                    if "experience_rate_checked" not in columns:
+                        connection.execute(
+                            "ALTER TABLE growth_daily_snapshots "
+                            "ADD COLUMN experience_rate_checked INTEGER NOT NULL DEFAULT 0"
+                        )
                     connection.execute(
                         """
                         CREATE INDEX IF NOT EXISTS idx_growth_daily_name_date
@@ -116,6 +146,18 @@ class GrowthHistoryStore:
             return int(str(value).replace(",", "").strip())
         except (TypeError, ValueError):
             return None
+
+    @staticmethod
+    def _to_rate(value):
+        if value is None or value == "":
+            return None
+        try:
+            number = float(str(value).replace("%", "").replace(",", "").strip())
+        except (TypeError, ValueError):
+            return None
+        if not 0 <= number <= 100:
+            return None
+        return number
 
     @classmethod
     def _normalize_record(cls, ocid, character_name, world_name, record):
@@ -141,6 +183,8 @@ class GrowthHistoryStore:
                 level,
                 experience,
                 cls._to_integer(record.get("ranking")),
+                cls._to_rate(record.get("experienceRate")),
+                bool(record.get("experienceRateChecked", False)),
                 "available",
             )
 
@@ -155,6 +199,8 @@ class GrowthHistoryStore:
                 None,
                 None,
                 None,
+                None,
+                False,
                 "not_ready",
             )
         return None
@@ -173,14 +219,16 @@ class GrowthHistoryStore:
             query = """
                 INSERT INTO growth_daily_snapshots
                     (ocid, snapshot_date, character_name, world_name, level,
-                     experience, ranking, record_status)
-                VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
+                     experience, ranking, experience_rate, experience_rate_checked, record_status)
+                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
                 ON CONFLICT (ocid, snapshot_date) DO UPDATE SET
                     character_name = EXCLUDED.character_name,
                     world_name = EXCLUDED.world_name,
                     level = EXCLUDED.level,
                     experience = EXCLUDED.experience,
                     ranking = EXCLUDED.ranking,
+                    experience_rate = EXCLUDED.experience_rate,
+                    experience_rate_checked = EXCLUDED.experience_rate_checked,
                     record_status = EXCLUDED.record_status,
                     recorded_at = CURRENT_TIMESTAMP
                 WHERE growth_daily_snapshots.record_status <> 'available'
@@ -190,14 +238,16 @@ class GrowthHistoryStore:
             query = """
                 INSERT INTO growth_daily_snapshots
                     (ocid, snapshot_date, character_name, world_name, level,
-                     experience, ranking, record_status)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                     experience, ranking, experience_rate, experience_rate_checked, record_status)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 ON CONFLICT (ocid, snapshot_date) DO UPDATE SET
                     character_name = excluded.character_name,
                     world_name = excluded.world_name,
                     level = excluded.level,
                     experience = excluded.experience,
                     ranking = excluded.ranking,
+                    experience_rate = excluded.experience_rate,
+                    experience_rate_checked = excluded.experience_rate_checked,
                     record_status = excluded.record_status,
                     recorded_at = CURRENT_TIMESTAMP
                 WHERE growth_daily_snapshots.record_status <> 'available'
@@ -223,7 +273,8 @@ class GrowthHistoryStore:
         placeholder = "%s" if self.uses_postgres else "?"
         query = f"""
             SELECT snapshot_date, character_name, world_name, level,
-                   experience, ranking, record_status, recorded_at
+                   experience, ranking, experience_rate, experience_rate_checked,
+                   record_status, recorded_at
             FROM growth_daily_snapshots
             WHERE ocid = {placeholder} AND snapshot_date >= {placeholder}
               AND snapshot_date <= {placeholder}
@@ -237,7 +288,7 @@ class GrowthHistoryStore:
 
         result = []
         for row in rows:
-            snapshot_date, saved_name, saved_world, level, experience, ranking, status, recorded_at = row
+            snapshot_date, saved_name, saved_world, level, experience, ranking, experience_rate, experience_rate_checked, status, recorded_at = row
             result.append({
                 "date": snapshot_date.isoformat() if hasattr(snapshot_date, "isoformat") else str(snapshot_date),
                 "characterName": saved_name,
@@ -245,6 +296,8 @@ class GrowthHistoryStore:
                 "level": self._to_integer(level),
                 "experience": self._to_integer(experience),
                 "ranking": self._to_integer(ranking),
+                "experienceRate": self._to_rate(experience_rate),
+                "experienceRateChecked": bool(experience_rate_checked),
                 "recordStatus": status,
                 "recordedAt": recorded_at.isoformat() if hasattr(recorded_at, "isoformat") else str(recorded_at),
             })

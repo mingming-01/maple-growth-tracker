@@ -42,6 +42,26 @@ class GrowthHistoryStoreTests(unittest.TestCase):
         self.assertEqual(result[1]["recordStatus"], "available")
         self.assertEqual(result[1]["experience"], 12345)
 
+    def test_experience_progress_rate_and_checked_flag_are_persisted(self):
+        record_date = self.today.isoformat()
+        self.store.save_records(
+            "test-ocid", "테스트캐릭터", "테스트월드",
+            [{
+                "date": record_date,
+                "recordStatus": "available",
+                "level": 280,
+                "experience": 12345,
+                "ranking": 100,
+                "experienceRate": "12.3456%",
+                "experienceRateChecked": True,
+            }],
+        )
+
+        result = self.store.get_records("test-ocid", self.today, self.today)
+
+        self.assertEqual(result[0]["experienceRate"], 12.3456)
+        self.assertTrue(result[0]["experienceRateChecked"])
+
     def test_same_character_and_date_is_upserted_instead_of_duplicated(self):
         record_date = self.today.isoformat()
         first = [{"date": record_date, "recordStatus": "available", "level": 280, "experience": 100, "ranking": 20}]
@@ -244,8 +264,13 @@ class GrowthHistoryApiTests(unittest.TestCase):
         self.assertEqual(response.status_code, 200)
         get_ranking.assert_called_once()
         self.assertTrue(get_ranking.call_args.kwargs["historical"])
-        get_basic.assert_called_once()
-        self.assertTrue(get_basic.call_args.kwargs["historical"])
+        self.assertEqual(get_basic.call_count, 2)
+        self.assertTrue(all(call.kwargs["historical"] for call in get_basic.call_args_list))
+        self.assertNotIn("target_date", get_basic.call_args_list[0].kwargs)
+        self.assertEqual(
+            get_basic.call_args_list[1].kwargs["target_date"],
+            target_date.isoformat(),
+        )
         saved = self.store.get_records("test-ocid", target_date, target_date)
         self.assertEqual(saved[0]["recordStatus"], "available")
         self.assertEqual(saved[0]["experience"], 654321)
@@ -327,6 +352,59 @@ class GrowthHistoryApiTests(unittest.TestCase):
         self.assertEqual(future_end.status_code, 400)
         self.assertEqual(too_old_end.status_code, 400)
 
+    def test_saved_recent_records_without_checked_rate_are_refreshed(self):
+        today = datetime.now(tracker.KOREA_TIMEZONE).date()
+        past_records = [
+            {
+                "date": (today - timedelta(days=offset)).isoformat(),
+                "recordStatus": "available",
+                "level": 279,
+                "experience": 10000 + offset,
+                "ranking": 500 + offset,
+                "experienceRateChecked": offset != 1,
+            }
+            for offset in range(1, 7)
+        ]
+        self.store.save_records("test-ocid", "테스트캐릭터", "테스트월드", past_records)
+        response_stub = Mock(status_code=200)
+        basic = {
+            "character_name": "테스트캐릭터",
+            "world_name": "테스트월드",
+            "character_level": 280,
+            "character_exp": 20000,
+            "character_exp_rate": "23.4567",
+        }
+        ranking = {
+            "ranking": 400,
+            "character_level": 280,
+            "character_exp": 20000,
+            "character_exp_rate": "23.4567",
+        }
+
+        with patch.object(
+            history_controller, "resolve_character",
+            return_value=("test-ocid", basic, response_stub)
+        ), patch.object(
+            history_controller, "get_ranking_snapshot",
+            return_value=(ranking, response_stub)
+        ) as get_ranking:
+            response = self.client.get(
+                "/api/history?name=%ED%85%8C%EC%8A%A4%ED%8A%B8%EC%BA%90%EB%A6%AD%ED%84%B0&refresh=1"
+            )
+
+        self.assertEqual(response.status_code, 200)
+        requested_dates = {call.kwargs["target_date"] for call in get_ranking.call_args_list}
+        self.assertEqual(
+            requested_dates,
+            {today.isoformat(), (today - timedelta(days=1)).isoformat()},
+        )
+        self.assertEqual(get_ranking.call_count, 2)
+        refreshed = self.store.get_records(
+            "test-ocid", today - timedelta(days=1), today - timedelta(days=1)
+        )
+        self.assertEqual(refreshed[0]["experienceRate"], 23.4567)
+        self.assertTrue(refreshed[0]["experienceRateChecked"])
+
     def test_saved_past_dates_are_reused_and_only_today_is_requested(self):
         today = datetime.now(tracker.KOREA_TIMEZONE).date()
         past_records = [
@@ -335,7 +413,9 @@ class GrowthHistoryApiTests(unittest.TestCase):
                 "recordStatus": "available",
                 "level": 279,
                 "experience": 10000 + offset,
-                "ranking": 500 + offset
+                "ranking": 500 + offset,
+                # This test covers reuse of fully checked historical records.
+                "experienceRateChecked": True
             }
             for offset in range(1, 7)
         ]
