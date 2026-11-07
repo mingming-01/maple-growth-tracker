@@ -909,3 +909,20 @@ button:focus-visible,input:focus-visible,select:focus-visible,a:focus-visible { 
   .game-appearance-item { padding:9px; }
   .game-union-champion-crest { width:31px; height:40px; }
 }
+
+.game-equipment-tooltip-rings span {
+  display:flex;
+  align-items:center;
+  gap:6px;
+}
+.game-floating-tooltip .game-equipment-tooltip-ring-icon {
+  flex:none;
+  width:34px !important;
+  height:34px !important;
+  margin:0 !important;
+  object-fit:contain;
+}
+.game-equipment-tooltip-rings em { color:#d9eaf3; font-size:9px; font-style:normal; }
+.game-union-champion-info-trigger { display:grid; justify-items:center; cursor:help; }
+.game-union-champion-info-trigger:focus-visible,
+.game-union-champion-crest:focus-visible { outline:2px solid #8ccfe6; outline-offset:3px; }
