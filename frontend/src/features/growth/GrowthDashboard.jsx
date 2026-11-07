@@ -611,12 +611,12 @@ export default function GrowthDashboard({ character, history, onHistoryChange, o
                   const validRate = Number.isFinite(rate) && rate >= 0 && rate <= 100;
                   return (
                     <tr key={item.date}>
-                      <td>{localDate(item.date)}</td>
-                      <td>{item.ranking == null ? "—" : Number(item.ranking).toLocaleString("ko-KR")+"위"}</td>
-                      <td>{item.level == null ? "—" : "Lv. "+item.level}</td>
-                      <td className="history-experience-value">{item.experience == null ? "—" : Number(item.experience).toLocaleString("ko-KR")}</td>
-                      <td className={"history-growth-value " + (Number(item.experienceChange) > 0 ? "is-positive" : Number(item.experienceChange) < 0 ? "is-negative" : "")}>{item.experienceChange == null ? "—" : signedFmt(item.experienceChange)}</td>
-                      <td>
+                      <td data-label="날짜">{localDate(item.date)}</td>
+                      <td data-label="랭킹">{item.ranking == null ? "—" : Number(item.ranking).toLocaleString("ko-KR")+"위"}</td>
+                      <td data-label="레벨">{item.level == null ? "—" : "Lv. "+item.level}</td>
+                      <td data-label="경험치" className="history-experience-value">{item.experience == null ? "—" : Number(item.experience).toLocaleString("ko-KR")}</td>
+                      <td data-label="경험치 증가량" className={"history-growth-value " + (Number(item.experienceChange) > 0 ? "is-positive" : Number(item.experienceChange) < 0 ? "is-negative" : "")}>{item.experienceChange == null ? "—" : signedFmt(item.experienceChange)}</td>
+                      <td data-label="레벨 진행률">
                         {validRate ? (
                           <span className="history-level-progress-cell">
                             <span>{rate.toFixed(3)}%</span>
