@@ -596,8 +596,6 @@ function EquipmentTab({ data, selected, onSelect }) {
       <div className="game-equipment-toolbar">
         <span className="game-window-eyebrow">EQUIPMENT</span>
         <h3 className="game-window-title">장비 · 치장 · 펫</h3>
-        {subTab === "equipment" && <PresetSelect source={equipment} value={presetNumber}
-          onChange={value => onSelect({ equipment: value })} label="장비 프리셋" />}
       </div>
       <div className="game-equipment-subtabs" role="tablist" aria-label="장비 상세 구분">
         {[
@@ -610,6 +608,10 @@ function EquipmentTab({ data, selected, onSelect }) {
         ))}
       </div>
       {subTab === "equipment" && <>
+        <div className="game-equipment-preset-toolbar">
+          <PresetSelect source={equipment} value={presetNumber}
+            onChange={value => onSelect({ equipment: value })} label="장비 프리셋" />
+        </div>
         <DataState source={equipment} />
         <div className="game-equipment-board react-equipment-board">
           {SLOT_DEFS.map(([slotName, key]) => {
