@@ -198,15 +198,20 @@ test("mobile touch opens item tooltips without clipped detail panels", async ({ 
     await page.getByRole("button", { name: /캐릭터 조회/ }).tap();
     await expect(page.getByRole("heading", { name: "터치테스트" })).toBeVisible();
 
+    await expect(page.getByText("프리셋 조합 추천")).toHaveCount(0);
     await page.locator('[data-detail-tab="symbols"]').tap();
     const symbol = page.locator(".game-symbol-tile[data-tooltip-trigger='true']");
     await expect(symbol).toBeVisible();
     await symbol.tap();
     const tooltip = page.locator("body > .game-floating-tooltip");
     await expect(tooltip).toContainText("심볼 설명 터치 확인");
+    await expect(tooltip).toContainText("포스 +300");
+    await expect(tooltip).toContainText("STR +500");
     await expect(symbol.locator(".game-symbol-growth")).toHaveText("MAX");
-    await expect(page.locator(".game-symbol-tile").filter({ hasText: "그랜드 어센틱 심볼: 테스트" }))
-      .toContainText("경험치 5%");
+    const grandSymbol = page.locator(".game-symbol-tile").filter({ hasText: "그랜드 어센틱 심볼: 테스트" });
+    await expect(grandSymbol).toContainText("경험치 5%");
+    await expect(grandSymbol).toContainText("드롭률 10%");
+    await expect(grandSymbol).toContainText("메획 10%");
     await symbol.tap();
     await expect(tooltip).toHaveCount(0);
     await symbol.tap();
@@ -246,8 +251,13 @@ test("mobile touch opens item tooltips without clipped detail panels", async ({ 
     const tooltipBounds = await equipmentTooltip.boundingBox();
     expect(tooltipBounds.y + tooltipBounds.height).toBeLessThanOrEqual(844);
 
+    await expect(page.locator(".game-set-effects")).toContainText("테스트 세트");
+    await expect(page.locator(".game-set-effects .game-stat-detail-card")).toHaveCount(0);
     const faceSlot = page.locator('.equipment-game-slot[data-slot="face"]');
     await expect(faceSlot.locator(".equipment-game-star")).toHaveCount(0);
+    await faceSlot.tap();
+    await expect(page.locator("body > .game-floating-tooltip .game-equipment-tooltip-star")).toHaveCount(0);
+    await page.locator(".mgt-topbar").tap();
     const seedRing = page.locator('.equipment-game-slot[data-slot="ring1"]');
     await seedRing.tap();
     await expect(page.locator("body > .game-floating-tooltip")).toContainText("시드링 구성");
