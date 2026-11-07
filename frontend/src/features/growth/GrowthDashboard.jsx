@@ -512,7 +512,9 @@ export default function GrowthDashboard({ character, history, onHistoryChange, o
           periodSummary:summary
         });
         const priorSummary = previous ? summarizePeriod(previous.history || [],days) : null;
-        setPeriodSummary({ ...summary, previousSummary:priorSummary });
+        const completeSummary = { ...summary, previousSummary:priorSummary };
+        setPeriodSummary(completeSummary);
+        onPersist?.({ periodSummary:completeSummary });
       }
       setChartVersion(value => value + 1);
       setProgressText("");
