@@ -43,7 +43,7 @@ class NexonServiceTests(unittest.TestCase):
         self.assertFalse(nexon_service.is_temporary_nexon_failure(Mock(status_code=404)))
 
 
-    @patch("tracker.services.nexon_service.get_api_class", return_value="전사-히어로")
+    @patch("tracker.services.nexon_service.get_api_class", return_value="히어로")
     @patch("tracker.services.nexon_service.get_ranking_snapshot")
     @patch("tracker.integrations.nexon_api.get_ranking_page")
     def test_job_world_and_global_ranks_are_found_in_filtered_lists(
@@ -89,13 +89,13 @@ class NexonServiceTests(unittest.TestCase):
         world_call, global_call = get_ranking_page.call_args_list
         self.assertEqual(world_call.kwargs["world_name"], "크로아")
         self.assertEqual(global_call.kwargs["world_name"], None)
-        self.assertEqual(world_call.kwargs["character_class"], "전사-히어로")
-        self.assertEqual(global_call.kwargs["character_class"], "전사-히어로")
+        self.assertEqual(world_call.kwargs["character_class"], "히어로")
+        self.assertEqual(global_call.kwargs["character_class"], "히어로")
         # Filtered ranking list queries must not include the OCID single-character filter.
         self.assertNotIn("ocid", world_call.kwargs)
         self.assertNotIn("ocid", global_call.kwargs)
 
-    @patch("tracker.services.nexon_service.get_api_class", return_value="전사-히어로")
+    @patch("tracker.services.nexon_service.get_api_class", return_value="히어로")
     @patch("tracker.services.nexon_service.get_ranking_snapshot")
     @patch("tracker.integrations.nexon_api.get_ranking_page")
     def test_filtered_job_rank_paginates_until_target_ocid_is_found(
@@ -130,7 +130,7 @@ class NexonServiceTests(unittest.TestCase):
         self.assertEqual(get_ranking_page.call_args_list[0].kwargs["page"], 1)
         self.assertEqual(get_ranking_page.call_args_list[1].kwargs["page"], 2)
 
-    @patch("tracker.services.nexon_service.get_api_class", return_value="전사-히어로")
+    @patch("tracker.services.nexon_service.get_api_class", return_value="히어로")
     @patch("tracker.services.nexon_service.get_ranking_snapshot")
     @patch("tracker.integrations.nexon_api.get_ranking_page")
     def test_equal_ordinal_job_rank_is_kept_when_found_in_filtered_list(
@@ -150,7 +150,7 @@ class NexonServiceTests(unittest.TestCase):
         self.assertEqual(result["jobRanking"], 123)
         self.assertEqual(result["rankingDataStatus"], "available")
 
-    @patch("tracker.services.nexon_service.get_api_class", return_value="전사-히어로")
+    @patch("tracker.services.nexon_service.get_api_class", return_value="히어로")
     @patch("tracker.services.nexon_service.get_ranking_snapshot")
     @patch("tracker.integrations.nexon_api.get_ranking_page")
     def test_ranking_lookup_marks_three_empty_days_as_not_ready(
@@ -171,7 +171,7 @@ class NexonServiceTests(unittest.TestCase):
         self.assertEqual(get_ranking_page.call_count, 6)
         self.assertTrue(result["rankingWarnings"])
 
-    @patch("tracker.services.nexon_service.get_api_class", return_value="전사-히어로")
+    @patch("tracker.services.nexon_service.get_api_class", return_value="히어로")
     @patch("tracker.services.nexon_service.get_ranking_snapshot")
     @patch("tracker.integrations.nexon_api.get_ranking_page")
     def test_ranking_lookup_does_not_hide_authentication_errors_with_old_dates(
