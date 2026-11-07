@@ -79,20 +79,6 @@ class GrowthHistoryStore:
                         ADD COLUMN IF NOT EXISTS experience_rate_checked BOOLEAN NOT NULL DEFAULT FALSE
                         """
                     )
-                    columns = {
-                        row[1] for row in connection.execute(
-                            "PRAGMA table_info(growth_daily_snapshots)"
-                        ).fetchall()
-                    }
-                    if "experience_rate" not in columns:
-                        connection.execute(
-                            "ALTER TABLE growth_daily_snapshots ADD COLUMN experience_rate REAL"
-                        )
-                    if "experience_rate_checked" not in columns:
-                        connection.execute(
-                            "ALTER TABLE growth_daily_snapshots "
-                            "ADD COLUMN experience_rate_checked INTEGER NOT NULL DEFAULT 0"
-                        )
                     connection.execute(
                         """
                         CREATE INDEX IF NOT EXISTS idx_growth_daily_name_date
@@ -128,6 +114,20 @@ class GrowthHistoryStore:
                         )
                         """
                     )
+                    columns = {
+                        row[1] for row in connection.execute(
+                            "PRAGMA table_info(growth_daily_snapshots)"
+                        ).fetchall()
+                    }
+                    if "experience_rate" not in columns:
+                        connection.execute(
+                            "ALTER TABLE growth_daily_snapshots ADD COLUMN experience_rate REAL"
+                        )
+                    if "experience_rate_checked" not in columns:
+                        connection.execute(
+                            "ALTER TABLE growth_daily_snapshots "
+                            "ADD COLUMN experience_rate_checked INTEGER NOT NULL DEFAULT 0"
+                        )
                     connection.execute(
                         """
                         CREATE INDEX IF NOT EXISTS idx_growth_daily_name_date
