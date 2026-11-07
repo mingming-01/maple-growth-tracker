@@ -99,8 +99,12 @@ test("React preview loads profile data and refreshes only on explicit request", 
   await expect(page.getByRole("progressbar", { name: "현재 레벨 경험치 진행률" })).toHaveAttribute("aria-valuenow", "35.6");
   await expect(page.locator(".mgt-character-avatar-frame")).toBeVisible();
   const desktopAvatar = await page.locator(".mgt-character-avatar-frame").boundingBox();
-  expect(desktopAvatar.width).toBeGreaterThanOrEqual(200);
-  expect(desktopAvatar.height).toBeGreaterThanOrEqual(200);
+  expect(desktopAvatar.width).toBeGreaterThanOrEqual(240);
+  expect(desktopAvatar.height).toBeGreaterThanOrEqual(240);
+  await expect(page.locator(".mgt-snapshot-stat[data-testid='profile-combat-power']")).toContainText("전투력");
+  await expect(page.locator(".mgt-snapshot-stat[data-testid='profile-combat-power']")).toContainText("987,654,321");
+  await expect(page.getByRole("button", { name: "관심 캐릭터 등록" })).toBeVisible();
+  await expect(page.getByText("주간 일일 평균 경험치")).toBeVisible();
   await expect(page.getByRole("heading", { name: "캐릭터 상세 정보" })).toBeVisible();
   await expect(page.locator(".game-stat-detail-grade")).toHaveText("레전드리");
 
@@ -111,6 +115,11 @@ test("React preview loads profile data and refreshes only on explicit request", 
       refreshRequests.push(request.url());
     }
   });
+  await page.getByRole("button", { name: "공유" }).click();
+  await expect(page.getByRole("menu", { name: "공유 및 저장" })).toBeVisible();
+  await expect(page.getByRole("menuitem", { name: "이미지 저장" })).toBeVisible();
+  await expect(page.getByRole("menuitem", { name: "PDF 저장" })).toBeVisible();
+  await page.keyboard.press("Escape");
   await page.getByRole("button", { name: "최신 정보 다시 조회" }).click();
   await expect.poll(() => refreshRequests.length).toBe(2);
 });
@@ -150,7 +159,7 @@ test("React profile keeps a readable avatar and progress bar on mobile", async (
   await expect(page.getByRole("progressbar", { name: "현재 레벨 경험치 진행률" })).toBeVisible();
   await expect(page.locator(".mgt-character-avatar-frame")).toBeVisible();
   const avatar = await page.locator(".mgt-character-avatar-frame").boundingBox();
-  expect(avatar.width).toBeGreaterThanOrEqual(110);
+  expect(avatar.width).toBeGreaterThanOrEqual(128);
 });
 
 
