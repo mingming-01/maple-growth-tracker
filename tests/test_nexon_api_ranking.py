@@ -2,7 +2,7 @@
 import unittest
 from unittest.mock import Mock, patch
 
-from tracker.integrations.nexon_api import get_ranking
+from tracker.integrations.nexon_api import get_ranking, get_ranking_page
 
 
 class NexonRankingRequestTests(unittest.TestCase):
@@ -31,6 +31,34 @@ class NexonRankingRequestTests(unittest.TestCase):
         self.assertEqual(params["ocid"], "test-ocid")
         self.assertEqual(params["character_class"], "전사-히어로")
         self.assertNotIn("class", params)
+
+    @patch("tracker.integrations.nexon_api.request_nexon_api")
+    def test_filtered_ranking_page_omits_ocid_and_returns_full_list(self, request_api):
+        response = Mock(status_code=200)
+        response.json.return_value = {
+            "ranking": [
+                {"ocid": "one", "ranking": 1},
+                {"ocid": "target", "ranking": 2},
+            ]
+        }
+        request_api.return_value = response
+
+        rows, returned_response = get_ranking_page(
+            target_date="2026-11-06",
+            world_name="크로아",
+            character_class="전사-히어로",
+            page=1,
+        )
+
+        self.assertEqual(len(rows), 2)
+        self.assertEqual(rows[1]["ocid"], "target")
+        self.assertIs(returned_response, response)
+        endpoint, params = request_api.call_args.args[:2]
+        self.assertEqual(endpoint, "ranking/overall")
+        self.assertEqual(params["world_name"], "크로아")
+        self.assertEqual(params["character_class"], "전사-히어로")
+        self.assertEqual(params["page"], 1)
+        self.assertNotIn("ocid", params)
 
 
 if __name__ == "__main__":
