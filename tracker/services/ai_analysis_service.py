@@ -40,7 +40,7 @@ def _generate_gemini_content(client, prompt):
                 time.sleep(delay)
 
 
-def generate_ai_analysis(character, history, computed_metrics=None, growth_insights=None, analysis_context=None):
+def generate_ai_analysis(character, history, computed_metrics=None, growth_insights=None, analysis_context=None, force_refresh=False):
     gemini_client = get_gemini_client()
     openrouter_api_key = get_runtime_state().openrouter_api_key
 
@@ -141,7 +141,7 @@ def generate_ai_analysis(character, history, computed_metrics=None, growth_insig
         if isinstance(prediction, dict):
             expected_date = prediction.get("estimatedDate")
 
-    cached_analysis = get_ai_response_cache(prompt)
+    cached_analysis = None if force_refresh else get_ai_response_cache(prompt)
     if cached_analysis is not None:
         print("저장된 AI 성장 리포트를 재사용했습니다.")
         return {"analysis": cached_analysis, "cacheHit": True, "growthInsights": growth_insights}
