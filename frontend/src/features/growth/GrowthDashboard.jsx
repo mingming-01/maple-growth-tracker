@@ -421,7 +421,17 @@ export default function GrowthDashboard({ character, history, onHistoryChange, o
       if (value !== null) running += value;
       return value === null ? null : running;
     });
-    const levelUps = sorted.map((item,index) => item.levelUp === true ? cumulative[index] : null);
+    let lastKnownCumulative = null;
+    const levelUps = sorted.map((item,index) => {
+      if (cumulative[index] !== null && cumulative[index] !== undefined) {
+        lastKnownCumulative = cumulative[index];
+      }
+      // 레벨업 날짜는 경험치 변화량을 계산할 수 없지만 이벤트 자체는
+      // 직전까지 확인된 누적값에 고정해 그래프에서 별도 마커로 보존한다.
+      return item.levelUp === true && lastKnownCumulative !== null
+        ? lastKnownCumulative
+        : null;
+    });
     chartRef.current = new Chart(canvasRef.current.getContext("2d"), {
       type: "line",
       data: {
@@ -445,6 +455,15 @@ export default function GrowthDashboard({ character, history, onHistoryChange, o
           }
         }}},
         scales:{
+          x:{type:"category",ticks:{
+            autoSkip:false,maxRotation:0,minRotation:0,
+            callback(value,index) {
+              const item = sorted[index];
+              if (index % 3 !== 0 && item?.levelUp !== true) return "";
+              const label = String(item?.date || "").slice(5);
+              return item?.levelUp ? label + " ★" : label;
+            }
+          }},
           experience:{type:"linear",position:"left",title:{display:true,text:"관측 누적 증가량"},ticks:{callback:value=>Number(value).toFixed(0)+"조"}},
           dailyGrowth:{type:"linear",position:"right",beginAtZero:true,title:{display:true,text:"일일 순증가량"},grid:{drawOnChartArea:false},ticks:{callback:value=>Number(value).toFixed(0)+"조"}}
         }
@@ -583,11 +602,11 @@ export default function GrowthDashboard({ character, history, onHistoryChange, o
       </section>
 
       <section className="section">
-        <div className="section-header"><h2 className="section-title">날짜별 성장 기록</h2><p className="section-description">선택한 기간의 경험치와 랭킹 변화입니다. 미수집 날짜는 비어 있는 상태로 유지합니다.</p></div>
+        <div className="section-header"><h2 className="section-title">날짜별 성장 기록</h2><p className="section-description">선택한 기간의 경험치 진행률과 랭킹 변화입니다. API가 진행률을 제공하지 않은 날짜는 추정하지 않고 비워 둡니다.</p></div>
         <div className="history-card">
           <div className="history-table-wrapper">
             <table className="history-table">
-              <thead><tr><th>날짜</th><th>랭킹</th><th>레벨</th><th>경험치</th><th>일일 변화</th><th>상태</th></tr></thead>
+              <thead><tr><th>날짜</th><th>랭킹</th><th>레벨</th><th>경험치</th><th>일일 변화</th><th>레벨 진행률</th></tr></thead>
               <tbody>
                 {sortHistoryDescending(displayHistory).map(item => (
                   <tr key={item.date}>
@@ -596,7 +615,9 @@ export default function GrowthDashboard({ character, history, onHistoryChange, o
                     <td>{item.level == null ? "—" : "Lv. "+item.level}</td>
                     <td className="history-experience-value">{item.experience == null ? "—" : Number(item.experience).toLocaleString("ko-KR")}</td>
                     <td className={"history-growth-value " + (Number(item.experienceChange) > 0 ? "is-positive" : Number(item.experienceChange) < 0 ? "is-negative" : "")}>{item.experienceChange == null ? "—" : signedFmt(item.experienceChange)}</td>
-                    <td>{item.recordStatus === "available" ? "정상" : item.recordStatus === "not_ready" ? "API 미제공" : "미수집"}</td>
+                    <td>{item.experienceRate == null || !Number.isFinite(Number(String(item.experienceRate).replace("%","")))
+                      ? "—"
+                      : Number(String(item.experienceRate).replace("%","")).toFixed(3) + "%"}</td>
                   </tr>
                 ))}
               </tbody>
