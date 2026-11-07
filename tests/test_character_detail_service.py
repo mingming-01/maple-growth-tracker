@@ -395,7 +395,7 @@ class CharacterDetailServiceTests(unittest.TestCase):
             return payloads[endpoint]
 
         with patch("tracker.services.character_detail_service.request_nexon_api", side_effect=fake_request), patch(
-            "tracker.services.character_detail_service._fetch_champion_image",
+            "tracker.services.character_detail_service._fetch_champion_profile",
             return_value=None,
         ):
             result = get_character_detail_section("sample-union-ocid", "union")
@@ -429,14 +429,21 @@ class CharacterDetailServiceTests(unittest.TestCase):
             }
         }
         with patch(
-            "tracker.services.character_detail_service._fetch_champion_image",
-            return_value="https://example.com/character.png",
+            "tracker.services.character_detail_service._fetch_champion_profile",
+            return_value={
+                "character_image": "https://example.com/character.png",
+                "character_level": 298,
+                "character_class": "아크메이지(썬,콜)",
+                "character_world_name": "크로아",
+            },
         ):
             result = _enrich_champion_images(source)
         self.assertEqual(
             result["currentData"]["union_champion"][0]["character_image"],
             "https://example.com/character.png",
         )
+        self.assertEqual(result["currentData"]["union_champion"][0]["character_level"], 298)
+        self.assertEqual(result["currentData"]["union_champion"][0]["character_class"], "아크메이지(썬,콜)")
 
     def test_unknown_section_is_rejected(self):
         with self.assertRaises(ValueError):
