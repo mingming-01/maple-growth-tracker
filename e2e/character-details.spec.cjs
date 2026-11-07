@@ -7,6 +7,8 @@ test("mobile touch opens item tooltips without clipped detail panels", async ({ 
     hasTouch: true
   });
   const page = await context.newPage();
+  page.setDefaultTimeout(6000);
+  page.setDefaultNavigationTimeout(10000);
 
   await page.route("**/api/character?*", route => route.fulfill({
     status: 200,
@@ -312,6 +314,6 @@ test("mobile touch opens item tooltips without clipped detail panels", async ({ 
     }));
     expect(scrollState.scrollHeight).toBeGreaterThan(scrollState.viewportHeight);
   } finally {
-    await context.close();
+    await context.close().catch(() => {});
   }
 });
