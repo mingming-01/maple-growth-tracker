@@ -841,6 +841,19 @@ function symbolGrowthComplete(symbol) {
   return required !== null && (required === 0 || (current !== null && current >= required));
 }
 
+function extractSymbolSpecialStats(symbol) {
+  const description = String(symbol?.symbol_description || "");
+  const patterns = [
+    ["경험치", /(?:경험치(?:\s*획득량)?|EXP)\s*[+:]?\s*(\d+(?:\.\d+)?%?)/i],
+    ["드롭률", /(?:아이템\s*)?드롭률?\s*[+:]?\s*(\d+(?:\.\d+)?%?)/i],
+    ["메획", /(?:메소\s*(?:획득량|증가|량)?|메획)\s*[+:]?\s*(\d+(?:\.\d+)?%?)/i]
+  ];
+  return patterns.map(([label, pattern]) => {
+    const match = description.match(pattern);
+    return match ? [label, match[1].includes("%") ? match[1] : match[1] + "%"] : null;
+  }).filter(Boolean);
+}
+
 function SymbolsTab({ data }) {
   const source = sourceOf(data, "symbolEquipment");
   const symbols = source?.currentData?.symbol || source?.data?.symbol || [];
@@ -855,12 +868,17 @@ function SymbolsTab({ data }) {
               ["INT", symbol.symbol_int], ["LUK", symbol.symbol_luk], ["HP", symbol.symbol_hp]
             ].filter(([, value]) => hasValue(value));
             const isGrandAuthentic = /그랜드\s*어센틱/.test(String(symbol.symbol_name || ""));
-            const specialStats = isGrandAuthentic ? [
+            const rawSpecialStats = isGrandAuthentic ? [
               ["경험치", ["symbol_exp_rate", "symbol_experience_rate", "symbol_exp"]],
               ["드롭률", ["symbol_drop_rate", "symbol_item_drop_rate"]],
               ["메획", ["symbol_meso_rate", "symbol_meso_acquisition_rate"]]
             ].map(([label, keys]) => [label, symbolFirstValue(symbol, keys)])
               .filter(([, value]) => hasValue(value)) : [];
+            const descriptionSpecialStats = isGrandAuthentic
+              ? extractSymbolSpecialStats(symbol) : [];
+            const specialStats = rawSpecialStats.length
+              ? rawSpecialStats
+              : descriptionSpecialStats;
             const force = symbol.symbol_force;
             const maxed = symbolGrowthComplete(symbol);
             const growthLine = maxed
