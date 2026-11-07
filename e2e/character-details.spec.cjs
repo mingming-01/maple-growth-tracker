@@ -229,11 +229,24 @@ test("mobile touch opens item tooltips without clipped detail panels", async ({ 
     await page.locator('[data-detail-tab="equipment"]').tap();
     const weapon = page.locator('.equipment-game-slot[data-slot="weapon"]');
     await expect(weapon).toBeVisible();
-    await weapon.evaluate(element => element.scrollIntoView({
-      block: "start", inline: "nearest", behavior: "instant"
-    }));
-    await expect.poll(async () => (await weapon.boundingBox())?.y).toBeGreaterThan(140);
-    await weapon.tap();
+    const weaponTapPoint = await weapon.evaluate(element => {
+      element.scrollIntoView({ block: "center", inline: "center", behavior: "instant" });
+      const rect = element.getBoundingClientRect();
+      const x = rect.left + rect.width / 2;
+      const y = rect.top + rect.height / 2;
+      const hit = document.elementFromPoint(x, y);
+      return {
+        x, y, top: rect.top,
+        hitSlot: hit?.closest("[data-slot]")?.getAttribute("data-slot") || null,
+        hitTag: hit?.tagName || null,
+        hitClass: typeof hit?.className === "string" ? hit.className : ""
+      };
+    });
+    expect(weaponTapPoint.top).toBeGreaterThan(90);
+    expect(weaponTapPoint.hitSlot, JSON.stringify(weaponTapPoint)).toBe("weapon");
+    // Send a real touch at the verified hit-test coordinate; locator.tap() performs
+    // a second automatic scroll which can move this target under neighboring slots.
+    await page.touchscreen.tap(weaponTapPoint.x, weaponTapPoint.y);
     const equipmentTooltip = page.locator("body > .game-floating-tooltip");
     await expect(equipmentTooltip.locator(".game-equipment-tooltip-star")).toHaveText("★ 22");
     await expect(equipmentTooltip.locator(".game-equipment-tooltip-icon")).toBeVisible();
