@@ -126,7 +126,7 @@ function isSeedRing(item) {
 }
 
 function seedRingLevel(item) {
-  const explicit = item?.ring_level ?? item?.item_level;
+  const explicit = item?.ring_level;
   if (hasValue(explicit) && Number.isFinite(Number(explicit))) return Number(explicit);
   const text = [item?.item_name, item?.item_description, item?.item_equipment_part]
     .filter(hasValue).join(" ");
