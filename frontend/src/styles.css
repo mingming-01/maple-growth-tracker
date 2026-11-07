@@ -790,5 +790,4 @@ button:focus-visible,input:focus-visible,select:focus-visible,a:focus-visible { 
   letter-spacing:-.02em;
 }
 .mgt-result-content .history-level-progress-change.is-positive { color:#79a5ef; }
-.mgt-result-content .history-level-progress-change.is-negative { color:#dc8992; }
 .mgt-result-content .history-level-progress-change.is-neutral { color:#9699aa; }
