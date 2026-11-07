@@ -347,6 +347,12 @@ def get_character_rankings(
             warnings.append("직업 랭킹 API 직업명 매핑을 찾지 못했습니다.")
         if filtered_rank_missing:
             warnings.append("동일 직업 랭킹 목록에서 해당 캐릭터를 찾지 못했습니다.")
+        filter_mismatch = any(
+            diagnostics[name].get("filterMismatch")
+            for name in ("jobWorldRanking", "jobRanking")
+        )
+        if filter_mismatch:
+            warnings.append("직업 랭킹 응답에 요청한 직업과 다른 항목이 포함되어 해당 순위를 제외했습니다.")
         if http_error:
             warnings.append("일부 랭킹 API 요청이 정상 응답하지 않았습니다.")
         if not has_data and not http_error:
