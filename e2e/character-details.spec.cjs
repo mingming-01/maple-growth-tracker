@@ -229,13 +229,9 @@ test("mobile touch opens item tooltips without clipped detail panels", async ({ 
     await page.locator('[data-detail-tab="equipment"]').tap();
     const weapon = page.locator('.equipment-game-slot[data-slot="weapon"]');
     await expect(weapon).toBeVisible();
-    await weapon.evaluate(element => {
-      element.scrollIntoView({ block: "start", inline: "nearest", behavior: "instant" });
-      const rect = element.getBoundingClientRect();
-      window.scrollTo({ top: window.scrollY + rect.top - 140, behavior: "instant" });
-    });
+    await weapon.scrollIntoViewIfNeeded();
     await expect.poll(async () => (await weapon.boundingBox())?.y).toBeGreaterThan(90);
-    await weapon.tap({ position: { x: 12, y: 12 } });
+    await weapon.tap();
     const equipmentTooltip = page.locator("body > .game-floating-tooltip");
     await expect(equipmentTooltip.locator(".game-equipment-tooltip-star")).toHaveText("★ 22");
     await expect(equipmentTooltip.locator(".game-equipment-tooltip-icon")).toBeVisible();
