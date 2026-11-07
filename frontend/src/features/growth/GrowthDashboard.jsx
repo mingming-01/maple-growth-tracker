@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import Chart from "chart.js/auto";
+import { buildLevelUpMarkers } from "./growthChartData.js";
 import {
   getHistoryArchive
 } from "../../services/api.js";
@@ -421,17 +422,9 @@ export default function GrowthDashboard({ character, history, onHistoryChange, o
       if (value !== null) running += value;
       return value === null ? null : running;
     });
-    let lastKnownCumulative = null;
-    const levelUps = sorted.map((item,index) => {
-      if (cumulative[index] !== null && cumulative[index] !== undefined) {
-        lastKnownCumulative = cumulative[index];
-      }
-      // 레벨업 날짜는 경험치 변화량을 계산할 수 없지만 이벤트 자체는
-      // 직전까지 확인된 누적값에 고정해 그래프에서 별도 마커로 보존한다.
-      return item.levelUp === true
-        ? (lastKnownCumulative ?? 0)
-        : null;
-    });
+    // Keep level-up events visible even when that date has no EXP delta
+    // or the chart has not observed a cumulative value yet.
+    const levelUps = buildLevelUpMarkers(sorted, cumulative);
     chartRef.current = new Chart(canvasRef.current.getContext("2d"), {
       type: "line",
       data: {
