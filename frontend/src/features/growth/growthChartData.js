@@ -21,6 +21,7 @@ export function buildExperienceChartSeries(records) {
   let running = null;
   let baselineEstablished = false;
   let cumulativeIsComplete = true;
+  const levelUpEvents = detectLevelUpEvents(rows);
 
   rows.forEach((item, index) => {
     const available = !!item &&
@@ -52,7 +53,7 @@ export function buildExperienceChartSeries(records) {
       return;
     }
 
-    if (item.levelUp === true) {
+    if (levelUpEvents[index]) {
       // Nexon EXP resets at a level boundary; do not invent cross-level EXP.
       cumulative.push(running / 1_000_000_000_000);
       return;
