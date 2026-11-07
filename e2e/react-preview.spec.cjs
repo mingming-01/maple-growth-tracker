@@ -48,7 +48,15 @@ test("React preview loads profile data and refreshes only on explicit request", 
   await page.route("**/api/history?*", route => route.fulfill({
     status: 200,
     contentType: "application/json",
-    body: JSON.stringify({ history: [], historyStatus: "complete", historyStorage: { backend: "postgres", status: "saved" } })
+    body: JSON.stringify({
+      history: [
+        { date: "2026-11-04", level: 280, experience: 1000, experienceRate: "30.125", experienceChange: null, recordStatus: "available" },
+        { date: "2026-11-05", level: 280, experience: 1200, experienceRate: "30.500", experienceChange: 200, recordStatus: "available" },
+        { date: "2026-11-06", level: 280, experience: 1300, experienceRate: "30.250", experienceChange: 100, recordStatus: "available" }
+      ],
+      historyStatus: "complete",
+      historyStorage: { backend: "postgres", status: "saved" }
+    })
   }));
   await page.route("**/api/character-details?*", route => route.fulfill({
     status: 200,
@@ -105,6 +113,11 @@ test("React preview loads profile data and refreshes only on explicit request", 
   await expect(page.locator(".mgt-snapshot-stat[data-testid='profile-combat-power']")).toContainText("987,654,321");
   await expect(page.getByRole("button", { name: "관심 캐릭터 등록" })).toBeVisible();
   await expect(page.getByText("주간 일일 평균 경험치")).toBeVisible();
+  await expect(page.locator(".history-table thead")).toContainText("경험치 증가량");
+  await expect(page.locator(".history-table thead")).not.toContainText("일일 변화");
+  const progressRow = page.locator(".history-table tbody tr").filter({ hasText: "2026.11.05" });
+  await expect(progressRow.locator(".history-level-progress-change")).toHaveText("+0.375%p");
+  await expect(progressRow.locator(".history-level-progress-change")).toHaveClass(/is-positive/);
   await expect(page.getByRole("heading", { name: "캐릭터 상세 정보" })).toBeVisible();
   await expect(page.locator(".game-stat-detail-grade")).toHaveText("레전드리");
 
