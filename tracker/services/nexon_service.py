@@ -82,6 +82,7 @@ def _find_character_in_filtered_ranking(
     character_name,
     ocid,
     historical=False,
+    target_world_name=None,
 ):
     """직업 필터 목록의 직업/월드 조건을 검증한 뒤 대상 캐릭터 순위를 찾는다.
 
@@ -92,7 +93,10 @@ def _find_character_in_filtered_ranking(
     from tracker.integrations.nexon_api import get_ranking_page
 
     expected_class = _normalize_ranking_text(character_class)
-    expected_world = _normalize_ranking_text(world_name)
+    filter_world = _normalize_ranking_text(world_name)
+    target_world = _normalize_ranking_text(
+        target_world_name if target_world_name is not None else world_name
+    )
     target_name = _normalize_ranking_text(character_name)
     last_response = None
     total_returned_entries = 0
@@ -153,16 +157,16 @@ def _find_character_in_filtered_ranking(
 
             # 직업/월드 목록은 월드 필터까지 서버 응답에서 검증한다.
             # 직업/전체 목록은 여러 월드가 섞이는 것이 정상이다.
-            if expected_world:
+            if filter_world:
                 entry_world = _normalize_ranking_text(entry.get("world_name"))
                 if not entry_world:
                     last_details["unverifiableEntries"] += 1
                     last_details["filterVerification"] = "missing-world-name"
                     return None, response, last_details
-                if entry_world != expected_world:
+                if entry_world != filter_world:
                     last_details["worldMismatchEntries"] += 1
                     last_details["filterVerification"] = "world-mismatch"
-                    return None, response, last_details
+                    return None, response, last_details}
 
         last_details["filterVerified"] = True
         last_details["filterVerification"] = "verified"
@@ -176,7 +180,7 @@ def _find_character_in_filtered_ranking(
                 matches = str(entry_ocid) == str(ocid)
                 # OCID가 일치하더라도 프로필의 월드와 다르면 오래되었거나
                 # 잘못된 데이터를 대상으로 판단하지 않는다.
-                if matches and expected_world and entry_world != expected_world:
+                if matches and target_world and entry_world != target_world:
                     matches = False
             else:
                 # 직업/전체 목록에는 여러 월드의 동명이인이 존재할 수 있다.
@@ -184,8 +188,8 @@ def _find_character_in_filtered_ranking(
                 matches = bool(
                     target_name
                     and entry_name == target_name
-                    and expected_world
-                    and entry_world == expected_world
+                    and target_world
+                    and entry_world == target_world
                 )
 
             if matches:
@@ -238,7 +242,7 @@ def get_character_rankings(
                 return None, None, {"pagesScanned": 0, "returnedEntries": 0, "matched": False}
             return _find_character_in_filtered_ranking(
                 date_text, None, api_class, character_class,
-                character_name, ocid,
+                character_name, ocid, target_world_name=world_name,
             )
 
         with ThreadPoolExecutor(max_workers=4) as executor:
