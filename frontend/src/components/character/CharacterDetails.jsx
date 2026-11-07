@@ -1,5 +1,5 @@
 import "./CharacterDetails.css";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { Fragment, useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { getCharacterDetails } from "../../services/api.js";
 
