@@ -226,6 +226,7 @@ function App() {
   const [name,setName] = useState(restored?.character?.characterName || "");
   const [character,setCharacter] = useState(restored?.character || null);
   const [history,setHistory] = useState(Array.isArray(restored?.history) ? restored.history : []);
+  const [analysisPeriod,setAnalysisPeriod] = useState(() => ({ days:[7,30,90].includes(Number(restored?.historyRange)) ? Number(restored.historyRange) : 7, history:Array.isArray(restored?.displayHistory) ? restored.displayHistory : (Array.isArray(restored?.history) ? restored.history : []), summary:restored?.periodSummary || null }));
   const [loading,setLoading] = useState(false);
   const [error,setError] = useState("");
   const [historyWarning,setHistoryWarning] = useState("");
@@ -332,6 +333,7 @@ function App() {
       nextCharacter.historyStorage = historyResult.historyStorage || null;
       setCharacter(nextCharacter);
       setHistory(records);
+      setAnalysisPeriod({days:7,history:records,summary:null});
       setComparisonState(null);
       setLastSearched(new Date().toLocaleTimeString("ko-KR",{hour:"2-digit",minute:"2-digit"}));
       saveTrackerState({
@@ -556,10 +558,10 @@ function App() {
                 <CharacterDetails ocid={character.ocid} onStatsLoaded={onStatsLoaded} />
               </div>
               <div id="growth">
-                <GrowthDashboard character={character} history={history} onHistoryChange={setHistory} onPersist={persistPatch} />
+                <GrowthDashboard character={character} history={history} onHistoryChange={setHistory} onAnalysisPeriodChange={setAnalysisPeriod} onPersist={persistPatch} />
               </div>
               <div id="analytics">
-                <AIReport character={character} history={history} />
+                <AIReport character={character} history={analysisPeriod.history || history} periodDays={analysisPeriod.days} periodSummary={analysisPeriod.summary} />
                 <GrowthComparison
                   character={character}
                   history={history}
