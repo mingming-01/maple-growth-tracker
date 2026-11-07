@@ -292,7 +292,7 @@ test("mobile touch opens item tooltips without clipped detail panels", async ({ 
     await page.getByRole("tab", { name: "펫" }).tap();
     await expect(page.getByText("밍펫")).toBeVisible();
     await expect(page.getByText("펫 장비 테스트")).toBeVisible();
-    await page.getByRole("tab", { name: "장비" }).tap();
+    await page.getByRole("tablist", { name: "장비 상세 구분" }).getByRole("tab", { name: "장비" }).tap();
     const androidSlot = page.locator('.equipment-game-slot[data-slot="android"]');
     await androidSlot.evaluate(element => element.scrollIntoView({ block: "center", inline: "center", behavior: "instant" }));
     await androidSlot.tap();
