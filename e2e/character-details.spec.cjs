@@ -319,7 +319,10 @@ test("mobile touch opens item tooltips without clipped detail panels", async ({ 
     await expect(championCard).toContainText("챔피언 테스트");
     const championAvatar = championCard.locator(".game-union-champion-avatar-preview");
     const avatarBounds = await championAvatar.boundingBox();
-    expect(avatarBounds.width).toBeGreaterThanOrEqual(110);
+    expect(avatarBounds.width).toBeGreaterThanOrEqual(150);
+    const crestStrip = championCard.locator(".game-union-champion-badges");
+    expect(await crestStrip.evaluate(element => getComputedStyle(element).padding)).toBe("0px");
+    expect(await crestStrip.evaluate(element => getComputedStyle(element).borderTopWidth)).toBe("0px");
     await championAvatar.tap();
     const championTooltip = page.locator("body > .game-floating-tooltip");
     await expect(championTooltip).toContainText("직업 · 아크메이지(썬,콜)");
@@ -332,6 +335,12 @@ test("mobile touch opens item tooltips without clipped detail panels", async ({ 
     const crestTooltip = page.locator("body > .game-floating-tooltip");
     await expect(crestTooltip).toContainText("보스 몬스터 공격 시 데미지 +1%");
     await expect(crestTooltip.locator("img")).toHaveCount(0);
+    await page.locator(".mgt-topbar").tap();
+
+    // Verify the desktop layout uses the larger avatar size as well.
+    await page.setViewportSize({ width: 1440, height: 900 });
+    const desktopAvatarBounds = await championAvatar.boundingBox();
+    expect(desktopAvatarBounds.width).toBeGreaterThanOrEqual(180);
 
     const scrollState = await page.evaluate(() => ({
       scrollHeight: document.documentElement.scrollHeight,
