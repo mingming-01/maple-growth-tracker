@@ -161,10 +161,13 @@ def get_character_rankings(target_date, world_name, character_class, ocid):
                         values[value_index] = (fallback_data, fallback_response)
                         class_filter_fallbacks[name] = "basic-character-class"
                     elif is_duplicate:
-                        # A 200 response with an unfiltered rank is not a valid
-                        # job rank. Preserve the response code for diagnostics.
-                        values[value_index] = (None, fallback_response or candidate_response)
-                        class_filter_unverified.add(name)
+                        # Equal numeric ranks do not prove that the class filter was
+                        # ignored: a character can legitimately hold the same ordinal
+                        # in the overall/world and class-specific lists. The request
+                        # already carries the documented character_class filter, so
+                        # keep the successful candidate rather than hiding it.
+                        # Record the comparison as inconclusive for diagnostics.
+                        class_filter_fallbacks[name] = "same-rank-inconclusive"
 
         names = ("ranking", "worldRanking", "jobWorldRanking", "jobRanking")
         status_codes = {
