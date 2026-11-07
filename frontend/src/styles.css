@@ -588,6 +588,13 @@ button:focus-visible,input:focus-visible,select:focus-visible,a:focus-visible { 
   border-radius:10px;
   object-fit:contain;
 }
+@media (max-width:760px) {
+  /* The global avatar base rule is loaded after the component stylesheet. */
+  .game-union-champion-avatar-preview {
+    width:118px;
+    height:118px;
+  }
+}
 .game-union-champion-tooltip-avatar { width:112px; height:112px; object-fit:contain; }
 
 .mgt-ranking-diagnostics { margin-top:9px; color:#b8addc; font-size:10px; }
