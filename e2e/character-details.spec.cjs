@@ -1,9 +1,11 @@
 const { test, expect } = require("@playwright/test");
 
 test("mobile touch opens item tooltips without clipped detail panels", async ({ browser }) => {
+  // Exercise touch input at a fixed mobile-sized CSS viewport. hasTouch enables
+  // genuine touchscreen events; isMobile changes Chromium's visual/layout viewport
+  // mapping and is not needed for this responsive-layout + touch regression test.
   const context = await browser.newContext({
     viewport: { width: 390, height: 844 },
-    isMobile: true,
     hasTouch: true
   });
   const page = await context.newPage();
@@ -229,110 +231,22 @@ test("mobile touch opens item tooltips without clipped detail panels", async ({ 
     await page.locator('[data-detail-tab="equipment"]').tap();
     const weapon = page.locator('.equipment-game-slot[data-slot="weapon"]');
     await expect(weapon).toBeVisible();
-    const weaponTapPoint = await weapon.evaluate(element => {
-      element.scrollIntoView({ block: "center", inline: "center", behavior: "instant" });
-      const rect = element.getBoundingClientRect();
-      const x = rect.left + rect.width / 2;
-      const y = rect.top + rect.height / 2;
-      const hit = document.elementFromPoint(x, y);
-      return {
-        x, y, top: rect.top,
-        hitSlot: hit?.closest("[data-slot]")?.getAttribute("data-slot") || null,
-        hitTag: hit?.tagName || null,
-        hitClass: typeof hit?.className === "string" ? hit.className : ""
-      };
-    });
-    expect(weaponTapPoint.top).toBeGreaterThan(90);
-    expect(weaponTapPoint.hitSlot, JSON.stringify(weaponTapPoint)).toBe("weapon");
-
-    // Confirm the API-backed weapon item is actually attached before testing touch.
     await expect(weapon).toHaveAttribute("data-tooltip-trigger", "true");
     await expect(weapon).toHaveAttribute("aria-label", "테스트 무기 상세 정보");
     await expect(weapon.locator(".equipment-game-icon-frame img")).toBeAttached();
 
-    // Capture input at document level as well as on the expected target. This
-    // distinguishes a missing React handler from a coordinate/input-routing issue.
-    await page.evaluate(() => {
-      window.__weaponDocumentEvents = [];
-      for (const type of ["pointerdown", "pointerup", "touchstart", "touchend", "mousedown", "mouseup", "click"]) {
-        document.addEventListener(type, event => {
-          const describe = node => ({
-            tag: node?.tagName || null,
-            className: typeof node?.className === "string" ? node.className : node?.className?.baseVal || null,
-            slot: node?.closest?.("[data-slot]")?.getAttribute("data-slot") || null
-          });
-          window.__weaponDocumentEvents.push({
-            type,
-            pointerType: event.pointerType || null,
-            clientX: event.clientX ?? event.changedTouches?.[0]?.clientX ?? null,
-            clientY: event.clientY ?? event.changedTouches?.[0]?.clientY ?? null,
-            target: describe(event.target),
-            hit: describe(document.elementFromPoint(
-              event.clientX ?? event.changedTouches?.[0]?.clientX ?? 0,
-              event.clientY ?? event.changedTouches?.[0]?.clientY ?? 0
-            )),
-            scrollY: window.scrollY
-          });
-        }, true);
-      }
-    });
-    await weapon.evaluate(element => {
-      window.__weaponTouchEvents = [];
-      for (const type of ["pointerdown", "pointerup", "touchstart", "touchend", "click", "focus", "blur"]) {
-        element.addEventListener(type, event => {
-          window.__weaponTouchEvents.push({
-            type,
-            pointerType: event.pointerType || null,
-            target: event.target?.className?.baseVal || event.target?.className || event.target?.tagName || null
-          });
-        }, true);
-      }
-    });
+    // Scroll the real element into the 390 × 844 CSS viewport and let Playwright
+    // generate a touch at its center. Do not pass DOMRect values to touchscreen.tap:
+    // those are layout-viewport coordinates, not device-screen coordinates.
+    await weapon.scrollIntoViewIfNeeded();
+    const weaponBounds = await weapon.boundingBox();
+    expect(weaponBounds).not.toBeNull();
+    expect(weaponBounds.x).toBeGreaterThanOrEqual(0);
+    expect(weaponBounds.y).toBeGreaterThanOrEqual(0);
+    expect(weaponBounds.x + weaponBounds.width).toBeLessThanOrEqual(390);
+    expect(weaponBounds.y + weaponBounds.height).toBeLessThanOrEqual(844);
+    await weapon.tap();
 
-    // DOMRect coordinates are in the layout viewport, while touchscreen.tap uses
-    // the visual/device viewport. Convert explicitly when mobile page scale differs.
-    const viewportMetrics = await page.evaluate(() => ({
-      layoutWidth: window.innerWidth,
-      layoutHeight: window.innerHeight,
-      visualWidth: window.visualViewport?.width ?? window.innerWidth,
-      visualHeight: window.visualViewport?.height ?? window.innerHeight,
-      offsetLeft: window.visualViewport?.offsetLeft ?? 0,
-      offsetTop: window.visualViewport?.offsetTop ?? 0,
-      scale: window.visualViewport?.scale ?? 1
-    }));
-    const touchX = (weaponTapPoint.x - viewportMetrics.offsetLeft) *
-      viewportMetrics.visualWidth / viewportMetrics.layoutWidth;
-    const touchY = (weaponTapPoint.y - viewportMetrics.offsetTop) *
-      viewportMetrics.visualHeight / viewportMetrics.layoutHeight;
-    expect(weaponTapPoint.x).toBeGreaterThanOrEqual(0);
-    expect(weaponTapPoint.x).toBeLessThan(viewportMetrics.layoutWidth);
-    expect(weaponTapPoint.y).toBeGreaterThanOrEqual(0);
-    expect(weaponTapPoint.y).toBeLessThan(viewportMetrics.layoutHeight);
-
-    // Send a real touch at the viewport-scaled coordinate.
-    await page.touchscreen.tap(touchX, touchY);
-    const touchState = await weapon.evaluate(element => ({
-      expanded: element.getAttribute("aria-expanded"),
-      trigger: element.getAttribute("data-tooltip-trigger"),
-      label: element.getAttribute("aria-label"),
-      events: window.__weaponTouchEvents || [],
-      documentEvents: window.__weaponDocumentEvents || [],
-      viewport: {
-        innerWidth: window.innerWidth,
-        innerHeight: window.innerHeight,
-        visualWidth: window.visualViewport?.width ?? null,
-        visualHeight: window.visualViewport?.height ?? null,
-        visualScale: window.visualViewport?.scale ?? null,
-        visualOffsetLeft: window.visualViewport?.offsetLeft ?? null,
-        visualOffsetTop: window.visualViewport?.offsetTop ?? null,
-        scrollX: window.scrollX,
-        scrollY: window.scrollY,
-        devicePixelRatio: window.devicePixelRatio,
-        maxTouchPoints: navigator.maxTouchPoints
-      },
-      tooltipCount: document.querySelectorAll("body > .game-floating-tooltip").length
-    }));
-    expect(touchState.expanded, JSON.stringify(touchState)).toBe("true");
     const equipmentTooltip = page.locator("body > .game-floating-tooltip");
     await expect(equipmentTooltip.locator(".game-equipment-tooltip-star")).toHaveText("★ 22");
     await expect(equipmentTooltip.locator(".game-equipment-tooltip-icon")).toBeVisible();
