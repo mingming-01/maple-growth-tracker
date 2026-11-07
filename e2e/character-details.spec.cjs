@@ -262,10 +262,11 @@ test("mobile touch opens item tooltips without clipped detail panels", async ({ 
     await expect(equipmentTooltip).toContainText("+500");
     await expect(equipmentTooltip).toContainText("공격력");
     await expect(equipmentTooltip).toContainText("+350");
-    await expect(equipmentTooltip.locator(".game-equipment-tooltip-stat small.is-base")).toContainText("기본 200");
-    await expect(equipmentTooltip.locator(".game-equipment-tooltip-stat small.is-starforce")).toContainText("스타포스 40");
-    await expect(equipmentTooltip.locator(".game-equipment-tooltip-stat small.is-scroll")).toContainText("주문서 50");
-    await expect(equipmentTooltip.locator(".game-equipment-tooltip-stat small.is-bonus")).toContainText("추옵 60");
+    await expect(equipmentTooltip.locator(".game-equipment-tooltip-stat-breakdown")).toContainText("(200 + 40 + 50 + 60)");
+    await expect(equipmentTooltip).not.toContainText("기본 200");
+    await expect(equipmentTooltip).not.toContainText("스타포스 40");
+    await expect(equipmentTooltip).not.toContainText("주문서 50");
+    await expect(equipmentTooltip).not.toContainText("추옵 60");
     await expect(equipmentTooltip).toContainText("잠재능력");
     await expect(equipmentTooltip).toContainText("보스 몬스터 공격 시 데미지 +40%");
     await expect(equipmentTooltip).toContainText("에디셔널 잠재 옵션");
