@@ -318,6 +318,60 @@ class NexonServiceTests(unittest.TestCase):
         self.assertEqual(get_ranking_page.call_args_list[1].kwargs["world_name"], None)
 
     @patch("tracker.integrations.nexon_api.get_ranking_page")
+    def test_world_job_ranking_rejects_entries_from_other_worlds(self, get_ranking_page):
+        response = Mock(status_code=200)
+        response.json.return_value = {"ranking": []}
+        get_ranking_page.return_value = ([{
+            "ocid": "target-ocid",
+            "character_name": "밍득",
+            "world_name": "리부트",
+            "sub_class_name": "아크메이지(썬,콜)",
+            "ranking": 79,
+        }], response)
+
+        entry, returned_response, details = nexon_service._find_character_in_filtered_ranking(
+            target_date="2026-11-07",
+            world_name="크로아",
+            api_class="아크메이지(썬,콜)",
+            character_class="아크메이지(썬,콜)",
+            character_name="밍득",
+            ocid="target-ocid",
+            target_world_name="크로아",
+        )
+
+        self.assertIsNone(entry)
+        self.assertIs(returned_response, response)
+        self.assertTrue(details["worldFilterMismatch"])
+        self.assertEqual(details["worldFilterVerification"], "mismatch")
+        self.assertEqual(details["mismatchedWorld"], "리부트")
+
+    @patch("tracker.integrations.nexon_api.get_ranking_page")
+    def test_world_job_ranking_rejects_payload_without_world_metadata(self, get_ranking_page):
+        response = Mock(status_code=200)
+        response.json.return_value = {"ranking": []}
+        get_ranking_page.return_value = ([{
+            "ocid": "target-ocid",
+            "character_name": "밍득",
+            "sub_class_name": "아크메이지(썬,콜)",
+            "ranking": 79,
+        }], response)
+
+        entry, returned_response, details = nexon_service._find_character_in_filtered_ranking(
+            target_date="2026-11-07",
+            world_name="크로아",
+            api_class="아크메이지(썬,콜)",
+            character_class="아크메이지(썬,콜)",
+            character_name="밍득",
+            ocid="target-ocid",
+            target_world_name="크로아",
+        )
+
+        self.assertIsNone(entry)
+        self.assertIs(returned_response, response)
+        self.assertTrue(details["filterUnverified"])
+        self.assertEqual(details["worldFilterVerification"], "not_exposed")
+
+    @patch("tracker.integrations.nexon_api.get_ranking_page")
     def test_filtered_ranking_rejects_payload_without_job_metadata(self, get_ranking_page):
         response = Mock(status_code=200)
         response.json.return_value = {"ranking": []}
