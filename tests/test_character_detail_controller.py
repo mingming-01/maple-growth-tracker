@@ -61,6 +61,8 @@ class CharacterDetailControllerTests(unittest.TestCase):
         self.assertEqual(body["sources"][1]["status"], "unavailable")
         self.assertEqual(body["bestCombatPower"], 123)
         self.assertIsNone(body["bestPresetCombination"])
+        self.assertNotIn("profileRecommendations", body)
+        self.assertNotIn("defaultProfile", body)
 
 
 if __name__ == "__main__":
