@@ -39,10 +39,26 @@ def ai_analysis():
         return jsonify({"error": "캐릭터 이름이 너무 깁니다."}), 400
     metrics = None
     supplied_history = None
+    analysis_context = {}
+    force_refresh = False
     if request.method == "POST":
         payload = request.get_json(silent=True) or {}
         metrics = payload.get("metrics")
         supplied_history = payload.get("history")
+        force_refresh = payload.get("forceRefresh", False)
+        if not isinstance(force_refresh, bool):
+            return jsonify({"error": "재분석 요청 값이 올바르지 않습니다."}), 400
+        raw_context = payload.get("analysisContext")
+        if raw_context is not None and not isinstance(raw_context, dict):
+            return jsonify({"error": "분석 기간 정보 형식이 올바르지 않습니다."}), 400
+        raw_context = raw_context or {}
+        period_days = raw_context.get("periodDays", 7)
+        if isinstance(period_days, bool) or period_days not in (7, 30, 90):
+            return jsonify({"error": "분석 기간은 7일, 30일, 90일 중 하나여야 합니다."}), 400
+        period_summary = raw_context.get("periodSummary")
+        if period_summary is not None and not isinstance(period_summary, dict):
+            return jsonify({"error": "기간별 분석 근거 형식이 올바르지 않습니다."}), 400
+        analysis_context = {"periodDays": period_days, "periodSummary": period_summary}
         if not isinstance(metrics, dict):
             return jsonify({"error": "계산된 성장 지표가 필요합니다."}), 400
         if supplied_history is not None and not isinstance(supplied_history, list):
@@ -120,7 +136,7 @@ def ai_analysis():
             insight_records, reference_date=today
         )
         result = generate_ai_analysis(
-            character, recent_history, metrics, growth_insights
+            character, recent_history, metrics, growth_insights, analysis_context, force_refresh
         )
         if "error" in result:
             return jsonify(result), 500

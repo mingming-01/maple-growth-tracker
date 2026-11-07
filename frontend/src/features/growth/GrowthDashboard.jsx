@@ -372,7 +372,7 @@ function PeriodSummary({ summary, previous, label }) {
   );
 }
 
-export default function GrowthDashboard({ character, history, onHistoryChange, onPersist }) {
+export default function GrowthDashboard({ character, history, onHistoryChange, onAnalysisPeriodChange, onPersist }) {
   const initialState = readTrackerState() || {};
   const initialRange = [7,30,90].includes(Number(initialState.historyRange)) ? Number(initialState.historyRange) : 7;
   const [range, setRange] = useState(initialRange);
@@ -476,6 +476,7 @@ export default function GrowthDashboard({ character, history, onHistoryChange, o
         setDisplayHistory(history || []);
         setRangeStatus(null);
         setPeriodSummary(null);
+        onAnalysisPeriodChange?.({ days:7, history:history || [], summary:null });
         onPersist?.({historyRange:7,displayHistory:history || [],historyRangeStatus:null,periodSummary:null});
       } else {
         const current = await fetchArchive(days,character,{
@@ -493,6 +494,7 @@ export default function GrowthDashboard({ character, history, onHistoryChange, o
         setRange(days);
         setDisplayHistory(current.history || []);
         setPeriodSummary(summary);
+        onAnalysisPeriodChange?.({ days, history:current.history || [], summary:{ ...summary, previousSummary:previous ? summarizePeriod(previous.history || [],days) : null } });
         setRangeStatus({
           availableDays:current.availableDays || 0,
           notReadyDays:current.notReadyDays || 0,
@@ -510,7 +512,9 @@ export default function GrowthDashboard({ character, history, onHistoryChange, o
           periodSummary:summary
         });
         const priorSummary = previous ? summarizePeriod(previous.history || [],days) : null;
-        setPeriodSummary({ ...summary, previousSummary:priorSummary });
+        const completeSummary = { ...summary, previousSummary:priorSummary };
+        setPeriodSummary(completeSummary);
+        onPersist?.({ periodSummary:completeSummary });
       }
       setChartVersion(value => value + 1);
       setProgressText("");

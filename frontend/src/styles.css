@@ -791,3 +791,36 @@ button:focus-visible,input:focus-visible,select:focus-visible,a:focus-visible { 
 }
 .mgt-result-content .history-level-progress-change.is-positive { color:#79a5ef; }
 .mgt-result-content .history-level-progress-change.is-neutral { color:#9699aa; }
+
+.mgt-result-content .ai-analysis-period-evidence {
+  margin:0 0 16px;
+  padding:13px 15px;
+  border:1px solid rgba(126,151,202,.22);
+  border-radius:10px;
+  background:rgba(75,91,132,.10);
+}
+.mgt-result-content .ai-analysis-period-evidence>strong {
+  display:block;
+  margin-bottom:10px;
+  color:#c9d5ed;
+  font-size:12px;
+}
+.mgt-result-content .ai-analysis-period-grid {
+  display:grid;
+  grid-template-columns:repeat(2,minmax(0,1fr));
+  gap:8px 14px;
+}
+.mgt-result-content .ai-analysis-period-grid span {
+  display:flex;
+  justify-content:space-between;
+  gap:8px;
+  color:#aeb5c8;
+  font-size:11px;
+}
+.mgt-result-content .ai-analysis-period-grid b {
+  color:#e0e5f1;
+  text-align:right;
+}
+@media(max-width:520px) {
+  .mgt-result-content .ai-analysis-period-grid { grid-template-columns:1fr; }
+}

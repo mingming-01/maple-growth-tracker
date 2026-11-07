@@ -7,7 +7,15 @@ export const STORAGE_KEYS = Object.freeze({
 
 const MAX_FAVORITES = 30;
 const MAX_AI_ENTRIES = 40;
-const AI_TTL_MS = 30 * 24 * 60 * 60 * 1000;
+const DEFAULT_AI_TTL_MS = 30 * 24 * 60 * 60 * 1000;
+const AI_TTL_BY_TYPE = Object.freeze({
+  // 30·90일 성장 리포트는 단기 기록 변동에 흔들리지 않도록 7일간 재사용한다.
+  "growth-report-long-v1": 7 * 24 * 60 * 60 * 1000
+});
+
+function getAiTtl(type) {
+  return AI_TTL_BY_TYPE[type] || DEFAULT_AI_TTL_MS;
+}
 
 function readJson(storage, key, fallback) {
   try {
@@ -91,7 +99,7 @@ export function readAIEntries() {
     typeof item.signature === "string" &&
     typeof item.analysis === "string" &&
     Number.isFinite(item.savedAt) &&
-    now - item.savedAt <= AI_TTL_MS
+    now - item.savedAt <= getAiTtl(item.type)
   ).slice(0, MAX_AI_ENTRIES);
 }
 
