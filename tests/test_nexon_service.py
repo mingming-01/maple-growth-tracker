@@ -62,10 +62,53 @@ class NexonServiceTests(unittest.TestCase):
             "2026-11-07", "크로아", "히어로", "ocid-value"
         )
 
-        self.assertEqual(result["rankingDataStatus"], "available")
+        self.assertEqual(result["rankingDataStatus"], "partial")
         self.assertEqual(result["rankingDate"], "2026-11-06")
         self.assertEqual(result["ranking"], 123)
-        self.assertEqual(get_ranking.call_count, 8)
+        self.assertIsNone(result["jobWorldRanking"])
+        self.assertIsNone(result["jobRanking"])
+        self.assertEqual(get_ranking.call_count, 10)
+
+    @patch("tracker.services.nexon_service.get_api_class", return_value="마법사-아크메이지(썬,콜)")
+    @patch("tracker.services.nexon_service.get_ranking_snapshot")
+    def test_job_rank_retries_with_basic_character_class_when_mapped_filter_is_ignored(
+        self, get_ranking, _get_api_class
+    ):
+        def result(rank):
+            response = Mock(status_code=200)
+            response.json.return_value = {"ranking": [{"ranking": rank}]}
+            return {"ranking": rank}, response
+
+        def ranking_side_effect(target_date, world_name=None, ocid=None, character_class=None, historical=False):
+            if character_class == "마법사-아크메이지(썬,콜)":
+                return result(374 if world_name else 2278)
+            if character_class == "아크메이지(썬,콜)":
+                return result(9 if world_name else 79)
+            return result(374 if world_name else 2278)
+
+        get_ranking.side_effect = ranking_side_effect
+
+        rankings = nexon_service.get_character_rankings(
+            "2026-11-07",
+            "크로아",
+            "아크메이지(썬,콜)",
+            "character-ocid",
+        )
+
+        self.assertEqual(rankings["worldRanking"], 374)
+        self.assertEqual(rankings["ranking"], 2278)
+        self.assertEqual(rankings["jobWorldRanking"], 9)
+        self.assertEqual(rankings["jobRanking"], 79)
+        self.assertEqual(
+            rankings["rankingApiDiagnostics"]["jobWorldRanking"]["classFilterFallback"],
+            "basic-character-class",
+        )
+        self.assertEqual(
+            rankings["rankingApiDiagnostics"]["jobRanking"]["classFilterFallback"],
+            "basic-character-class",
+        )
+        self.assertEqual(rankings["rankingDataStatus"], "available")
+        self.assertEqual(get_ranking.call_count, 6)
 
     @patch("tracker.services.nexon_service.get_api_class", return_value="전사-히어로")
     @patch("tracker.services.nexon_service.get_ranking_snapshot")

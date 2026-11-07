@@ -118,6 +118,54 @@ def get_character_rankings(target_date, world_name, character_class, ocid):
             ]
             values = [future.result() for future in futures]
 
+        # Some API deployments have returned a successful but unfiltered result
+        # when the mapped class label is not accepted. Detect a job rank that is
+        # identical to its unfiltered counterpart and retry using the exact class
+        # name received from character/basic. Never silently present the duplicate.
+        class_filter_fallbacks = {}
+        class_filter_unverified = set()
+        if api_class and character_class and character_class != api_class:
+            for name, value_index, base_index, filtered_world in (
+                ("jobWorldRanking", 2, 1, world_name),
+                ("jobRanking", 3, 0, None),
+            ):
+                candidate, candidate_response = values[value_index]
+                base_data = values[base_index][0]
+                candidate_rank = candidate.get("ranking") if isinstance(candidate, dict) else None
+                base_rank = base_data.get("ranking") if isinstance(base_data, dict) else None
+                is_duplicate = (
+                    candidate_rank is not None
+                    and base_rank is not None
+                    and str(candidate_rank) == str(base_rank)
+                )
+                if is_duplicate or (candidate is None and base_rank is not None):
+                    fallback_data, fallback_response = get_ranking_snapshot(
+                        target_date=date_text,
+                        world_name=filtered_world,
+                        character_class=character_class,
+                        ocid=ocid,
+                    )
+                    fallback_rank = (
+                        fallback_data.get("ranking")
+                        if isinstance(fallback_data, dict)
+                        else None
+                    )
+                    fallback_is_distinct = (
+                        fallback_rank is not None
+                        and (
+                            base_rank is None
+                            or str(fallback_rank) != str(base_rank)
+                        )
+                    )
+                    if fallback_is_distinct:
+                        values[value_index] = (fallback_data, fallback_response)
+                        class_filter_fallbacks[name] = "basic-character-class"
+                    elif is_duplicate:
+                        # A 200 response with an unfiltered rank is not a valid
+                        # job rank. Preserve the response code for diagnostics.
+                        values[value_index] = (None, fallback_response or candidate_response)
+                        class_filter_unverified.add(name)
+
         names = ("ranking", "worldRanking", "jobWorldRanking", "jobRanking")
         status_codes = {
             name: response.status_code if response is not None else None
@@ -136,6 +184,10 @@ def get_character_rankings(target_date, world_name, character_class, ocid):
                 "returnedEntries": entry_count,
                 "matched": data is not None,
             }
+            if name in class_filter_fallbacks:
+                diagnostics[name]["classFilterFallback"] = class_filter_fallbacks[name]
+            if name in class_filter_unverified:
+                diagnostics[name]["classFilterVerified"] = False
         result = {
             name: (data.get("ranking") if isinstance(data, dict) else None)
             for name, (data, _) in zip(names, values)
@@ -146,7 +198,7 @@ def get_character_rankings(target_date, world_name, character_class, ocid):
             for code in status_codes.values()
         )
         mapping_missing = not bool(api_class)
-        has_error = http_error or mapping_missing
+        has_error = http_error or mapping_missing or bool(class_filter_unverified)
 
         if has_data and has_error:
             status = "partial"
@@ -160,6 +212,8 @@ def get_character_rankings(target_date, world_name, character_class, ocid):
         warnings = []
         if mapping_missing:
             warnings.append("직업 랭킹 API 직업명 매핑을 찾지 못했습니다.")
+        if class_filter_unverified:
+            warnings.append("직업 필터가 적용된 순위를 확인하지 못해 중복된 전체·월드 순위는 표시하지 않았습니다.")
         if http_error:
             warnings.append("일부 랭킹 API 요청이 정상 응답하지 않았습니다.")
         if not has_data and not http_error:

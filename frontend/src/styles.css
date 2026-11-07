@@ -666,3 +666,89 @@ button:focus-visible,input:focus-visible,select:focus-visible,a:focus-visible { 
   .game-floating-tooltip { padding:11px 12px; max-height:min(420px,72vh); }
   .game-floating-tooltip .game-equipment-tooltip-icon { width:56px !important; height:56px !important; }
 }
+
+
+/* Profile refinement: larger character portrait and compact icon-first actions. */
+.mgt-character-avatar-frame { width:248px; height:248px; }
+.mgt-character-avatar { width:100%; height:100%; transform:none; object-fit:contain; }
+.mgt-icon-action {
+  display:inline-grid;
+  place-items:center;
+  flex:none;
+  width:40px;
+  height:40px;
+  padding:0;
+  border:1px solid var(--mgt-line);
+  border-radius:12px;
+  color:#d4cfff;
+  background:#191827;
+  transition:border-color .18s,background .18s,color .18s,transform .18s;
+}
+.mgt-icon-action:hover:not(:disabled) {
+  border-color:rgba(169,149,255,.42);
+  color:#fff;
+  background:#25223a;
+  transform:translateY(-1px);
+}
+.mgt-icon-action:disabled { cursor:wait; opacity:.58; }
+.mgt-icon-action span { font-size:22px; line-height:1; }
+.mgt-icon-action svg {
+  width:19px;
+  height:19px;
+  fill:none;
+  stroke:currentColor;
+  stroke-width:1.8;
+  stroke-linecap:round;
+  stroke-linejoin:round;
+}
+.mgt-favorite-icon-button.is-saved {
+  border-color:rgba(226,196,119,.35);
+  color:#e6d39a;
+  background:rgba(164,127,37,.12);
+}
+.mgt-share-menu-wrap { position:relative; display:inline-flex; }
+.mgt-share-menu {
+  position:absolute;
+  z-index:40;
+  top:calc(100% + 8px);
+  right:0;
+  display:grid;
+  min-width:176px;
+  padding:6px;
+  border:1px solid rgba(190,180,255,.2);
+  border-radius:12px;
+  background:#1b1a2b;
+  box-shadow:0 16px 38px rgba(0,0,0,.38);
+}
+.mgt-share-menu button {
+  display:flex;
+  align-items:center;
+  gap:10px;
+  min-height:39px;
+  padding:0 10px;
+  border:0;
+  border-radius:8px;
+  color:#e9e5fb;
+  text-align:left;
+  background:transparent;
+  font-size:11px;
+  font-weight:750;
+  white-space:nowrap;
+}
+.mgt-share-menu button:hover:not(:disabled) { background:rgba(169,149,255,.1); }
+.mgt-share-menu button:disabled { cursor:wait; opacity:.6; }
+.mgt-share-menu button span { width:18px; color:#bbaeff; text-align:center; font-size:15px; }
+.mgt-profile-side .mgt-snapshot-stat[data-testid="profile-combat-power"] strong { color:#c6d8ff; font-size:14px; }
+@media (max-width:900px) {
+  .mgt-character-avatar-frame { width:190px; height:190px; }
+}
+@media (max-width:760px) {
+  .mgt-character-avatar-frame { width:158px; height:158px; }
+  .mgt-export-actions { gap:8px; }
+  .mgt-icon-action { width:38px; height:38px; }
+}
+@media (max-width:480px) {
+  .mgt-character-avatar-frame { width:132px; height:142px; }
+  .mgt-icon-action { width:36px; height:36px; }
+  .mgt-share-menu { min-width:162px; }
+}

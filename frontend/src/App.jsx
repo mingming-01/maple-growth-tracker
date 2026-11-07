@@ -17,7 +17,8 @@ import {
 } from "./lib/storage.js";
 import {
   calculateAverageGrowth,
-  calculateLevelProgress
+  calculateLevelProgress,
+  sortHistoryAscending
 } from "./lib/growth.js";
 
 const WORLD_LOGOS = {
@@ -110,9 +111,10 @@ function RankingStatus({ character }) {
   );
 }
 
-function CharacterProfile({ character, history, onToggleFavorite, isFavorite }) {
+function CharacterProfile({ character, history }) {
   const rate = formatRate(character.experienceRate);
-  const average = calculateAverageGrowth(history || []);
+  const weeklyHistory = sortHistoryAscending(history || []).slice(-7);
+  const average = calculateAverageGrowth(weeklyHistory);
   const progress = calculateLevelProgress(character,average);
   const logo = WORLD_LOGOS[character.worldName];
   return (
@@ -136,11 +138,6 @@ function CharacterProfile({ character, history, onToggleFavorite, isFavorite }) 
               <span>{character.job || "직업 정보 없음"}</span>
               <span>{character.guildName || "길드 없음"}</span>
             </div>
-            <button type="button" className={"mgt-favorite-button " + (isFavorite ? "is-saved" : "")}
-              onClick={onToggleFavorite} aria-pressed={isFavorite}>
-              <span aria-hidden="true">{isFavorite ? "★" : "☆"}</span>
-              {isFavorite ? "관심 캐릭터 해제" : "관심 캐릭터 등록"}
-            </button>
           </div>
         </div>
         <div className="mgt-profile-progress">
@@ -162,13 +159,10 @@ function CharacterProfile({ character, history, onToggleFavorite, isFavorite }) 
       <div className="mgt-profile-side">
         <div className="mgt-eyebrow">CHARACTER SNAPSHOT</div>
         <div className="mgt-snapshot-stat"><span>현재 경험치</span><strong>{formatNumber(character.experience)}</strong></div>
-        <div className="mgt-snapshot-stat"><span>일일 평균 경험치</span><strong>{average === null ? "자료 부족" : formatTrillion(average)}</strong></div>
-        <div className="mgt-snapshot-stat"><span>최고 전투력 기록</span><strong>{formatNumber(character.bestCombatPower)}</strong></div>
-        <p className="mgt-power-caption">
-          {character.bestCombatPowerObservedAt
-            ? "조회 기록 중 최고 · " + new Date(character.bestCombatPowerObservedAt).toLocaleDateString("ko-KR")
-            : "상세 스탯 조회 시 실제 전투력 기록을 확인합니다."}
-        </p>
+        <div className="mgt-snapshot-stat"><span>주간 일일 평균 경험치</span><strong>{average === null ? "자료 부족" : formatTrillion(average)}</strong></div>
+        <div className="mgt-snapshot-stat" data-testid="profile-combat-power">
+          <span>전투력</span><strong>{character.currentCombatPower == null ? "상세 정보 조회 대기" : formatNumber(character.currentCombatPower)}</strong>
+        </div>
       </div>
       <div className="mgt-ranking-panel">
         <div className="mgt-ranking-heading">
@@ -237,6 +231,7 @@ function App() {
   const [favorites,setFavorites] = useState(() => readFavorites());
   const [favoriteFeedback,setFavoriteFeedback] = useState("");
   const [exporting,setExporting] = useState("");
+  const [shareOpen,setShareOpen] = useState(false);
   const [view,setView] = useState(() => window.location.hash === "#admin" ? "admin" : "dashboard");
   const [comparisonState,setComparisonState] = useState(restored?.comparison || null);
   const resultRef = useRef(null);
@@ -246,6 +241,22 @@ function App() {
     window.addEventListener("hashchange",syncView);
     return () => window.removeEventListener("hashchange",syncView);
   },[]);
+
+  useEffect(() => {
+    if (!shareOpen) return undefined;
+    const closeOnOutsideClick = event => {
+      if (!event.target?.closest?.(".mgt-share-menu-wrap")) setShareOpen(false);
+    };
+    const closeOnEscape = event => {
+      if (event.key === "Escape") setShareOpen(false);
+    };
+    document.addEventListener("pointerdown",closeOnOutsideClick);
+    document.addEventListener("keydown",closeOnEscape);
+    return () => {
+      document.removeEventListener("pointerdown",closeOnOutsideClick);
+      document.removeEventListener("keydown",closeOnEscape);
+    };
+  },[shareOpen]);
 
   const isFavorite = useMemo(() => {
     if (!character) return false;
@@ -279,8 +290,13 @@ function App() {
   const onStatsLoaded = useCallback(data => {
     setCharacter(previous => {
       if (!previous) return previous;
+      const statSource = Array.isArray(data?.sources)
+        ? data.sources.find(source => source?.id === "stat")
+        : null;
+      const currentCombatPower = statSource?.combatPower ?? data?.combatPower ?? null;
       const next = {
         ...previous,
+        currentCombatPower: currentCombatPower ?? previous.currentCombatPower ?? null,
         bestCombatPower: data.bestCombatPower ?? previous.bestCombatPower ?? null,
         bestCombatPowerObservedAt: data.bestCombatPowerObservedAt ?? previous.bestCombatPowerObservedAt ?? null,
         bestPresetCombination: data.bestPresetCombination ?? previous.bestPresetCombination ?? null
@@ -492,15 +508,47 @@ function App() {
             <div className="mgt-result-toolbar">
               <span><i /> 조회 완료{lastSearched ? " · "+lastSearched : ""}</span>
               <div className="mgt-export-actions" data-export-ignore="true">
-                <button type="button" className="export-button" onClick={refreshCurrent} disabled={loading}>최신 정보 다시 조회</button>
-                <button type="button" className="export-button" onClick={exportImage} disabled={!!exporting}>{exporting === "image" ? "저장 중..." : "이미지 저장"}</button>
-                <button type="button" className="export-button" onClick={exportPdf} disabled={!!exporting}>{exporting === "pdf" ? "생성 중..." : "PDF 저장"}</button>
+                <button type="button"
+                  className={"mgt-icon-action mgt-favorite-icon-button " + (isFavorite ? "is-saved" : "")}
+                  onClick={toggleFavorite} aria-pressed={isFavorite}
+                  aria-label={isFavorite ? "관심 캐릭터 해제" : "관심 캐릭터 등록"}
+                  title={isFavorite ? "관심 캐릭터 해제" : "관심 캐릭터 등록"}>
+                  <span aria-hidden="true">{isFavorite ? "★" : "☆"}</span>
+                </button>
+                <button type="button" className="mgt-icon-action" onClick={refreshCurrent}
+                  disabled={loading} aria-label="최신 정보 다시 조회" title="최신 정보 다시 조회">
+                  <svg viewBox="0 0 24 24" aria-hidden="true">
+                    <path d="M20 7v5h-5M4 17v-5h5" />
+                    <path d="M6.2 9A7 7 0 0 1 18 6.5L20 12M4 12l2 5.5A7 7 0 0 0 17.8 15" />
+                  </svg>
+                </button>
+                <div className="mgt-share-menu-wrap">
+                  <button type="button" className="mgt-icon-action" onClick={() => setShareOpen(open => !open)}
+                    aria-label="공유" aria-haspopup="menu" aria-expanded={shareOpen} title="공유">
+                    <svg viewBox="0 0 24 24" aria-hidden="true">
+                      <circle cx="18" cy="5" r="3" />
+                      <circle cx="6" cy="12" r="3" />
+                      <circle cx="18" cy="19" r="3" />
+                      <path d="m8.7 10.7 6.6-4.4M8.7 13.3l6.6 4.4" />
+                    </svg>
+                  </button>
+                  {shareOpen && (
+                    <div className="mgt-share-menu" role="menu" aria-label="공유 및 저장">
+                      <button type="button" role="menuitem" onClick={() => { setShareOpen(false); exportImage(); }} disabled={!!exporting}>
+                        <span aria-hidden="true">▧</span> {exporting === "image" ? "이미지 저장 중..." : "이미지 저장"}
+                      </button>
+                      <button type="button" role="menuitem" onClick={() => { setShareOpen(false); exportPdf(); }} disabled={!!exporting}>
+                        <span aria-hidden="true">▤</span> {exporting === "pdf" ? "PDF 생성 중..." : "PDF 저장"}
+                      </button>
+                    </div>
+                  )}
+                </div>
               </div>
             </div>
 
             <div ref={resultRef} className="mgt-result-content">
               <div id="character">
-                <CharacterProfile character={character} history={history} onToggleFavorite={toggleFavorite} isFavorite={isFavorite} />
+                <CharacterProfile character={character} history={history} />
               </div>
               <div id="details">
                 <CharacterDetails ocid={character.ocid} onStatsLoaded={onStatsLoaded} />
