@@ -261,7 +261,7 @@ test("mobile touch opens item tooltips without clipped detail panels", async ({ 
     await expect(coloredBreakdown.nth(0)).toHaveClass(/is-base/);
     await expect(coloredBreakdown.nth(1)).toHaveClass(/is-starforce/);
     await expect(coloredBreakdown.nth(2)).toHaveClass(/is-scroll/);
-    await expect(coloredBreakdown.nth(3)).toHaveClass(/is-additional/);
+    await expect(coloredBreakdown.nth(3)).toHaveClass(/is-bonus/);
     await expect(equipmentTooltip).toContainText("착용 직업 마법사");
     await expect(equipmentTooltip).toContainText("무기 · 무기");
     await expect(equipmentTooltip).toContainText("STR");
