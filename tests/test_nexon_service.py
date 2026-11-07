@@ -69,6 +69,7 @@ class NexonServiceTests(unittest.TestCase):
                 "ocid": "ocid-value",
                 "character_name": "밍득",
                 "world_name": "크로아",
+                "sub_class_name": "히어로",
                 "ranking": target_rank,
             }], response
 
@@ -116,7 +117,7 @@ class NexonServiceTests(unittest.TestCase):
         get_ranking_page.side_effect = [
             ([{"ocid": "other", "sub_class_name": "히어로", "ranking": 1}], empty_response),
             ([{"ocid": "ocid-value", "sub_class_name": "히어로", "ranking": 201}], target_response),
-            ([{"ocid": "ocid-value", "ranking": 201}], target_response),
+            ([{"ocid": "ocid-value", "sub_class_name": "히어로", "ranking": 201}], target_response),
         ]
 
         result = nexon_service.get_character_rankings(
