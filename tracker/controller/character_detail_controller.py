@@ -8,7 +8,6 @@ from tracker.runtime import get_cache, set_cache, record_best_combat_power, KORE
 from tracker.services.character_detail_service import (
     VALID_SECTIONS,
     get_character_detail_section,
-    recommend_preset_profiles,
 )
 
 character_detail_bp = Blueprint(
@@ -85,15 +84,6 @@ def get_character_details():
 
         result["actualPresetNumbers"] = actual_numbers
         result["actualPresetCombinationComplete"] = combination_complete
-        result["profileRecommendations"] = recommend_preset_profiles(sources)
-
-        boss = result["profileRecommendations"]["boss"]
-        hunting = result["profileRecommendations"]["hunting"]
-        if boss["confidence"] == "low" and hunting["confidence"] == "low":
-            result["defaultProfile"] = "current"
-        else:
-            result["defaultProfile"] = "boss" if boss["score"] >= hunting["score"] else "hunting"
-
         if best:
             result["bestCombatPower"] = best.get("value")
             result["bestCombatPowerObservedAt"] = best.get("observedAt")

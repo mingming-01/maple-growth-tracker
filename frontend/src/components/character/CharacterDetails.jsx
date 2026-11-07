@@ -1,3 +1,4 @@
+import "./CharacterDetails.css";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { getCharacterDetails } from "../../services/api.js";
@@ -22,8 +23,7 @@ const SLOT_DEFS = [
   ["반지 1","ring1"],["얼굴장식","face"],["반지 2","ring2"],["눈장식","eye"],
   ["반지 3","ring3"],["귀고리","ear"],["반지 4","ring4"],["펜던트 1","pendant1"],
   ["모자","hat"],["망토","cape"],["상의","top"],["장갑","gloves"],
-  ["하의","bottom"],["신발","shoes"],["헤어","hair"],["성형","faceStyle"],
-  ["피부","skin"],["어깨장식","shoulder"],["훈장","medal"],["벨트","belt"],
+  ["하의","bottom"],["신발","shoes"],["어깨장식","shoulder"],["훈장","medal"],["벨트","belt"],
   ["펜던트 2","pendant2"],["무기","weapon"],["보조무기","subweapon"],
   ["엠블렘","emblem"],["안드로이드","android"],["하트","heart"],["포켓","pocket"],["뱃지","badge"]
 ];
@@ -76,13 +76,13 @@ function equipmentTotalOptions(item) {
   const total = item?.item_total_option;
   let values = total && typeof total === "object" ? { ...total } : {};
   const sources = [
-    ["base", item?.item_base_option],
-    ["scroll", item?.item_etc_option],
-    ["bonus", item?.item_add_option],
-    ["starforce", item?.item_starforce_option]
+    ["base", "기본", item?.item_base_option],
+    ["starforce", "스타포스", item?.item_starforce_option],
+    ["scroll", "주문서", item?.item_etc_option],
+    ["bonus", "추옵", item?.item_add_option]
   ];
   if (!Object.keys(values).length) {
-    for (const [, source] of sources) {
+    for (const [, , source] of sources) {
       if (!source || typeof source !== "object") continue;
       for (const [key, raw] of Object.entries(source)) {
         const value = optionNumber(raw);
@@ -96,8 +96,9 @@ function equipmentTotalOptions(item) {
     const value = optionNumber(values[key]);
     if (value === null || value === 0) return [];
     const amount = (value > 0 ? "+" : "") + numberText(value) + suffix;
-    const breakdown = sources.map(([sourceName, source]) => ({
+    const breakdown = sources.map(([sourceName, label, source]) => ({
       source: sourceName,
+      label,
       value: optionNumber(source?.[key]) || 0
     }));
     return [{ label, value: amount, breakdown }];
@@ -112,6 +113,60 @@ function equipmentPotentialOptions(item) {
     item?.additional_potential_option_3
   ].filter(hasValue);
   return { normal, additional };
+}
+
+function equipmentIsStarforce(item) {
+  const value = optionNumber(item?.starforce ?? item?.item_starforce);
+  return value !== null && value > 0;
+}
+
+function isSeedRing(item) {
+  const name = String(item?.item_name || "");
+  return /리스트레인트\s*링|컨티뉴어스\s*링|웨폰퍼프\s*링|리스크테이커\s*링|크라이시스\s*링|레벨퍼프\s*링|얼티메이덤\s*링/.test(name);
+}
+
+function seedRingLevel(item) {
+  const explicit = item?.ring_level;
+  if (hasValue(explicit) && Number.isFinite(Number(explicit))) return Number(explicit);
+  const text = [item?.item_name, item?.item_description, item?.item_equipment_part]
+    .filter(hasValue).join(" ");
+  const match = text.match(/(?:Lv\.?\s*(\d+)|레벨\s*(\d+)|(\d+)\s*레벨)/i);
+  const level = match?.[1] || match?.[2] || match?.[3];
+  return level ? Number(level) : null;
+}
+
+function equipmentCategory(key, item) {
+  if (["hat", "top", "bottom", "cape", "gloves", "shoes", "shoulder"].includes(key)) return "방어구";
+  if (key === "weapon") return "무기";
+  if (["subweapon", "emblem"].includes(key)) return "보조 장비";
+  if (/^ring|pendant|face|eye|ear|belt|pocket|badge|medal|heart/.test(key)) return "장신구";
+  return item?.item_equipment_category || "장비";
+}
+
+function equipmentJobRequirement(item) {
+  const base = item?.item_base_option || {};
+  const value = base.base_equipment_job ?? item?.base_equipment_job ?? item?.item_equipment_job;
+  if (Array.isArray(value)) return value.filter(hasValue).join(" · ");
+  return hasValue(value) ? String(value) : null;
+}
+
+function appearanceColors(value) {
+  if (!value || typeof value !== "object") return [];
+  return [
+    ["기본 색상", value.base_color],
+    ["믹스 색상", value.mix_color],
+    ["믹스 비율", hasValue(value.mix_rate) ? value.mix_rate + "%" : null]
+  ].filter(([, item]) => hasValue(item));
+}
+
+function badgeGlyph(stat, index = 0) {
+  const value = String(stat || "");
+  if (/경험치/.test(value)) return "✦";
+  if (/공격력|마력|보스|최종 데미지/.test(value)) return "⚔";
+  if (/드롭|아이템/.test(value)) return "⬡";
+  if (/메소|획득/.test(value)) return "◈";
+  if (/크리티컬|데미지/.test(value)) return "✧";
+  return ["✦", "⚔", "◈", "✧", "⬡"][index % 5];
 }
 
 function apiImage(url, alt, className = "") {
@@ -161,23 +216,32 @@ function DetailTooltip({
   const [open, setOpen] = useState(false);
   const [position, setPosition] = useState(null);
   const triggerRef = useRef(null);
+  const tooltipRef = useRef(null);
   const Wrapper = as;
 
   function updatePosition() {
     const element = triggerRef.current;
     if (!element || typeof window === "undefined") return;
     const rect = element.getBoundingClientRect();
-    const width = Math.min(280, Math.max(180, window.innerWidth - 24));
-    const estimatedHeight = Math.min(280, Math.max(88, visible.length * 24 + 42));
-    let top = rect.bottom + 8;
-    if (top + estimatedHeight > window.innerHeight - 12) {
-      top = Math.max(12, rect.top - estimatedHeight - 8);
-    }
+    const width = Math.min(390, Math.max(180, window.innerWidth - 24));
+    const measuredHeight = tooltipRef.current?.getBoundingClientRect().height;
+    const estimatedHeight = measuredHeight || Math.min(520, Math.max(100, visible.length * 22 + 110));
+    const below = window.innerHeight - rect.bottom - 20;
+    const above = rect.top - 20;
+    let top = below >= estimatedHeight || below >= above
+      ? rect.bottom + 8
+      : rect.top - estimatedHeight - 8;
+    top = Math.max(12, Math.min(top, window.innerHeight - estimatedHeight - 12));
     const left = Math.max(
       12,
       Math.min(rect.left + rect.width / 2 - width / 2, window.innerWidth - width - 12)
     );
-    setPosition({ top, left, width });
+    setPosition(previous => previous &&
+      Math.abs(previous.top - top) < 1 &&
+      Math.abs(previous.left - left) < 1 &&
+      Math.abs(previous.width - width) < 1
+        ? previous
+        : { top, left, width });
   }
 
   useEffect(() => {
@@ -201,7 +265,7 @@ function DetailTooltip({
       window.removeEventListener("resize", updatePosition);
       window.removeEventListener("scroll", updatePosition, true);
     };
-  }, [open, visible.length]);
+  }, [open, position, visible.length, Boolean(tooltipContent)]);
 
   const hasTooltip = visible.length > 0 || Boolean(tooltipContent);
 
@@ -237,6 +301,7 @@ function DetailTooltip({
       {children}
       {open && position && createPortal(
         <div
+          ref={tooltipRef}
           className="game-floating-tooltip"
           role="tooltip"
           style={{ top: position.top, left: position.left, width: position.width }}
@@ -273,9 +338,6 @@ function StatsTab({ data, selected, onSelect }) {
   const stat = sourceOf(data, "stat");
   const ability = sourceOf(data, "ability");
   const hyper = sourceOf(data, "hyperStat");
-  const equipment = sourceOf(data, "itemEquipment");
-  const link = sourceOf(data, "linkSkill");
-  const union = sourceOf(data, "unionStateStat");
   const selectedAbility = selected.ability ?? fallbackPreset(ability);
   const selectedHyper = selected.hyperStat ?? fallbackPreset(hyper);
   const power = stat?.combatPower;
@@ -348,51 +410,166 @@ function StatsTab({ data, selected, onSelect }) {
           </div>
           <DataState source={hyper} />
         </section>
-        <section className="game-stat-detail-card">
-          <div className="game-stat-detail-card-header">
-            <h4 className="game-window-title">프리셋 조합 추천</h4>
-            <span className="game-window-eyebrow">PROFILE</span>
-          </div>
-          <div className="react-profile-buttons">
-            <button type="button" onClick={() => applyProfile("current")}>현재 적용</button>
-            <button type="button" onClick={() => applyProfile("boss")}>보스 추천</button>
-            <button type="button" onClick={() => applyProfile("hunting")}>사냥 추천</button>
-            <button type="button" onClick={() => applyProfile("highest")}>최고 전투력 기록</button>
-          </div>
-          <p className="game-stat-source-note">
-            프리셋 선택은 조회 화면만 변경합니다. 비활성 조합의 실제 전투력과 최종 합산 능력치는 API에서 제공되지 않아 임의 계산하지 않습니다.
-          </p>
-          <div className="game-stat-detail-list">
-            {Object.entries({
-              장비: equipment, 어빌리티: ability, 링크: link, 유니온: union
-            }).map(([label, source]) => source && (
-              <div className="game-stat-detail-row" key={label}>
-                <span className="game-stat-detail-name">{label}</span>
-                <strong className="game-stat-detail-value">
-                  활성 프리셋 {source.activePresetNo ?? "확인 불가"}
-                </strong>
-              </div>
-            ))}
-          </div>
-          <p className="game-stat-source-note">
-            보스 추천 신뢰도: {recommendations.boss?.confidence || "자료 부족"} · 사냥 추천 신뢰도: {recommendations.hunting?.confidence || "자료 부족"}
-          </p>
-        </section>
       </section>
     </div>
   );
 }
 
+function CosmeticsSubtab({ appearance, cashSource, selected, onSelect }) {
+  const cashNumber = selected.cashItemEquipment ?? fallbackPreset(cashSource);
+  const cashPreset = presetData(cashSource, cashNumber);
+  const baseItems = Array.isArray(cashSource?.currentData?.cash_item_equipment_base)
+    ? cashSource.currentData.cash_item_equipment_base : [];
+  const cashItems = Array.isArray(cashPreset.cash_item_equipment)
+    ? cashPreset.cash_item_equipment : baseItems;
+  const additionalItems = Array.isArray(cashPreset.additional_cash_item_equipment)
+    ? cashPreset.additional_cash_item_equipment
+    : (cashSource?.currentData?.additional_cash_item_equipment_base || []);
+  const hair = appearance.character_hair;
+  const face = appearance.character_face;
+  const skin = appearance.character_skin_name;
+  const lookMode = cashSource?.currentData?.character_look_mode || cashSource?.data?.character_look_mode;
+
+  const renderCashItem = (item, index, kind = "cash") => {
+    const icon = item.cash_item_icon || item.item_icon;
+    const name = item.cash_item_name || item.item_name || item.cash_item_equipment_slot || "캐시 장비";
+    return (
+      <article className="game-cosmetic-item" key={kind + "-" + index}>
+        <span className="game-cosmetic-item-icon">{apiImage(icon, name)}</span>
+        <strong>{name}</strong>
+        <span>{item.cash_item_equipment_part || item.cash_item_equipment_slot || item.item_equipment_part || "캐시 아이템"}</span>
+      </article>
+    );
+  };
+
+  const appearanceItems = [
+    ["헤어", hair?.hair_name || hair?.name || (typeof hair === "string" ? hair : null), appearanceColors(hair)],
+    ["성형", face?.face_name || face?.name || (typeof face === "string" ? face : null), appearanceColors(face)],
+    ["피부", skin?.skin_name || skin?.name || (typeof skin === "string" ? skin : null), []]
+  ];
+
+  return (
+    <div className="game-cosmetics-panel">
+      <section className="game-cosmetics-appearance">
+        <div className="game-subpanel-heading">
+          <span className="game-window-eyebrow">CHARACTER LOOK</span>
+          <h4 className="game-window-title">헤어 · 성형 · 피부</h4>
+        </div>
+        <div className="game-appearance-grid">
+          {appearanceItems.map(([label, name, colors]) => (
+            <article className="game-appearance-item" key={label}>
+              <span className="game-appearance-symbol" aria-hidden="true">{label === "헤어" ? "✂" : label === "성형" ? "◉" : "✧"}</span>
+              <div>
+                <span className="game-cosmetic-overline">{label}</span>
+                <strong>{name || "정보 없음"}</strong>
+                {colors.map(([colorLabel, value]) => (
+                  <small key={colorLabel}>{colorLabel} · {value}</small>
+                ))}
+              </div>
+            </article>
+          ))}
+        </div>
+        <p className="game-cosmetic-note">
+          Nexon Open API의 외형 정보는 헤어·성형·피부 이름과 색상 위주이며, 개별 이미지 URL은 제공하지 않습니다. 별도 게임 리소스 매핑 전에는 임의 아이콘을 붙이지 않습니다.
+        </p>
+      </section>
+      <section className="game-cash-equipment-panel">
+        <div className="game-subpanel-heading game-cash-toolbar">
+          <div>
+            <span className="game-window-eyebrow">CASH COORDINATION</span>
+            <h4 className="game-window-title">캐시 장비 · 외형 프리셋</h4>
+            <span className="game-cosmetic-overline">착용 모드 · {lookMode || "API 응답에 모드 정보 없음"}</span>
+          </div>
+          <PresetSelect source={cashSource} value={cashNumber}
+            onChange={value => onSelect({ cashItemEquipment: value })} label="외형 장비 프리셋" />
+        </div>
+        <DataState source={cashSource} />
+        <h5 className="game-cosmetic-list-title">
+          {cashNumber ? "외형 장비 프리셋 " + cashNumber : "착용 중인 캐시 장비"}
+        </h5>
+        <div className="game-cosmetic-grid">
+          {cashItems.length ? cashItems.map((item, index) => renderCashItem(item, index)) : <Empty>조회된 캐시 장비가 없습니다.</Empty>}
+        </div>
+        {additionalItems.length > 0 && (
+          <>
+            <h5 className="game-cosmetic-list-title">추가 착용 캐시 장비</h5>
+            <div className="game-cosmetic-grid">
+              {additionalItems.map((item, index) => renderCashItem(item, index, "additional"))}
+            </div>
+          </>
+        )}
+      </section>
+    </div>
+  );
+}
+
+function PetsSubtab({ source }) {
+  const petData = source?.currentData || source?.data || {};
+  const asList = value => Array.isArray(value) ? value : (value && typeof value === "object" ? [value] : []);
+  const pets = [1, 2, 3].map(number => ({
+    number,
+    name: petData["pet_" + number + "_name"],
+    nickname: petData["pet_" + number + "_nickname"],
+    icon: petData["pet_" + number + "_icon"],
+    description: petData["pet_" + number + "_description"],
+    type: petData["pet_" + number + "_pet_type"],
+    equipment: asList(petData["pet_" + number + "_equipment"]),
+    autoSkill: asList(petData["pet_" + number + "_auto_skill"])
+  })).filter(pet => hasValue(pet.name) || hasValue(pet.nickname) || hasValue(pet.icon));
+
+  return (
+    <section className="game-pet-panel">
+      <div className="game-subpanel-heading">
+        <span className="game-window-eyebrow">PET EQUIPMENT</span>
+        <h4 className="game-window-title">펫 정보</h4>
+      </div>
+      <DataState source={source} />
+      <div className="game-pet-grid">
+        {pets.length ? pets.map(pet => (
+          <article className="game-pet-card" key={pet.number}>
+            <div className="game-pet-card-heading">
+              <span className="game-pet-icon">{apiImage(pet.icon, pet.name || pet.nickname)}</span>
+              <div>
+                <strong>{pet.nickname || pet.name || "펫"}</strong>
+                <span>{pet.name || "이름 정보 없음"}{pet.type ? " · " + pet.type : ""}</span>
+              </div>
+            </div>
+            {hasValue(pet.description) && <p className="game-pet-description">{pet.description}</p>}
+            <h5>펫 장비</h5>
+            <div className="game-pet-equipment-list">
+              {pet.equipment.length ? pet.equipment.map((item, index) => (
+                <span key={index}>{item.item_name || item.pet_equipment_name || item.item_equipment_part || "펫 장비"}</span>
+              )) : <small>장착된 펫 장비 정보가 없습니다.</small>}
+            </div>
+            {pet.autoSkill.length > 0 && (
+              <>
+                <h5>자동 스킬</h5>
+                <div className="game-pet-equipment-list">
+                  {pet.autoSkill.map((skill, index) => <span key={index}>{skill.skill_name || skill.skill || "자동 스킬"}</span>)}
+                </div>
+              </>
+            )}
+          </article>
+        )) : <Empty>등록된 펫 정보가 없습니다.</Empty>}
+      </div>
+    </section>
+  );
+}
+
 function EquipmentTab({ data, selected, onSelect }) {
+  const [subTab, setSubTab] = useState("equipment");
   const equipment = sourceOf(data, "itemEquipment");
   const appearanceSource = sourceOf(data, "characterAppearance");
   const androidSource = sourceOf(data, "androidEquipment");
+  const cashSource = sourceOf(data, "cashItemEquipment");
+  const petSource = sourceOf(data, "petEquipment");
   const setSource = sourceOf(data, "setEffect");
   const presetNumber = selected.equipment ?? fallbackPreset(equipment);
   const current = presetData(equipment, presetNumber);
   const items = Array.isArray(current.item_equipment) ? current.item_equipment : [];
   const appearance = { ...(appearanceSource?.data || {}), ...(appearanceSource?.currentData || {}) };
   const android = { ...(androidSource?.data || {}), ...(androidSource?.currentData || {}) };
+  const seedRings = items.filter(isSeedRing);
 
   const findSlotItem = (slot, key) => {
     if (/^ring[1-4]$/.test(key)) {
@@ -411,149 +588,231 @@ function EquipmentTab({ data, selected, onSelect }) {
 
   const sets = setSource?.currentData?.set_effect || setSource?.data?.set_effect || [];
   const isActive = equipment?.activePresetNo != null && Number(equipment.activePresetNo) === Number(presetNumber);
+  const presetSets = Array.isArray(current.set_effect) ? current.set_effect
+    : Array.isArray(current.item_set_effect) ? current.item_set_effect : [];
 
   return (
     <div className="game-equipment-layout">
       <div className="game-equipment-toolbar">
         <span className="game-window-eyebrow">EQUIPMENT</span>
-        <h3 className="game-window-title">장착 장비</h3>
-        <PresetSelect source={equipment} value={presetNumber} onChange={value => onSelect({ equipment: value })} label="장비 프리셋" />
+        <h3 className="game-window-title">장비 · 치장 · 펫</h3>
       </div>
-      <DataState source={equipment} />
-      <div className="game-equipment-board react-equipment-board">
-        {SLOT_DEFS.map(([slotName, key], index) => {
-          const item = findSlotItem(slotName, key);
-          const appearanceValue = key === "hair"
-            ? appearance.character_hair?.hair_name || appearance.character_hair?.name || appearance.character_hair
-            : key === "faceStyle"
-              ? appearance.character_face?.face_name || appearance.character_face?.name || appearance.character_face
-              : key === "skin"
-                ? appearance.character_skin_name?.skin_name || appearance.character_skin_name?.name || appearance.character_skin_name
-                : null;
-          const androidName = android.android_name || android.android_nickname || "";
-          const isAndroid = key === "android" && (androidName || android.android_icon);
-          const isAppearance = ["hair", "faceStyle", "skin"].includes(key);
-          const iconUrl = isAndroid ? android.android_icon : item?.item_icon;
-          const title = isAndroid ? androidName || "안드로이드" : item?.item_name || String(appearanceValue || "");
-          const totalOptions = item ? equipmentTotalOptions(item) : [];
-          const potentialOptions = item ? equipmentPotentialOptions(item) : { normal: [], additional: [] };
-          const tooltipLines = item ? [
-            "스타포스 " + (item.starforce ?? item.item_starforce ?? 0),
-            ...totalOptions.map(option => option.label + " " + option.value),
-            ...potentialOptions.normal,
-            ...potentialOptions.additional
-          ] : isAndroid ? [
-            android.android_grade, android.android_gender, android.android_description,
-            android.android_hair?.hair_name, android.android_face?.face_name, android.android_skin_name
-          ] : [];
-          const requiredLevel = optionNumber(item?.item_base_option?.base_equipment_level);
-          const levelIncrease = optionNumber(item?.equipment_level_increase);
-          const tooltipContent = item ? (
-            <div className="game-equipment-tooltip">
-              <div className="game-equipment-tooltip-topline">
-                <span>{item.item_equipment_slot || slotName}</span>
-                <span className="game-equipment-tooltip-star">★ {item.starforce ?? item.item_starforce ?? 0}</span>
-              </div>
-              <div className="game-equipment-tooltip-heading">
-                {apiImage(item.item_icon, title, "game-equipment-tooltip-icon")}
-                <div className="game-equipment-tooltip-title-wrap">
-                  <strong>{title || slotName}</strong>
-                  <span className="game-equipment-tooltip-meta">
-                    {requiredLevel ? "요구 레벨 Lv. " + requiredLevel + (levelIncrease ? " (+" + levelIncrease + ")" : "") : "현재 장착 장비"}
-                  </span>
-                </div>
-              </div>
-              <div className="game-equipment-tooltip-section">
-                <div className="game-equipment-tooltip-section-title">
-                  <strong>능력치 합계</strong><span>기본 · 주문서 · 추가 · 스타포스</span>
-                </div>
-                <div className="game-equipment-tooltip-total">
-                  {totalOptions.length ? totalOptions.map(option => (
-                    <div className="game-equipment-tooltip-stat" key={option.label}>
-                      <span>{option.label}</span>
-                      <div className="game-equipment-tooltip-stat-values">
-                        <b>{option.value}</b>
-                        <small>{option.breakdown.some(part => part.value !== 0)
-                          ? "(" + option.breakdown.map(part => numberText(part.value)).join(" · ") + ")"
-                          : ""}</small>
-                      </div>
-                    </div>
-                  )) : <p className="game-equipment-tooltip-empty">합산 옵션 정보가 없습니다.</p>}
-                </div>
-              </div>
-              <div className="game-equipment-tooltip-potential">
-                <div className="game-equipment-tooltip-section-title">
-                  <strong>잠재능력</strong>
-                  <span>{item.potential_option_grade || "등급 정보 없음"}</span>
-                </div>
-                {potentialOptions.normal.length ? (
-                  <div className="game-equipment-tooltip-potential-group">
-                    <span className="game-equipment-tooltip-subtitle">잠재 옵션</span>
-                    {potentialOptions.normal.map((value, optionIndex) => (
-                      <p key={optionIndex}><i />{value}</p>
-                    ))}
-                  </div>
-                ) : null}
-                {potentialOptions.additional.length ? (
-                  <div className="game-equipment-tooltip-potential-group is-additional">
-                    <span className="game-equipment-tooltip-subtitle">에디셔널 잠재 옵션 · {item.additional_potential_option_grade || "등급 정보 없음"}</span>
-                    {potentialOptions.additional.map((value, optionIndex) => (
-                      <p key={optionIndex}><i />{value}</p>
-                    ))}
-                  </div>
-                ) : null}
-                {!potentialOptions.normal.length && !potentialOptions.additional.length
-                  ? <p className="game-equipment-tooltip-empty">잠재능력 정보가 없습니다.</p> : null}
-              </div>
-            </div>
-          ) : null;
-          return (
-            <DetailTooltip
-              as="article"
-              className={"equipment-game-slot game-tooltip-trigger " + (item || isAndroid || (isAppearance && appearanceValue) ? "is-equipped" : "is-empty")}
-              data-slot={key}
-              key={key}
-              style={{ gridArea: equipmentGridArea(key) }}
-              title={title || slotName}
-              lines={tooltipLines}
-              tooltipContent={tooltipContent}
-            >
-              <span className="equipment-slot-caption">{slotName}</span>
-              <span className="equipment-game-icon-frame">
-                {apiImage(iconUrl, title || slotName)}
-                {!iconUrl && <span className="equipment-empty-icon">{isAppearance ? "✧" : "+"}</span>}
-              </span>
-              <strong className="equipment-game-item-name">{title || (isAppearance ? "정보 없음" : "비어 있음")}</strong>
-              {item && Number(item.starforce || item.item_starforce) > 0 && <span className="equipment-game-star">★ {item.starforce || item.item_starforce}</span>}
-            </DetailTooltip>
-          );
-        })}
+      <div className="game-equipment-subtabs" role="tablist" aria-label="장비 상세 구분">
+        {[
+          ["equipment", "장비"],
+          ["cosmetics", "치장"],
+          ["pets", "펫"]
+        ].map(([value, label]) => (
+          <button type="button" role="tab" key={value} aria-selected={subTab === value}
+            className={subTab === value ? "is-active" : ""} onClick={() => setSubTab(value)}>{label}</button>
+        ))}
       </div>
-      <section className="game-set-effects">
-        <h3 className="game-window-title">세트 효과</h3>
-        {isActive && Array.isArray(sets) && sets.length ? (
-          <div className="game-set-grid">
-            {sets.map((set, index) => (
-              <div className="game-set-item" key={index}>
-                <strong>{set.set_name || "세트"}</strong>
-                <span>{hasValue(set.total_set_count) ? set.total_set_count + "개 부위 적용" : "적용 부위 수 미제공"}</span>
-              </div>
-            ))}
-          </div>
-        ) : (
-          <p className="game-set-unavailable">
-            {isActive ? setSource?.message || "현재 적용 장비의 세트 효과를 조회할 수 없습니다." : "선택한 비활성 장비 프리셋의 세트 효과는 API에서 별도로 제공하지 않습니다."}
-          </p>
-        )}
-      </section>
-      {androidSource && <section className="game-stat-detail-card">
-        <h4 className="game-window-title">안드로이드</h4>
-        <div className="game-stat-detail-row">
-          <span className="game-stat-detail-name">{android.android_name || android.android_nickname || "안드로이드 정보 없음"}</span>
-          <strong className="game-stat-detail-value">{android.android_grade || ""}</strong>
+      {subTab === "equipment" && <>
+        <div className="game-equipment-preset-toolbar">
+          <PresetSelect source={equipment} value={presetNumber}
+            onChange={value => onSelect({ equipment: value })} label="장비 프리셋" />
         </div>
-        <DataState source={androidSource} />
-      </section>}
+        <DataState source={equipment} />
+        <div className="game-equipment-board react-equipment-board">
+          {SLOT_DEFS.map(([slotName, key]) => {
+            const item = findSlotItem(slotName, key);
+            const androidName = android.android_name || android.android_nickname || "";
+            const isAndroid = key === "android" && (androidName || android.android_icon);
+            const iconUrl = isAndroid ? android.android_icon : item?.item_icon;
+            const title = isAndroid ? androidName || "안드로이드" : item?.item_name || "";
+            const totalOptions = item ? equipmentTotalOptions(item) : [];
+            const potentialOptions = item ? equipmentPotentialOptions(item) : { normal: [], additional: [] };
+            const requiredLevel = optionNumber(item?.item_base_option?.base_equipment_level);
+            const levelIncrease = optionNumber(item?.equipment_level_increase);
+            const requiredJob = equipmentJobRequirement(item);
+            const part = item?.item_equipment_part || item?.item_equipment_slot || slotName;
+            const category = equipmentCategory(key, item);
+            const starforce = optionNumber(item?.starforce ?? item?.item_starforce);
+            const hasStarforce = equipmentIsStarforce(item);
+            const isSeedRingItem = isSeedRing(item);
+            const ringLevel = isSeedRingItem ? seedRingLevel(item) : null;
+            const companionRings = isSeedRingItem ? seedRings.filter(ring => ring !== item) : [];
+            const tooltipLines = item ? [
+              ...totalOptions.map(option => option.label + " " + option.value),
+              ...potentialOptions.normal,
+              ...potentialOptions.additional
+            ] : isAndroid ? [
+              android.android_grade, android.android_gender, android.android_description,
+              android.android_hair?.hair_name, android.android_face?.face_name, android.android_skin_name
+            ] : [];
+            const tooltipContent = item ? (
+              <div className="game-equipment-tooltip">
+                <div className="game-equipment-tooltip-topline">
+                  <span>
+                    착용 직업 {requiredJob || "제한 정보 API 미제공"}
+                    {" · "}
+                    {requiredLevel ? "요구 레벨 Lv. " + requiredLevel + (levelIncrease ? " (+" + levelIncrease + ")" : "") : "요구 레벨 정보 API 미제공"}
+                  </span>
+                  <span>{category} · {part}</span>
+                </div>
+                {hasStarforce && <span className="game-equipment-tooltip-star">★ {starforce}</span>}
+                <div className="game-equipment-tooltip-heading">
+                  {apiImage(item.item_icon, title, "game-equipment-tooltip-icon")}
+                  <div className="game-equipment-tooltip-title-wrap">
+                    <strong>{title || slotName}</strong>
+                    <span className="game-equipment-tooltip-meta">
+                      {requiredLevel ? "요구 레벨 Lv. " + requiredLevel + (levelIncrease ? " (+" + levelIncrease + ")" : "") : "현재 장착 장비"}
+                      {isSeedRingItem && ringLevel ? " · 시드링 Lv. " + ringLevel : ""}
+                    </span>
+                  </div>
+                </div>
+                {isSeedRingItem && seedRings.length > 1 && (
+                  <div className="game-equipment-tooltip-rings">
+                    <strong>시드링 구성</strong>
+                    <div>
+                      {seedRings.map((ring, index) => (
+                        <span key={index}>
+                          {apiImage(ring.item_icon, ring.item_name || "시드링", "game-equipment-tooltip-ring-icon")}
+                          <em>{ring.item_name || "시드링"}{seedRingLevel(ring) ? " · Lv. " + seedRingLevel(ring) : ""}</em>
+                        </span>
+                      ))}
+                    </div>
+                  </div>
+                )}
+                <div className="game-equipment-tooltip-section">
+                  <div className="game-equipment-tooltip-section-title">
+                    <strong>스탯</strong><span>합계 · 기본 · 스타포스 · 주문서 · 추옵</span>
+                  </div>
+                  <div className="game-equipment-tooltip-total">
+                    {totalOptions.length ? totalOptions.map(option => (
+                      <div className="game-equipment-tooltip-stat" key={option.label}>
+                        <span>{option.label}</span>
+                        <div className="game-equipment-tooltip-stat-values">
+                          <b>{option.value}</b>
+                          {option.breakdown.filter(part => part.value !== 0).map(part => (
+                            <small className={"is-" + part.source} key={part.source}>{part.label} {numberText(part.value)}</small>
+                          ))}
+                        </div>
+                      </div>
+                    )) : <p className="game-equipment-tooltip-empty">합산 옵션 정보가 없습니다.</p>}
+                  </div>
+                </div>
+                <div className="game-equipment-tooltip-potential">
+                  <div className="game-equipment-tooltip-section-title">
+                    <strong>잠재능력</strong>
+                    <span>{item.potential_option_grade || "등급 정보 없음"}</span>
+                  </div>
+                  {potentialOptions.normal.length ? (
+                    <div className="game-equipment-tooltip-potential-group">
+                      <span className="game-equipment-tooltip-subtitle">잠재 옵션</span>
+                      {potentialOptions.normal.map((value, optionIndex) => (
+                        <p key={optionIndex}><i />{value}</p>
+                      ))}
+                    </div>
+                  ) : null}
+                  {potentialOptions.additional.length ? (
+                    <div className="game-equipment-tooltip-potential-group is-additional">
+                      <span className="game-equipment-tooltip-subtitle">에디셔널 잠재 옵션 · {item.additional_potential_option_grade || "등급 정보 없음"}</span>
+                      {potentialOptions.additional.map((value, optionIndex) => (
+                        <p key={optionIndex}><i />{value}</p>
+                      ))}
+                    </div>
+                  ) : null}
+                  {!potentialOptions.normal.length && !potentialOptions.additional.length
+                    ? <p className="game-equipment-tooltip-empty">잠재능력 정보가 없습니다.</p> : null}
+                </div>
+              </div>
+            ) : isAndroid ? (
+              <div className="game-equipment-tooltip">
+                <div className="game-equipment-tooltip-topline">
+                  <span>안드로이드</span>
+                  <span>{android.android_grade || "등급 정보 없음"}</span>
+                </div>
+                <div className="game-equipment-tooltip-heading">
+                  {apiImage(android.android_icon, title, "game-equipment-tooltip-icon")}
+                  <div className="game-equipment-tooltip-title-wrap"><strong>{title}</strong>
+                    <span className="game-equipment-tooltip-meta">{android.android_gender || "성별 정보 없음"}</span>
+                  </div>
+                </div>
+                {hasValue(android.android_description) && <p>{android.android_description}</p>}
+                {hasValue(android.android_ear_sensor) && <p>이어 센서 · {String(android.android_ear_sensor)}</p>}
+                {hasValue(android.android_non_humanoid) && <p>비인간형 · {String(android.android_non_humanoid)}</p>}
+                {hasValue(android.android_hair?.hair_name) && <p>헤어 · {android.android_hair.hair_name}</p>}
+                {hasValue(android.android_face?.face_name) && <p>성형 · {android.android_face.face_name}</p>}
+                {hasValue(android.android_skin_name) && <p>피부 · {String(android.android_skin_name)}</p>}
+              </div>
+            ) : null;
+            return (
+              <DetailTooltip
+                as="article"
+                className={"equipment-game-slot game-tooltip-trigger " + (item || isAndroid ? "is-equipped" : "is-empty")}
+                data-slot={key}
+                key={key}
+                style={{ gridArea: equipmentGridArea(key) }}
+                title={title || slotName}
+                lines={tooltipLines}
+                tooltipContent={tooltipContent}
+              >
+                <span className="equipment-slot-caption">{slotName}</span>
+                <span className="equipment-game-icon-frame">
+                  {apiImage(iconUrl, title || slotName)}
+                  {!iconUrl && <span className="equipment-empty-icon">+</span>}
+                  {isSeedRingItem && ringLevel && <span className="equipment-game-ring-level">Lv.{ringLevel}</span>}
+                  {isSeedRingItem && companionRings.length > 0 && (
+                    <span className="equipment-ring-companion-count" title={"함께 착용한 시드링 " + companionRings.length + "개"}>
+                      +{companionRings.length}
+                    </span>
+                  )}
+                </span>
+                <strong className="equipment-game-item-name">{title || "비어 있음"}</strong>
+                {hasStarforce && <span className="equipment-game-star">★ {starforce}</span>}
+              </DetailTooltip>
+            );
+          })}
+        </div>
+        <section className="game-set-effects">
+          <div className="game-subpanel-heading">
+            <h3 className="game-window-title">세트 효과</h3>
+            <span className="game-cosmetic-overline">{isActive ? "활성 장비 프리셋 " + presetNumber : "비활성 장비 프리셋 " + presetNumber}</span>
+          </div>
+          {isActive && Array.isArray(sets) && sets.length ? (
+            <div className="game-set-grid">
+              {sets.map((set, index) => (
+                <div className="game-set-item" key={index}>
+                  <strong>{set.set_name || "세트"}</strong>
+                  <span>{hasValue(set.total_set_count) ? set.total_set_count + "개 부위 적용" : "적용 부위 수 미제공"}</span>
+                </div>
+              ))}
+            </div>
+          ) : presetSets.length ? (
+            <div className="game-set-grid">
+              {presetSets.map((set, index) => (
+                <div className="game-set-item" key={index}>
+                  <strong>{set.set_name || "세트"}</strong>
+                  <span>{hasValue(set.total_set_count) ? set.total_set_count + "개 부위 적용" : "적용 부위 수 미제공"}</span>
+                </div>
+              ))}
+            </div>
+          ) : !isActive && items.some(item => hasValue(item.item_set_name)) ? (
+            <div className="game-set-grid">
+              {[...new Set(items.map(item => item.item_set_name).filter(hasValue))].map(name => (
+                <div className="game-set-item" key={name}>
+                  <strong>{name}</strong>
+                  <span>{items.filter(item => item.item_set_name === name).length}개 부위 확인 · 효과 수치 미제공</span>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <p className="game-set-unavailable">
+              {isActive
+                ? setSource?.message || "현재 적용 장비의 세트 효과를 조회할 수 없습니다."
+                : "세트 효과 API는 현재 적용 중인 장비 기준으로 응답합니다. 선택 프리셋의 원본 정보에 포함되지 않은 효과는 임의 계산하지 않습니다."}
+            </p>
+          )}
+        </section>
+      </>}
+      {subTab === "cosmetics" && (
+        <>
+          <DataState source={appearanceSource} />
+          <CosmeticsSubtab appearance={appearance} cashSource={cashSource} selected={selected} onSelect={onSelect} />
+        </>
+      )}
+      {subTab === "pets" && <PetsSubtab source={petSource} />}
     </div>
   );
 }
@@ -572,6 +831,38 @@ function equipmentGridArea(key) {
   return map[key] || "auto";
 }
 
+function symbolFirstValue(symbol, keys) {
+  for (const key of keys) {
+    if (hasValue(symbol?.[key])) return symbol[key];
+  }
+  return null;
+}
+
+function symbolGrowthComplete(symbol) {
+  const required = optionNumber(symbol?.symbol_require_growth_count);
+  const current = optionNumber(symbol?.symbol_growth_count);
+  const name = String(symbol?.symbol_name || "");
+  const level = Number(symbol?.symbol_level);
+  const knownMaxLevel = (/아케인/.test(name) && level >= 20) ||
+    (/어센틱/.test(name) && level >= 11);
+  return knownMaxLevel || (
+    required !== null && (required === 0 || (current !== null && current >= required))
+  );
+}
+
+function extractSymbolSpecialStats(symbol) {
+  const description = String(symbol?.symbol_description || "");
+  const patterns = [
+    ["경험치", /(?:경험치(?:\s*획득량)?|EXP)\s*[+:]?\s*(\d+(?:\.\d+)?%?)/i],
+    ["드롭률", /(?:아이템\s*)?드롭률?\s*[+:]?\s*(\d+(?:\.\d+)?%?)/i],
+    ["메획", /(?:메소\s*(?:획득량|증가|량)?|메획)\s*[+:]?\s*(\d+(?:\.\d+)?%?)/i]
+  ];
+  return patterns.map(([label, pattern]) => {
+    const match = description.match(pattern);
+    return match ? [label, match[1].includes("%") ? match[1] : match[1] + "%"] : null;
+  }).filter(Boolean);
+}
+
 function SymbolsTab({ data }) {
   const source = sourceOf(data, "symbolEquipment");
   const symbols = source?.currentData?.symbol || source?.data?.symbol || [];
@@ -582,27 +873,59 @@ function SymbolsTab({ data }) {
         <div className="game-symbol-grid">
           {symbols.map((symbol, index) => {
             const stats = [
-              ["STR",symbol.symbol_str],["DEX",symbol.symbol_dex],["INT",symbol.symbol_int],
-              ["LUK",symbol.symbol_luk],["HP",symbol.symbol_hp]
-            ].filter(([,value]) => hasValue(value));
+              ["STR", symbol.symbol_str], ["DEX", symbol.symbol_dex],
+              ["INT", symbol.symbol_int], ["LUK", symbol.symbol_luk], ["HP", symbol.symbol_hp]
+            ].filter(([, value]) => hasValue(value));
+            const isGrandAuthentic = /그랜드\s*어센틱/.test(String(symbol.symbol_name || ""));
+            const descriptionSpecialStats = isGrandAuthentic
+              ? extractSymbolSpecialStats(symbol) : [];
+            const specialStatFromDescription = label =>
+              descriptionSpecialStats.find(([descriptionLabel]) => descriptionLabel === label)?.[1];
+            const specialStats = isGrandAuthentic ? [
+              ["경험치", symbolFirstValue(symbol, ["symbol_exp_rate", "symbol_experience_rate", "symbol_exp"])
+                ?? specialStatFromDescription("경험치")],
+              ["드롭률", symbolFirstValue(symbol, ["symbol_drop_rate", "symbol_item_drop_rate"])
+                ?? specialStatFromDescription("드롭률")],
+              ["메획", symbolFirstValue(symbol, ["symbol_meso_rate", "symbol_meso_acquisition_rate"])
+                ?? specialStatFromDescription("메획")]
+            ].filter(([, value]) => hasValue(value)) : [];
+            const force = symbol.symbol_force;
+            const maxed = symbolGrowthComplete(symbol);
+            const growthLine = maxed
+              ? "성장량 MAX"
+              : hasValue(symbol.symbol_require_growth_count)
+                ? "성장량 " + numberText(symbol.symbol_growth_count) + " / " + numberText(symbol.symbol_require_growth_count)
+                : "성장량 정보 API 미제공";
+            const tooltipLines = [
+              symbol.symbol_description,
+              hasValue(force) ? "포스 +" + numberText(force) : null,
+              ...stats.map(([key, value]) => key + " +" + numberText(value)),
+              ...specialStats.map(([label, value]) => label + " " +
+                (String(value).includes("%") ? value : String(value) + "%")),
+              growthLine,
+              maxed ? "최대 레벨 달성" : hasValue(symbol.symbol_require_growth_count)
+                ? "다음 레벨까지 " + numberText(Math.max(0, optionNumber(symbol.symbol_require_growth_count) - (optionNumber(symbol.symbol_growth_count) || 0))) + " 남음"
+                : null
+            ];
             return (
               <DetailTooltip
                 as="article"
-                className="game-symbol-tile game-tooltip-trigger"
+                className={"game-symbol-tile game-tooltip-trigger " + (maxed ? "is-maxed" : "")}
                 key={index}
                 title={symbol.symbol_name || "심볼"}
-                lines={[
-                  symbol.symbol_description,
-                  ...stats.map(([key,value]) => key + " +" + numberText(value)),
-                  hasValue(symbol.symbol_require_growth_count)
-                    ? "성장량 " + numberText(symbol.symbol_growth_count) + " / " + numberText(symbol.symbol_require_growth_count)
-                    : "성장량 정보 API 미제공"
-                ]}
+                lines={tooltipLines}
               >
                 {apiImage(symbol.symbol_icon, symbol.symbol_name, "game-symbol-icon")}
                 <strong className="game-symbol-name">{symbol.symbol_name || "심볼"}</strong>
                 <span className="game-symbol-level">Lv. {symbol.symbol_level ?? "—"}</span>
-                {hasValue(symbol.symbol_force) && <span className="game-symbol-force">포스 {numberText(symbol.symbol_force)}</span>}
+                {hasValue(force) && <span className="game-symbol-force">포스 {numberText(force)}</span>}
+                <span className={"game-symbol-growth " + (maxed ? "is-max" : "")}>{maxed ? "MAX" : growthLine}</span>
+                {specialStats.length > 0 && (
+                  <span className="game-symbol-special-summary">
+                    {specialStats.map(([label, value]) => label + " " +
+                      (String(value).includes("%") ? value : String(value) + "%")).join(" · ")}
+                  </span>
+                )}
               </DetailTooltip>
             );
           })}
@@ -762,6 +1085,21 @@ function UnionTab({ data, selected, onSelect }) {
   const effects = artifactData.union_artifact_effect || [];
   const totals = champion?.currentData?.champion_badge_total_info || champion?.data?.champion_badge_total_info || [];
 
+  const renderCrest = (badge, index, keyPrefix = "badge") => {
+    const stat = badge?.stat || badge?.badge_stat || badge?.name || "휘장 효과 정보 없음";
+    return (
+      <DetailTooltip
+        as="span"
+        className="game-union-champion-crest game-tooltip-trigger"
+        key={keyPrefix + "-" + index}
+        title={stat}
+        lines={[stat]}
+      >
+        <span className="game-union-champion-crest-glyph" aria-hidden="true">{badgeGlyph(stat,index)}</span>
+      </DetailTooltip>
+    );
+  };
+
   return (
     <div className="game-union-window">
       <div className="game-union-summary">
@@ -838,39 +1176,43 @@ function UnionTab({ data, selected, onSelect }) {
           <h3 className="game-window-title">유니온 챔피언</h3>
         </div>
         <div className="game-union-champion-grid">
-          {champions.length ? champions.map((item,index) => (
-            <article className="game-union-champion-card" key={index}>
-              <div className="game-union-champion-card-head">
-                <span className={"game-union-grade-badge grade-"+String(item.champion_grade||"").toLowerCase()}>{item.champion_grade || "—"}</span>
-                <span className="game-union-champion-slot">SLOT {item.champion_slot ?? "—"}</span>
-              </div>
-              {item.character_image && (
+          {champions.length ? champions.map((item,index) => {
+            const level = item.character_level ?? item.champion_level ?? null;
+            const championName = item.champion_name || "유니온 챔피언";
+            const className = item.character_class || item.champion_class || "직업 정보 없음";
+            const badgeInfo = Array.isArray(item.champion_badge_info) ? item.champion_badge_info : [];
+            return (
+              <article className="game-union-champion-card" key={index}>
+                <div className="game-union-champion-card-head">
+                  <span className={"game-union-grade-badge grade-"+String(item.champion_grade||"").toLowerCase()}>{item.champion_grade || "—"}</span>
+                  <span className="game-union-champion-level">{hasValue(level) ? "Lv."+level : "Lv.—"}</span>
+                </div>
                 <DetailTooltip
-                  className="game-union-champion-avatar-tooltip game-tooltip-trigger"
-                  title={item.champion_name || "유니온 챔피언"}
-                  tooltipContent={
-                    <>
-                      {apiImage(item.character_image,item.champion_name,"game-union-champion-tooltip-avatar")}
-                      <strong>{item.champion_name || "캐릭터 아바타"}</strong>
-                    </>
-                  }
+                  as="div"
+                  className="game-union-champion-avatar game-union-champion-avatar-trigger game-tooltip-trigger"
+                  title={championName}
+                  lines={[
+                    "직업 · " + className,
+                    hasValue(level) ? "레벨 · Lv. " + level : null,
+                    hasValue(item.character_world_name) ? "월드 · " + item.character_world_name : null,
+                    "등급 · " + (item.champion_grade || "정보 없음"),
+                    hasValue(item.champion_slot) ? "챔피언 슬롯 · " + item.champion_slot : null
+                  ]}
                 >
-                  {apiImage(item.character_image,item.champion_name,"game-union-champion-avatar-preview")}
+                  {apiImage(item.character_image,championName,"game-union-champion-avatar-preview")}
                 </DetailTooltip>
-              )}
-              <strong className="game-union-champion-name">{item.champion_name || "캐릭터 정보 없음"}</strong>
-              <span className="game-union-champion-class">{item.champion_class || "직업 정보 없음"}</span>
-              <div className="game-union-champion-badges">
-                {(item.champion_badge_info || []).map((badge,index2) => (
-                  <span className="game-union-champion-effect" key={index2}>{badge.stat}</span>
-                ))}
-              </div>
-            </article>
-          )) : <Empty>등록된 유니온 챔피언이 없습니다.</Empty>}
+                <strong className="game-union-champion-name">{championName}</strong>
+                <span className="game-union-champion-class">{className}</span>
+                <div className="game-union-champion-badges" aria-label="챔피언 휘장">
+                  {badgeInfo.map((badge,badgeIndex) => renderCrest(badge,badgeIndex,"champion-"+index))}
+                </div>
+              </article>
+            );
+          }) : <Empty>등록된 유니온 챔피언이 없습니다.</Empty>}
         </div>
         <h4 className="game-union-subtitle">전체 챔피언 휘장 효과</h4>
         <div className="game-union-champion-total-list">
-          {totals.length ? totals.map((item,index) => <span className="game-union-champion-effect" key={index}>{item.stat}</span>) : <Empty>전체 휘장 효과 정보가 없습니다.</Empty>}
+          {totals.length ? totals.map((item,index) => renderCrest(item,index,"total")) : <Empty>전체 휘장 효과 정보가 없습니다.</Empty>}
         </div>
         <DataState source={champion} />
       </section>
