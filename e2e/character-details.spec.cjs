@@ -289,9 +289,28 @@ test("mobile touch opens item tooltips without clipped detail panels", async ({ 
       }
     });
 
-    // Send a real touch at the verified hit-test coordinate; locator.tap() performs
-    // a second automatic scroll which can move this target under neighboring slots.
-    await page.touchscreen.tap(weaponTapPoint.x, weaponTapPoint.y);
+    // DOMRect coordinates are in the layout viewport, while touchscreen.tap uses
+    // the visual/device viewport. Convert explicitly when mobile page scale differs.
+    const viewportMetrics = await page.evaluate(() => ({
+      layoutWidth: window.innerWidth,
+      layoutHeight: window.innerHeight,
+      visualWidth: window.visualViewport?.width ?? window.innerWidth,
+      visualHeight: window.visualViewport?.height ?? window.innerHeight,
+      offsetLeft: window.visualViewport?.offsetLeft ?? 0,
+      offsetTop: window.visualViewport?.offsetTop ?? 0,
+      scale: window.visualViewport?.scale ?? 1
+    }));
+    const touchX = (weaponTapPoint.x - viewportMetrics.offsetLeft) *
+      viewportMetrics.visualWidth / viewportMetrics.layoutWidth;
+    const touchY = (weaponTapPoint.y - viewportMetrics.offsetTop) *
+      viewportMetrics.visualHeight / viewportMetrics.layoutHeight;
+    expect(weaponTapPoint.x).toBeGreaterThanOrEqual(0);
+    expect(weaponTapPoint.x).toBeLessThan(viewportMetrics.layoutWidth);
+    expect(weaponTapPoint.y).toBeGreaterThanOrEqual(0);
+    expect(weaponTapPoint.y).toBeLessThan(viewportMetrics.layoutHeight);
+
+    // Send a real touch at the viewport-scaled coordinate.
+    await page.touchscreen.tap(touchX, touchY);
     const touchState = await weapon.evaluate(element => ({
       expanded: element.getAttribute("aria-expanded"),
       trigger: element.getAttribute("data-tooltip-trigger"),
@@ -301,6 +320,11 @@ test("mobile touch opens item tooltips without clipped detail panels", async ({ 
       viewport: {
         innerWidth: window.innerWidth,
         innerHeight: window.innerHeight,
+        visualWidth: window.visualViewport?.width ?? null,
+        visualHeight: window.visualViewport?.height ?? null,
+        visualScale: window.visualViewport?.scale ?? null,
+        visualOffsetLeft: window.visualViewport?.offsetLeft ?? null,
+        visualOffsetTop: window.visualViewport?.offsetTop ?? null,
         scrollX: window.scrollX,
         scrollY: window.scrollY,
         devicePixelRatio: window.devicePixelRatio,
