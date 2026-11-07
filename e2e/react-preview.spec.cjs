@@ -255,3 +255,76 @@ test("React admin panel renders and filters session-protected operations logs", 
   await page.getByRole("button", { name: "로그아웃" }).click();
   await expect(page.getByRole("heading", { name: "관리자 로그인" })).toBeVisible();
 });
+
+
+test("30-day AI report reuses cache without automatic LLM calls and only regenerates on demand", async ({ page }) => {
+  const character = {
+    characterName: "기간캐시테스트",
+    ocid: "period-cache-test-ocid",
+    character_image: null,
+    worldName: "크로아",
+    job: "아크메이지",
+    guildName: null,
+    level: 280,
+    experience: 123456789,
+    experienceRate: "35.600",
+    ranking: 12345,
+    worldRanking: 6789,
+    jobWorldRanking: 123,
+    jobRanking: 456,
+    rankingDataStatus: "available"
+  };
+  const history = [
+    { date: "2026-10-20", level: 280, experience: 1000, experienceChange: null, ranking: 12350, recordStatus: "available" },
+    { date: "2026-10-21", level: 280, experience: 1200, experienceChange: 200, ranking: 12345, recordStatus: "available" }
+  ];
+  await page.addInitScript(({ character, history }) => {
+    sessionStorage.setItem("mapleGrowthTrackerState", JSON.stringify({
+      character,
+      history,
+      historyRange: 30,
+      displayHistory: history,
+      periodSummary: {
+        days: 30, coveragePercent: 80, confirmedChangeDays: 12,
+        averageGrowth: 2000000000000, previousSummary: null
+      }
+    }));
+    localStorage.removeItem("mapleGrowthTrackerAIResponsesV1");
+  }, { character, history });
+
+  let aiCalls = 0;
+  let submittedPayload = null;
+  await page.route("**/api/character-details?*", route => route.fulfill({
+    status: 200,
+    contentType: "application/json",
+    body: JSON.stringify({ section: "stats", status: "available", sources: [] })
+  }));
+  await page.route("**/api/ai-analysis?*", async route => {
+    aiCalls += 1;
+    submittedPayload = route.request().postDataJSON();
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({
+        analysis: "[성장 패턴] 기간 분석 테스트 결과입니다.\\n[성장 변화] 선택 기간 기록을 확인했습니다.\\n[레벨업 분석] 확인할 기록이 부족합니다.\\n[성장 전망] 자료가 부족합니다.\\n[AI 코멘트] 테스트 리포트입니다.",
+        cacheHit: false,
+        growthInsights: {}
+      })
+    });
+  });
+
+  await page.goto("/preview/");
+  await expect(page.getByRole("heading", { name: "기간캐시테스트" })).toBeVisible();
+  await expect(page.getByText(/최근 30일 분석의 저장 결과가 없습니다/)).toBeVisible();
+  await expect.poll(() => aiCalls).toBe(0);
+
+  await page.getByRole("button", { name: "AI 다시 분석" }).click();
+  await expect(page.getByText("기간 분석 테스트 결과입니다.")).toBeVisible();
+  expect(aiCalls).toBe(1);
+  expect(submittedPayload.analysisContext.periodDays).toBe(30);
+  expect(submittedPayload.history).toHaveLength(2);
+
+  await page.reload();
+  await expect(page.getByText("기간 분석 테스트 결과입니다.")).toBeVisible();
+  expect(aiCalls).toBe(1);
+});
