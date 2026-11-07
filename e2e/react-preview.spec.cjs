@@ -322,6 +322,7 @@ test("30-day AI report reuses cache without automatic LLM calls and only regener
   await expect(page.getByText("기간 분석 테스트 결과입니다.")).toBeVisible();
   expect(aiCalls).toBe(1);
   expect(submittedPayload.analysisContext.periodDays).toBe(30);
+  expect(submittedPayload.forceRefresh).toBe(true);
   expect(submittedPayload.history).toHaveLength(2);
 
   await page.reload();
