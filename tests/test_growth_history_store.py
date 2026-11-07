@@ -42,6 +42,26 @@ class GrowthHistoryStoreTests(unittest.TestCase):
         self.assertEqual(result[1]["recordStatus"], "available")
         self.assertEqual(result[1]["experience"], 12345)
 
+    def test_experience_progress_rate_and_checked_flag_are_persisted(self):
+        record_date = self.today.isoformat()
+        self.store.save_records(
+            "test-ocid", "테스트캐릭터", "테스트월드",
+            [{
+                "date": record_date,
+                "recordStatus": "available",
+                "level": 280,
+                "experience": 12345,
+                "ranking": 100,
+                "experienceRate": "12.3456%",
+                "experienceRateChecked": True,
+            }],
+        )
+
+        result = self.store.get_records("test-ocid", self.today, self.today)
+
+        self.assertEqual(result[0]["experienceRate"], 12.3456)
+        self.assertTrue(result[0]["experienceRateChecked"])
+
     def test_same_character_and_date_is_upserted_instead_of_duplicated(self):
         record_date = self.today.isoformat()
         first = [{"date": record_date, "recordStatus": "available", "level": 280, "experience": 100, "ranking": 20}]
