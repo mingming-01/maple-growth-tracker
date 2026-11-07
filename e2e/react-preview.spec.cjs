@@ -345,7 +345,8 @@ test("30-day AI report reuses cache without automatic LLM calls and only regener
   aiCalls = 0;
 
   await page.locator(".history-range-control select").selectOption("30");
-  await expect(page.getByText(/최근 30일 분석의 저장 결과가 없습니다/)).toBeVisible();
+  const aiReportSection = page.locator(".section").filter({ has: page.getByRole("heading", { name: "AI 성장 리포트" }) });
+  await expect(aiReportSection.locator(".section-description")).toContainText("선택한 30일");
   expect(aiCalls).toBe(0);
 
   await page.getByRole("button", { name: "AI 다시 분석" }).click();
