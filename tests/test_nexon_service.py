@@ -112,6 +112,33 @@ class NexonServiceTests(unittest.TestCase):
 
     @patch("tracker.services.nexon_service.get_api_class", return_value="전사-히어로")
     @patch("tracker.services.nexon_service.get_ranking_snapshot")
+    def test_equal_overall_and_job_rank_is_not_misclassified_as_failed(
+        self, get_ranking, _get_api_class
+    ):
+        response = Mock(status_code=200)
+        response.json.return_value = {"ranking": [{"ranking": 123}]}
+        get_ranking.return_value = ({"ranking": 123}, response)
+
+        result = nexon_service.get_character_rankings(
+            "2026-11-07", "크로아", "히어로", "ocid-value"
+        )
+
+        self.assertEqual(result["rankingDataStatus"], "available")
+        self.assertEqual(result["ranking"], 123)
+        self.assertEqual(result["worldRanking"], 123)
+        self.assertEqual(result["jobWorldRanking"], 123)
+        self.assertEqual(result["jobRanking"], 123)
+        self.assertEqual(
+            result["rankingApiDiagnostics"]["jobWorldRanking"]["classFilterFallback"],
+            "same-rank-inconclusive",
+        )
+        self.assertEqual(
+            result["rankingApiDiagnostics"]["jobRanking"]["classFilterFallback"],
+            "same-rank-inconclusive",
+        )
+
+    @patch("tracker.services.nexon_service.get_api_class", return_value="전사-히어로")
+    @patch("tracker.services.nexon_service.get_ranking_snapshot")
     def test_ranking_lookup_marks_three_empty_days_as_not_ready(
         self, get_ranking, _get_api_class
     ):
