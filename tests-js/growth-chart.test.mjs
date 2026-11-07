@@ -116,10 +116,10 @@ test("dashes only the daily EXP segment whose current day has zero growth", () =
 
 test("carries the last known total across a level-up without inventing cross-level EXP", () => {
   const records = [
-    { date: "2026-11-02", recordStatus: "available", experience: 1_000_000_000_000, experienceChange: null },
-    { date: "2026-11-03", recordStatus: "available", experience: 1_100_000_000_000, experienceChange: 100_000_000_000 },
-    { date: "2026-11-04", recordStatus: "available", experience: 20_000_000, experienceChange: null, levelUp: true },
-    { date: "2026-11-05", recordStatus: "available", experience: 120_000_000, experienceChange: 100_000_000 }
+    { date: "2026-11-02", level: 280, recordStatus: "available", experience: 1_000_000_000_000, experienceChange: null },
+    { date: "2026-11-03", level: 280, recordStatus: "available", experience: 1_100_000_000_000, experienceChange: 100_000_000_000 },
+    { date: "2026-11-04", level: 281, recordStatus: "available", experience: 20_000_000, experienceChange: null },
+    { date: "2026-11-05", level: 281, recordStatus: "available", experience: 120_000_000, experienceChange: 100_000_000 }
   ];
 
   const series = buildExperienceChartSeries(records);
