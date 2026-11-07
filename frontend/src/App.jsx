@@ -561,7 +561,7 @@ function App() {
                 <GrowthDashboard character={character} history={history} onHistoryChange={setHistory} onAnalysisPeriodChange={setAnalysisPeriod} onPersist={persistPatch} />
               </div>
               <div id="analytics">
-                <AIReport character={character} history={analysisPeriod.history || history} periodDays={analysisPeriod.days} periodSummary={analysisPeriod.summary} />
+                <AIReport character={character} history={history} analysisHistory={analysisPeriod.history || history} periodDays={analysisPeriod.days} periodSummary={analysisPeriod.summary} />
                 <GrowthComparison
                   character={character}
                   history={history}
