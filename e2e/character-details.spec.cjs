@@ -251,7 +251,11 @@ test("mobile touch opens item tooltips without clipped detail panels", async ({ 
     await expect(equipmentTooltip.locator(".game-equipment-tooltip-star")).toHaveText("★ 22");
     await expect(equipmentTooltip.locator(".game-equipment-tooltip-icon")).toBeVisible();
     await expect(equipmentTooltip).toContainText("요구 레벨 Lv. 250 (+10)");
-    await expect(equipmentTooltip).toContainText("합계 · 기본 · 스타포스 · 주문서 · 추옵");
+    await expect(equipmentTooltip).toContainText("합계와 구성 수치");
+    await expect(equipmentTooltip).not.toContainText("기본");
+    await expect(equipmentTooltip).not.toContainText("스타포스");
+    await expect(equipmentTooltip).not.toContainText("주문서");
+    await expect(equipmentTooltip).not.toContainText("추옵");
     await expect(equipmentTooltip).toContainText("착용 직업 마법사");
     await expect(equipmentTooltip).toContainText("무기 · 무기");
     await expect(equipmentTooltip).toContainText("STR");
