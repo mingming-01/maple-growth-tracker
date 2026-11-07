@@ -55,6 +55,7 @@ class GrowthCalculationBehaviorTests(unittest.TestCase):
             "world_name": "테스트월드",
             "character_level": 281,
             "character_exp": 100,
+            "character_exp_rate": "23.4567",
         }
         first_date = self.today - timedelta(days=6)
 
@@ -77,6 +78,10 @@ class GrowthCalculationBehaviorTests(unittest.TestCase):
             return_value=("test-ocid", basic, response_stub),
         ), patch.object(
             history_controller, "get_ranking_snapshot", side_effect=get_ranking
+        ), patch.object(
+            history_controller,
+            "get_basic_character_snapshot",
+            return_value=(basic, response_stub),
         ):
             response = self.client.get(
                 "/api/history",
@@ -89,6 +94,8 @@ class GrowthCalculationBehaviorTests(unittest.TestCase):
         self.assertIsNone(history[6]["experienceChange"])
         self.assertTrue(history[6]["levelUp"])
         self.assertEqual(history[6]["rankingChange"], 10)
+        self.assertEqual(history[6]["experienceRate"], "23.4567")
+        self.assertTrue(history[6]["experienceRateChecked"])
 
     def test_archive_history_does_not_calculate_changes_across_missing_records(self):
         start_date = self.today - timedelta(days=29)
