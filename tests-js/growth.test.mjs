@@ -60,9 +60,11 @@ test("daily level progress change compares only consecutive dates within the sam
     assert.deepEqual(calculateDailyExperienceRateChanges(history), {
         "2026-11-02": 0.75,
         "2026-11-03": 0,
-        "2026-11-05": 0.5,
-        "2026-11-10": -1.25
+        "2026-11-05": 0.5
     });
+    // A negative same-level delta is treated as an inconsistent/corrected
+    // snapshot, not as a legitimate decrease in MapleStory EXP progress.
+    assert.equal(calculateDailyExperienceRateChanges(history)["2026-11-10"], undefined);
 });
 
 test("level progress converts average EXP to percentage points of the current level", () => {
