@@ -86,28 +86,42 @@ export function AIReport({ character, history, analysisHistory = history, period
   const [analysis,setAnalysis] = useState("");
   const [loading,setLoading] = useState(false);
   const [error,setError] = useState("");
+  const [notice,setNotice] = useState("");
 
   const metrics = useMemo(() => {
     const prediction = calculatePrediction(character,history || []);
     return calculateGrowthMetrics(character,history || [],prediction);
   },[character,history]);
 
-  const run = useCallback(async ({ force = false } = {}) => {
+  const run = useCallback(async ({ force = false, allowGenerate = true } = {}) => {
     if (!character?.characterName || !Array.isArray(history) || !Array.isArray(analysisHistory)) return;
     setLoading(true);
     setError("");
     const analysisContext = { periodDays:[7,30,90].includes(Number(periodDays)) ? Number(periodDays) : 7, periodSummary:periodSummary || null };
-    const signature = buildReportSignature(character,analysisHistory,metrics,analysisContext);
+    // 7일 리포트는 기존처럼 데이터 변경 시 갱신한다. 30·90일 리포트는
+    // 캐시 식별자를 기간+캐릭터로 고정해 하루치 기록 추가로 캐시가 무효화되지 않게 한다.
+    const signature = analysisContext.periodDays > 7
+      ? stableStringify({ cacheVersion: 1, character: character.ocid || character.characterName, periodDays: analysisContext.periodDays })
+      : buildReportSignature(character,analysisHistory,metrics,analysisContext);
     const cached = !force ? getCachedAI("growth-report-v3",signature) : null;
     if (cached?.analysis) {
       setAnalysis(cached.analysis);
+      setNotice(analysisContext.periodDays > 7 ? `최근 ${analysisContext.periodDays}일 분석의 저장 결과를 재사용했습니다.` : "");
       setLoading(false);
       return;
     }
+    if (!allowGenerate && !force) {
+      setAnalysis("");
+      setNotice(`최근 ${analysisContext.periodDays}일 분석의 저장 결과가 없습니다. 새 분석은 'AI 다시 분석'을 눌렀을 때만 생성됩니다.`);
+      setLoading(false);
+      return;
+    }
+    setNotice("");
     try {
       const result = await postAiAnalysis(character.characterName,metrics,analysisHistory,analysisContext);
       if (!result.analysis) throw new Error("AI 분석 결과가 비어 있습니다.");
       setAnalysis(result.analysis);
+      setNotice("");
       saveCachedAI("growth-report-v3",signature,result.analysis,result.growthInsights || null);
     } catch (requestError) {
       setError(requestError.message || "AI 성장 분석을 불러오지 못했습니다.");
@@ -119,8 +133,9 @@ export function AIReport({ character, history, analysisHistory = history, period
   useEffect(() => {
     setAnalysis("");
     setError("");
-    run();
-  },[run]);
+    // 기간 전환 시 30·90일은 캐시만 확인한다. 캐시가 없더라도 자동 LLM 호출은 하지 않는다.
+    run({ allowGenerate: Number(periodDays) <= 7 });
+  },[run,periodDays]);
 
   const sections = useMemo(() => parseAnalysis(analysis),[analysis]);
 
@@ -141,7 +156,7 @@ export function AIReport({ character, history, analysisHistory = history, period
           </div>
         </div>}
         <div className="ai-analysis-actions">
-          <button className="export-button" type="button" onClick={() => run({force:true})} disabled={loading}>
+          <button className="export-button" type="button" onClick={() => run({force:true,allowGenerate:true})} disabled={loading}>
             {loading ? "분석 중..." : "AI 다시 분석"}
           </button>
         </div>
