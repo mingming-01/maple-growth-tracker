@@ -104,6 +104,8 @@ def _find_character_in_filtered_ranking(
     total_entries = 0
     class_metadata_entries = 0
     class_metadata_missing_entries = 0
+    world_metadata_entries = 0
+    world_metadata_missing_entries = 0
     target_name = _normalize_ranking_label(character_name)
     target_world = _normalize_ranking_label(
         target_world_name if target_world_name is not None else world_name
@@ -122,6 +124,7 @@ def _find_character_in_filtered_ranking(
         "pageLimitReached": False,
         "filterVerification": "pending",
         "filterUnverified": False,
+        "worldFilterVerification": "not_requested" if not world_name else "pending",
         "targetWorldName": target_world_name if target_world_name is not None else world_name,
     }
     if not api_class:
@@ -158,6 +161,8 @@ def _find_character_in_filtered_ranking(
         for entry in entries:
             if not isinstance(entry, dict):
                 class_metadata_missing_entries += 1
+                if world_name:
+                    world_metadata_missing_entries += 1
                 continue
             entry_class = _ranking_entry_class(entry)
             if entry_class:
@@ -171,6 +176,29 @@ def _find_character_in_filtered_ranking(
                     return None, response, last_details
             else:
                 class_metadata_missing_entries += 1
+
+            if world_name:
+                entry_world = _normalize_ranking_label(entry.get("world_name"))
+                if entry_world:
+                    world_metadata_entries += 1
+                    if entry_world != _normalize_ranking_label(world_name):
+                        last_details.update({
+                            "worldFilterVerification": "mismatch",
+                            "worldFilterMismatch": True,
+                            "mismatchedWorld": entry.get("world_name"),
+                        })
+                        return None, response, last_details
+                else:
+                    world_metadata_missing_entries += 1
+
+        if class_metadata_missing_entries or world_metadata_missing_entries:
+            last_details["filterUnverified"] = True
+            last_details["worldFilterVerification"] = (
+                "partial" if world_metadata_entries else
+                "not_exposed" if world_name else "not_requested"
+            )
+        elif world_name:
+            last_details["worldFilterVerification"] = "verified"
 
         for entry in entries:
             if not isinstance(entry, dict):
@@ -191,10 +219,19 @@ def _find_character_in_filtered_ranking(
             if matches:
                 # 직업 정보가 없는 payload에서는 필터 적용 여부를 독립 검증할 수 없다.
                 # 잘못된 전체/월드 순위를 직업 순위로 노출하지 않도록 fail closed 한다.
-                if class_metadata_entries != total_entries or class_metadata_missing_entries:
+                if (
+                    class_metadata_entries != total_entries
+                    or class_metadata_missing_entries
+                    or (world_name and world_metadata_entries != total_entries)
+                    or world_metadata_missing_entries
+                ):
                     last_details.update({
                         "filterVerification": (
                             "partial" if class_metadata_entries else "not_exposed"
+                        ),
+                        "worldFilterVerification": (
+                            "partial" if world_metadata_entries else
+                            "not_exposed" if world_name else "not_requested"
                         ),
                         "filterUnverified": True,
                     })
@@ -370,7 +407,10 @@ def get_character_rankings(
             for name in ("jobWorldRanking", "jobRanking")
         )
         if filter_unverified:
-            warnings.append("직업 랭킹 응답에 세부 직업 정보가 없어 필터 적용 여부를 검증할 수 없어 해당 순위를 제외했습니다.")
+            warnings.append("직업 또는 월드 랭킹 응답의 필터 조건을 검증할 수 없어 해당 순위를 제외했습니다.")
+        world_filter_mismatch = diagnostics["jobWorldRanking"].get("worldFilterMismatch")
+        if world_filter_mismatch:
+            warnings.append("월드 랭킹 응답에 요청한 월드가 아닌 캐릭터가 포함되어 해당 순위를 제외했습니다.")
         if http_error:
             warnings.append("일부 랭킹 API 요청이 정상 응답하지 않았습니다.")
         if not has_data and not http_error:
