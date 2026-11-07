@@ -268,5 +268,133 @@ class NexonServiceTests(unittest.TestCase):
         )
 
 
+
+    def test_api_class_uses_exact_job_name_from_character_basic(self):
+        self.assertEqual(
+            nexon_service.get_api_class("아크메이지(썬,콜)"),
+            "아크메이지(썬,콜)",
+        )
+        self.assertEqual(nexon_service.get_api_class("히어로"), "히어로")
+        self.assertIsNone(nexon_service.get_api_class("존재하지않는직업"))
+
+    @patch("tracker.integrations.nexon_api.get_ranking_page")
+    def test_global_job_ranking_name_fallback_checks_target_world(self, get_ranking_page):
+        response = Mock(status_code=200)
+        response.json.return_value = {"ranking": []}
+        get_ranking_page.side_effect = [
+            ([{
+                "character_name": "밍득",
+                "world_name": "리부트",
+                "sub_class_name": "아크메이지(썬,콜)",
+                "ranking": 12,
+            }], response),
+            ([{
+                "character_name": "밍득",
+                "world_name": "크로아",
+                "sub_class_name": "아크메이지(썬,콜)",
+                "ranking": 79,
+            }], response),
+        ]
+
+        entry, returned_response, details = nexon_service._find_character_in_filtered_ranking(
+            target_date="2026-11-07",
+            world_name=None,
+            api_class="아크메이지(썬,콜)",
+            character_class="아크메이지(썬,콜)",
+            character_name="밍득",
+            ocid=None,
+            target_world_name="크로아",
+        )
+
+        self.assertEqual(entry["ranking"], 79)
+        self.assertIs(returned_response, response)
+        self.assertEqual(details["pagesScanned"], 2)
+        self.assertEqual(details["filterVerification"], "verified")
+        self.assertEqual(get_ranking_page.call_args_list[0].kwargs["world_name"], None)
+        self.assertEqual(get_ranking_page.call_args_list[1].kwargs["world_name"], None)
+
+    @patch("tracker.integrations.nexon_api.get_ranking_page")
+    def test_filtered_ranking_rejects_mixed_job_classes(self, get_ranking_page):
+        response = Mock(status_code=200)
+        response.json.return_value = {"ranking": []}
+        get_ranking_page.return_value = ([
+            {
+                "ocid": "other-ocid",
+                "character_name": "다른캐릭터",
+                "world_name": "크로아",
+                "sub_class_name": "히어로",
+                "ranking": 1,
+            },
+            {
+                "ocid": "target-ocid",
+                "character_name": "밍득",
+                "world_name": "크로아",
+                "sub_class_name": "아크메이지(썬,콜)",
+                "ranking": 79,
+            },
+        ], response)
+
+        entry, returned_response, details = nexon_service._find_character_in_filtered_ranking(
+            target_date="2026-11-07",
+            world_name="크로아",
+            api_class="아크메이지(썬,콜)",
+            character_class="아크메이지(썬,콜)",
+            character_name="밍득",
+            ocid="target-ocid",
+            target_world_name="크로아",
+        )
+
+        self.assertIsNone(entry)
+        self.assertIs(returned_response, response)
+        self.assertTrue(details["filterMismatch"])
+        self.assertEqual(details["filterVerification"], "mismatch")
+        self.assertEqual(details["mismatchedClass"], "히어로")
+
+    @patch("tracker.services.nexon_service.get_api_class", return_value="아크메이지(썬,콜)")
+    @patch("tracker.services.nexon_service.get_ranking_snapshot")
+    @patch("tracker.integrations.nexon_api.get_ranking_page")
+    def test_partial_job_rank_retries_previous_aggregate_date(
+        self, get_ranking_page, get_ranking_snapshot, _get_api_class
+    ):
+        current_response = Mock(status_code=200)
+        current_response.json.return_value = {"ranking": []}
+        previous_response = Mock(status_code=200)
+        previous_response.json.return_value = {"ranking": []}
+        base_response = Mock(status_code=200)
+        base_response.json.return_value = {"ranking": [{"ranking": 2278}]}
+
+        def snapshot_side_effect(target_date, world_name=None, ocid=None, **kwargs):
+            rank = 374 if world_name else 2278
+            return {"ranking": rank}, base_response
+
+        def page_side_effect(target_date, world_name=None, **kwargs):
+            if target_date == "2026-11-08":
+                return [], current_response
+            rank = 9 if world_name else 79
+            return [{
+                "ocid": "ocid-value",
+                "character_name": "밍득",
+                "world_name": "크로아",
+                "sub_class_name": "아크메이지(썬,콜)",
+                "ranking": rank,
+            }], previous_response
+
+        get_ranking_snapshot.side_effect = snapshot_side_effect
+        get_ranking_page.side_effect = page_side_effect
+
+        result = nexon_service.get_character_rankings(
+            "2026-11-08", "크로아", "아크메이지(썬,콜)", "ocid-value", "밍득"
+        )
+
+        self.assertEqual(result["rankingDate"], "2026-11-07")
+        self.assertEqual(result["ranking"], 2278)
+        self.assertEqual(result["worldRanking"], 374)
+        self.assertEqual(result["jobWorldRanking"], 9)
+        self.assertEqual(result["jobRanking"], 79)
+        self.assertEqual(result["rankingDataStatus"], "available")
+        self.assertIn("2026-11-08", [c.kwargs["target_date"] for c in get_ranking_page.call_args_list])
+        self.assertIn("2026-11-07", [c.kwargs["target_date"] for c in get_ranking_page.call_args_list])
+
+
 if __name__ == "__main__":
     unittest.main()
