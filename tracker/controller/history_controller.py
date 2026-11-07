@@ -474,7 +474,10 @@ def get_history_archive():
             or stored_by_date[target_date.isoformat()].get("recordStatus") == "not_ready"
             or (
                 stored_by_date[target_date.isoformat()].get("recordStatus") == "available"
-                and not stored_by_date[target_date.isoformat()].get("experienceRateChecked", False)
+                and (
+                    not stored_by_date[target_date.isoformat()].get("experienceRateChecked", False)
+                    or stored_by_date[target_date.isoformat()].get("experienceRate") is None
+                )
             )
         ]
         fetched_records = []
