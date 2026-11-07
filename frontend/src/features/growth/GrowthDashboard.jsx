@@ -9,6 +9,7 @@ import {
   sortHistoryDescending,
   getDailyGrowth,
   calculateAverageGrowth,
+  calculateDailyExperienceRateChanges,
   calculateWeeklyGrowth,
   getRankingChange,
   calculatePrediction,
@@ -402,6 +403,10 @@ export default function GrowthDashboard({ character, history, onHistoryChange, o
   const metrics = useMemo(() => calculateGrowthMetrics(character, history || [], prediction), [character, history, prediction]);
   const levelProgress = metrics.levelProgress;
   const timeline = useMemo(() => buildGrowthTimeline(displayHistory, 8), [displayHistory]);
+  const progressRateChanges = useMemo(
+    () => calculateDailyExperienceRateChanges(displayHistory),
+    [displayHistory]
+  );
 
   useEffect(() => {
     if (!canvasRef.current) return undefined;
@@ -589,20 +594,38 @@ export default function GrowthDashboard({ character, history, onHistoryChange, o
         <div className="history-card">
           <div className="history-table-wrapper">
             <table className="history-table">
-              <thead><tr><th>날짜</th><th>랭킹</th><th>레벨</th><th>경험치</th><th>일일 변화</th><th>레벨 진행률</th></tr></thead>
+              <thead><tr><th>날짜</th><th>랭킹</th><th>레벨</th><th>경험치</th><th>경험치 증가량</th><th>레벨 진행률</th></tr></thead>
               <tbody>
-                {sortHistoryDescending(displayHistory).map(item => (
-                  <tr key={item.date}>
-                    <td>{localDate(item.date)}</td>
-                    <td>{item.ranking == null ? "—" : Number(item.ranking).toLocaleString("ko-KR")+"위"}</td>
-                    <td>{item.level == null ? "—" : "Lv. "+item.level}</td>
-                    <td className="history-experience-value">{item.experience == null ? "—" : Number(item.experience).toLocaleString("ko-KR")}</td>
-                    <td className={"history-growth-value " + (Number(item.experienceChange) > 0 ? "is-positive" : Number(item.experienceChange) < 0 ? "is-negative" : "")}>{item.experienceChange == null ? "—" : signedFmt(item.experienceChange)}</td>
-                    <td>{item.experienceRate == null || !Number.isFinite(Number(String(item.experienceRate).replace("%","")))
-                      ? "—"
-                      : Number(String(item.experienceRate).replace("%","")).toFixed(3) + "%"}</td>
-                  </tr>
-                ))}
+                {sortHistoryDescending(displayHistory).map(item => {
+                  const rate = item.experienceRate == null
+                    ? null
+                    : Number(String(item.experienceRate).replace("%",""));
+                  const rateChange = progressRateChanges[item.date];
+                  const validRate = Number.isFinite(rate) && rate >= 0 && rate <= 100;
+                  return (
+                    <tr key={item.date}>
+                      <td>{localDate(item.date)}</td>
+                      <td>{item.ranking == null ? "—" : Number(item.ranking).toLocaleString("ko-KR")+"위"}</td>
+                      <td>{item.level == null ? "—" : "Lv. "+item.level}</td>
+                      <td className="history-experience-value">{item.experience == null ? "—" : Number(item.experience).toLocaleString("ko-KR")}</td>
+                      <td className={"history-growth-value " + (Number(item.experienceChange) > 0 ? "is-positive" : Number(item.experienceChange) < 0 ? "is-negative" : "")}>{item.experienceChange == null ? "—" : signedFmt(item.experienceChange)}</td>
+                      <td>
+                        {validRate ? (
+                          <span className="history-level-progress-cell">
+                            <span>{rate.toFixed(3)}%</span>
+                            {Number.isFinite(rateChange) && (
+                              <small className={"history-level-progress-change " + (
+                                rateChange > 0 ? "is-positive" : rateChange < 0 ? "is-negative" : "is-neutral"
+                              )}>
+                                {rateChange > 0 ? "+" : rateChange < 0 ? "−" : ""}{Math.abs(rateChange).toFixed(3)}%p
+                              </small>
+                            )}
+                          </span>
+                        ) : "—"}
+                      </td>
+                    </tr>
+                  );
+                })}
               </tbody>
             </table>
           </div>
