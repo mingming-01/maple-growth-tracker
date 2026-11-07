@@ -174,6 +174,42 @@ class NexonServiceTests(unittest.TestCase):
     @patch("tracker.services.nexon_service.get_api_class", return_value="히어로")
     @patch("tracker.services.nexon_service.get_ranking_snapshot")
     @patch("tracker.integrations.nexon_api.get_ranking_page")
+    def test_ranking_lookup_retries_previous_date_when_all_requests_return_400(
+        self, get_ranking_page, get_ranking_snapshot, _get_api_class
+    ):
+        bad_request = Mock(status_code=400)
+        bad_request.json.return_value = {
+            "error": {"name": "OPENAPI00000", "message": "Invalid date"}
+        }
+        success = Mock(status_code=200)
+        success.json.return_value = {"ranking": [{"ranking": 77}]}
+
+        get_ranking_snapshot.side_effect = [
+            (None, bad_request), (None, bad_request),
+            ({"ranking": 77}, success), ({"ranking": 88}, success),
+        ]
+        get_ranking_page.side_effect = [
+            ([], bad_request), ([], bad_request),
+            ([{"ocid": "ocid-value", "ranking": 9}], success),
+            ([{"ocid": "ocid-value", "ranking": 19}], success),
+        ]
+
+        result = nexon_service.get_character_rankings(
+            "2026-11-08", "크로아", "히어로", "ocid-value", "밍득"
+        )
+
+        self.assertEqual(result["rankingDate"], "2026-11-07")
+        self.assertEqual(result["ranking"], 77)
+        self.assertEqual(result["worldRanking"], 88)
+        self.assertEqual(result["jobWorldRanking"], 9)
+        self.assertEqual(result["jobRanking"], 19)
+        self.assertEqual(result["rankingDataStatus"], "available")
+        self.assertEqual(get_ranking_snapshot.call_count, 4)
+        self.assertEqual(get_ranking_page.call_count, 4)
+
+    @patch("tracker.services.nexon_service.get_api_class", return_value="히어로")
+    @patch("tracker.services.nexon_service.get_ranking_snapshot")
+    @patch("tracker.integrations.nexon_api.get_ranking_page")
     def test_ranking_lookup_does_not_hide_authentication_errors_with_old_dates(
         self, get_ranking_page, get_ranking_snapshot, _get_api_class
     ):
