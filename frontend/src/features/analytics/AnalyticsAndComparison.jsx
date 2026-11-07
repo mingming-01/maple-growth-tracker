@@ -103,7 +103,8 @@ export function AIReport({ character, history, analysisHistory = history, period
     const signature = analysisContext.periodDays > 7
       ? stableStringify({ cacheVersion: 1, character: character.ocid || character.characterName, periodDays: analysisContext.periodDays })
       : buildReportSignature(character,analysisHistory,metrics,analysisContext);
-    const cached = !force ? getCachedAI("growth-report-v3",signature) : null;
+    const cacheType = analysisContext.periodDays > 7 ? "growth-report-long-v1" : "growth-report-v3";
+    const cached = !force ? getCachedAI(cacheType,signature) : null;
     if (cached?.analysis) {
       setAnalysis(cached.analysis);
       setNotice(analysisContext.periodDays > 7 ? `최근 ${analysisContext.periodDays}일 분석의 저장 결과를 재사용했습니다.` : "");
@@ -122,7 +123,7 @@ export function AIReport({ character, history, analysisHistory = history, period
       if (!result.analysis) throw new Error("AI 분석 결과가 비어 있습니다.");
       setAnalysis(result.analysis);
       setNotice("");
-      saveCachedAI("growth-report-v3",signature,result.analysis,result.growthInsights || null);
+      saveCachedAI(cacheType,signature,result.analysis,result.growthInsights || null);
     } catch (requestError) {
       setError(requestError.message || "AI 성장 분석을 불러오지 못했습니다.");
     } finally {
