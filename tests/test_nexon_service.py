@@ -68,7 +68,7 @@ class NexonServiceTests(unittest.TestCase):
                 "ocid": "ocid-value",
                 "character_name": "밍득",
                 "world_name": "크로아",
-                "character_class": "히어로",
+                "sub_class_name": "히어로",
                 "ranking": target_rank,
             }], response
 
@@ -116,15 +116,15 @@ class NexonServiceTests(unittest.TestCase):
         get_ranking_page.side_effect = [
             ([{
                 "ocid": "other", "character_name": "다른캐릭터",
-                "world_name": "크로아", "character_class": "히어로", "ranking": 1,
+                "world_name": "크로아", "sub_class_name": "히어로", "ranking": 1,
             }], empty_response),
             ([{
                 "ocid": "ocid-value", "character_name": "밍득",
-                "world_name": "크로아", "character_class": "히어로", "ranking": 201,
+                "world_name": "크로아", "sub_class_name": "히어로", "ranking": 201,
             }], target_response),
             ([{
                 "ocid": "ocid-value", "character_name": "밍득",
-                "world_name": "크로아", "character_class": "히어로", "ranking": 201,
+                "world_name": "크로아", "sub_class_name": "히어로", "ranking": 201,
             }], target_response),
         ]
 
@@ -151,7 +151,7 @@ class NexonServiceTests(unittest.TestCase):
         get_ranking_snapshot.return_value = ({"ranking": 123}, response)
         entry = {
             "ocid": "ocid-value", "character_name": "밍득",
-            "world_name": "크로아", "character_class": "히어로", "ranking": 123,
+            "world_name": "크로아", "sub_class_name": "히어로", "ranking": 123,
         }
         get_ranking_page.return_value = ([entry], response)
 
@@ -203,8 +203,8 @@ class NexonServiceTests(unittest.TestCase):
         ]
         get_ranking_page.side_effect = [
             ([], bad_request), ([], bad_request),
-            ([{"ocid": "ocid-value", "character_name": "밍득", "world_name": "크로아", "character_class": "히어로", "ranking": 9}], success),
-            ([{"ocid": "ocid-value", "character_name": "밍득", "world_name": "크로아", "character_class": "히어로", "ranking": 19}], success),
+            ([{"ocid": "ocid-value", "character_name": "밍득", "world_name": "크로아", "sub_class_name": "히어로", "ranking": 9}], success),
+            ([{"ocid": "ocid-value", "character_name": "밍득", "world_name": "크로아", "sub_class_name": "히어로", "ranking": 19}], success),
         ]
 
         result = nexon_service.get_character_rankings(
@@ -257,19 +257,19 @@ class NexonServiceTests(unittest.TestCase):
         global_entry = {
             "character_name": "밍득",
             "world_name": "크로아",
-            "character_class": "히어로",
+            "sub_class_name": "히어로",
             "ranking": 79,
         }
         global_same_name_other_world = {
             "character_name": "밍득",
             "world_name": "베라",
-            "character_class": "히어로",
+            "sub_class_name": "히어로",
             "ranking": 12,
         }
         world_entry = {
             "character_name": "밍득",
             "world_name": "크로아",
-            "character_class": "히어로",
+            "sub_class_name": "히어로",
             "ranking": 9,
         }
         get_ranking_page.side_effect = [
@@ -318,7 +318,7 @@ class NexonServiceTests(unittest.TestCase):
                     "ocid": "target-ocid",
                     "character_name": "대상캐릭터",
                     "world_name": world,
-                    "character_class": job,
+                    "sub_class_name": job,
                     "ranking": 7,
                 }
                 get_ranking_page.side_effect = [
@@ -353,7 +353,7 @@ class NexonServiceTests(unittest.TestCase):
             "ocid": "ocid-value",
             "character_name": "밍득",
             "world_name": "크로아",
-            "character_class": "히어로",
+            "sub_class_name": "히어로",
             "ranking": 9,
         }
         get_ranking_page.return_value = ([wrong_class_row], response)
@@ -387,7 +387,7 @@ class NexonServiceTests(unittest.TestCase):
             "ocid": "ocid-value",
             "character_name": "밍득",
             "world_name": "베라",
-            "character_class": "히어로",
+            "sub_class_name": "히어로",
             "ranking": 9,
         }
         get_ranking_page.return_value = ([wrong_world_row], response)

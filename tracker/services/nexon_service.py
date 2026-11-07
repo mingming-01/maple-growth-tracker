@@ -145,7 +145,9 @@ def _find_character_in_filtered_ranking(
                 last_details["filterVerification"] = "invalid-ranking-entry"
                 return None, response, last_details
 
-            entry_class = _normalize_ranking_text(entry.get("character_class"))
+            entry_class = _normalize_ranking_text(
+                entry.get("sub_class_name") or entry.get("character_class")
+            )
             if not entry_class:
                 last_details["unverifiableEntries"] += 1
                 last_details["filterVerification"] = "missing-character-class"
