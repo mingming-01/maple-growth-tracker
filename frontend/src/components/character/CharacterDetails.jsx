@@ -694,15 +694,17 @@ function EquipmentTab({ data, selected, onSelect }) {
                         <div className="game-equipment-tooltip-stat-values">
                           <b>{option.value}</b>
                           {option.breakdown.filter(part => part.value !== 0).length > 0 && (
-                            <small className="game-equipment-tooltip-stat-breakdown">
+                            <span className="game-equipment-tooltip-stat-breakdown">
                               ({option.breakdown.filter(part => part.value !== 0).map((part,index) => {
                                 const value = Number(part.value);
-                                if (index === 0) return numberText(value);
-                                return value < 0
-                                  ? "− " + numberText(Math.abs(value))
-                                  : "+ " + numberText(value);
-                              }).join(" ")})
-                            </small>
+                                const formatted = index === 0
+                                  ? numberText(value)
+                                  : value < 0
+                                    ? "− " + numberText(Math.abs(value))
+                                    : "+ " + numberText(value);
+                                return <small key={part.source} className={"is-" + part.source}>{formatted}</small>;
+                              })})
+                            </span>
                           )}
                         </div>
                       </div>
