@@ -141,7 +141,7 @@ class NexonServiceTests(unittest.TestCase):
         response = Mock(status_code=200)
         response.json.return_value = {"ranking": [{"ranking": 123}]}
         get_ranking_snapshot.return_value = ({"ranking": 123}, response)
-        entry = {"ocid": "ocid-value", "sub_class_name": "히어로", "ranking": 123}
+        entry = {"ocid": "ocid-value", "world_name": "크로아", "sub_class_name": "히어로", "ranking": 123}
         get_ranking_page.return_value = ([entry], response)
 
         result = nexon_service.get_character_rankings(
@@ -192,8 +192,8 @@ class NexonServiceTests(unittest.TestCase):
         ]
         get_ranking_page.side_effect = [
             ([], bad_request), ([], bad_request),
-            ([{"ocid": "ocid-value", "sub_class_name": "히어로", "ranking": 9}], success),
-            ([{"ocid": "ocid-value", "sub_class_name": "히어로", "ranking": 19}], success),
+            ([{"ocid": "ocid-value", "world_name": "크로아", "sub_class_name": "히어로", "ranking": 9}], success),
+            ([{"ocid": "ocid-value", "world_name": "크로아", "sub_class_name": "히어로", "ranking": 19}], success),
         ]
 
         result = nexon_service.get_character_rankings(
