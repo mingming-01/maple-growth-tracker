@@ -83,55 +83,55 @@ def _find_character_in_filtered_ranking(
     """
     from tracker.integrations.nexon_api import get_ranking_page
 
-    class_filters = []
-    for value in (api_class, character_class):
-        if value and value not in class_filters:
-            class_filters.append(value)
-
     last_response = None
     last_details = {
         "pagesScanned": 0,
         "returnedEntries": 0,
-        "filterUsed": None,
+        "filterUsed": api_class,
         "matched": False,
     }
-    for class_filter in class_filters:
-        for page in range(1, 6):
-            entries, response = get_ranking_page(
-                target_date=target_date,
-                world_name=world_name,
-                character_class=class_filter,
-                page=page,
-                historical=historical,
-            )
-            last_response = response
-            last_details = {
-                "pagesScanned": page,
-                "returnedEntries": len(entries),
-                "filterUsed": class_filter,
-                "matched": False,
-            }
-            if response is None or response.status_code != 200:
-                return None, response, last_details
+    if not api_class:
+        return None, None, last_details
 
-            for entry in entries:
-                if not isinstance(entry, dict):
-                    continue
-                entry_ocid = entry.get("ocid") or entry.get("character_ocid")
-                if entry_ocid:
-                    matches = str(entry_ocid) == str(ocid)
-                else:
-                    matches = (
-                        str(entry.get("character_name") or "").casefold()
-                        == str(character_name or "").casefold()
-                        and str(entry.get("world_name") or "") == str(world_name or "")
-                    )
-                if matches:
-                    last_details["matched"] = True
-                    return entry, response, last_details
+    # jobs.json의 매핑값이 Nexon API character_class 계약값이다.
+    # UI 직업명(character_class)을 두 번째 필터로 재시도하면 같은 직업을
+    # 중복 조회하거나, 지원되지 않는 필터값 때문에 불필요한 오류가 발생한다.
+    for page in range(1, 6):
+        entries, response = get_ranking_page(
+            target_date=target_date,
+            world_name=world_name,
+            character_class=api_class,
+            page=page,
+            historical=historical,
+        )
+        last_response = response
+        last_details = {
+            "pagesScanned": page,
+            "returnedEntries": len(entries),
+            "filterUsed": api_class,
+            "matched": False,
+        }
+        if response is None or response.status_code != 200:
+            return None, response, last_details
 
-            if not entries:
-                break
+        for entry in entries:
+            if not isinstance(entry, dict):
+                continue
+            entry_ocid = entry.get("ocid") or entry.get("character_ocid")
+            if entry_ocid:
+                matches = str(entry_ocid) == str(ocid)
+            else:
+                matches = (
+                    str(entry.get("character_name") or "").casefold()
+                    == str(character_name or "").casefold()
+                    and str(entry.get("world_name") or "") == str(world_name or "")
+                )
+            if matches:
+                last_details["matched"] = True
+                return entry, response, last_details
+
+        if not entries:
+            break
 
     return None, last_response, last_details
 
