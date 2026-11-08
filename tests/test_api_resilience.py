@@ -1,5 +1,6 @@
 import tempfile
 import unittest
+from datetime import datetime, timedelta
 from pathlib import Path
 from unittest.mock import Mock, patch
 
@@ -175,6 +176,78 @@ class ApiResilienceTests(unittest.TestCase):
                 )
 
         self.assertEqual(result["rankingDataStatus"], "not_ready")
+
+    def test_historical_eos_ranking_passes_reboot_world_type(self):
+        target_date = datetime.now(history_controller.KOREA_TIMEZONE).date() - timedelta(days=1)
+        ranking = {
+            "ranking": 12,
+            "character_level": 280,
+            "character_exp": 123456,
+            "character_exp_rate": 12.5,
+        }
+        response = Mock(status_code=200)
+        with patch.object(
+            history_controller, "get_ranking_snapshot", return_value=(ranking, response)
+        ) as get_ranking:
+            record = history_controller.fetch_historical_record(
+                "test-ocid", "에오스", target_date,
+                datetime.now(history_controller.KOREA_TIMEZONE).date()
+            )
+
+        self.assertEqual(record["ranking"], 12)
+        self.assertEqual(get_ranking.call_args.kwargs["world_type"], 1)
+
+    def test_checked_missing_experience_rate_is_not_refetched(self):
+        today = datetime.now(history_controller.KOREA_TIMEZONE).date()
+        historical_records = [
+            {
+                "date": (today - timedelta(days=offset)).isoformat(),
+                "ranking": 100 + offset,
+                "level": 280,
+                "experience": 1000 + offset,
+                "experienceRate": None,
+                "experienceRateChecked": True,
+                "recordStatus": "available",
+            }
+            for offset in range(1, 7)
+        ]
+
+        class FakeHistoryService:
+            backend = "sqlite"
+
+            def get_records(self, ocid, start_date, end_date):
+                return historical_records
+
+            def save_records(self, ocid, character_name, world_name, records):
+                return len(records)
+
+        basic = {
+            "character_name": "테스트캐릭터",
+            "world_name": "에오스",
+            "character_level": 280,
+            "character_exp": 2000,
+            "character_exp_rate": 15.0,
+        }
+        basic_response = Mock(status_code=200)
+        today_ranking = {
+            "ranking": 99,
+            "character_level": 280,
+            "character_exp": 2000,
+            "character_exp_rate": 15.0,
+        }
+        ranking_response = Mock(status_code=200)
+
+        with patch.object(history_controller, "get_growth_history_service", return_value=FakeHistoryService()), patch.object(
+            history_controller, "resolve_character", return_value=("test-ocid", basic, basic_response)
+        ), patch.object(
+            history_controller, "get_ranking_snapshot", return_value=(today_ranking, ranking_response)
+        ) as get_ranking:
+            response = self.client.get(
+                "/api/history", query_string={"name": "테스트캐릭터", "refresh": "1"}
+            )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(get_ranking.call_count, 1)
 
 
 if __name__ == "__main__":
