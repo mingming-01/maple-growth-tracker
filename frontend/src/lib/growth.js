@@ -150,7 +150,6 @@ function parseISODate(value) {
 }
 
 export function calculatePrediction(character, history) {
-    const today = formatLocalISODate(new Date());
     const cutoffDate = new Date();
     cutoffDate.setDate(cutoffDate.getDate() - 7);
     const recentStart = formatLocalISODate(cutoffDate);
