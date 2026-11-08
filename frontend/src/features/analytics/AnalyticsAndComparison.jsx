@@ -413,7 +413,7 @@ export function GrowthComparison({ character, history, initialState, onSave }) {
                     <article className="comparison-period-character-card" key={title}>
                       <h4 className="comparison-period-name">{title}</h4>
                       <div className="comparison-period-stat"><span>확인된 경험치 증가</span><strong>{formatTrillion(item.growth)}</strong></div>
-                      <div className="comparison-period-stat"><span>관측된 1일 평균</span><strong>{formatTrillion(item.average)}</strong></div>
+                      <div className="comparison-period-stat"><span>기록 기준 1일 평균</span><strong>{formatTrillion(item.average)}</strong></div>
                       <div className="comparison-period-stat"><span>랭킹 변화</span><strong>{item.rankingChange == null ? "자료 부족" : (item.rankingChange > 0 ? "▲ " : item.rankingChange < 0 ? "▼ " : "")+formatNumber(Math.abs(item.rankingChange))+"위"}</strong></div>
                       <div className="comparison-period-stat"><span>기록 충실도</span><strong>{item.availableDays} / {item.days}일</strong></div>
                       <p className="comparison-period-detail">API 미제공 {item.notReady}일 · 미수집 {item.notCollected}일</p>
