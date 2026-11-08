@@ -35,9 +35,9 @@ function symbolGrowthComplete(symbol) {
 function extractSymbolSpecialStats(symbol) {
   const description = String(symbol?.symbol_description || "");
   const patterns = [
-    ["경험치", /(?:경험치(?:\\s*획득량)?|EXP)\\s*[+:]?\\s*(\\d+(?:\\.\\d+)?%?)/i],
-    ["드롭률", /(?:아이템\\s*)?드롭률?\\s*[+:]?\\s*(\\d+(?:\\.\\d+)?%?)/i],
-    ["메획", /(?:메소\\s*(?:획득량|증가|량)?|메획)\\s*[+:]?\\s*(\\d+(?:\\.\\d+)?%?)/i]
+    ["경험치", /(?:경험치(?:\s*획득량)?|EXP)\s*[+:]?\s*(\d+(?:\.\d+)?%?)/i],
+    ["드롭률", /(?:아이템\s*)?드롭률?\s*[+:]?\s*(\d+(?:\.\d+)?%?)/i],
+    ["메획", /(?:메소\s*(?:획득량|증가|량)?|메획)\s*[+:]?\s*(\d+(?:\.\d+)?%?)/i]
   ];
   return patterns.map(([label, pattern]) => {
     const match = description.match(pattern);
