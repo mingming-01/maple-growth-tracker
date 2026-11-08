@@ -7,7 +7,9 @@ import {
   apiImage,
   PresetSelect,
   DataState,
-  Empty
+  Empty,
+  DetailTooltip,
+  badgeGlyph
 } from "./CharacterDetailsShared.jsx";
 
 export function SymbolsTab({ data }) {
@@ -36,7 +38,7 @@ export function SymbolsTab({ data }) {
 }
 
 export function SkillsTab({ data }) {
-  const skill = sourceOf(data, "skill");
+  const skill = sourceOf(data, "skill6");
   const hexa = sourceOf(data, "hexaMatrix");
   const hexaStat = sourceOf(data, "hexaStat");
   const skillData = skill?.currentData || skill?.data || {};
@@ -129,77 +131,149 @@ export function LinkTab({ data, selected, onSelect }) {
 }
 
 export function UnionTab({ data, selected, onSelect }) {
-  const union = sourceOf(data, "union");
-  const raider = sourceOf(data, "unionRaider");
+  const base = sourceOf(data, "union")?.data || {};
+  const states = sourceOf(data, "unionStateStat");
   const artifact = sourceOf(data, "unionArtifact");
   const champion = sourceOf(data, "unionChampion");
-  const unionData = union?.currentData || union?.data || {};
-  const raiderData = raider?.currentData || raider?.data || {};
+  const stateNumber = selected.union ?? fallbackPreset(states);
+  const state = presetData(states,stateNumber);
+  const stateRows = Array.isArray(state.union_state_stat) ? state.union_state_stat : [];
   const artifactData = artifact?.currentData || artifact?.data || {};
-  const championData = champion?.currentData || champion?.data || {};
-  const raiderPreset = selected.unionRaider ?? fallbackPreset(raider);
-  const artifactPreset = selected.unionArtifact ?? fallbackPreset(artifact);
-  const raiderPresetData = presetData(raider, raiderPreset);
-  const artifactPresetData = presetData(artifact, artifactPreset);
-  const innerStat = Array.isArray(raiderPresetData.union_inner_stat)
-    ? raiderPresetData.union_inner_stat
-    : (Array.isArray(raiderData.union_inner_stat) ? raiderData.union_inner_stat : []);
-  const artifacts = Array.isArray(artifactPresetData.union_artifact)
-    ? artifactPresetData.union_artifact
-    : (Array.isArray(artifactData.union_artifact) ? artifactData.union_artifact : []);
-  const champions = Array.isArray(championData.union_champion)
-    ? championData.union_champion : [];
+  const champions = champion?.currentData?.union_champion || champion?.data?.union_champion || [];
+  const crystals = artifactData.union_artifact_crystal || [];
+  const effects = artifactData.union_artifact_effect || [];
+  const totals = champion?.currentData?.champion_badge_total_info || champion?.data?.champion_badge_total_info || [];
+
+  const renderCrest = (badge, index, keyPrefix = "badge") => {
+    const stat = badge?.stat || badge?.badge_stat || badge?.name || "휘장 효과 정보 없음";
+    return (
+      <DetailTooltip
+        as="span"
+        className="game-union-champion-crest game-tooltip-trigger"
+        key={keyPrefix + "-" + index}
+        title={stat}
+        lines={[stat]}
+      >
+        <span className="game-union-champion-crest-glyph" aria-hidden="true">{badgeGlyph(stat,index)}</span>
+      </DetailTooltip>
+    );
+  };
 
   return (
     <div className="game-union-window">
-      <div className="game-window-heading">
-        <span className="game-window-eyebrow">UNION</span>
-        <h3 className="game-window-title">유니온</h3>
+      <div className="game-union-summary">
+        {[
+          ["유니온 레벨",base.union_level],["유니온 등급",base.union_grade],
+          ["아티팩트 레벨",base.union_artifact_level],["아티팩트 경험치",base.union_artifact_exp],
+          ["아티팩트 포인트",base.union_artifact_point]
+        ].filter(([,value]) => hasValue(value)).map(([label,value]) => (
+          <div className="game-union-stat" key={label}><span>{label}</span><strong>{numberText(value)}</strong></div>
+        ))}
       </div>
-      <DataState source={union || raider || artifact} />
-      <section className="game-union-summary">
-        <div><span>유니온 레벨</span><strong>{numberText(unionData.union_level)}</strong></div>
-        <div><span>유니온 등급</span><strong>{unionData.union_grade || "—"}</strong></div>
-        <div><span>공격대원 수</span><strong>{numberText(unionData.union_artifact_level || raiderData.use_preset_no)}</strong></div>
-      </section>
-      <div className="game-union-preset-row">
-        <PresetSelect source={raider} value={raiderPreset}
-          onChange={value => onSelect({ unionRaider: value })} label="유니온 공격대 프리셋" />
-        <PresetSelect source={artifact} value={artifactPreset}
-          onChange={value => onSelect({ unionArtifact: value })} label="아티팩트 프리셋" />
-      </div>
-      <section className="game-union-section">
-        <h4 className="game-window-title">공격대 배치 스탯</h4>
-        <div className="game-union-stat-list">
-          {innerStat.length ? innerStat.map((item, index) => (
-            <div className="game-union-stat-item" key={index}>
-              <span>{item.stat_field_id || item.stat_name || "스탯"}</span>
-              <strong>{item.stat_info || item.stat_value || "—"}</strong>
-            </div>
-          )) : <Empty>공격대 스탯 정보가 없습니다.</Empty>}
+      <DataState source={sourceOf(data,"union")} />
+      <section className="game-union-state-panel">
+        <div className="game-union-section-heading">
+          <span className="game-window-eyebrow">UNION STATE</span>
+          <h3 className="game-window-title">유니온 스탯 투자</h3>
         </div>
-      </section>
-      <section className="game-union-section">
-        <h4 className="game-window-title">아티팩트</h4>
-        <div className="game-union-artifact-list">
-          {artifacts.length ? artifacts.map((item, index) => (
-            <div className="game-union-artifact-item" key={index}>
-              <strong>{item.name || item.artifact_name || "아티팩트"}</strong>
-              <span>Lv. {numberText(item.level || item.artifact_level)}</span>
-            </div>
-          )) : <Empty>아티팩트 정보가 없습니다.</Empty>}
+        <div className="game-union-state-toolbar">
+          <PresetSelect source={states} value={stateNumber} onChange={value => onSelect({union:value})} label="유니온 프리셋" />
         </div>
-      </section>
-      <section className="game-union-section">
-        <h4 className="game-window-title">챔피언</h4>
-        <div className="game-union-champion-list">
-          {champions.length ? champions.map((item, index) => (
-            <div className="game-union-champion-item" key={index}>
-              <span>{apiImage(item.champion_icon || item.character_image, item.champion_name || item.character_name)}</span>
-              <strong>{item.champion_name || item.character_name || "챔피언"}</strong>
-            </div>
-          )) : <Empty>챔피언 정보가 없습니다.</Empty>}
+        <div className="game-union-state-grid">
+          {stateRows.length ? stateRows.map((effect,index) => (
+            <article className="game-union-state-stat" key={index}>
+              <span className="game-union-state-index">{String(index+1).padStart(2,"0")}</span>
+              <strong className="game-union-state-name">{effect}</strong>
+            </article>
+          )) : <Empty>선택한 프리셋에 표시할 스탯 효과가 없습니다.</Empty>}
         </div>
+        <DataState source={states} />
+      </section>
+      <section className="game-union-artifact-panel">
+        <div className="game-union-section-heading">
+          <span className="game-window-eyebrow">UNION ARTIFACT</span>
+          <h3 className="game-window-title">유니온 아티팩트</h3>
+        </div>
+        {hasValue(artifactData.union_artifact_remain_ap) && (
+          <div className="game-union-point-card"><span>잔여 아티팩트 AP</span><strong>{numberText(artifactData.union_artifact_remain_ap)}</strong></div>
+        )}
+        <h4 className="game-union-subtitle">아티팩트 크리스탈</h4>
+        <div className="game-union-crystal-grid">
+          {crystals.length ? crystals.map((crystal,index) => (
+            <article className="game-union-crystal" key={index}>
+              <div className="game-union-crystal-top">
+                <span className="game-union-crystal-order">{String(index+1).padStart(2,"0")}</span>
+                <strong className="game-union-crystal-name">{crystal.name || "크리스탈"}</strong>
+                {hasValue(crystal.level) && <span className="game-union-crystal-level">Lv. {crystal.level}</span>}
+              </div>
+              <span className={"game-union-crystal-status " + (String(crystal.validity_flag ?? "0") === "0" ? "is-valid" : "is-expired")}>
+                {String(crystal.validity_flag ?? "0") === "0" ? "효과 적용 상태" : "만료 또는 비활성"}
+              </span>
+              <div className="game-union-crystal-options">
+                {[1,2,3].filter(number => hasValue(crystal["crystal_option_name_"+number])).map(number => (
+                  <span className="game-union-crystal-option" key={number}>{crystal["crystal_option_name_"+number]}</span>
+                ))}
+              </div>
+              {hasValue(crystal.date_expire) && <span className="game-union-crystal-expiry">만료 예정 · {crystal.date_expire}</span>}
+            </article>
+          )) : <Empty>등록된 아티팩트 크리스탈이 없습니다.</Empty>}
+        </div>
+        <h4 className="game-union-subtitle">아티팩트 효과</h4>
+        <div className="game-union-artifact-effect-grid">
+          {effects.length ? effects.map((effect,index) => (
+            <article className="game-union-artifact-effect" key={index}>
+              <strong>{effect.name || "효과"}</strong>
+              <span>{hasValue(effect.level) ? "Lv. "+effect.level : "레벨 정보 없음"}</span>
+            </article>
+          )) : <Empty>조회된 아티팩트 효과가 없습니다.</Empty>}
+        </div>
+        <DataState source={artifact} />
+      </section>
+      <section className="game-union-champion-panel">
+        <div className="game-union-section-heading">
+          <span className="game-window-eyebrow">UNION CHAMPION</span>
+          <h3 className="game-window-title">유니온 챔피언</h3>
+        </div>
+        <div className="game-union-champion-grid">
+          {champions.length ? champions.map((item,index) => {
+            const level = item.character_level ?? item.champion_level ?? null;
+            const championName = item.champion_name || "유니온 챔피언";
+            const className = item.character_class || item.champion_class || "직업 정보 없음";
+            const badgeInfo = Array.isArray(item.champion_badge_info) ? item.champion_badge_info : [];
+            return (
+              <article className="game-union-champion-card" key={index}>
+                <div className="game-union-champion-card-head">
+                  <span className={"game-union-grade-badge grade-"+String(item.champion_grade||"").toLowerCase()}>{item.champion_grade || "—"}</span>
+                  <span className="game-union-champion-level">{hasValue(level) ? "Lv."+level : "Lv.—"}</span>
+                </div>
+                <DetailTooltip
+                  as="div"
+                  className="game-union-champion-avatar game-union-champion-avatar-trigger game-tooltip-trigger"
+                  title={championName}
+                  lines={[
+                    "직업 · " + className,
+                    hasValue(level) ? "레벨 · Lv. " + level : null,
+                    hasValue(item.character_world_name) ? "월드 · " + item.character_world_name : null,
+                    "등급 · " + (item.champion_grade || "정보 없음"),
+                    hasValue(item.champion_slot) ? "챔피언 슬롯 · " + item.champion_slot : null
+                  ]}
+                >
+                  {apiImage(item.character_image,championName,"game-union-champion-avatar-preview")}
+                </DetailTooltip>
+                <strong className="game-union-champion-name">{championName}</strong>
+                <span className="game-union-champion-class">{className}</span>
+                <div className="game-union-champion-badges" aria-label="챔피언 휘장">
+                  {badgeInfo.map((badge,badgeIndex) => renderCrest(badge,badgeIndex,"champion-"+index))}
+                </div>
+              </article>
+            );
+          }) : <Empty>등록된 유니온 챔피언이 없습니다.</Empty>}
+        </div>
+        <h4 className="game-union-subtitle">전체 챔피언 휘장 효과</h4>
+        <div className="game-union-champion-total-list">
+          {totals.length ? totals.map((item,index) => renderCrest(item,index,"total")) : <Empty>전체 휘장 효과 정보가 없습니다.</Empty>}
+        </div>
+        <DataState source={champion} />
       </section>
     </div>
   );
