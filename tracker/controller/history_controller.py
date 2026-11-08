@@ -12,6 +12,7 @@ from tracker.domain.growth_calculations import (
 from tracker.services.nexon_service import (
     get_basic_character_snapshot,
     get_ranking_snapshot,
+    get_world_type,
     is_temporary_nexon_failure,
     resolve_character,
 )
@@ -106,7 +107,6 @@ def get_history():
                     and saved.get("recordStatus") == "available"
                     and (
                         not saved.get("experienceRateChecked", False)
-                        or saved.get("experienceRate") is None
                     )
                 )
             )
@@ -126,7 +126,8 @@ def get_history():
             ranking_data, response = get_ranking_snapshot(
                 target_date=date_string,
                 world_name=world_name,
-                ocid=ocid
+                ocid=ocid,
+                world_type=get_world_type(world_name),
             )
             if ranking_data:
                 experience_rate = ranking_data.get("character_exp_rate")
@@ -332,7 +333,8 @@ def fetch_historical_record(ocid, world_name, target_date, today):
     date_text = target_date.isoformat()
     try:
         ranking_data, ranking_response = get_ranking_snapshot(
-            date_text, world_name=world_name, ocid=ocid, historical=True
+            date_text, world_name=world_name, ocid=ocid,
+            world_type=get_world_type(world_name), historical=True
         )
     except requests.RequestException:
         ranking_data, ranking_response = None, None
@@ -487,7 +489,6 @@ def get_history_archive():
                 stored_by_date[target_date.isoformat()].get("recordStatus") == "available"
                 and (
                     not stored_by_date[target_date.isoformat()].get("experienceRateChecked", False)
-                    or stored_by_date[target_date.isoformat()].get("experienceRate") is None
                 )
             )
         ]
@@ -528,8 +529,7 @@ def get_history_archive():
                 or (
                     stored_by_date[(start_date + timedelta(days=index)).isoformat()].get("recordStatus") == "available"
                     and (
-                        stored_by_date[(start_date + timedelta(days=index)).isoformat()].get("experienceRate") is None
-                        or not stored_by_date[(start_date + timedelta(days=index)).isoformat()].get("experienceRateChecked", False)
+                        not stored_by_date[(start_date + timedelta(days=index)).isoformat()].get("experienceRateChecked", False)
                     )
                 )
                 for index in range(days)
