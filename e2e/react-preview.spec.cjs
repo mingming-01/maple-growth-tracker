@@ -360,3 +360,126 @@ test("30-day AI report reuses cache without automatic LLM calls and only regener
   await expect(page.getByText("기간 분석 테스트 결과입니다.")).toBeVisible();
   expect(aiCalls).toBe(1);
 });
+
+
+test("diagnostic: report mobile document overflow at common viewport widths", async ({ page }) => {
+  await page.route("**/api/character?*", route => route.fulfill({
+    status: 200,
+    contentType: "application/json",
+    body: JSON.stringify({
+      characterName: "모바일진단",
+      ocid: "mobile-layout-diagnostic",
+      character_image: null,
+      worldName: "크로아",
+      job: "아크메이지(불,독)",
+      guildName: "테스트길드",
+      level: 280,
+      experience: 123456789012345,
+      experienceRate: "42.125",
+      ranking: 12345,
+      worldRanking: 6789,
+      jobWorldRanking: 123,
+      jobRanking: 456,
+      rankingDataStatus: "available"
+    })
+  }));
+  await page.route("**/api/history?*", route => route.fulfill({
+    status: 200,
+    contentType: "application/json",
+    body: JSON.stringify({
+      history: [
+        { date: "2026-11-02", level: 280, experience: 1000, experienceRate: "39.000", experienceChange: null, recordStatus: "available" },
+        { date: "2026-11-03", level: 280, experience: 1200, experienceRate: "39.500", experienceChange: 200, recordStatus: "available" },
+        { date: "2026-11-04", level: 280, experience: 1300, experienceRate: "40.000", experienceChange: 100, recordStatus: "available" },
+        { date: "2026-11-05", level: 280, experience: 1500, experienceRate: "40.750", experienceChange: 200, recordStatus: "available" },
+        { date: "2026-11-06", level: 280, experience: 1700, experienceRate: "41.250", experienceChange: 200, recordStatus: "available" },
+        { date: "2026-11-07", level: 280, experience: 1900, experienceRate: "41.750", experienceChange: 200, recordStatus: "available" },
+        { date: "2026-11-08", level: 280, experience: 2100, experienceRate: "42.125", experienceChange: 200, recordStatus: "available" }
+      ],
+      historyStatus: "complete",
+      historyStorage: { backend: "postgres", status: "saved" }
+    })
+  }));
+  await page.route("**/api/character-details?*", route => route.fulfill({
+    status: 200,
+    contentType: "application/json",
+    body: JSON.stringify({ section: "stats", status: "available", sources: [] })
+  }));
+  await page.route("**/api/ai-analysis?*", route => route.fulfill({
+    status: 200,
+    contentType: "application/json",
+    body: JSON.stringify({
+      analysis: "[성장 패턴] 모바일 레이아웃 진단",
+      cacheHit: true,
+      growthInsights: {}
+    })
+  }));
+
+  await page.setViewportSize({ width: 360, height: 800 });
+  await page.goto("/preview/");
+  await page.getByLabel("캐릭터명").fill("모바일진단");
+  await page.getByRole("button", { name: /캐릭터 조회/ }).click();
+  await expect(page.getByRole("heading", { name: "모바일진단" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "날짜별 성장 기록" })).toBeVisible();
+
+  const measurements = [];
+  for (const width of [360, 390, 412]) {
+    await page.setViewportSize({ width, height: 844 });
+    await page.waitForTimeout(100);
+    const measurement = await page.evaluate(() => {
+      const viewport = document.documentElement.clientWidth;
+      const root = {
+        innerWidth: window.innerWidth,
+        clientWidth: viewport,
+        documentScrollWidth: document.documentElement.scrollWidth,
+        bodyScrollWidth: document.body.scrollWidth
+      };
+      const majorSelectors = [
+        ".mgt-app-shell", ".mgt-page-content", ".mgt-result-content",
+        "#character", "#details", "#growth", "#analytics",
+        ".mgt-profile-shell", ".character-details-section",
+        ".react-equipment-board", ".growth-dashboard",
+        ".history-card", ".history-table-wrapper", ".history-table"
+      ];
+      const major = Object.fromEntries(majorSelectors.map(selector => {
+        const element = document.querySelector(selector);
+        if (!element) return [selector, null];
+        const rect = element.getBoundingClientRect();
+        return [selector, {
+          left: Math.round(rect.left * 10) / 10,
+          right: Math.round(rect.right * 10) / 10,
+          width: Math.round(rect.width * 10) / 10,
+          scrollWidth: element.scrollWidth,
+          clientWidth: element.clientWidth
+        }];
+      }));
+      const offenders = [...document.querySelectorAll("body *")].map(element => {
+        const rect = element.getBoundingClientRect();
+        if (!rect.width || !rect.height) return null;
+        let clipped = false;
+        for (let parent = element.parentElement; parent && parent !== document.body; parent = parent.parentElement) {
+          const overflowX = getComputedStyle(parent).overflowX;
+          if (["auto", "scroll", "hidden", "clip"].includes(overflowX)) {
+            clipped = true;
+            break;
+          }
+        }
+        return {
+          tag: element.tagName.toLowerCase(),
+          id: element.id || "",
+          className: typeof element.className === "string" ? element.className : "",
+          left: Math.round(rect.left * 10) / 10,
+          right: Math.round(rect.right * 10) / 10,
+          width: Math.round(rect.width * 10) / 10,
+          clippedByAncestor: clipped
+        };
+      }).filter(item => item && !item.clippedByAncestor &&
+        (item.left < -1 || item.right > viewport + 1))
+        .sort((a, b) => Math.max(b.right - viewport, -b.left) - Math.max(a.right - viewport, -a.left))
+        .slice(0, 12);
+      return { ...root, major, offenders };
+    });
+    measurements.push({ viewport: width, ...measurement });
+  }
+  console.log("MGT_MOBILE_LAYOUT_DIAGNOSTIC " + JSON.stringify(measurements));
+});
