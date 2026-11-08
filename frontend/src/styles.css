@@ -285,7 +285,7 @@ button:focus-visible,input:focus-visible,select:focus-visible,a:focus-visible { 
 .react-equipment-board .equipment-game-icon-frame img { width:46px; height:46px; object-fit:contain; }
 .react-equipment-board .equipment-game-item-name { display:-webkit-box; width:100%; overflow:hidden; color:#e5def8; font-size:9px; line-height:1.35; text-align:center; overflow-wrap:anywhere; -webkit-line-clamp:2; -webkit-box-orient:vertical; }
 .react-equipment-board .equipment-game-star { margin-top:3px; color:#e3c778; font-size:9px; }
-.game-tooltip-trigger { cursor:help; touch-action:manipulation; -webkit-tap-highlight-color:transparent; }
+.game-tooltip-trigger { cursor:default; touch-action:manipulation; -webkit-tap-highlight-color:transparent; }
 .game-floating-tooltip {
   position:fixed;
   z-index:99999;
@@ -1014,4 +1014,384 @@ button:focus-visible,input:focus-visible,select:focus-visible,a:focus-visible { 
   .mgt-result-content .history-level-progress-change {
     font-size:8px;
   }
+}
+
+/* Keep the long numeric values aligned to the left edge of their table cells. */
+.mgt-result-content .history-experience-value,
+.mgt-result-content .history-level-progress-cell {
+  text-align:left;
+}
+.mgt-result-content .history-experience-value > span,
+.mgt-result-content .history-experience-change,
+.mgt-result-content .history-level-progress-cell,
+.mgt-result-content .history-level-progress-change {
+  text-align:left;
+}
+.mgt-result-content .history-level-progress-cell { align-items:flex-start; }
+
+/* A restrained display stage for the Union Champion roster. */
+.mgt-result-content .game-union-display {
+  position:relative;
+  border-color:rgba(191,167,114,.34);
+  background:
+    radial-gradient(ellipse at 50% 0%,rgba(125,101,157,.16),transparent 58%),
+    linear-gradient(145deg,rgba(34,32,47,.98),rgba(24,23,35,.98));
+}
+.mgt-result-content .game-union-champion-banner {
+  display:flex;
+  align-items:center;
+  gap:14px;
+  min-width:0;
+  margin-bottom:16px;
+  padding:15px 17px;
+  border:1px solid rgba(195,170,117,.26);
+  border-radius:12px;
+  background:
+    linear-gradient(105deg,rgba(125,98,151,.16),transparent 52%),
+    rgba(12,12,20,.28);
+  box-shadow:inset 0 1px rgba(255,255,255,.035);
+}
+.mgt-result-content .game-union-champion-banner-emblem {
+  display:grid;
+  place-items:center;
+  flex:none;
+  width:46px;
+  height:46px;
+  border:1px solid rgba(221,196,139,.5);
+  border-radius:50%;
+  color:#f0d99d;
+  background:radial-gradient(circle at 35% 28%,rgba(192,157,98,.32),rgba(54,44,62,.8));
+  box-shadow:0 0 22px rgba(190,151,91,.13),inset 0 0 0 4px rgba(245,220,163,.06);
+  font-size:22px;
+}
+.mgt-result-content .game-union-champion-banner-copy { display:grid; gap:4px; min-width:0; }
+.mgt-result-content .game-union-champion-banner-copy .game-window-eyebrow { color:#c9b88e; }
+.mgt-result-content .game-union-champion-banner-copy .game-window-title { margin:0; color:#f0e7d1; }
+.mgt-result-content .game-union-champion-banner-copy p { margin:0; color:#aaa3b4; font-size:10px; line-height:1.45; }
+.mgt-result-content .game-union-champion-banner-count {
+  display:grid;
+  justify-items:center;
+  gap:2px;
+  flex:none;
+  min-width:67px;
+  margin-left:auto;
+  padding-left:14px;
+  border-left:1px solid rgba(195,170,117,.23);
+}
+.mgt-result-content .game-union-champion-banner-count strong { color:#eddaa7; font-size:23px; line-height:1; font-variant-numeric:tabular-nums; }
+.mgt-result-content .game-union-champion-banner-count span { color:#9690a0; font-size:8px; font-weight:850; letter-spacing:.1em; }
+.mgt-result-content .game-union-champion-stage {
+  position:relative;
+  isolation:isolate;
+  overflow:visible;
+  width:100%;
+  min-width:0;
+  box-sizing:border-box;
+  padding:23px 15px 34px;
+  border:1px solid rgba(74,159,192,.26);
+  border-radius:12px;
+  background:
+    radial-gradient(ellipse at 50% 8%,rgba(58,151,202,.18),transparent 32%),
+    radial-gradient(ellipse at 50% 30%,rgba(54,112,162,.12),transparent 62%),
+    linear-gradient(180deg,rgba(8,19,33,.28),rgba(5,12,22,.52));
+}
+.mgt-result-content .game-union-champion-stage-lights {
+  position:absolute;
+  z-index:-1;
+  inset:0;
+  border-radius:inherit;
+  opacity:.58;
+  background:radial-gradient(ellipse at 50% 0%,rgba(86,201,238,.15),transparent 42%),repeating-linear-gradient(90deg,transparent 0,transparent 48px,rgba(118,204,228,.035) 49px,transparent 50px);
+  pointer-events:none;
+}
+.mgt-result-content .game-union-champion-stage::after {
+  content:"";
+  position:absolute;
+  z-index:0;
+  right:5%;
+  bottom:18px;
+  left:5%;
+  height:1px;
+  background:linear-gradient(90deg,transparent,rgba(93,190,225,.48),transparent);
+  pointer-events:none;
+}
+.mgt-result-content .game-union-display .game-union-champion-grid {
+  position:relative;
+  z-index:1;
+  display:grid !important;
+  width:100%;
+  max-width:1000px;
+  min-width:0;
+  margin-inline:auto;
+  box-sizing:border-box;
+  align-items:stretch;
+  grid-template-columns:repeat(3,minmax(0,1fr)) !important;
+  gap:24px 14px;
+}
+.mgt-result-content .game-union-display .game-union-champion-card {
+  display:grid !important;
+  grid-template-columns:minmax(0,1fr);
+  grid-template-rows:28px 164px 62px 50px;
+  align-items:start;
+  justify-items:stretch;
+  width:100%;
+  max-width:310px;
+  min-width:0;
+  justify-self:center;
+  box-sizing:border-box;
+  margin-bottom:10px;
+  padding:10px 12px 14px;
+  border-color:rgba(104,197,236,.64) !important;
+  border-radius:12px;
+  background:
+    linear-gradient(145deg,rgba(37,112,152,.1),transparent 42%),
+    radial-gradient(ellipse at 50% 10%,rgba(52,139,190,.2),transparent 62%),
+    linear-gradient(160deg,rgba(21,38,57,.99),rgba(10,17,29,.99)) !important;
+  box-shadow:inset 0 1px rgba(220,249,255,.16),inset 0 0 0 1px rgba(96,191,225,.16),0 10px 22px rgba(0,0,0,.32);
+  transform:none;
+  transition:border-color .18s ease,box-shadow .18s ease,transform .18s ease;
+}
+.mgt-result-content .game-union-display .game-union-champion-card:hover {
+  border-color:rgba(138,225,255,.92) !important;
+  box-shadow:inset 0 1px rgba(255,255,255,.18),0 12px 26px rgba(0,0,0,.35),0 0 24px rgba(73,193,239,.16);
+}
+.mgt-result-content .game-union-display .game-union-champion-card.is-sss {
+  border-color:rgba(166,142,241,.78) !important;
+  background:
+    linear-gradient(145deg,rgba(108,75,173,.13),transparent 44%),
+    radial-gradient(ellipse at 50% 10%,rgba(126,91,193,.23),transparent 62%),
+    linear-gradient(160deg,rgba(25,33,57,.99),rgba(12,15,31,.99)) !important;
+  box-shadow:inset 0 1px rgba(238,229,255,.18),inset 0 0 0 1px rgba(164,138,235,.18),0 10px 22px rgba(0,0,0,.32),0 0 16px rgba(123,91,205,.09);
+}
+.mgt-result-content .game-union-display .game-union-champion-card.is-sss::before {
+  border-color:rgba(184,164,255,.3);
+  background:
+    linear-gradient(90deg,rgba(196,174,255,.76) 0 11px,transparent 11px) left top/22px 1px no-repeat,
+    linear-gradient(180deg,rgba(196,174,255,.76) 0 11px,transparent 11px) left top/1px 22px no-repeat,
+    linear-gradient(270deg,rgba(196,174,255,.76) 0 11px,transparent 11px) right top/22px 1px no-repeat,
+    linear-gradient(180deg,rgba(196,174,255,.76) 0 11px,transparent 11px) right top/1px 22px no-repeat,
+    linear-gradient(90deg,rgba(196,174,255,.52) 0 11px,transparent 11px) left bottom/22px 1px no-repeat,
+    linear-gradient(0deg,rgba(196,174,255,.52) 0 11px,transparent 11px) left bottom/1px 22px no-repeat,
+    linear-gradient(270deg,rgba(196,174,255,.52) 0 11px,transparent 11px) right bottom/22px 1px no-repeat,
+    linear-gradient(0deg,rgba(196,174,255,.52) 0 11px,transparent 11px) right bottom/1px 22px no-repeat;
+}
+.mgt-result-content .game-union-display .game-union-champion-card.is-sss .game-union-grade-badge.grade-sss {
+  border-color:rgba(236,190,255,.92);
+  color:#fff4ff;
+  background:linear-gradient(145deg,#a75cb7,#564083);
+  box-shadow:inset 0 1px rgba(255,255,255,.5),0 0 12px rgba(177,117,235,.32);
+}
+.mgt-result-content .game-union-display .game-union-champion-card::before {
+  inset:5px;
+  border-color:rgba(130,211,243,.22);
+  border-radius:8px;
+  box-shadow:inset 0 1px rgba(220,249,255,.06);
+  background:
+    linear-gradient(90deg,rgba(105,218,247,.62) 0 11px,transparent 11px) left top/22px 1px no-repeat,
+    linear-gradient(180deg,rgba(105,218,247,.62) 0 11px,transparent 11px) left top/1px 22px no-repeat,
+    linear-gradient(270deg,rgba(105,218,247,.62) 0 11px,transparent 11px) right top/22px 1px no-repeat,
+    linear-gradient(180deg,rgba(105,218,247,.62) 0 11px,transparent 11px) right top/1px 22px no-repeat,
+    linear-gradient(90deg,rgba(105,218,247,.44) 0 11px,transparent 11px) left bottom/22px 1px no-repeat,
+    linear-gradient(0deg,rgba(105,218,247,.44) 0 11px,transparent 11px) left bottom/1px 22px no-repeat,
+    linear-gradient(270deg,rgba(105,218,247,.44) 0 11px,transparent 11px) right bottom/22px 1px no-repeat,
+    linear-gradient(0deg,rgba(105,218,247,.44) 0 11px,transparent 11px) right bottom/1px 22px no-repeat;
+}
+.mgt-result-content .game-union-display .game-union-champion-card::after {
+  content:none;
+}
+.mgt-result-content .game-union-display .game-union-champion-card-head { grid-row:1; display:flex; min-width:0; height:28px; align-items:center; justify-content:space-between; margin:0; padding:0 0 5px; border-bottom:1px solid rgba(111,195,225,.22); }
+.mgt-result-content .game-union-champion-slot { color:#8bb8d5; font-size:8px; font-weight:850; letter-spacing:.11em; }
+.mgt-result-content .game-union-display .game-union-champion-avatar {
+  position:relative;
+  overflow:visible;
+  display:block;
+  flex:none;
+  width:100%;
+  height:164px !important;
+  min-height:164px;
+  grid-row:2;
+  align-self:stretch;
+  margin:0;
+  border-color:rgba(85,185,225,.34);
+  background:radial-gradient(ellipse at 50% 38%,rgba(68,156,205,.22),transparent 52%),linear-gradient(180deg,rgba(9,21,35,.08),rgba(4,12,23,.42));
+  box-shadow:inset 0 0 0 1px rgba(120,211,242,.08),inset 0 -16px 25px rgba(0,0,0,.24);
+}
+.mgt-result-content .game-union-display .game-union-champion-avatar::before {
+  content:"";
+  position:absolute;
+  z-index:0;
+  top:9px;
+  left:50%;
+  width:126px;
+  height:126px;
+  border:1px solid rgba(86,200,243,.38);
+  border-radius:50%;
+  background:radial-gradient(circle,rgba(91,190,243,.19),rgba(49,134,199,.035) 62%,transparent 63%);
+  box-shadow:0 0 28px rgba(55,174,234,.17),inset 0 0 0 7px rgba(113,211,246,.035);
+  transform:translateX(-50%);
+}
+.mgt-result-content .game-union-display .game-union-champion-avatar::after {
+  content:"";
+  position:absolute;
+  z-index:0;
+  inset:0;
+  background:
+    radial-gradient(ellipse 42% 25% at 50% 88%,rgba(82,220,255,.3),transparent 72%),
+    linear-gradient(76deg,transparent 35%,rgba(102,205,255,.055) 50%,transparent 65%);
+  pointer-events:none;
+}
+.mgt-result-content .game-union-display .game-union-champion-avatar-preview {
+  position:absolute;
+  z-index:2;
+  top:50%;
+  left:50%;
+  width:184px !important;
+  height:184px !important;
+  max-width:none;
+  filter:drop-shadow(0 5px 7px rgba(0,0,0,.45));
+  transform:translate(-50%,calc(-50% + 10px)) scale(1.42);
+}
+.mgt-result-content .game-union-display .game-union-champion-podium {
+  position:absolute;
+  z-index:1;
+  right:22%;
+  bottom:6px;
+  left:22%;
+  height:36px;
+  filter:drop-shadow(0 0 7px rgba(65,207,250,.34)) drop-shadow(0 5px 7px rgba(0,0,0,.42));
+  pointer-events:none;
+}
+.mgt-result-content .game-union-display .game-union-champion-podium-tier {
+  position:absolute;
+  left:50%;
+  transform:translateX(-50%);
+  border:1px solid rgba(113,218,250,.82);
+  background:linear-gradient(90deg,#12334e,#287ca2 22%,#43b5d4 50%,#287ca2 78%,#12334e);
+  box-shadow:inset 0 1px rgba(239,253,255,.54),0 2px 5px rgba(0,0,0,.28);
+}
+.mgt-result-content .game-union-display .podium-tier-top {
+  z-index:3;
+  top:14px;
+  width:58%;
+  height:8px;
+  border-radius:4px 4px 2px 2px;
+  background:linear-gradient(180deg,#d1f8ff,#58c8e7 60%,#2783b6);
+  box-shadow:0 0 13px rgba(55,190,240,.48),inset 0 1px rgba(255,255,255,.9);
+}
+.mgt-result-content .game-union-display .podium-tier-middle {
+  z-index:2;
+  top:21px;
+  width:80%;
+  height:9px;
+  clip-path:polygon(0 0,100% 0,94% 100%,6% 100%);
+}
+.mgt-result-content .game-union-display .podium-tier-back {
+  z-index:1;
+  top:28px;
+  width:100%;
+  height:9px;
+  border-radius:1px 1px 4px 4px;
+  clip-path:polygon(0 0,100% 0,91% 100%,9% 100%);
+}
+.mgt-result-content .game-union-display .game-union-champion-avatar-trigger { cursor:default; }
+.mgt-result-content .game-union-display .game-union-champion-identity {
+  grid-row:3;
+  grid-column:1/-1;
+  display:grid;
+  grid-template-columns:minmax(0,1fr);
+  grid-template-rows:1fr auto;
+  align-self:stretch;
+  min-width:0;
+  padding:7px 9px 6px;
+  border:1px solid rgba(119,179,207,.38);
+  border-radius:6px;
+  background:linear-gradient(180deg,rgba(31,57,75,.9),rgba(12,27,41,.94));
+  box-shadow:inset 0 1px rgba(219,241,249,.09),inset 0 -2px rgba(1,9,17,.28);
+}
+.mgt-result-content .game-union-display .game-union-champion-identity-heading { grid-column:1; display:flex; min-width:0; align-items:center; justify-content:space-between; gap:8px; }
+.mgt-result-content .game-union-display .game-union-champion-name { grid-column:auto; flex:1; min-width:0; overflow:hidden; color:#f1ebdc; font-size:12px; text-align:left; text-overflow:ellipsis; white-space:nowrap; }
+.mgt-result-content .game-union-display .game-union-champion-level { flex:none; padding:2px 6px; border:1px solid rgba(111,184,215,.38); border-radius:3px; color:#b6d8e8; background:rgba(11,31,48,.78); font-size:9px; font-weight:800; font-variant-numeric:tabular-nums; }
+.mgt-result-content .game-union-display .game-union-champion-class { grid-column:1; align-self:end; max-width:100%; margin:4px 0 0; overflow:hidden; color:#b7ccd6; font-size:9px; text-align:left; text-overflow:ellipsis; white-space:nowrap; }
+.mgt-result-content .game-union-display .game-union-grade-badge {
+  order:-1;
+  border-color:rgba(205,182,126,.46);
+  color:#f1dfb0;
+  background:linear-gradient(135deg,rgba(120,94,54,.72),rgba(56,45,38,.9));
+  box-shadow:inset 0 1px rgba(255,245,214,.14);
+}
+.mgt-result-content .game-union-display .game-union-grade-badge.grade-sss { border-color:#ddbe70; color:#ffe6a8; background:linear-gradient(135deg,#80652f,#48391f); }
+.mgt-result-content .game-union-display .game-union-grade-badge.grade-ss { border-color:#b9a5dc; color:#eee4ff; background:linear-gradient(135deg,#665687,#39334e); }
+.mgt-result-content .game-union-display .game-union-grade-badge.grade-s { border-color:#8db5d3; color:#d9efff; background:linear-gradient(135deg,#466882,#293b4d); }
+.mgt-result-content .game-union-display .game-union-grade-badge.grade-sss {
+  border-color:rgba(145,225,251,.82);
+  color:#f1fbff;
+  background:linear-gradient(145deg,rgba(68,137,169,.94),rgba(23,61,91,.98));
+  box-shadow:inset 0 1px rgba(255,255,255,.42),0 0 12px rgba(67,182,226,.22);
+}
+.mgt-result-content .game-union-display .game-union-champion-badges,
+.mgt-result-content .game-union-display .game-union-champion-total-list {
+  display:flex !important;
+  flex-wrap:wrap;
+  justify-content:center;
+  align-items:center;
+  gap:7px;
+  width:100%;
+  margin-top:8px;
+}
+.mgt-result-content .game-union-display .game-union-champion-badges { grid-row:4; align-self:center; margin-top:0; }
+.mgt-result-content .game-union-display .game-union-champion-crest {
+  width:37px;
+  height:45px;
+  border:2px solid #9cc7de;
+  border-radius:3px 3px 10px 10px;
+  clip-path:polygon(0 0,100% 0,100% 76%,50% 100%,0 76%);
+  color:#f0f8fc;
+  background:radial-gradient(circle at 30% 14%,rgba(204,239,255,.62),transparent 30%),linear-gradient(145deg,#84bedc 0%,#528db6 42%,#315d83 100%);
+  box-shadow:inset 0 0 0 1px rgba(229,247,255,.46),inset 0 -7px 9px rgba(10,34,55,.28),0 3px 7px rgba(0,0,0,.34),0 0 9px rgba(77,176,230,.18);
+  transition:box-shadow .15s ease,transform .15s ease,filter .15s ease;
+}
+.mgt-result-content .game-union-display .game-union-champion-crest:hover {
+  transform:translateY(-3px);
+  filter:brightness(1.12);
+  box-shadow:inset 0 0 0 1px rgba(255,255,255,.34),inset 0 -5px 9px rgba(4,14,24,.24),0 5px 14px rgba(0,0,0,.35);
+}
+.mgt-result-content .game-union-display .game-union-champion-crest-glyph {
+  width:26px;
+  height:26px;
+  border:2px solid rgba(224,245,255,.84);
+  border-radius:50%;
+  color:inherit;
+  background:rgba(15,48,75,.48);
+  font-size:14px;
+  text-shadow:0 1px 5px currentColor;
+}
+.mgt-result-content .game-union-champion-total {
+  margin-top:17px;
+  padding-top:14px;
+  border-color:rgba(191,167,114,.2);
+}
+.mgt-result-content .game-union-champion-total-heading { display:flex; align-items:end; justify-content:space-between; gap:10px; margin-bottom:8px; }
+.mgt-result-content .game-union-champion-total-heading .game-window-eyebrow { color:#a99a79; }
+.mgt-result-content .game-union-champion-total-heading .game-union-subtitle { margin:3px 0 0; color:#e1d8c3; }
+.mgt-result-content .game-union-champion-total-count { color:#aaa2b0; font-size:9px; white-space:nowrap; }
+@media(max-width:760px) {
+  .mgt-result-content .game-union-champion-banner { padding:12px; gap:10px; }
+  .mgt-result-content .game-union-champion-banner-emblem { width:39px; height:39px; }
+  .mgt-result-content .game-union-display .game-union-champion-grid { grid-template-columns:repeat(2,minmax(0,1fr)) !important; gap:20px 10px; }
+  .mgt-result-content .game-union-display .game-union-champion-avatar-preview { width:138px !important; height:138px !important; transform:translate(-50%,calc(-50% + 24px)) scale(1.3); }
+}
+@media(max-width:480px) {
+  .mgt-result-content .game-union-champion-banner { align-items:flex-start; }
+  .mgt-result-content .game-union-champion-banner-emblem { width:34px; height:34px; font-size:17px; }
+  .mgt-result-content .game-union-champion-banner-copy .game-window-title { font-size:13px; }
+  .mgt-result-content .game-union-champion-banner-copy p { max-width:210px; font-size:9px; }
+  .mgt-result-content .game-union-champion-banner-count { min-width:51px; padding-left:9px; }
+  .mgt-result-content .game-union-champion-banner-count strong { font-size:19px; }
+  .mgt-result-content .game-union-champion-banner-count span { font-size:7px; }
+  .mgt-result-content .game-union-champion-stage { padding:16px 10px 28px; }
+  .mgt-result-content .game-union-display .game-union-champion-grid { grid-template-columns:1fr !important; gap:17px; }
+  .mgt-result-content .game-union-display .game-union-champion-card { grid-template-rows:28px 170px 62px 50px; margin-bottom:0; }
+  .mgt-result-content .game-union-display .game-union-champion-avatar-preview { transform:translate(-50%,calc(-50% + 26px)) scale(1.35); }
+  .mgt-result-content .game-union-display .game-union-champion-podium { height:36px; }
+  .mgt-result-content .game-union-display .game-union-champion-avatar { height:170px !important; min-height:170px; }
 }

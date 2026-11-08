@@ -31,6 +31,7 @@ CHARACTER_CACHE_TTL = 300
 HISTORY_CACHE_TTL = 1800
 AI_RESPONSE_CACHE_TTL = 6 * 60 * 60
 AI_RESPONSE_CACHE_MAX_ENTRIES = 100
+RUNTIME_CACHE_MAX_ENTRIES = 1000
 
 
 class RuntimeState:
@@ -82,6 +83,7 @@ class RuntimeState:
         )
         self.cache = {}
         self.ai_response_cache = {}
+        self.cache_lock = Lock()
         self.nexon_request_lock = Lock()
         self.last_nexon_request_at = 0.0
         self.nexon_request_count = 0
@@ -290,18 +292,20 @@ def initialize_snapshot_db():
 def get_ai_response_cache(prompt):
     """같은 프롬프트의 성공한 AI 결과를 일정 시간 재사용한다."""
     cache_key = hashlib.sha256(prompt.encode("utf-8")).hexdigest()
-    cache = get_runtime_state().ai_response_cache
-    item = cache.get(cache_key)
-    if not item:
-        return None
+    state = get_runtime_state()
+    with state.cache_lock:
+        cache = state.ai_response_cache
+        item = cache.get(cache_key)
+        if not item:
+            return None
 
-    now = time.time()
-    if now - item["cached_at"] > AI_RESPONSE_CACHE_TTL:
-        cache.pop(cache_key, None)
-        return None
+        now = time.time()
+        if now - item["cached_at"] > AI_RESPONSE_CACHE_TTL:
+            cache.pop(cache_key, None)
+            return None
 
-    item["used_at"] = now
-    return item["analysis"]
+        item["used_at"] = now
+        return item["analysis"]
 
 
 def set_ai_response_cache(prompt, analysis):
@@ -310,45 +314,66 @@ def set_ai_response_cache(prompt, analysis):
 
     now = time.time()
     cache_key = hashlib.sha256(prompt.encode("utf-8")).hexdigest()
-    cache = get_runtime_state().ai_response_cache
-    cache[cache_key] = {
-        "analysis": analysis,
-        "cached_at": now,
-        "used_at": now,
-    }
+    state = get_runtime_state()
+    with state.cache_lock:
+        cache = state.ai_response_cache
+        cache[cache_key] = {
+            "analysis": analysis,
+            "cached_at": now,
+            "used_at": now,
+        }
 
-    while len(cache) > AI_RESPONSE_CACHE_MAX_ENTRIES:
-        oldest_key = min(
-            cache,
-            key=lambda key: cache[key]["used_at"],
-        )
-        cache.pop(oldest_key, None)
+        while len(cache) > AI_RESPONSE_CACHE_MAX_ENTRIES:
+            oldest_key = min(cache, key=lambda key: cache[key]["used_at"])
+            cache.pop(oldest_key, None)
 
 
 def get_cache(key):
-    cache = get_runtime_state().cache
-    item = cache.get(key)
-    if not item:
-        return None
-    if time.time() - item["time"] > item["ttl"]:
-        del cache[key]
-        return None
-    return item["data"]
+    state = get_runtime_state()
+    with state.cache_lock:
+        cache = state.cache
+        item = cache.get(key)
+        if not item:
+            return None
+        now = time.time()
+        if now - item["time"] > item["ttl"]:
+            del cache[key]
+            return None
+        item["used_at"] = now
+        return item["data"]
 
 
 def set_cache(key, data, ttl):
-    cache = get_runtime_state().cache
-    cache[key] = {
-        "time": time.time(),
-        "data": data,
-        "ttl": ttl,
-        "saved_at": datetime.now().astimezone().isoformat(timespec="seconds")
-    }
+    state = get_runtime_state()
+    now = time.time()
+    with state.cache_lock:
+        cache = state.cache
+        if len(cache) >= RUNTIME_CACHE_MAX_ENTRIES:
+            for existing_key, item in list(cache.items()):
+                if now - item["time"] > item["ttl"]:
+                    cache.pop(existing_key, None)
+        cache[key] = {
+            "time": now,
+            "used_at": now,
+            "data": data,
+            "ttl": ttl,
+            "saved_at": datetime.now().astimezone().isoformat(timespec="seconds")
+        }
+        while len(cache) > RUNTIME_CACHE_MAX_ENTRIES:
+            oldest_key = min(cache, key=lambda cache_key: cache[cache_key]["used_at"])
+            cache.pop(oldest_key, None)
 
 
 def get_cache_timestamp(key):
-    item = get_runtime_state().cache.get(key)
-    return item.get("saved_at") if item else None
+    state = get_runtime_state()
+    with state.cache_lock:
+        item = state.cache.get(key)
+        if not item:
+            return None
+        if time.time() - item["time"] > item["ttl"]:
+            state.cache.pop(key, None)
+            return None
+        return item.get("saved_at")
 
 
 def save_api_snapshot(cache_key, data):

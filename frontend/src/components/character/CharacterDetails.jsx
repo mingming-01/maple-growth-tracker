@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import "./CharacterDetails.css";
 import { getCharacterDetails } from "../../services/api.js";
 import {
@@ -10,6 +10,8 @@ import { EquipmentTab } from "./CharacterDetailsEquipment.jsx";
 import { SymbolsTab, SkillsTab, LinkTab, UnionTab } from "./CharacterDetailsOtherTabs.jsx";
 
 export default function CharacterDetails({ ocid, onStatsLoaded }) {
+  const sectionRef = useRef(null);
+  const [visibleOcid, setVisibleOcid] = useState(null);
   const [tab, setTab] = useState("stats");
   const [cache, setCache] = useState({});
   const [data, setData] = useState(null);
@@ -17,6 +19,24 @@ export default function CharacterDetails({ ocid, onStatsLoaded }) {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
+
+  useEffect(() => {
+    const section = sectionRef.current;
+    if (!ocid || !section) return;
+    if (typeof IntersectionObserver === "undefined") {
+      setVisibleOcid(ocid);
+      return;
+    }
+
+    const observer = new IntersectionObserver(([entry]) => {
+      if (entry.isIntersecting) {
+        setVisibleOcid(ocid);
+        observer.disconnect();
+      }
+    }, { rootMargin: "140px 0px" });
+    observer.observe(section);
+    return () => observer.disconnect();
+  }, [ocid]);
 
   useEffect(() => {
     setTab("stats");
@@ -28,7 +48,7 @@ export default function CharacterDetails({ ocid, onStatsLoaded }) {
   }, [ocid]);
 
   useEffect(() => {
-    if (!ocid) return;
+    if (!ocid || visibleOcid !== ocid) return;
     const key = ocid + ":" + tab;
     const cached = cache[key];
     let cancelled = false;
@@ -58,7 +78,7 @@ export default function CharacterDetails({ ocid, onStatsLoaded }) {
       })
       .finally(() => { if (!cancelled) setLoading(false); });
     return () => { cancelled = true; };
-  }, [ocid, tab, cache, onStatsLoaded]);
+  }, [ocid, tab, cache, onStatsLoaded, visibleOcid]);
 
   const changePreset = patch => setSelected(previous => ({ ...previous, ...patch }));
 
@@ -81,7 +101,7 @@ export default function CharacterDetails({ ocid, onStatsLoaded }) {
   if (!ocid) return null;
 
   return (
-    <section className="section character-details-section react-character-details" aria-labelledby="react-detail-title">
+    <section ref={sectionRef} className="section character-details-section react-character-details" aria-labelledby="react-detail-title">
       <div className="section-header character-details-header">
         <div>
           <h2 className="section-title" id="react-detail-title">캐릭터 상세 정보</h2>

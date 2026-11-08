@@ -1,6 +1,4 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import html2canvas from "html2canvas";
-import { jsPDF } from "jspdf";
 import { getCharacter, getHistory } from "./services/api.js";
 import CharacterDetails from "./components/character/CharacterDetails.jsx";
 import AdminDashboard from "./components/admin/AdminDashboard.jsx";
@@ -318,7 +316,7 @@ function App() {
       const nextCharacter = await getCharacter(target,{refresh});
       let historyResult;
       try {
-        historyResult = await getHistory(target,{refresh});
+        historyResult = await getHistory(target,{refresh,ocid:nextCharacter.ocid});
       } catch (historyError) {
         historyResult = {history:[],dataStatus:"unavailable",historyStatus:"unavailable"};
         setHistoryWarning(historyError.message || "성장 기록을 조회하지 못했습니다. 캐릭터 기본 정보는 표시합니다.");
@@ -397,6 +395,7 @@ function App() {
     if (!resultRef.current) return;
     setExporting("image");
     try {
+      const { default: html2canvas } = await import("html2canvas");
       const canvas = await html2canvas(resultRef.current,{
         backgroundColor:"#10101a",
         scale:2,
@@ -418,6 +417,10 @@ function App() {
     if (!resultRef.current) return;
     setExporting("pdf");
     try {
+      const [{ default: html2canvas }, { jsPDF }] = await Promise.all([
+        import("html2canvas"),
+        import("jspdf")
+      ]);
       const canvas = await html2canvas(resultRef.current,{
         backgroundColor:"#10101a",
         scale:2,

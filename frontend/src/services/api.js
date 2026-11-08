@@ -29,8 +29,9 @@ export function getCharacter(name, { refresh = true, signal } = {}) {
   return requestJson("/api/character?" + params.toString(), { signal, cache: "no-store" });
 }
 
-export function getHistory(name, { refresh = true, signal } = {}) {
+export function getHistory(name, { refresh = true, ocid, signal } = {}) {
   const params = new URLSearchParams({ name: String(name || "").trim() });
+  if (ocid) params.set("ocid", String(ocid));
   if (refresh) params.set("refresh", "1");
   return requestJson("/api/history?" + params.toString(), { signal, cache: "no-store" });
 }

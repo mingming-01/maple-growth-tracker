@@ -358,49 +358,82 @@ export function UnionTab({ data, selected, onSelect }) {
         </div>
         <DataState source={artifact} />
       </section>
-      <section className="game-union-champion-panel">
-        <div className="game-union-section-heading">
-          <span className="game-window-eyebrow">UNION CHAMPION</span>
-          <h3 className="game-window-title">유니온 챔피언</h3>
+      <section className="game-union-champion-panel game-union-display">
+        <div className="game-union-champion-banner">
+          <span className="game-union-champion-banner-emblem" aria-hidden="true">✦</span>
+          <div className="game-union-champion-banner-copy">
+            <span className="game-window-eyebrow">UNION · CHAMPIONS</span>
+            <h3 className="game-window-title">유니온 챔피언</h3>
+            <p>등록된 챔피언과 보유한 휘장을 한눈에 확인합니다.</p>
+          </div>
+          <div className="game-union-champion-banner-count" aria-label={`등록된 챔피언 ${champions.length}명`}>
+            <strong>{String(champions.length).padStart(2,"0")}</strong>
+            <span>CHAMPIONS</span>
+          </div>
         </div>
-        <div className="game-union-champion-grid">
-          {champions.length ? champions.map((item,index) => {
-            const level = item.character_level ?? item.champion_level ?? null;
-            const championName = item.champion_name || "유니온 챔피언";
-            const className = item.character_class || item.champion_class || "직업 정보 없음";
-            const badgeInfo = Array.isArray(item.champion_badge_info) ? item.champion_badge_info : [];
-            return (
-              <article className="game-union-champion-card" key={index}>
-                <div className="game-union-champion-card-head">
-                  <span className={"game-union-grade-badge grade-"+String(item.champion_grade||"").toLowerCase()}>{item.champion_grade || "—"}</span>
-                  <span className="game-union-champion-level">{hasValue(level) ? "Lv."+level : "Lv.—"}</span>
-                </div>
-                <DetailTooltip
-                  as="div"
-                  className="game-union-champion-avatar game-union-champion-avatar-trigger game-tooltip-trigger"
-                  title={championName}
-                  lines={[
-                    "직업 · " + className,
-                    hasValue(level) ? "레벨 · Lv. " + level : null,
-                    hasValue(item.character_world_name) ? "월드 · " + item.character_world_name : null,
-                    "등급 · " + (item.champion_grade || "정보 없음"),
-                    hasValue(item.champion_slot) ? "챔피언 슬롯 · " + item.champion_slot : null
-                  ]}
+        <div className="game-union-champion-stage">
+          <div className="game-union-champion-stage-lights" aria-hidden="true" />
+          <div className="game-union-champion-grid">
+            {champions.length ? champions.map((item,index) => {
+              const level = item.character_level ?? item.champion_level ?? null;
+              const championName = item.champion_name || "유니온 챔피언";
+              const className = item.character_class || item.champion_class || "직업 정보 없음";
+              const badgeInfo = Array.isArray(item.champion_badge_info) ? item.champion_badge_info : [];
+              const grade = String(item.champion_grade || "").toLowerCase();
+              return (
+                <article
+                  className={"game-union-champion-card"+(grade === "sss" ? " is-sss" : "")}
+                  key={index}
                 >
-                  {apiImage(item.character_image,championName,"game-union-champion-avatar-preview")}
-                </DetailTooltip>
-                <strong className="game-union-champion-name">{championName}</strong>
-                <span className="game-union-champion-class">{className}</span>
-                <div className="game-union-champion-badges" aria-label="챔피언 휘장">
-                  {badgeInfo.map((badge,badgeIndex) => renderCrest(badge,badgeIndex,"champion-"+index))}
-                </div>
-              </article>
-            );
-          }) : <Empty>등록된 유니온 챔피언이 없습니다.</Empty>}
+                  <div className="game-union-champion-card-head">
+                    <span className={"game-union-grade-badge grade-"+grade}>{item.champion_grade || "—"}</span>
+                    <span className="game-union-champion-slot">SLOT {item.champion_slot ?? index + 1}</span>
+                  </div>
+                  <DetailTooltip
+                    as="div"
+                    className="game-union-champion-avatar game-union-champion-avatar-trigger game-tooltip-trigger"
+                    title={championName}
+                    lines={[
+                      "직업 · " + className,
+                      hasValue(level) ? "레벨 · Lv. " + level : null,
+                      hasValue(item.character_world_name) ? "월드 · " + item.character_world_name : null,
+                      "등급 · " + (item.champion_grade || "정보 없음"),
+                      hasValue(item.champion_slot) ? "챔피언 슬롯 · " + item.champion_slot : null
+                    ]}
+                  >
+                    <span className="game-union-champion-podium" aria-hidden="true">
+                      <span className="game-union-champion-podium-tier podium-tier-back" />
+                      <span className="game-union-champion-podium-tier podium-tier-middle" />
+                      <span className="game-union-champion-podium-tier podium-tier-top" />
+                    </span>
+                    {apiImage(item.character_image,championName,"game-union-champion-avatar-preview")}
+                  </DetailTooltip>
+                  <div className="game-union-champion-identity">
+                    <div className="game-union-champion-identity-heading">
+                      <strong className="game-union-champion-name">{championName}</strong>
+                      <span className="game-union-champion-level">{hasValue(level) ? "Lv." + level : "Lv.—"}</span>
+                    </div>
+                    <span className="game-union-champion-class">{className}</span>
+                  </div>
+                  <div className="game-union-champion-badges" aria-label="챔피언 휘장">
+                    {badgeInfo.map((badge,badgeIndex) => renderCrest(badge,badgeIndex,"champion-"+index))}
+                  </div>
+                </article>
+              );
+            }) : <Empty>등록된 유니온 챔피언이 없습니다.</Empty>}
+          </div>
         </div>
-        <h4 className="game-union-subtitle">전체 챔피언 휘장 효과</h4>
-        <div className="game-union-champion-total-list">
-          {totals.length ? totals.map((item,index) => renderCrest(item,index,"total")) : <Empty>전체 휘장 효과 정보가 없습니다.</Empty>}
+        <div className="game-union-champion-total">
+          <div className="game-union-champion-total-heading">
+            <div>
+              <span className="game-window-eyebrow">SHARED CRESTS</span>
+              <h4 className="game-union-subtitle">전체 챔피언 휘장 효과</h4>
+            </div>
+            {totals.length > 0 && <span className="game-union-champion-total-count">{totals.length}개 효과</span>}
+          </div>
+          <div className="game-union-champion-total-list">
+            {totals.length ? totals.map((item,index) => renderCrest(item,index,"total")) : <Empty>전체 휘장 효과 정보가 없습니다.</Empty>}
+          </div>
         </div>
         <DataState source={champion} />
       </section>

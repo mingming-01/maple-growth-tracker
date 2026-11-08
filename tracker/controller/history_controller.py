@@ -43,6 +43,10 @@ def get_history():
     if len(character_name) > 30:
         return jsonify({"error": "캐릭터 이름이 너무 깁니다."}), 400
 
+    requested_ocid = request.args.get("ocid", "").strip()
+    if len(requested_ocid) > 128:
+        return jsonify({"error": "캐릭터 식별 정보가 올바르지 않습니다."}), 400
+
     cache_key = f"history:{character_name}"
     force_refresh = request.args.get("refresh") == "1"
     cached_history = None if force_refresh else get_cache(cache_key)
@@ -52,7 +56,14 @@ def get_history():
         ))
 
     try:
-        ocid, basic, response = resolve_character(character_name)
+        if requested_ocid:
+            ocid = requested_ocid
+            basic, response = get_basic_character_snapshot(ocid)
+            resolved_name = str((basic or {}).get("character_name") or "").strip()
+            if resolved_name and resolved_name.casefold() != character_name.casefold():
+                return jsonify({"error": "조회한 캐릭터 이름과 OCID가 일치하지 않습니다."}), 404
+        else:
+            ocid, basic, response = resolve_character(character_name)
         if not ocid:
             if is_temporary_nexon_failure(response):
                 return stale_snapshot_response(
