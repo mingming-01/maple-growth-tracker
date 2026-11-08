@@ -26,8 +26,11 @@ def _error_result(error, fallback_message):
     """공급자 오류를 HTTP 계층에서 구분할 수 있는 안전한 형태로 변환한다."""
     if _is_quota_error(error):
         retry_after = None
-        raw = str(error)
-        delay_match = re.search(r"retryDelay['\"]?\s*:\s*['\"]?(\d+(?:\.\d+)?)s", raw, re.I)
+        delay_match = re.search(
+            r"retryDelay['\"]?\s*:\s*['\"]?(\d+(?:\.\d+)?)s",
+            str(error),
+            re.I,
+        )
         if delay_match:
             retry_after = max(1, int(float(delay_match.group(1))))
         return {
@@ -54,10 +57,7 @@ def _generate_gemini_content(client, prompt):
     max_attempts = min(max(0, retry_count), 3) + 1
     for attempt in range(max_attempts):
         try:
-            return client.models.generate_content(
-                model="gemini-3.6-flash",
-                contents=prompt,
-            )
+            return client.models.generate_content(model="gemini-3.6-flash", contents=prompt)
         except Exception as error:
             if _is_quota_error(error):
                 raise
@@ -69,6 +69,24 @@ def _generate_gemini_content(client, prompt):
 
 
 def _build_growth_report_prompt(source_data):
+    prompt_data = dict(source_data)
+    selected_period = prompt_data.get("selectedPeriod") or {}
+    period_days = selected_period.get("periodDays", 7)
+    if period_days in (30, 90):
+        # 장기 리포트에는 7일 기준 평균/증감 지표를 섞지 않는다.
+        # 장기 기간 통계는 periodSummary, 전망은 최근 7일 기준 prediction으로 분리한다.
+        original_metrics = prompt_data.get("metrics") or {}
+        level_progress = original_metrics.get("levelProgress") or {}
+        prompt_data["metrics"] = {
+            "recentSevenDayPrediction": original_metrics.get("prediction"),
+            "currentLevelProgress": {
+                key: level_progress.get(key)
+                for key in ("currentRate", "remainingRate")
+                if key in level_progress
+            },
+        }
+        prompt_data["growthInsights"] = None
+
     return f"""
 너는 메이플스토리 캐릭터의 성장 기록을 해석하고, 결과를 자연스러운 한국어로 전달하는 전문 리포트 작성자야.
 목표는 수치를 다시 계산하는 것이 아니라, 서비스가 계산한 사실을 정확하고 읽기 쉬운 문장으로 설명하는 거야.
@@ -78,14 +96,15 @@ def _build_growth_report_prompt(source_data):
 2. 수치의 단위와 의미를 바꾸지 마. 경험치 증가량은 '경험치 증가량' 또는 '경험치 획득량'이라고 표현해. '경보'라는 단어는 어떤 경우에도 사용하지 마.
 3. 퍼센트는 반드시 '%' 또는 '%p'의 원래 의미를 유지해. 퍼센트 숫자를 날짜나 월·일로 해석하지 마.
 4. 과거 최고 성장일은 history의 실제 날짜와 경험치 변화가 확인될 때만 언급해. 예상 레벨업 날짜와 과거 기록 날짜를 혼동하지 마.
-5. 현재 레벨 진행률과 다음 레벨까지 남은 비율을 혼동하지 마. experienceRate는 현재 레벨 진행률이므로, 남은 비율이 별도 데이터로 주어지지 않았다면 남은 비율을 임의로 계산하거나 단정하지 마.
+5. 현재 레벨 진행률과 다음 레벨까지 남은 비율을 혼동하지 마. experienceRate는 현재 레벨 진행률이므로, 남은 비율은 currentLevelProgress.remainingRate가 제공된 경우에만 언급해.
 6. '꾸준한 성장', '성장세 상승', '안정적'이라는 표현은 실제로 여러 유효 관측 구간이 있을 때만 사용해. 기록이 부족하면 '확인 가능한 기록이 부족합니다'라고 말해.
-7. 30일·90일 분석은 selectedPeriod.periodSummary를 최우선 근거로 사용해. 7일 기준 growthInsights를 30일·90일 전체의 결과처럼 표현하지 마. 선택 기간과 비교 기간의 데이터가 모두 있을 때만 기간 비교를 언급해.
-8. 예측은 metrics.prediction에 유효한 예상 날짜가 있을 때만 언급해. 예상값은 확정 일정이 아니므로 '현재 관측 속도가 유지된다면'과 같은 조건부 표현을 사용해. 예측 데이터가 없으면 날짜나 소요 일수를 만들지 마.
-9. 숫자를 나열하지 말고 변화의 의미를 설명해. 화면 카드에 이미 표시되는 숫자를 불필요하게 반복하지 마.
-10. '경보를 기록', '최고 성장일을 찍다', '성장률을 경보하다'처럼 부자연스러운 표현을 쓰지 마. 자연스러운 한국어 문장으로 작성하고 조사와 단위를 확인해.
-11. 근거 없는 칭찬, 과장, 플레이 시간·요일별 접속 습관 추측, 같은 뜻의 반복을 피하고 담백하고 친근하게 작성해.
-12. 데이터 필드명, 내부 모델명, API, Python, Gemini, OpenRouter, 프롬프트, 시스템 동작, null, undefined, 영어 상태값을 본문에 노출하지 마.
+7. 30일·90일 분석은 selectedPeriod.periodSummary를 최우선 근거로 사용해. 이 경우 metrics에는 최근 7일 예측과 현재 레벨 진행률만 들어 있어. 이를 선택 기간 전체의 평균이나 성장 추세처럼 설명하지 마.
+8. 7일 분석은 growthInsights의 최근 7일·직전 7일 비교를 사용해도 돼. 표본이 충분하지 않으면 기간 변화율을 단정하지 마.
+9. 예측은 metrics.recentSevenDayPrediction 또는 metrics.prediction에 유효한 예상 날짜가 있을 때만 언급해. 예측은 최근 관측 속도가 유지된다는 가정의 참고값이므로 확정 일정처럼 말하지 마. 예측 데이터가 없으면 날짜나 소요 일수를 만들지 마.
+10. 숫자를 나열하지 말고 변화의 의미를 설명해. 화면 카드에 이미 표시되는 숫자를 불필요하게 반복하지 마.
+11. '경보를 기록', '최고 성장일을 찍다', '성장률을 경보하다'처럼 부자연스러운 표현을 쓰지 마. 자연스러운 한국어 문장으로 작성하고 조사와 단위를 확인해.
+12. 근거 없는 칭찬, 과장, 플레이 시간·요일별 접속 습관 추측, 같은 뜻의 반복을 피하고 담백하고 친근하게 작성해.
+13. 데이터 필드명, 내부 모델명, API, Python, Gemini, OpenRouter, 프롬프트, 시스템 동작, null, undefined, 영어 상태값을 본문에 노출하지 마.
 
 [항목별 작성 지침]
 - [성장 패턴]: 선택 기간의 전반적인 성장 흐름과 실제 관측 수준을 설명해. 기록 수나 기간을 근거로 삼아.
@@ -102,7 +121,7 @@ def _build_growth_report_prompt(source_data):
 - 최종 답변을 출력하기 전에 숫자·단위·날짜·문맥·맞춤법·중복을 스스로 점검해.
 
 [분석 데이터]
-{json.dumps(source_data, ensure_ascii=False)}
+{json.dumps(prompt_data, ensure_ascii=False)}
 
 [성장 패턴]
 [성장 변화]
