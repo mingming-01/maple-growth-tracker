@@ -85,7 +85,8 @@ async function fetchArchive(days, character, { end = null, collect = false, onPr
       characterName: character.characterName,
       worldName: character.worldName,
       offset,
-      limit
+      limit,
+      summaryOnly: collect
     });
     const item = result.collection || {};
     totals.checkedDays += Number(item.checkedDays || 0);
@@ -95,7 +96,12 @@ async function fetchArchive(days, character, { end = null, collect = false, onPr
     totals.remainingDays = Number(item.remainingDays || 0);
     if (!collect || totals.remainingDays === 0) break;
   }
-  if (result && collect) result.collectionSummary = totals;
+  if (result && collect) {
+    onProgress?.("수집된 기간 기록 정리 중...");
+    // 중간 배치의 전체 기간 응답을 누적하지 않고, 최종 기록은 한 번만 조회한다.
+    result = await getHistoryArchive(character.ocid, days, { end });
+    result.collectionSummary = totals;
+  }
   return result;
 }
 
