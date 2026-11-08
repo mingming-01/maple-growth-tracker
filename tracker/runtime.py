@@ -406,26 +406,6 @@ def stale_snapshot_response(cache_key, error_message):
     return jsonify({"error": error_message}), 503
 
 
-# 이전 app 모듈을 직접 참조하던 테스트와 운영 스크립트의 호환성 래퍼.
-def is_temporary_nexon_failure(response):
-    from tracker.services.nexon_service import is_temporary_nexon_failure as check_failure
-
-    return check_failure(response)
-
-
-def get_api_class(character_class):
-    from tracker.services.nexon_service import get_api_class as resolve_api_class
-
-    return resolve_api_class(character_class)
-
-
-def get_character_rankings(target_date, world_name, character_class, ocid):
-    from tracker.services.nexon_service import get_character_rankings as fetch_rankings
-
-    return fetch_rankings(target_date, world_name, character_class, ocid)
-
-
-
 # 메인 화면
 # 관리자 로그인 및 로그 조회
 

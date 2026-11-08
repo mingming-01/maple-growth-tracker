@@ -1,20 +1,17 @@
 """Nexon Open API 응답을 애플리케이션 기능에 맞게 조합하는 서비스."""
 import json
-import requests
-from datetime import datetime
-from zoneinfo import ZoneInfo
 from concurrent.futures import ThreadPoolExecutor
+from datetime import datetime, timedelta
 from pathlib import Path
+from zoneinfo import ZoneInfo
 
-MAX_FILTERED_RANKING_PAGES = 25
-
+import requests
 from flask import current_app, has_app_context
 
 from tracker.integrations.nexon_api import (
     get_basic_character,
     get_ocid,
     get_ranking,
-    request_nexon_api,
 )
 
 
@@ -23,16 +20,12 @@ def resolve_character(character_name):
     ocid, response = get_ocid(character_name)
     if not ocid:
         return None, None, response
-
     basic, response = get_basic_character(ocid)
     return ocid, basic, response
 
 
 def get_basic_character_snapshot(ocid, target_date=None, historical=False):
-    """캐릭터 기본 정보 스냅샷을 조회한다."""
-    return get_basic_character(
-        ocid, target_date=target_date, historical=historical
-    )
+    return get_basic_character(ocid, target_date=target_date, historical=historical)
 
 
 def get_ranking_snapshot(
@@ -40,14 +33,16 @@ def get_ranking_snapshot(
     world_name=None,
     ocid=None,
     character_class=None,
+    world_type=0,
     historical=False,
 ):
-    """캐릭터 랭킹 스냅샷을 조회한다."""
+    """랭킹 스냅샷을 조회한다. character_class는 API의 class 필터 값이다."""
     return get_ranking(
         target_date=target_date,
         world_name=world_name,
         ocid=ocid,
         character_class=character_class,
+        world_type=world_type,
         historical=historical,
     )
 
@@ -59,254 +54,81 @@ def _jobs_path():
 
 
 def get_api_class(character_class):
+    """기본 정보에 직군/전직이 없을 때 사용할 API class 필터를 반환한다."""
     try:
         with _jobs_path().open("r", encoding="utf-8") as file:
             jobs_data = json.load(file)
     except (OSError, ValueError, TypeError):
-        print("jobs.json 로드에 실패했습니다.")
         return None
     return jobs_data.get(character_class)
 
 
-def _normalize_ranking_label(value):
-    if value is None:
-        return ""
-    return str(value).strip()
+def _normalize(value):
+    return str(value).strip() if value is not None else ""
 
 
-def _ranking_entry_class(entry):
-    """랭킹 응답에서 세부 직업명을 찾는다. 상위 직업군(class_name)은 사용하지 않는다."""
-    for field in ("sub_class_name", "character_class", "character_class_name"):
-        value = _normalize_ranking_label(entry.get(field))
-        if value:
-            return value
-    return ""
+def _class_filter_from_entry(entry, fallback_class):
+    """랭킹 응답의 직군/전직 값을 우선 사용하고 매핑 파일을 폴백한다."""
+    if isinstance(entry, dict):
+        family = _normalize(entry.get("class_name"))
+        job = _normalize(entry.get("sub_class_name"))
+        if family and job:
+            return f"{family}-{job}"
+    return fallback_class
 
 
-def _find_character_in_filtered_ranking(
-    target_date,
-    world_name,
-    api_class,
-    character_class,
-    character_name,
-    ocid,
-    target_world_name=None,
-    historical=False,
-):
-    """직업 필터가 적용된 랭킹 목록에서 대상 캐릭터를 찾는다.
-
-    world_name은 API 목록 조회 필터이고 target_world_name은 대상 캐릭터의 실제 월드다.
-    전체 직업 랭킹은 world_name을 생략하더라도 이름으로 대상을 찾을 때 월드를 확인해야 한다.
-    """
-    from tracker.integrations.nexon_api import get_ranking_page
-
-    last_response = None
-    total_entries = 0
-    class_metadata_entries = 0
-    class_metadata_missing_entries = 0
-    world_metadata_entries = 0
-    world_metadata_missing_entries = 0
-    target_name = _normalize_ranking_label(character_name)
-    target_world = _normalize_ranking_label(
-        target_world_name if target_world_name is not None else world_name
-    )
-    expected_classes = {
-        _normalize_ranking_label(value)
-        for value in (api_class, character_class)
-        if _normalize_ranking_label(value)
-    }
-    last_details = {
-        "pagesScanned": 0,
-        "returnedEntries": 0,
-        "lastPageEntries": 0,
-        "matched": False,
-        "filterUsed": api_class,
-        "scanComplete": False,
-        "pageLimitReached": False,
-        "filterVerification": "pending",
-        "filterUnverified": False,
-        "worldFilterVerification": "not_requested" if not world_name else "pending",
-        "targetWorldName": target_world_name if target_world_name is not None else world_name,
-    }
-    if not api_class:
-        last_details["filterVerification"] = "not_requested"
-        return None, None, last_details
-
-    for page in range(1, MAX_FILTERED_RANKING_PAGES + 1):
-        entries, response = get_ranking_page(
-            target_date=target_date,
-            world_name=world_name,
-            character_class=api_class,
-            page=page,
-            historical=historical,
-        )
-        last_response = response
-        entries = entries if isinstance(entries, list) else []
-        total_entries += len(entries)
-        last_details.update({
-            "pagesScanned": page,
-            "returnedEntries": total_entries,
-            "lastPageEntries": len(entries),
-            "filterUsed": api_class,
-            "matched": False,
-        })
-        if response is None or response.status_code != 200:
-            last_details["filterVerification"] = (
-                "verified" if class_metadata_entries == total_entries and total_entries else
-                "partial" if class_metadata_entries else "not_exposed"
-            )
-            return None, response, last_details
-
-        for entry in entries:
-            if not isinstance(entry, dict):
-                class_metadata_missing_entries += 1
-                if world_name:
-                    world_metadata_missing_entries += 1
-                continue
-            entry_class = _ranking_entry_class(entry)
-            if entry_class:
-                class_metadata_entries += 1
-                if _normalize_ranking_label(entry_class) not in expected_classes:
-                    last_details.update({
-                        "filterVerification": "mismatch",
-                        "filterMismatch": True,
-                        "mismatchedClass": entry_class,
-                    })
-                    return None, response, last_details
-            else:
-                class_metadata_missing_entries += 1
-
-            if world_name:
-                entry_world = _normalize_ranking_label(entry.get("world_name"))
-                if entry_world:
-                    world_metadata_entries += 1
-                    if entry_world != _normalize_ranking_label(world_name):
-                        last_details.update({
-                            "worldFilterVerification": "mismatch",
-                            "worldFilterMismatch": True,
-                            "mismatchedWorld": entry_world,
-                        })
-                        return None, response, last_details
-                else:
-                    world_metadata_missing_entries += 1
-
-        if class_metadata_missing_entries or world_metadata_missing_entries:
-            last_details["filterUnverified"] = True
-            last_details["worldFilterVerification"] = (
-                "partial" if world_metadata_entries else
-                "not_exposed" if world_name else "not_requested"
-            )
-        elif world_name:
-            last_details["worldFilterVerification"] = "verified"
-
-        for entry in entries:
-            if not isinstance(entry, dict):
-                continue
-            entry_ocid = entry.get("ocid") or entry.get("character_ocid")
-            if entry_ocid:
-                matches = bool(ocid and str(entry_ocid) == str(ocid))
-            else:
-                entry_name = _normalize_ranking_label(entry.get("character_name"))
-                entry_world = _normalize_ranking_label(entry.get("world_name"))
-                matches = bool(
-                    target_name
-                    and target_world
-                    and entry_name == target_name
-                    and entry_world == target_world
-                )
-            if matches:
-                if world_name and (
-                    world_metadata_entries != total_entries or world_metadata_missing_entries
-                ):
-                    last_details.update({
-                        "filterVerification": (
-                            "verified" if class_metadata_entries == total_entries and total_entries
-                            else "partial" if class_metadata_entries
-                            else "not_exposed"
-                        ),
-                        "worldFilterVerification": (
-                            "partial" if world_metadata_entries else "not_exposed"
-                        ),
-                        "filterUnverified": True,
-                    })
-                    return None, response, last_details
-
-                if class_metadata_entries == total_entries and total_entries:
-                    last_details["filterVerification"] = "verified"
-                elif class_metadata_entries:
-                    last_details["filterVerification"] = "partial"
-                else:
-                    last_details["filterVerification"] = "not_exposed"
-                    last_details["filterUnverified"] = True
-                last_details["matched"] = True
-                return entry, response, last_details
-
-        if not entries:
-            last_details["scanComplete"] = True
-            last_details["filterVerification"] = (
-                "verified" if class_metadata_entries == total_entries and total_entries
-                else "partial" if class_metadata_entries
-                else "not_exposed"
-            )
-            break
-    else:
-        last_details["pageLimitReached"] = True
-        last_details["filterVerification"] = (
-            "verified" if class_metadata_entries == total_entries and total_entries
-            else "partial" if class_metadata_entries
-            else "not_exposed"
-        )
-
-    return None, last_response, last_details
+def _validate_filtered_entry(entry, class_filter, world_name=None):
+    """필터 응답의 대상 직업과 월드를 검증한다."""
+    if not isinstance(entry, dict):
+        return False, "missing_entry"
+    family, separator, job = _normalize(class_filter).partition("-")
+    actual_family = _normalize(entry.get("class_name"))
+    actual_job = _normalize(entry.get("sub_class_name"))
+    if not separator or not family or not job or not actual_family:
+        return False, "job_metadata_missing"
+    if actual_family != family:
+        return False, "job_mismatch"
+    # '전체 전직'은 직업군 전체를 뜻하므로 세부 전직 이름은 다를 수 있다.
+    if job != "전체 전직" and actual_job != job:
+        return False, "job_mismatch"
+    if world_name and _normalize(entry.get("world_name")) != _normalize(world_name):
+        return False, "world_mismatch"
+    return True, "verified"
 
 
-def _reject_job_rank_if_collapses_to_unfiltered(job_rank, unfiltered_rank, details):
-    """직업 순위가 종합/월드 순위와 같고 필터 검증이 약하면 폐기한다."""
-    if job_rank is None or unfiltered_rank is None:
-        return job_rank, details
+def _response_entry_count(response):
+    if response is None or response.status_code != 200:
+        return None
     try:
-        same = int(job_rank) == int(unfiltered_rank)
+        return len(response.json().get("ranking", []))
+    except (TypeError, ValueError, AttributeError):
+        return None
+
+
+def _rank_value(entry):
+    if not isinstance(entry, dict):
+        return None
+    return entry.get("ranking")
+
+
+def _rank_is_consistent(rank, upper_bound):
+    if rank is None or upper_bound is None:
+        return True
+    try:
+        return int(rank) <= int(upper_bound)
     except (TypeError, ValueError):
-        same = str(job_rank) == str(unfiltered_rank)
-    if not same:
-        return job_rank, details
-    verification = (details or {}).get("filterVerification")
-    if verification == "verified":
-        return job_rank, details
-    updated = dict(details or {})
-    updated["collapsedToUnfiltered"] = True
-    updated["filterUnverified"] = True
-    updated["matched"] = False
-    return None, updated
+        return False
 
 
-def _should_retry_filtered_ranking_date(candidate):
-    """200 응답으로 목록 검색을 끝냈지만 직업 순위를 못 찾은 경우 과거 집계일을 확인한다."""
-    diagnostics = candidate.get("rankingApiDiagnostics", {})
-    for name in ("jobWorldRanking", "jobRanking"):
-        detail = diagnostics.get(name, {})
-        if (
-            detail.get("statusCode") == 200
-            and not detail.get("matched")
-            and not detail.get("pageLimitReached")
-            and not detail.get("filterMismatch")
-            and not detail.get("filterUnverified")
-        ):
-            return True
-    return False
+def _world_type(world_name):
+    """에오스/헬리오스(구 리부트 계열)는 API의 type 1 랭킹을 사용한다."""
+    reboot_worlds = {"에오스", "헬리오스", "리부트", "리부트2"}
+    return 1 if _normalize(world_name) in reboot_worlds else 0
 
 
-def get_character_rankings(
-    target_date, world_name, character_class, ocid, character_name=None
-):
-    """전체·월드 순위와 동일 직업의 월드·전체 순위를 각각 조회한다.
-
-    전체·월드 순위는 OCID 단건 조회를 사용하고, 직업 순위는 직업 필터가
-    적용된 목록에서 OCID/캐릭터 식별 정보를 찾아 실제 해당 목록의 순위를 쓴다.
-    """
-    from datetime import datetime, timedelta
-
-    api_class = get_api_class(character_class)
+def get_character_rankings(target_date, world_name, character_class, ocid):
+    """대상 OCID의 종합·월드·직업/월드·직업 순위를 조회한다."""
+    fallback_class = get_api_class(character_class)
     try:
         requested_date = datetime.strptime(target_date, "%Y-%m-%d").date()
     except (TypeError, ValueError):
@@ -314,150 +136,130 @@ def get_character_rankings(
 
     def fetch_for_date(date_value):
         date_text = date_value.isoformat()
-
-        def fetch_overall():
-            return get_ranking_snapshot(target_date=date_text, ocid=ocid)
+        world_type = _world_type(world_name)
+        # 직업 필터는 응답의 class_name/sub_class_name으로 만들어야 하므로
+        # OCID 단건 종합 랭킹을 먼저 가져와 필터 값을 확정한다.
+        overall_data, overall_response = get_ranking_snapshot(
+            target_date=date_text, ocid=ocid, world_type=world_type
+        )
+        api_class = _class_filter_from_entry(overall_data, fallback_class)
 
         def fetch_world():
             return get_ranking_snapshot(
-                target_date=date_text, world_name=world_name, ocid=ocid
+                target_date=date_text, world_name=world_name, ocid=ocid,
+                world_type=world_type,
             )
 
         def fetch_job_world():
             if not api_class:
-                return None, None, {"pagesScanned": 0, "returnedEntries": 0, "matched": False}
-            return _find_character_in_filtered_ranking(
-                date_text, world_name, api_class, character_class,
-                character_name, ocid, target_world_name=world_name,
+                return None, None
+            return get_ranking_snapshot(
+                target_date=date_text,
+                world_name=world_name,
+                ocid=ocid,
+                character_class=api_class,
+                world_type=world_type,
             )
 
         def fetch_job():
             if not api_class:
-                return None, None, {"pagesScanned": 0, "returnedEntries": 0, "matched": False}
-            return _find_character_in_filtered_ranking(
-                date_text, None, api_class, character_class,
-                character_name, ocid, target_world_name=world_name,
+                return None, None
+            return get_ranking_snapshot(
+                target_date=date_text,
+                ocid=ocid,
+                character_class=api_class,
+                world_type=world_type,
             )
 
-        with ThreadPoolExecutor(max_workers=4) as executor:
-            overall_future = executor.submit(fetch_overall)
+        with ThreadPoolExecutor(max_workers=3) as executor:
             world_future = executor.submit(fetch_world)
             job_world_future = executor.submit(fetch_job_world)
             job_future = executor.submit(fetch_job)
-            overall_data, overall_response = overall_future.result()
             world_data, world_response = world_future.result()
-            job_world_data, job_world_response, job_world_details = job_world_future.result()
-            job_data, job_response, job_details = job_future.result()
+            job_world_data, job_world_response = job_world_future.result()
+            job_data, job_response = job_future.result()
 
-        values = [
-            (overall_data, overall_response),
-            (world_data, world_response),
-            (job_world_data, job_world_response),
-            (job_data, job_response),
-        ]
-        names = ("ranking", "worldRanking", "jobWorldRanking", "jobRanking")
+        entries = {
+            "ranking": overall_data,
+            "worldRanking": world_data,
+            "jobWorldRanking": job_world_data,
+            "jobRanking": job_data,
+        }
+        responses = {
+            "ranking": overall_response,
+            "worldRanking": world_response,
+            "jobWorldRanking": job_world_response,
+            "jobRanking": job_response,
+        }
         diagnostics = {}
-        for name, (data, response) in zip(names, values):
-            entry_count = None
-            if response is not None and response.status_code == 200:
-                try:
-                    entry_count = len(response.json().get("ranking", []))
-                except (TypeError, ValueError, AttributeError):
-                    entry_count = None
-            error_code = None
-            error_message = None
+        warnings = []
+        for name, entry in entries.items():
+            response = responses[name]
+            detail = {
+                "statusCode": response.status_code if response is not None else None,
+                "returnedEntries": _response_entry_count(response),
+                "matched": entry is not None,
+            }
             if response is not None and response.status_code >= 400:
                 try:
-                    error_payload = response.json()
+                    payload = response.json()
                 except (TypeError, ValueError, AttributeError):
-                    error_payload = {}
-                if isinstance(error_payload, dict):
-                    error_detail = error_payload.get("error", error_payload)
-                    if isinstance(error_detail, dict):
-                        error_code = error_detail.get("name") or error_detail.get("code")
-                        error_message = error_detail.get("message")
-                    elif error_detail:
-                        error_message = str(error_detail)
-            diagnostics[name] = {
-                "statusCode": response.status_code if response is not None else None,
-                "returnedEntries": entry_count,
-                "matched": data is not None,
-                "errorCode": str(error_code)[:80] if error_code else None,
-                "errorMessage": str(error_message)[:240] if error_message else None,
-            }
+                    payload = {}
+                error = payload.get("error", {}) if isinstance(payload, dict) else {}
+                if isinstance(error, dict):
+                    detail["errorCode"] = error.get("name") or error.get("code")
+                    detail["errorMessage"] = error.get("message")
+            diagnostics[name] = detail
 
-        diagnostics["jobWorldRanking"].update(job_world_details)
-        diagnostics["jobRanking"].update(job_details)
-        result = {
-            name: (data.get("ranking") if isinstance(data, dict) else None)
-            for name, (data, _) in zip(names, values)
-        }
-        result["jobWorldRanking"], diagnostics["jobWorldRanking"] = (
-            _reject_job_rank_if_collapses_to_unfiltered(
-                result.get("jobWorldRanking"),
-                result.get("worldRanking"),
-                diagnostics.get("jobWorldRanking"),
-            )
+        # filtered endpoints return the target row directly when OCID is supplied.
+        for name, entry, requested_world in (
+            ("jobWorldRanking", job_world_data, world_name),
+            ("jobRanking", job_data, None),
+        ):
+            if entry is None:
+                continue
+            valid, reason = _validate_filtered_entry(entry, api_class, requested_world)
+            diagnostics[name]["filterValidation"] = reason
+            diagnostics[name]["filterUsed"] = api_class
+            if not valid:
+                entries[name] = None
+                diagnostics[name]["matched"] = False
+                if reason == "world_mismatch":
+                    warnings.append("월드 직업 랭킹의 월드가 요청한 월드와 달라 해당 순위를 제외했습니다.")
+                elif reason == "job_mismatch":
+                    warnings.append("직업 랭킹 응답이 요청한 직업과 달라 해당 순위를 제외했습니다.")
+                else:
+                    warnings.append("직업 랭킹 응답의 직업 정보를 검증할 수 없어 해당 순위를 제외했습니다.")
+
+        result = {name: _rank_value(entry) for name, entry in entries.items()}
+        consistency_checks = (
+            ("jobWorldRanking", "worldRanking"),
+            ("jobWorldRanking", "jobRanking"),
+            ("jobRanking", "ranking"),
+            ("worldRanking", "ranking"),
         )
-        result["jobRanking"], diagnostics["jobRanking"] = (
-            _reject_job_rank_if_collapses_to_unfiltered(
-                result.get("jobRanking"),
-                result.get("ranking"),
-                diagnostics.get("jobRanking"),
-            )
-        )
-        has_data = any(value is not None for value in result.values())
+        for lower, upper in consistency_checks:
+            if not _rank_is_consistent(result[lower], result[upper]):
+                result[lower] = None
+                diagnostics[lower]["rankConsistency"] = "mismatch"
+                warnings.append("랭킹 간 순위 관계가 맞지 않아 일부 순위를 제외했습니다.")
+
         http_error = any(
             response is not None and response.status_code != 200
-            for _, response in values
+            for response in responses.values()
         )
-        mapping_missing = not bool(api_class)
-        filtered_rank_missing = bool(api_class) and (
-            result["jobWorldRanking"] is None or result["jobRanking"] is None
-        )
-        has_error = http_error or mapping_missing or filtered_rank_missing
-
-        if has_data and has_error:
-            status = "partial"
-        elif has_data:
-            status = "available"
-        elif http_error:
-            status = "unavailable"
-        else:
-            status = "empty"
-
-        warnings = []
+        mapping_missing = not api_class
         if mapping_missing:
             warnings.append("직업 랭킹 API 직업명 매핑을 찾지 못했습니다.")
-        if filtered_rank_missing:
-            warnings.append("동일 직업 랭킹 목록에서 해당 캐릭터를 찾지 못했습니다.")
-        filter_mismatch = any(
-            diagnostics[name].get("filterMismatch")
-            for name in ("jobWorldRanking", "jobRanking")
+        if any(result[name] is None for name in ("jobWorldRanking", "jobRanking")):
+            warnings.append("직업 랭킹 응답에서 해당 캐릭터의 순위를 확인하지 못했습니다.")
+        has_data = any(value is not None for value in result.values())
+        status = (
+            "partial" if has_data and (http_error or mapping_missing or warnings)
+            else "available" if has_data
+            else "unavailable" if http_error
+            else "empty"
         )
-        if filter_mismatch:
-            warnings.append("직업 랭킹 응답에 요청한 직업과 다른 항목이 포함되어 해당 순위를 제외했습니다.")
-        filter_unverified = any(
-            diagnostics[name].get("filterUnverified")
-            for name in ("jobWorldRanking", "jobRanking")
-        )
-        if filter_unverified:
-            warnings.append("직업 또는 월드 랭킹 응답의 필터 조건을 검증할 수 없어 해당 순위를 제외했습니다.")
-        if any(diagnostics[name].get("collapsedToUnfiltered") for name in ("jobWorldRanking", "jobRanking")):
-            warnings.append("직업 순위가 종합/월드 순위와 같아 필터 미적용으로 판단하고 해당 순위를 제외했습니다.")
-        world_filter_mismatch = diagnostics["jobWorldRanking"].get("worldFilterMismatch")
-        if world_filter_mismatch:
-            warnings.append("월드 랭킹 응답에 요청한 월드가 아닌 캐릭터가 포함되어 해당 순위를 제외했습니다.")
-        if http_error:
-            warnings.append("일부 랭킹 API 요청이 정상 응답하지 않았습니다.")
-        if not has_data and not http_error:
-            counts = ", ".join(
-                f"{name}: HTTP {detail['statusCode']} / "
-                f"{detail['returnedEntries'] if detail['returnedEntries'] is not None else '응답 파싱 불가'}건"
-                for name, detail in diagnostics.items()
-            )
-            warnings.append("공개 랭킹 응답에 캐릭터 항목이 없습니다. " + counts)
-
         result.update({
             "rankingDataStatus": status,
             "rankingDate": date_text,
@@ -465,26 +267,24 @@ def get_character_rankings(
                 name: detail["statusCode"] for name, detail in diagnostics.items()
             },
             "rankingApiDiagnostics": diagnostics,
-            "rankingWarnings": warnings,
+            "rankingWarnings": list(dict.fromkeys(warnings)),
         })
         return result
 
-    for days_ago in range(0, 3):
+    candidate = None
+    for days_ago in range(3):
         candidate = fetch_for_date(requested_date - timedelta(days=days_ago))
         if candidate["rankingDataStatus"] == "empty":
             continue
-
-        status_codes = [
-            status for status in candidate["rankingApiStatuses"].values()
-            if status is not None
-        ]
-        all_bad_request = bool(status_codes) and all(
-            status == 400 for status in status_codes
+        statuses = [s for s in candidate["rankingApiStatuses"].values() if s is not None]
+        all_bad_request = bool(statuses) and all(status == 400 for status in statuses)
+        job_missing = (
+            candidate.get("jobWorldRanking") is None
+            or candidate.get("jobRanking") is None
         )
-        if all_bad_request and days_ago < 2:
-            continue
-
-        if _should_retry_filtered_ranking_date(candidate) and days_ago < 2:
+        if days_ago < 2 and (all_bad_request or (candidate["rankingDataStatus"] == "partial" and job_missing and not all(
+            status is not None and status >= 500 for status in statuses
+        ))):
             continue
         return candidate
 

@@ -63,7 +63,6 @@ def get_character():
             world_name=basic["world_name"],
             character_class=character_class,
             ocid=ocid,
-            character_name=basic.get("character_name")
         )
     except requests.RequestException:
         return stale_snapshot_response(

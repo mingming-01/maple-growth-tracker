@@ -99,19 +99,20 @@ def get_ranking_page(
     target_date,
     world_name=None,
     character_class=None,
+    world_type=0,
     page=1,
     historical=False,
 ):
     """필터링된 랭킹 페이지를 조회한다. OCID 단건 필터는 사용하지 않는다."""
     params = {
         "date": target_date,
-        "world_type": 0,
+        "world_type": int(world_type),
         "page": max(1, int(page)),
     }
     if world_name:
         params["world_name"] = world_name
     if character_class:
-        params["character_class"] = character_class
+        params["class"] = character_class
 
     response = request_nexon_api("ranking/overall", params, historical)
     if response.status_code != 200:
@@ -125,14 +126,15 @@ def get_ranking(
     world_name=None,
     ocid=None,
     character_class=None,
+    world_type=0,
     historical=False,
 ):
     """OCID로 특정 캐릭터의 일반·월드 랭킹을 조회한다."""
-    params = {"date": target_date, "world_type": 0, "page": 1}
+    params = {"date": target_date, "world_type": int(world_type), "page": 1}
     if world_name:
         params["world_name"] = world_name
     if character_class:
-        params["character_class"] = character_class
+        params["class"] = character_class
     if ocid:
         params["ocid"] = ocid
 
