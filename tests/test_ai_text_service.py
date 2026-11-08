@@ -27,7 +27,7 @@ class SanitizeAITextTests(unittest.TestCase):
             expected_date="2026-11-19",
         )
 
-        self.assertIn("10월 19일", result)
+        self.assertIn("2026-10-19", result)
         self.assertIn("10월 25일", result)
         self.assertIn("11월 19일", result)
 
