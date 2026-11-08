@@ -518,3 +518,5 @@ test("mobile dashboard stays within the viewport and keeps the report before his
       .toBeLessThanOrEqual(measurement.major[".history-table-wrapper"].clientWidth + 1);
   }
 });
+
+// Baseline verification only: no behavior changes.
