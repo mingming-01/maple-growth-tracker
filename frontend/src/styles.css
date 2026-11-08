@@ -1308,9 +1308,9 @@ button:focus-visible,input:focus-visible,select:focus-visible,a:focus-visible { 
   background:linear-gradient(180deg,rgba(31,57,75,.9),rgba(12,27,41,.94));
   box-shadow:inset 0 1px rgba(219,241,249,.09),inset 0 -2px rgba(1,9,17,.28);
 }
-.mgt-result-content .game-union-display .game-union-champion-identity-heading { grid-column:1; display:flex; min-width:0; align-items:center; justify-content:space-between; gap:8px; }
-.mgt-result-content .game-union-display .game-union-champion-name { grid-column:auto; flex:1; min-width:0; overflow:hidden; color:#f1ebdc; font-size:12px; text-align:left; text-overflow:ellipsis; white-space:nowrap; }
-.mgt-result-content .game-union-display .game-union-champion-level { flex:none; padding:2px 6px; border:1px solid rgba(111,184,215,.38); border-radius:3px; color:#b6d8e8; background:rgba(11,31,48,.78); font-size:9px; font-weight:800; font-variant-numeric:tabular-nums; }
+.mgt-result-content .game-union-display .game-union-champion-identity-heading { grid-column:1; display:grid; grid-template-columns:minmax(0,1fr) auto; min-width:0; align-items:center; gap:8px; }
+.mgt-result-content .game-union-display .game-union-champion-name { grid-column:1; grid-row:1; min-width:0; overflow:hidden; color:#f1ebdc; font-size:12px; text-align:left; text-overflow:ellipsis; white-space:nowrap; }
+.mgt-result-content .game-union-display .game-union-champion-level { grid-column:2; grid-row:1; padding:2px 6px; border:1px solid rgba(111,184,215,.38); border-radius:3px; color:#b6d8e8; background:rgba(11,31,48,.78); font-size:9px; font-weight:800; font-variant-numeric:tabular-nums; }
 .mgt-result-content .game-union-display .game-union-champion-class { grid-column:1; align-self:end; max-width:100%; margin:4px 0 0; overflow:hidden; color:#b7ccd6; font-size:9px; text-align:left; text-overflow:ellipsis; white-space:nowrap; }
 .mgt-result-content .game-union-display .game-union-grade-badge {
   order:-1;
