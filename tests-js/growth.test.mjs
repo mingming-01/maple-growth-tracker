@@ -116,11 +116,25 @@ test("growth timeline contains level-up, best-growth, ranking and latest milesto
 });
 
 
-test("future snapshots are excluded from growth metrics and timeline", () => {
+test("future and invalid snapshots are excluded from growth metrics and timeline", () => {
+    const formatDate = value => {
+        const year = value.getFullYear();
+        const month = String(value.getMonth() + 1).padStart(2, "0");
+        const day = String(value.getDate()).padStart(2, "0");
+        return `${year}-${month}-${day}`;
+    };
+    const today = new Date();
+    const yesterday = new Date(today);
+    yesterday.setDate(yesterday.getDate() - 1);
+    const tomorrow = new Date(today);
+    tomorrow.setDate(tomorrow.getDate() + 1);
+
+    const todayDate = formatDate(today);
     const history = [
-        { date: "2026-11-08", recordStatus: "available", level: 280, experience: 1000, experienceChange: 100 },
-        { date: "2026-11-09", recordStatus: "available", level: 280, experience: 1100, experienceChange: 100 },
-        { date: "2099-12-31", recordStatus: "available", level: 281, experience: 999999, experienceChange: 999000, levelUp: true }
+        { date: formatDate(yesterday), recordStatus: "available", level: 280, experience: 1000, experienceChange: 100 },
+        { date: todayDate, recordStatus: "available", level: 280, experience: 1100, experienceChange: 100 },
+        { date: formatDate(tomorrow), recordStatus: "available", level: 281, experience: 999999, experienceChange: 999000, levelUp: true },
+        { date: "2026-02-30", recordStatus: "available", level: 282, experience: 1999999, experienceChange: 999000, levelUp: true }
     ];
 
     const metrics = calculateGrowthMetrics(
@@ -129,8 +143,10 @@ test("future snapshots are excluded from growth metrics and timeline", () => {
     );
 
     assert.equal(metrics.observedChangeDays, 2);
+    assert.equal(metrics.recordedDays, 2);
     assert.equal(metrics.averageDailyGrowth, 100);
-    assert.ok(metrics.timeline.every(event => event.date !== "2099-12-31"));
+    assert.ok(metrics.timeline.every(event => event.date <= todayDate));
+    assert.ok(metrics.timeline.every(event => event.date !== "2026-02-30"));
 });
 
 test("level-up forecast is withheld when recent observed intervals are insufficient", () => {
