@@ -17,7 +17,15 @@ async function requestJson(path, options = {}) {
   }
 
   if (!response.ok) {
-    throw new Error(payload.error || "요청을 처리하지 못했습니다. 잠시 후 다시 시도해주세요.");
+    const error = new Error(payload.error || "요청을 처리하지 못했습니다. 잠시 후 다시 시도해주세요.");
+    error.status = response.status;
+    const retryAfter = Number(
+      payload.retryAfterSeconds ?? payload.retryAfter ?? response.headers.get("Retry-After")
+    );
+    if (Number.isFinite(retryAfter) && retryAfter > 0) {
+      error.retryAfterSeconds = Math.ceil(retryAfter);
+    }
+    throw error;
   }
 
   return payload;
