@@ -121,11 +121,11 @@ export function SkillsTab({ data }) {
   const skill = sourceOf(data, "skill6");
   const hexa = sourceOf(data, "hexaMatrix");
   const hexaStat = sourceOf(data, "hexaStat");
-  const skillData = skill?.currentData || skill?.data || {};
+  const skillData = skill?.data || skill?.currentData || {};
   const skills = skillData.character_skill || [];
-  const hexaData = hexa?.currentData || hexa?.data || {};
+  const hexaData = hexa?.data || hexa?.currentData || {};
   const cores = hexaData.character_hexa_core_equipment || [];
-  const stats = hexaStat?.currentData || hexaStat?.data || {};
+  const stats = hexaStat?.data || hexaStat?.currentData || {};
   const statGroups = [
     ["현재 HEXA 스탯", ["character_hexa_stat_core", "character_hexa_stat_core_2", "character_hexa_stat_core_3"]],
     ["저장된 HEXA 스탯", ["preset_hexa_stat_core", "preset_hexa_stat_core_2", "preset_hexa_stat_core_3"]]
