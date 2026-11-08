@@ -539,6 +539,19 @@ def get_history_archive():
             )
         }
 
+    # 중간 수집 배치는 전체 기간 기록을 반복 반환하지 않고 진행 요약만 전달한다.
+    # 프론트엔드는 모든 배치가 끝난 뒤 collect 없이 한 번만 전체 기록을 조회한다.
+    if request.args.get("summary_only") == "1" and request.args.get("collect") == "1":
+        return jsonify({
+            "ocid": ocid,
+            "days": days,
+            "startDate": start_date.isoformat(),
+            "endDate": end_date.isoformat(),
+            "collection": collection,
+            "storageBackend": growth_history_service.backend,
+            "persistentStorage": growth_history_service.uses_postgres,
+        })
+
     history = []
     for offset in range(days):
         target_date = start_date + timedelta(days=offset)

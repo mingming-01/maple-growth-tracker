@@ -109,6 +109,9 @@ test("React preview loads profile data and refreshes only on explicit request", 
   const desktopAvatar = await page.locator(".mgt-character-avatar-frame").boundingBox();
   expect(desktopAvatar.width).toBeGreaterThanOrEqual(240);
   expect(desktopAvatar.height).toBeGreaterThanOrEqual(240);
+  // CharacterDetails intentionally lazy-loads stats when its section approaches the viewport.
+  // Scroll it into view to exercise the same interaction as a real visitor.
+  await page.getByRole("heading", { name: "캐릭터 상세 정보" }).scrollIntoViewIfNeeded();
   await expect(page.locator(".mgt-snapshot-stat[data-testid='profile-combat-power']")).toContainText("전투력");
   await expect(page.locator(".mgt-snapshot-stat[data-testid='profile-combat-power']")).toContainText("987,654,321");
   await expect(page.getByRole("button", { name: "관심 캐릭터 등록" })).toBeVisible();

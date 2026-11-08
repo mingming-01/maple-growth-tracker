@@ -237,6 +237,35 @@ class GrowthHistoryApiTests(unittest.TestCase):
         )
         self.assertEqual(len(saved), 3)
 
+    def test_archive_collection_summary_only_omits_repeated_full_history_payload(self):
+        ranking_response = Mock(status_code=200)
+        basic_response = Mock(status_code=200)
+        basic = {
+            "character_name": "테스트캐릭터",
+            "world_name": "테스트월드",
+            "character_level": 280,
+            "character_exp": 123456,
+        }
+        with patch.object(
+            history_controller, "get_ranking_snapshot",
+            return_value=(None, ranking_response),
+        ), patch.object(
+            history_controller, "get_basic_character_snapshot",
+            side_effect=[(basic, basic_response), (basic, basic_response)],
+        ):
+            response = self.client.get(
+                "/api/history/archive?ocid=test-ocid&days=30&collect=1&summary_only=1"
+                "&character_name=%ED%85%8C%EC%8A%A4%ED%8A%B8%EC%BA%90%EB%A6%AD%ED%84%B0"
+                "&world_name=%ED%85%8C%EC%8A%A4%ED%8A%B8%EC%9B%94%EB%93%9C&offset=0&limit=1"
+            )
+
+        self.assertEqual(response.status_code, 200)
+        body = response.get_json()
+        self.assertIn("collection", body)
+        self.assertEqual(body["collection"]["checkedDays"], 1)
+        self.assertNotIn("history", body)
+        self.assertEqual(body["days"], 30)
+
     def test_archive_rechecks_not_ready_dates_when_user_requests_history(self):
         target_date = self.today - timedelta(days=2)
         self.store.save_records(
