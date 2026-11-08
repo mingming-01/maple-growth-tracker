@@ -436,7 +436,7 @@ function App() {
       pdf.addImage(imageData,"PNG",margin,position,availableWidth,imageHeight);
       heightLeft -= pageHeight - margin * 2;
       while (heightLeft > 0) {
-        position = heightLeft - imageHeight + margin;
+        position = -(imageHeight - heightLeft) + margin;
         pdf.addPage();
         pdf.addImage(imageData,"PNG",margin,position,availableWidth,imageHeight);
         heightLeft -= pageHeight - margin * 2;
@@ -450,77 +450,141 @@ function App() {
   }
 
   return (
-    <div className="mgt-app">
-      <main className="mgt-shell">
+    <div className="mgt-app-shell" data-testid="react-preview-ready">
+      <header className="mgt-topbar">
+        <a className="mgt-brand" href="/" aria-label="Maple Growth Tracker 메인">
+          <span className="mgt-brand-mark">M</span>
+          <span>MAPLE <b>GROWTH</b></span>
+        </a>
+        <nav className="mgt-nav" aria-label="주요 메뉴">
+          {view === "dashboard" ? <>
+            <a href="#character">캐릭터</a>
+            <a href="#details">스펙</a>
+            <a href="#growth">성장 기록</a>
+            <a href="#analytics">AI 분석</a>
+          </> : <a href="#dashboard" onClick={event=>{event.preventDefault();closeAdmin();}}>대시보드</a>}
+          <a href="#admin" onClick={openAdmin}>관리자</a>
+        </nav>
+      </header>
+
+      <main className="mgt-page-content">
         {view === "admin" ? <AdminDashboard onBack={closeAdmin} /> : <>
-          <header className="mgt-hero">
-            <div>
-              <span className="mgt-eyebrow">MAPLE GROWTH TRACKER</span>
-              <h1>메이플 성장 추적기</h1>
-              <p>캐릭터 검색, 성장 기록, 랭킹, 장비·스탯 상세, AI 분석까지 한 화면에서 확인합니다.</p>
-            </div>
-            <div className="mgt-hero-actions">
-              <button type="button" className="mgt-secondary-button" onClick={openAdmin}>관리자</button>
-            </div>
-          </header>
+        <section className="mgt-hero">
+          <div>
+            <div className="mgt-hero-label"><span /> CHARACTER GROWTH DASHBOARD</div>
+            <h1>모험가의 성장을<br /><em>기록하고 분석하다.</em></h1>
+            <p>Nexon Open API 기반의 캐릭터 정보, 성장 통계, 스펙과 프리셋을 하나의 대시보드에서 확인하세요.</p>
+          </div>
+          <div className="mgt-hero-ornament" aria-hidden="true">
+            <span className="mgt-orbit mgt-orbit-one" />
+            <span className="mgt-orbit mgt-orbit-two" />
+            <span className="mgt-orbit-core">M</span>
+            <i>✦</i><b>✧</b>
+          </div>
+        </section>
 
-          <form className="mgt-search-panel" onSubmit={handleSearch}>
-            <label className="mgt-search-label" htmlFor="character-name">캐릭터 이름</label>
-            <div className="mgt-search-row">
-              <input id="character-name" value={name} onChange={event => setName(event.target.value)}
-                placeholder="캐릭터 이름을 입력하세요" autoComplete="off" />
-              <button type="submit" disabled={loading}>{loading ? "조회 중…" : "검색"}</button>
-              <button type="button" className="mgt-secondary-button" onClick={refreshCurrent} disabled={!character || loading}>최신 정보 다시 조회</button>
-            </div>
-            {lastSearched && <p className="mgt-search-meta">마지막 조회 · {lastSearched}</p>}
-            {error && <p className="mgt-error" role="alert">{error}</p>}
-            {historyWarning && <p className="mgt-warning" role="status">{historyWarning}</p>}
-            {favoriteFeedback && <p className="mgt-feedback" role="status">{favoriteFeedback}</p>}
+        <FavoritesPanel favorites={favorites} current={character} onOpen={item => searchName(item.name)} onRemove={removeFavorite} />
+
+        <section className="mgt-search-panel" aria-labelledby="mgt-search-title">
+          <div className="mgt-search-heading">
+            <div><span className="mgt-eyebrow">CHARACTER SEARCH</span><h2 id="mgt-search-title">모험가 찾기</h2></div>
+            <span className="mgt-api-indicator"><i /> NEXON OPEN API</span>
+          </div>
+          <form className="mgt-search-form" onSubmit={handleSearch} data-testid="react-character-search">
+            <label className="sr-only" htmlFor="react-character-name">캐릭터명</label>
+            <input id="react-character-name" value={name} onChange={event=>setName(event.target.value)}
+              placeholder="조회할 캐릭터명을 입력하세요" autoComplete="off" maxLength={30} />
+            <button type="submit" disabled={loading || !name.trim()}>{loading ? "조회 중..." : "캐릭터 조회"} <span>→</span></button>
           </form>
+          <div className="mgt-search-footnote">넥슨 Open API에서 최신 공개 데이터를 다시 조회합니다.</div>
+          {error && <p className="mgt-error" role="alert">{error}</p>}
+          {favoriteFeedback && <p className="mgt-feedback" role="status">{favoriteFeedback}</p>}
+          {historyWarning && <p className="mgt-warning" role="status">{historyWarning}</p>}
+        </section>
 
-          <FavoritesPanel
-            favorites={favorites}
-            current={character}
-            onOpen={item => searchName(item.name)}
-            onRemove={removeFavorite}
-          />
+        {loading && <div className="mgt-loading" role="status"><span /> 캐릭터 정보를 불러오고 있습니다.</div>}
 
-          {character && (
-            <div className="mgt-result" ref={resultRef}>
-              <div className="mgt-result-toolbar" data-export-ignore="true">
-                <button type="button" className={isFavorite ? "mgt-favorite-active" : "mgt-secondary-button"} onClick={toggleFavorite}>
-                  {isFavorite ? "관심 캐릭터 해제" : "관심 캐릭터 등록"}
+        {character && (
+          <>
+            <div className="mgt-result-toolbar">
+              <span><i /> 조회 완료{lastSearched ? " · "+lastSearched : ""}</span>
+              <div className="mgt-export-actions" data-export-ignore="true">
+                <button type="button"
+                  className={"mgt-icon-action mgt-favorite-icon-button " + (isFavorite ? "is-saved" : "")}
+                  onClick={toggleFavorite} aria-pressed={isFavorite}
+                  aria-label={isFavorite ? "관심 캐릭터 해제" : "관심 캐릭터 등록"}
+                  title={isFavorite ? "관심 캐릭터 해제" : "관심 캐릭터 등록"}>
+                  <span aria-hidden="true">{isFavorite ? "★" : "☆"}</span>
+                </button>
+                <button type="button" className="mgt-icon-action" onClick={refreshCurrent}
+                  disabled={loading} aria-label="최신 정보 다시 조회" title="최신 정보 다시 조회">
+                  <svg viewBox="0 0 24 24" aria-hidden="true">
+                    <path d="M20 7v5h-5M4 17v-5h5" />
+                    <path d="M6.2 9A7 7 0 0 1 18 6.5L20 12M4 12l2 5.5A7 7 0 0 0 17.8 15" />
+                  </svg>
                 </button>
                 <div className="mgt-share-menu-wrap">
-                  <button type="button" className="mgt-secondary-button" onClick={() => setShareOpen(value => !value)} aria-expanded={shareOpen}>
-                    저장 / 공유
+                  <button type="button" className="mgt-icon-action" onClick={() => setShareOpen(open => !open)}
+                    aria-label="공유" aria-haspopup="menu" aria-expanded={shareOpen} title="공유">
+                    <svg viewBox="0 0 24 24" aria-hidden="true">
+                      <circle cx="18" cy="5" r="3" />
+                      <circle cx="6" cy="12" r="3" />
+                      <circle cx="18" cy="19" r="3" />
+                      <path d="m8.7 10.7 6.6-4.4M8.7 13.3l6.6 4.4" />
+                    </svg>
                   </button>
                   {shareOpen && (
-                    <div className="mgt-share-menu" role="menu">
-                      <button type="button" role="menuitem" onClick={exportImage} disabled={!!exporting}>
-                        {exporting === "image" ? "이미지 저장 중…" : "이미지로 저장"}
+                    <div className="mgt-share-menu" role="menu" aria-label="공유 및 저장">
+                      <button type="button" role="menuitem" onClick={() => { setShareOpen(false); exportImage(); }} disabled={!!exporting}>
+                        <span aria-hidden="true">▧</span> {exporting === "image" ? "이미지 저장 중..." : "이미지 저장"}
                       </button>
-                      <button type="button" role="menuitem" onClick={exportPdf} disabled={!!exporting}>
-                        {exporting === "pdf" ? "PDF 저장 중…" : "PDF로 저장"}
+                      <button type="button" role="menuitem" onClick={() => { setShareOpen(false); exportPdf(); }} disabled={!!exporting}>
+                        <span aria-hidden="true">▤</span> {exporting === "pdf" ? "PDF 생성 중..." : "PDF 저장"}
                       </button>
                     </div>
                   )}
                 </div>
               </div>
-              <CharacterProfile character={character} history={history} />
-              <CharacterDetails ocid={character.ocid} onStatsLoaded={onStatsLoaded} />
-              <GrowthDashboard
-                character={character}
-                history={history}
-                analysisPeriod={analysisPeriod}
-                onAnalysisPeriodChange={setAnalysisPeriod}
-                onPersist={persistPatch}
-              />
-              <AIReport character={character} history={history} analysisPeriod={analysisPeriod} onPersist={persistPatch} />
-              <GrowthComparison character={character} comparison={comparisonState} onPersist={persistPatch} />
             </div>
-          )}
+
+            <div ref={resultRef} className="mgt-result-content">
+              <div id="character">
+                <CharacterProfile character={character} history={history} />
+              </div>
+              <div id="details">
+                <CharacterDetails ocid={character.ocid} onStatsLoaded={onStatsLoaded} />
+              </div>
+              <div id="growth">
+                <GrowthDashboard character={character} history={history} onHistoryChange={setHistory} onAnalysisPeriodChange={setAnalysisPeriod} onPersist={persistPatch} />
+              </div>
+              <div id="analytics">
+                <AIReport character={character} history={history} analysisHistory={analysisPeriod.history || history} periodDays={analysisPeriod.days} periodSummary={analysisPeriod.summary} />
+                <GrowthComparison
+                  character={character}
+                  history={history}
+                  initialState={comparisonState}
+                  onSave={persistPatch}
+                />
+              </div>
+            </div>
+          </>
+        )}
+
+        {!character && !loading && (
+          <section className="mgt-empty-state">
+            <span className="mgt-empty-emblem">✧</span>
+            <span className="mgt-eyebrow">YOUR ADVENTURE LOG</span>
+            <h2>성장 기록을 시작해 보세요.</h2>
+            <p>캐릭터를 조회하면 프로필, 실시간 공개 랭킹, 장비·능력치, 성장 기록과 AI 분석이 표시됩니다.</p>
+          </section>
+        )}
+
         </>}
+        <footer className="mgt-footer">
+          <span>MAPLE GROWTH TRACKER</span>
+          <span>Powered by NEXON Open API · Flask · React</span>
+          <a href="/admin/login">레거시 관리자 로그인</a>
+        </footer>
       </main>
     </div>
   );
