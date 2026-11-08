@@ -30,7 +30,6 @@ class SanitizeAITextTests(unittest.TestCase):
         self.assertIn("10월 19일", result)
         self.assertIn("10월 25일", result)
         self.assertIn("11월 19일", result)
-        self.assertNotIn("10월 19일", result.replace("10월 19일", "", 1) if False else "")
 
     def test_unrelated_iso_dates_are_not_replaced_by_prediction_date(self):
         result = sanitize_ai_text(
