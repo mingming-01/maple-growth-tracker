@@ -248,6 +248,7 @@ class ApiResilienceTests(unittest.TestCase):
 
         self.assertEqual(response.status_code, 200)
         self.assertEqual(get_ranking.call_count, 1)
+        self.assertEqual(get_ranking.call_args.kwargs["world_type"], 1)
 
 
 if __name__ == "__main__":
