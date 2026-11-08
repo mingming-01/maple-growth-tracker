@@ -1,5 +1,6 @@
 import tempfile
 import unittest
+from datetime import datetime, timedelta
 from pathlib import Path
 from unittest.mock import Mock, patch
 
@@ -176,6 +177,25 @@ class ApiResilienceTests(unittest.TestCase):
 
         self.assertEqual(result["rankingDataStatus"], "not_ready")
 
+    def test_historical_eos_ranking_passes_reboot_world_type(self):
+        target_date = datetime.now(history_controller.KOREA_TIMEZONE).date() - timedelta(days=1)
+        ranking = {
+            "ranking": 12,
+            "character_level": 280,
+            "character_exp": 123456,
+            "character_exp_rate": 12.5,
+        }
+        response = Mock(status_code=200)
+        with patch.object(
+            history_controller, "get_ranking_snapshot", return_value=(ranking, response)
+        ) as get_ranking:
+            record = history_controller.fetch_historical_record(
+                "test-ocid", "에오스", target_date,
+                datetime.now(history_controller.KOREA_TIMEZONE).date()
+            )
+
+        self.assertEqual(record["ranking"], 12)
+        self.assertEqual(get_ranking.call_args.kwargs["world_type"], 1)
 
 if __name__ == "__main__":
     unittest.main()

@@ -37,6 +37,35 @@ class NexonServiceTests(unittest.TestCase):
         self.assertTrue(nexon_service.is_temporary_nexon_failure(Mock(status_code=503)))
         self.assertFalse(nexon_service.is_temporary_nexon_failure(Mock(status_code=404)))
 
+    def test_world_type_uses_reboot_type_for_eos_and_helios(self):
+        self.assertEqual(nexon_service.get_world_type("에오스"), 1)
+        self.assertEqual(nexon_service.get_world_type("헬리오스"), 1)
+        self.assertEqual(nexon_service.get_world_type("크로아"), 0)
+
+    @patch("tracker.services.nexon_service.get_ranking_snapshot")
+    def test_stops_historical_date_retry_after_temporary_failure(self, get_snapshot):
+        overall = {
+            "ranking": 200,
+            "class_name": "마법사",
+            "sub_class_name": "아크메이지(썬,콜)",
+            "world_name": "크로아",
+        }
+
+        def snapshot(**kwargs):
+            if not kwargs.get("character_class") and not kwargs.get("world_name"):
+                return overall, response_for(overall)
+            return None, response_for(None, status=429)
+
+        get_snapshot.side_effect = snapshot
+        result = nexon_service.get_character_rankings(
+            "2026-11-08", "크로아", "아크메이지(썬,콜)", "ocid-value"
+        )
+
+        self.assertEqual(get_snapshot.call_count, 4)
+        self.assertEqual(result["rankingDate"], "2026-11-08")
+        self.assertEqual(result["ranking"], 200)
+        self.assertEqual(result["rankingDataStatus"], "partial")
+
     @patch("tracker.services.nexon_service.get_ranking_snapshot")
     def test_uses_ranking_response_job_metadata_and_direct_ocid_filters(self, get_snapshot):
         overall = {

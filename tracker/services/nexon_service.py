@@ -120,7 +120,7 @@ def _rank_is_consistent(rank, upper_bound):
         return False
 
 
-def _world_type(world_name):
+def get_world_type(world_name):
     """에오스/헬리오스(구 리부트 계열)는 API의 type 1 랭킹을 사용한다."""
     reboot_worlds = {"에오스", "헬리오스", "리부트", "리부트2"}
     return 1 if _normalize(world_name) in reboot_worlds else 0
@@ -136,7 +136,7 @@ def get_character_rankings(target_date, world_name, character_class, ocid):
 
     def fetch_for_date(date_value):
         date_text = date_value.isoformat()
-        world_type = _world_type(world_name)
+        world_type = get_world_type(world_name)
         # 직업 필터는 응답의 class_name/sub_class_name으로 만들어야 하므로
         # OCID 단건 종합 랭킹을 먼저 가져와 필터 값을 확정한다.
         overall_data, overall_response = get_ranking_snapshot(
@@ -277,14 +277,25 @@ def get_character_rankings(target_date, world_name, character_class, ocid):
         if candidate["rankingDataStatus"] == "empty":
             continue
         statuses = [s for s in candidate["rankingApiStatuses"].values() if s is not None]
+        # 429/5xx는 날짜를 바꿔도 해결되지 않는 일시적 장애일 수 있다.
+        # 이때 전체 4개 랭킹을 재조회하면 제한 상황에서 호출량만 더 증가하므로 중단한다.
+        temporary_failure = any(
+            status in (408, 425, 429) or status >= 500
+            for status in statuses
+        )
+        if temporary_failure:
+            return candidate
+
         all_bad_request = bool(statuses) and all(status == 400 for status in statuses)
         job_missing = (
             candidate.get("jobWorldRanking") is None
             or candidate.get("jobRanking") is None
         )
-        if days_ago < 2 and (all_bad_request or (candidate["rankingDataStatus"] == "partial" and job_missing and not all(
-            status is not None and status >= 500 for status in statuses
-        ))):
+        # 날짜별 순위의 일관성을 위해 재시도 시 해당 날짜의 네 순위를 함께 조회한다.
+        if days_ago < 2 and (
+            all_bad_request
+            or (candidate["rankingDataStatus"] == "partial" and job_missing)
+        ):
             continue
         return candidate
 
