@@ -3,10 +3,14 @@
   "private": true,
   "type": "module",
   "scripts": {
+    "dev": "concurrently --kill-others --names BACKEND,FRONTEND \"python app.py\" \"npm --prefix frontend run dev\"",
+    "dev:backend": "python app.py",
+    "dev:frontend": "npm --prefix frontend run dev",
     "test:e2e": "playwright test",
     "test:growth": "node --test tests-js/*.test.mjs"
   },
   "devDependencies": {
-    "@playwright/test": "1.56.1"
+    "@playwright/test": "1.56.1",
+    "concurrently": "^9.2.1"
   }
 }
