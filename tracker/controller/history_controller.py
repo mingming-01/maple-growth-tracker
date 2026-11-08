@@ -107,6 +107,7 @@ def get_history():
                     and saved.get("recordStatus") == "available"
                     and (
                         not saved.get("experienceRateChecked", False)
+                        or saved.get("experienceRate") is None
                     )
                 )
             )
@@ -489,6 +490,7 @@ def get_history_archive():
                 stored_by_date[target_date.isoformat()].get("recordStatus") == "available"
                 and (
                     not stored_by_date[target_date.isoformat()].get("experienceRateChecked", False)
+                    or stored_by_date[target_date.isoformat()].get("experienceRate") is None
                 )
             )
         ]
@@ -530,6 +532,7 @@ def get_history_archive():
                     stored_by_date[(start_date + timedelta(days=index)).isoformat()].get("recordStatus") == "available"
                     and (
                         not stored_by_date[(start_date + timedelta(days=index)).isoformat()].get("experienceRateChecked", False)
+                        or stored_by_date[(start_date + timedelta(days=index)).isoformat()].get("experienceRate") is None
                     )
                 )
                 for index in range(days)
