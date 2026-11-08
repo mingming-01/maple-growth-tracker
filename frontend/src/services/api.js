@@ -24,6 +24,15 @@ async function requestJson(path, options = {}) {
     );
     if (Number.isFinite(retryAfter) && retryAfter > 0) {
       error.retryAfterSeconds = Math.ceil(retryAfter);
+      if (response.status === 429) {
+        const totalMinutes = Math.ceil(error.retryAfterSeconds / 60);
+        const hours = Math.floor(totalMinutes / 60);
+        const minutes = totalMinutes % 60;
+        const retryLabel = hours > 0
+          ? (minutes > 0 ? `${hours}시간 ${minutes}분` : `${hours}시간`)
+          : `${Math.max(1, minutes)}분`;
+        error.message += ` (약 ${retryLabel} 후 다시 시도할 수 있습니다.)`;
+      }
     }
     throw error;
   }
