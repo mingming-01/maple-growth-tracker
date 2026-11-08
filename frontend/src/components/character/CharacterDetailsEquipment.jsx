@@ -1,4 +1,4 @@
-import { Fragment, useState } from "react";
+import { useState } from "react";
 import {
   SLOT_DEFS,
   sourceOf,
@@ -16,8 +16,7 @@ import {
   apiImage,
   PresetSelect,
   DataState,
-  DetailTooltip,
-  Empty
+  DetailTooltip
 } from "./CharacterDetailsShared.jsx";
 import { CosmeticsSubtab, PetsSubtab } from "./CharacterDetailsStats.jsx";
 
@@ -30,7 +29,7 @@ export function EquipmentTab({ data, selected, onSelect }) {
   const petSource = sourceOf(data, "petEquipment");
   const setSource = sourceOf(data, "setEffect");
   const presetNumber = selected.equipment ?? fallbackPreset(equipment);
-  const current = presetData(equipment
+  const current = presetData(equipment, presetNumber);
   const items = Array.isArray(current.item_equipment) ? current.item_equipment : [];
   const appearance = { ...(appearanceSource?.data || {}), ...(appearanceSource?.currentData || {}) };
   const android = { ...(androidSource?.data || {}), ...(androidSource?.currentData || {}) };
