@@ -59,28 +59,28 @@ def _jobs_path():
 
 
 def get_api_class(character_class):
-    """Nexon API가 사용하는 직업 분류 이름을 매핑한다."""
     try:
         with _jobs_path().open("r", encoding="utf-8") as file:
             jobs_data = json.load(file)
-    except (OSError, ValueError):
+    except (OSError, ValueError, TypeError):
         print("jobs.json 로드에 실패했습니다.")
         return None
     return jobs_data.get(character_class)
 
 
 def _normalize_ranking_label(value):
-    """랭킹 응답의 이름 필드를 비교할 때 공백·대소문자 차이를 정규화한다."""
-    return " ".join(str(value or "").split()).casefold()
+    if value is None:
+        return ""
+    return str(value).strip()
 
 
 def _ranking_entry_class(entry):
     """랭킹 응답에서 세부 직업명을 찾는다. 상위 직업군(class_name)은 사용하지 않는다."""
     for field in ("sub_class_name", "character_class", "character_class_name"):
-        value = entry.get(field)
-        if isinstance(value, str) and value.strip():
-            return value.strip()
-    return None
+        value = _normalize_ranking_label(entry.get(field))
+        if value:
+            return value
+    return ""
 
 
 def _find_character_in_filtered_ranking(
@@ -93,7 +93,7 @@ def _find_character_in_filtered_ranking(
     target_world_name=None,
     historical=False,
 ):
-    """직업 필터 목록에서 대상 캐릭터를 찾고 응답의 직업·월드 일관성을 검사한다.
+    """직업 필터가 적용된 랭킹 목록에서 대상 캐릭터를 찾는다.
 
     world_name은 API 목록 조회 필터이고 target_world_name은 대상 캐릭터의 실제 월드다.
     전체 직업 랭킹은 world_name을 생략하더라도 이름으로 대상을 찾을 때 월드를 확인해야 한다.
@@ -119,8 +119,9 @@ def _find_character_in_filtered_ranking(
         "pagesScanned": 0,
         "returnedEntries": 0,
         "lastPageEntries": 0,
-        "filterUsed": api_class,
         "matched": False,
+        "filterUsed": api_class,
+        "scanComplete": False,
         "pageLimitReached": False,
         "filterVerification": "pending",
         "filterUnverified": False,
@@ -156,8 +157,6 @@ def _find_character_in_filtered_ranking(
             )
             return None, response, last_details
 
-        # ranking/overall이 character_class 필터를 무시하고 200 OK 전체 목록을
-        # 반환하는 경우를 잡기 위해, 응답에 세부 직업명이 있으면 페이지 전체를 검사한다.
         for entry in entries:
             if not isinstance(entry, dict):
                 class_metadata_missing_entries += 1
@@ -185,7 +184,7 @@ def _find_character_in_filtered_ranking(
                         last_details.update({
                             "worldFilterVerification": "mismatch",
                             "worldFilterMismatch": True,
-                            "mismatchedWorld": entry.get("world_name"),
+                            "mismatchedWorld": entry_world,
                         })
                         return None, response, last_details
                 else:
@@ -209,7 +208,6 @@ def _find_character_in_filtered_ranking(
             else:
                 entry_name = _normalize_ranking_label(entry.get("character_name"))
                 entry_world = _normalize_ranking_label(entry.get("world_name"))
-                # OCID가 제공되지 않을 때는 전체 직업 목록에서도 동명이인을 구분한다.
                 matches = bool(
                     target_name
                     and target_world
@@ -217,27 +215,30 @@ def _find_character_in_filtered_ranking(
                     and entry_world == target_world
                 )
             if matches:
-                # 직업 정보가 없는 payload에서는 필터 적용 여부를 독립 검증할 수 없다.
-                # 잘못된 전체/월드 순위를 직업 순위로 노출하지 않도록 fail closed 한다.
-                if (
-                    class_metadata_entries != total_entries
-                    or class_metadata_missing_entries
-                    or (world_name and world_metadata_entries != total_entries)
-                    or world_metadata_missing_entries
+                if world_name and (
+                    world_metadata_entries != total_entries or world_metadata_missing_entries
                 ):
                     last_details.update({
                         "filterVerification": (
-                            "partial" if class_metadata_entries else "not_exposed"
+                            "verified" if class_metadata_entries == total_entries and total_entries
+                            else "partial" if class_metadata_entries
+                            else "not_exposed"
                         ),
                         "worldFilterVerification": (
-                            "partial" if world_metadata_entries else
-                            "not_exposed" if world_name else "not_requested"
+                            "partial" if world_metadata_entries else "not_exposed"
                         ),
                         "filterUnverified": True,
                     })
                     return None, response, last_details
+
+                if class_metadata_entries == total_entries and total_entries:
+                    last_details["filterVerification"] = "verified"
+                elif class_metadata_entries:
+                    last_details["filterVerification"] = "partial"
+                else:
+                    last_details["filterVerification"] = "not_exposed"
+                    last_details["filterUnverified"] = True
                 last_details["matched"] = True
-                last_details["filterVerification"] = "verified"
                 return entry, response, last_details
 
         if not entries:
@@ -257,6 +258,26 @@ def _find_character_in_filtered_ranking(
         )
 
     return None, last_response, last_details
+
+
+def _reject_job_rank_if_collapses_to_unfiltered(job_rank, unfiltered_rank, details):
+    """직업 순위가 종합/월드 순위와 같고 필터 검증이 약하면 폐기한다."""
+    if job_rank is None or unfiltered_rank is None:
+        return job_rank, details
+    try:
+        same = int(job_rank) == int(unfiltered_rank)
+    except (TypeError, ValueError):
+        same = str(job_rank) == str(unfiltered_rank)
+    if not same:
+        return job_rank, details
+    verification = (details or {}).get("filterVerification")
+    if verification == "verified":
+        return job_rank, details
+    updated = dict(details or {})
+    updated["collapsedToUnfiltered"] = True
+    updated["filterUnverified"] = True
+    updated["matched"] = False
+    return None, updated
 
 
 def _should_retry_filtered_ranking_date(candidate):
@@ -371,6 +392,20 @@ def get_character_rankings(
             name: (data.get("ranking") if isinstance(data, dict) else None)
             for name, (data, _) in zip(names, values)
         }
+        result["jobWorldRanking"], diagnostics["jobWorldRanking"] = (
+            _reject_job_rank_if_collapses_to_unfiltered(
+                result.get("jobWorldRanking"),
+                result.get("worldRanking"),
+                diagnostics.get("jobWorldRanking"),
+            )
+        )
+        result["jobRanking"], diagnostics["jobRanking"] = (
+            _reject_job_rank_if_collapses_to_unfiltered(
+                result.get("jobRanking"),
+                result.get("ranking"),
+                diagnostics.get("jobRanking"),
+            )
+        )
         has_data = any(value is not None for value in result.values())
         http_error = any(
             response is not None and response.status_code != 200
@@ -408,6 +443,8 @@ def get_character_rankings(
         )
         if filter_unverified:
             warnings.append("직업 또는 월드 랭킹 응답의 필터 조건을 검증할 수 없어 해당 순위를 제외했습니다.")
+        if any(diagnostics[name].get("collapsedToUnfiltered") for name in ("jobWorldRanking", "jobRanking")):
+            warnings.append("직업 순위가 종합/월드 순위와 같아 필터 미적용으로 판단하고 해당 순위를 제외했습니다.")
         world_filter_mismatch = diagnostics["jobWorldRanking"].get("worldFilterMismatch")
         if world_filter_mismatch:
             warnings.append("월드 랭킹 응답에 요청한 월드가 아닌 캐릭터가 포함되어 해당 순위를 제외했습니다.")
@@ -437,9 +474,6 @@ def get_character_rankings(
         if candidate["rankingDataStatus"] == "empty":
             continue
 
-        # 랭킹 집계일 당일에는 공개 API가 아직 날짜를 허용하지 않아
-        # HTTP 400을 반환할 수 있다. 이 경우에만 직전 집계일을 재시도한다.
-        # 401/403 등 인증·권한 오류는 날짜를 바꿔도 해결되지 않으므로 즉시 반환한다.
         status_codes = [
             status for status in candidate["rankingApiStatuses"].values()
             if status is not None
@@ -450,8 +484,6 @@ def get_character_rankings(
         if all_bad_request and days_ago < 2:
             continue
 
-        # 기본/월드 순위는 준비됐지만 직업 필터 목록에 대상이 아직 없으면
-        # 직전 집계일을 확인한다. 페이지 안전 한도 도달이나 직업 불일치는 재시도하지 않는다.
         if _should_retry_filtered_ranking_date(candidate) and days_ago < 2:
             continue
         return candidate
