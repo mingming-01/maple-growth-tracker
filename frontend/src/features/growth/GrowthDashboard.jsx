@@ -596,49 +596,90 @@ export default function GrowthDashboard({ character, history, onHistoryChange, o
         <GoalPanel character={character} metrics={metrics} history={history || []} />
       </section>
 
-      <section className="section">
-        <div className="section-header"><h2 className="section-title">날짜별 성장 기록</h2><p className="section-description">선택한 기간의 경험치 진행률과 랭킹 변화입니다. API가 진행률을 제공하지 않은 날짜는 추정하지 않고 비워 둡니다.</p></div>
-        <div className="history-card">
-          <div className="history-table-wrapper">
-            <table className="history-table">
-              <thead><tr><th>날짜</th><th>랭킹</th><th>레벨</th><th>경험치</th><th>경험치 증가량</th><th>레벨 진행률</th></tr></thead>
-              <tbody>
-                {sortHistoryDescending(displayHistory).map(item => {
-                  const rate = item.experienceRate == null
-                    ? null
-                    : Number(String(item.experienceRate).replace("%",""));
-                  const rateChange = progressRateChanges[item.date];
-                  const validRate = Number.isFinite(rate) && rate >= 0 && rate <= 100;
-                  return (
-                    <tr key={item.date}>
-                      <td data-label="날짜">{localDate(item.date)}</td>
-                      <td data-label="랭킹">{item.ranking == null ? "—" : Number(item.ranking).toLocaleString("ko-KR")+"위"}</td>
-                      <td data-label="레벨">{item.level == null ? "—" : "Lv. "+item.level}</td>
-                      <td data-label="경험치" className="history-experience-value">{item.experience == null ? "—" : Number(item.experience).toLocaleString("ko-KR")}</td>
-                      <td data-label="경험치 증가량" className={"history-growth-value " + (Number(item.experienceChange) > 0 ? "is-positive" : Number(item.experienceChange) < 0 ? "is-negative" : "")}>{item.experienceChange == null ? "—" : signedFmt(item.experienceChange)}</td>
-                      <td data-label="레벨 진행률">
-                        {validRate ? (
-                          <span className="history-level-progress-cell">
-                            <span>{rate.toFixed(3)}%</span>
-                            {Number.isFinite(rateChange) && (
-                              <small className={"history-level-progress-change " + (
-                                rateChange > 0 ? "is-positive" : "is-neutral"
-                              )}>
-                                {rateChange > 0 ? "+" : ""}{rateChange.toFixed(3)}%p
-                              </small>
-                            )}
-                          </span>
-                        ) : "—"}
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
-          {!displayHistory.length && <p className="history-range-notice">성장 기록이 없습니다.</p>}
-        </div>
-      </section>
     </div>
+  );
+}
+
+export function GrowthHistoryTable({ history }) {
+  const records = Array.isArray(history) ? history : [];
+  const progressRateChanges = useMemo(
+    () => calculateDailyExperienceRateChanges(records),
+    [records]
+  );
+
+  return (
+    <section className="section growth-history-section" aria-labelledby="growth-history-title">
+      <div className="section-header">
+        <h2 className="section-title" id="growth-history-title">날짜별 성장 기록</h2>
+        <p className="section-description">선택한 기간의 경험치 진행률과 랭킹 변화입니다. API가 진행률을 제공하지 않은 날짜는 추정하지 않고 비워 둡니다.</p>
+      </div>
+      <div className="history-card">
+        <div className="history-table-wrapper">
+          <table className="history-table" aria-label="날짜별 캐릭터 성장 기록">
+            <thead>
+              <tr><th scope="col">날짜</th><th scope="col">랭킹</th><th scope="col">레벨</th><th scope="col">경험치</th><th scope="col">레벨 진행률</th></tr>
+            </thead>
+            <tbody>
+              {sortHistoryDescending(records).map(item => {
+                const rate = item.experienceRate == null
+                  ? null
+                  : Number(String(item.experienceRate).replace("%",""));
+                const rateChange = progressRateChanges[item.date];
+                const validRate = Number.isFinite(rate) && rate >= 0 && rate <= 100;
+                const experienceChange = item.experienceChange == null
+                  ? null
+                  : Number(item.experienceChange);
+                const validExperienceChange = Number.isFinite(experienceChange);
+                const experienceChangeClass = !validExperienceChange
+                  ? "is-neutral"
+                  : experienceChange > 0
+                    ? "is-positive"
+                    : experienceChange < 0
+                      ? "is-negative"
+                      : "is-neutral";
+                const experienceChangeLabel = validExperienceChange
+                  ? signedFmt(experienceChange)
+                  : "자료 없음";
+
+                return (
+                  <tr key={item.date}>
+                    <td data-label="날짜">{localDate(item.date)}</td>
+                    <td data-label="랭킹">{item.ranking == null ? "—" : Number(item.ranking).toLocaleString("ko-KR")+"위"}</td>
+                    <td data-label="레벨">{item.level == null ? "—" : "Lv. "+item.level}</td>
+                    <td
+                      data-label="경험치"
+                      className="history-experience-value"
+                      aria-label={"경험치 "+(item.experience == null ? "자료 없음" : Number(item.experience).toLocaleString("ko-KR"))+" · 경험치 증가량 "+experienceChangeLabel}
+                    >
+                      <span>{item.experience == null ? "—" : Number(item.experience).toLocaleString("ko-KR")}</span>
+                      {validExperienceChange && (
+                        <small className={"history-experience-change "+experienceChangeClass}>
+                          {signedFmt(experienceChange)}
+                        </small>
+                      )}
+                    </td>
+                    <td data-label="레벨 진행률">
+                      {validRate ? (
+                        <span className="history-level-progress-cell">
+                          <span>{rate.toFixed(3)}%</span>
+                          {Number.isFinite(rateChange) && (
+                            <small className={"history-level-progress-change "+(
+                              rateChange > 0 ? "is-positive" : rateChange < 0 ? "is-negative" : "is-neutral"
+                            )}>
+                              {rateChange > 0 ? "+" : ""}{rateChange.toFixed(3)}%p
+                            </small>
+                          )}
+                        </span>
+                      ) : "—"}
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+        {!records.length && <p className="history-range-notice">성장 기록이 없습니다.</p>}
+      </div>
+    </section>
   );
 }

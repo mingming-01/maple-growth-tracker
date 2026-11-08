@@ -326,7 +326,8 @@ test("mobile touch opens item tooltips without clipped detail panels", async ({ 
     await expect(championCard).toContainText("챔피언 테스트");
     const championAvatar = championCard.locator(".game-union-champion-avatar-preview");
     const avatarBounds = await championAvatar.boundingBox();
-    expect(avatarBounds.width).toBeGreaterThanOrEqual(150);
+    // The 2-column champion grid now fits the real mobile viewport instead of inheriting the old 640px page overflow.
+    expect(avatarBounds.width).toBeGreaterThanOrEqual(135);
     const crestStrip = championCard.locator(".game-union-champion-badges");
     expect(await crestStrip.evaluate(element => getComputedStyle(element).padding)).toBe("0px");
     expect(await crestStrip.evaluate(element => getComputedStyle(element).borderTopWidth)).toBe("0px");

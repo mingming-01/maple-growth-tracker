@@ -113,11 +113,27 @@ test("React preview loads profile data and refreshes only on explicit request", 
   await expect(page.locator(".mgt-snapshot-stat[data-testid='profile-combat-power']")).toContainText("987,654,321");
   await expect(page.getByRole("button", { name: "관심 캐릭터 등록" })).toBeVisible();
   await expect(page.getByText("주간 일일 평균 경험치")).toBeVisible();
-  await expect(page.locator(".history-table thead")).toContainText("경험치 증가량");
+  await expect(page.locator(".history-table thead")).toContainText("경험치");
+  await expect(page.locator(".history-table thead")).not.toContainText("경험치 증가량");
+  await expect(page.locator(".history-table thead tr th")).toHaveCount(5);
   await expect(page.locator(".history-table thead")).not.toContainText("일일 변화");
   const progressRow = page.locator(".history-table tbody tr").filter({ hasText: "2026.11.05" });
   await expect(progressRow.locator(".history-level-progress-change")).toHaveText("+0.375%p");
   await expect(progressRow.locator(".history-level-progress-change")).toHaveClass(/is-positive/);
+  await expect(progressRow.locator(".history-experience-value > span")).toHaveText("1,200");
+  await expect(progressRow.locator(".history-experience-change")).toHaveText("+0.00조");
+  await expect(progressRow.locator(".history-experience-change")).toHaveClass(/is-positive/);
+  await expect(progressRow.locator(".history-experience-value")).toHaveAttribute("aria-label", /경험치 증가량/);
+  const aiHeading = page.getByRole("heading", { name: "AI 성장 리포트" });
+  const historyHeading = page.getByRole("heading", { name: "날짜별 성장 기록" });
+  const aiBeforeHistory = await page.evaluate(() => {
+    const ai = [...document.querySelectorAll("h2")].find(node => node.textContent.trim() === "AI 성장 리포트");
+    const table = document.querySelector("#history");
+    return Boolean(ai && table && (ai.compareDocumentPosition(table) & Node.DOCUMENT_POSITION_FOLLOWING));
+  });
+  expect(aiBeforeHistory).toBe(true);
+  await expect(aiHeading).toBeVisible();
+  await expect(historyHeading).toBeVisible();
   await expect(page.getByRole("heading", { name: "캐릭터 상세 정보" })).toBeVisible();
   await expect(page.locator(".game-stat-detail-grade")).toHaveText("레전드리");
 
@@ -347,6 +363,8 @@ test("30-day AI report reuses cache without automatic LLM calls and only regener
   await page.locator(".history-range-control select").selectOption("30");
   const aiReportSection = page.locator(".section").filter({ has: page.getByRole("heading", { name: "AI 성장 리포트" }) });
   await expect(aiReportSection.locator(".section-description")).toContainText("선택한 30일");
+  await expect(page.locator("#history .history-table tbody tr")).toHaveCount(30);
+  await expect(page.locator("#history .history-table tbody tr").first()).toContainText("2026.11.06");
   expect(aiCalls).toBe(0);
 
   await page.getByRole("button", { name: "AI 다시 분석" }).click();
@@ -358,5 +376,145 @@ test("30-day AI report reuses cache without automatic LLM calls and only regener
 
   await page.reload();
   await expect(page.getByText("기간 분석 테스트 결과입니다.")).toBeVisible();
+  await expect(page.locator("#history .history-table tbody tr")).toHaveCount(30);
   expect(aiCalls).toBe(1);
+
+  await page.locator(".history-range-control select").selectOption("7");
+  await expect(page.locator("#history .history-table tbody tr")).toHaveCount(3);
+  await expect(page.locator("#history .history-table tbody tr").first()).toContainText("2026.11.06");
+});
+
+
+test("mobile dashboard stays within the viewport and keeps the report before history", async ({ page }) => {
+  await page.route("**/api/character?*", route => route.fulfill({
+    status: 200,
+    contentType: "application/json",
+    body: JSON.stringify({
+      characterName: "모바일진단",
+      ocid: "mobile-layout-diagnostic",
+      character_image: null,
+      worldName: "크로아",
+      job: "아크메이지(불,독)",
+      guildName: "테스트길드",
+      level: 280,
+      experience: 123456789012345,
+      experienceRate: "42.125",
+      ranking: 12345,
+      worldRanking: 6789,
+      jobWorldRanking: 123,
+      jobRanking: 456,
+      rankingDataStatus: "available"
+    })
+  }));
+  await page.route("**/api/history?*", route => route.fulfill({
+    status: 200,
+    contentType: "application/json",
+    body: JSON.stringify({
+      history: [
+        { date: "2026-11-02", level: 280, experience: 1000, experienceRate: "39.000", experienceChange: null, recordStatus: "available" },
+        { date: "2026-11-03", level: 280, experience: 1200, experienceRate: "39.500", experienceChange: 200, recordStatus: "available" },
+        { date: "2026-11-04", level: 280, experience: 1300, experienceRate: "40.000", experienceChange: 100, recordStatus: "available" },
+        { date: "2026-11-05", level: 280, experience: 1500, experienceRate: "40.750", experienceChange: 200, recordStatus: "available" },
+        { date: "2026-11-06", level: 280, experience: 1700, experienceRate: "41.250", experienceChange: 200, recordStatus: "available" },
+        { date: "2026-11-07", level: 280, experience: 1900, experienceRate: "41.750", experienceChange: 200, recordStatus: "available" },
+        { date: "2026-11-08", level: 280, experience: 2100, experienceRate: "42.125", experienceChange: 200, recordStatus: "available" }
+      ],
+      historyStatus: "complete",
+      historyStorage: { backend: "postgres", status: "saved" }
+    })
+  }));
+  await page.route("**/api/character-details?*", route => route.fulfill({
+    status: 200,
+    contentType: "application/json",
+    body: JSON.stringify({ section: "stats", status: "available", sources: [] })
+  }));
+  await page.route("**/api/ai-analysis?*", route => route.fulfill({
+    status: 200,
+    contentType: "application/json",
+    body: JSON.stringify({
+      analysis: "[성장 패턴] 모바일 레이아웃 진단",
+      cacheHit: true,
+      growthInsights: {}
+    })
+  }));
+
+  await page.setViewportSize({ width: 360, height: 800 });
+  await page.goto("/preview/");
+  await page.getByLabel("캐릭터명").fill("모바일진단");
+  await page.getByRole("button", { name: /캐릭터 조회/ }).click();
+  await expect(page.getByRole("heading", { name: "모바일진단" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "날짜별 성장 기록" })).toBeVisible();
+
+  const measurements = [];
+  for (const width of [360, 390, 412]) {
+    await page.setViewportSize({ width, height: 844 });
+    await page.waitForTimeout(100);
+    const measurement = await page.evaluate(() => {
+      const viewport = document.documentElement.clientWidth;
+      const root = {
+        innerWidth: window.innerWidth,
+        clientWidth: viewport,
+        documentScrollWidth: document.documentElement.scrollWidth,
+        bodyScrollWidth: document.body.scrollWidth
+      };
+      const majorSelectors = [
+        ".mgt-app-shell", ".mgt-page-content", ".mgt-result-content",
+        "#character", "#details", "#growth", "#analytics",
+        ".mgt-profile-shell", ".character-details-section",
+        ".react-equipment-board", ".growth-dashboard",
+        ".history-card", ".history-table-wrapper", ".history-table"
+      ];
+      const major = Object.fromEntries(majorSelectors.map(selector => {
+        const element = document.querySelector(selector);
+        if (!element) return [selector, null];
+        const rect = element.getBoundingClientRect();
+        return [selector, {
+          left: Math.round(rect.left * 10) / 10,
+          right: Math.round(rect.right * 10) / 10,
+          width: Math.round(rect.width * 10) / 10,
+          scrollWidth: element.scrollWidth,
+          clientWidth: element.clientWidth
+        }];
+      }));
+      const offenders = [...document.querySelectorAll("body *")].map(element => {
+        const rect = element.getBoundingClientRect();
+        if (!rect.width || !rect.height) return null;
+        let clipped = false;
+        for (let parent = element.parentElement; parent && parent !== document.body; parent = parent.parentElement) {
+          const overflowX = getComputedStyle(parent).overflowX;
+          if (["auto", "scroll", "hidden", "clip"].includes(overflowX)) {
+            clipped = true;
+            break;
+          }
+        }
+        return {
+          tag: element.tagName.toLowerCase(),
+          id: element.id || "",
+          className: typeof element.className === "string" ? element.className : "",
+          left: Math.round(rect.left * 10) / 10,
+          right: Math.round(rect.right * 10) / 10,
+          width: Math.round(rect.width * 10) / 10,
+          clippedByAncestor: clipped
+        };
+      }).filter(item => item && !item.clippedByAncestor &&
+        (item.left < -1 || item.right > viewport + 1))
+        .sort((a, b) => Math.max(b.right - viewport, -b.left) - Math.max(a.right - viewport, -a.left))
+        .slice(0, 12);
+      return { ...root, major, offenders };
+    });
+    measurements.push({ viewport: width, ...measurement });
+  }
+  for (const measurement of measurements) {
+    expect(
+      measurement.documentScrollWidth,
+      `document overflow at ${measurement.viewport}px: ${JSON.stringify(measurement.offenders)}`
+    ).toBe(measurement.clientWidth);
+    expect(measurement.bodyScrollWidth).toBe(measurement.clientWidth);
+    expect(measurement.major["#character"].right).toBeLessThanOrEqual(measurement.viewport + 1);
+    expect(measurement.major["#details"].right).toBeLessThanOrEqual(measurement.viewport + 1);
+    expect(measurement.major["#growth"].right).toBeLessThanOrEqual(measurement.viewport + 1);
+    expect(measurement.major["#analytics"].right).toBeLessThanOrEqual(measurement.viewport + 1);
+    expect(measurement.major[".history-table-wrapper"].scrollWidth)
+      .toBeLessThanOrEqual(measurement.major[".history-table-wrapper"].clientWidth + 1);
+  }
 });
