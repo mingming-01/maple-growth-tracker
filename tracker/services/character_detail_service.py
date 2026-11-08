@@ -111,7 +111,6 @@ _PRESET_DATA_KEYS = {
     "ability_preset_": "ability_info",
     "character_link_skill_preset_": "character_link_skill",
     "character_owned_link_skill_preset_": "character_owned_link_skill",
-
 }
 
 
@@ -123,8 +122,6 @@ def _normalize_source(payload, spec):
     """Nexon 원본 응답을 화면에서 사용하는 공통 데이터 구조로 정규화한다."""
     payload = payload if isinstance(payload, dict) else {}
 
-    # 최신 KMS 유니온 스탯은 preset_1 같은 개별 필드가 아니라
-    # union_state_stat_preset 배열 안에 preset_no와 효과 목록으로 제공된다.
     preset_list_field = spec.get("preset_list_field")
     if preset_list_field:
         number_field = spec.get("preset_number_field", "preset_no")
@@ -143,10 +140,7 @@ def _normalize_source(payload, spec):
                 if not isinstance(values, list):
                     values = []
                 selected = {value_field: values}
-                presets.append({
-                    "number": number,
-                    "data": selected,
-                })
+                presets.append({"number": number, "data": selected})
 
         current_fields = spec.get("current_fields", ())
         current_data = {
@@ -154,8 +148,6 @@ def _normalize_source(payload, spec):
             for field in current_fields
             if _has_data(payload.get(field))
         }
-        # 현 적용 프리셋 번호는 별도 필드로 오지 않을 수 있다.
-        # 현재 효과 목록과 프리셋 효과 목록이 완전히 일치할 때만 활성 번호를 확정한다.
         active_number = None
         current_values = current_data.get(value_field)
         if isinstance(current_values, list) and presets:
@@ -174,24 +166,15 @@ def _normalize_source(payload, spec):
                 )
                 if current_signature == preset_signature:
                     matching_numbers.append(preset["number"])
-            # 같은 효과를 가진 프리셋이 여러 개면 번호를 추측하지 않는다.
             if len(matching_numbers) == 1:
                 active_number = matching_numbers[0]
 
         if not presets and current_data:
-            presets = [{
-                "number": 0,
-                "data": current_data,
-                "currentOnly": True,
-            }]
+            presets = [{"number": 0, "data": current_data, "currentOnly": True}]
             active_number = 0
 
         excluded = set(current_fields) | {preset_list_field} | set(spec.get("exclude_fields", ()))
-        data = {
-            key: value
-            for key, value in payload.items()
-            if key not in excluded
-        }
+        data = {key: value for key, value in payload.items() if key not in excluded}
         return {
             "status": "available" if data or presets or current_data else "empty",
             "activePresetNo": active_number,
@@ -225,10 +208,7 @@ def _normalize_source(payload, spec):
                 else:
                     selected[_preset_data_key(prefix)] = value
         if selected:
-            presets.append({
-                "number": number,
-                "data": selected,
-            })
+            presets.append({"number": number, "data": selected})
 
     current_fields = spec.get("current_fields", ())
     current_data = {
@@ -237,11 +217,7 @@ def _normalize_source(payload, spec):
         if _has_data(payload.get(field))
     }
     if not presets and current_data:
-        presets = [{
-            "number": 0,
-            "data": current_data,
-            "currentOnly": True,
-        }]
+        presets = [{"number": 0, "data": current_data, "currentOnly": True}]
 
     excluded = set(current_fields) | set(spec.get("active_fields", ()))
     for prefix in prefixes:
@@ -270,3 +246,90 @@ def _extract_combat_power(payload):
         if isinstance(item, dict) and str(item.get("stat_name", "")).strip() == "전투력":
             return item.get("stat_value")
     return None
+
+
+def _fetch_source(ocid, spec, force_refresh=False):
+    params = {"ocid": ocid, **spec.get("params", {})}
+    cache_key = "nexon-source:{}:{}:{}:{}".format(
+        ocid, spec["endpoint"], json.dumps(params, sort_keys=True, ensure_ascii=False),
+        json.dumps(spec, sort_keys=True, ensure_ascii=False)
+    )
+    now = time.monotonic()
+    if not force_refresh:
+        with _SOURCE_CACHE_LOCK:
+            cached_item = _SOURCE_CACHE.get(cache_key)
+            if cached_item and cached_item["expires_at"] > now:
+                return cached_item["source"]
+            if cached_item:
+                _SOURCE_CACHE.pop(cache_key, None)
+    try:
+        response = request_nexon_api(spec["endpoint"], params)
+    except requests.RequestException:
+        return {
+            "id": spec["id"],
+            "label": spec["label"],
+            "status": "unavailable",
+            "message": "넥슨 API 연결에 실패했습니다.",
+        }
+
+    if response.status_code != 200:
+        return {
+            "id": spec["id"],
+            "label": spec["label"],
+            "status": "unavailable",
+            "statusCode": response.status_code,
+            "message": (
+                "요청이 일시적으로 제한되었습니다."
+                if response.status_code == 429
+                else "이 데이터는 현재 조회할 수 없습니다."
+            ),
+        }
+
+    try:
+        payload = response.json()
+    except (ValueError, requests.RequestException):
+        payload = None
+
+    if not isinstance(payload, dict):
+        payload = {}
+
+    result = _normalize_source(payload, spec)
+    source = {
+        "id": spec["id"], "label": spec["label"], **result,
+        "message": "API 응답에 표시할 데이터가 없습니다." if result["status"] == "empty" else None,
+    }
+    with _SOURCE_CACHE_LOCK:
+        _SOURCE_CACHE[cache_key] = {
+            "source": source,
+            "expires_at": time.monotonic() + _SOURCE_CACHE_TTL,
+        }
+    return source
+
+
+def get_character_detail_section(ocid, section, force_refresh=False):
+    """선택된 상세 탭에 필요한 API만 병렬 조회한다."""
+    if section not in VALID_SECTIONS:
+        raise ValueError("지원하지 않는 상세 정보 구분입니다.")
+
+    specs = SECTION_SOURCES[section]
+    with ThreadPoolExecutor(max_workers=min(4, len(specs))) as executor:
+        sources = list(executor.map(
+            lambda spec: _fetch_source(ocid, spec, force_refresh=force_refresh),
+            specs,
+        ))
+
+    available = sum(source["status"] == "available" for source in sources)
+    if available == len(sources):
+        status = "available"
+    elif available:
+        status = "partial"
+    elif any(source["status"] == "empty" for source in sources):
+        status = "partial"
+    else:
+        status = "unavailable"
+
+    return {
+        "section": section,
+        "status": status,
+        "sources": sources,
+    }
