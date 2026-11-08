@@ -1,4 +1,5 @@
 """Nexon service composition tests."""
+import json
 import unittest
 from unittest.mock import Mock, patch
 
@@ -258,6 +259,18 @@ class NexonServiceTests(unittest.TestCase):
         )
         self.assertEqual(nexon_service.get_api_class("히어로"), "히어로")
         self.assertIsNone(nexon_service.get_api_class("존재하지않는직업"))
+
+        # Every Nexon ranking filter must use the exact character_class value,
+        # not a broad class-group label such as "전사-히어로".
+        with nexon_service._jobs_path().open("r", encoding="utf-8") as file:
+            jobs = json.load(file)
+        self.assertGreaterEqual(len(jobs), 40)
+        for character_class in jobs:
+            with self.subTest(character_class=character_class):
+                self.assertEqual(
+                    nexon_service.get_api_class(character_class),
+                    character_class,
+                )
 
     @patch("tracker.integrations.nexon_api.get_ranking_page")
     def test_global_job_ranking_name_fallback_checks_world(self, get_ranking_page):
