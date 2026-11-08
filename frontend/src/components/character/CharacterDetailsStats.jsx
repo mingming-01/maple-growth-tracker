@@ -91,30 +91,59 @@ export function CosmeticsSubtab({ appearance, cashSource, selected, onSelect }) 
     ? cashSource.currentData.cash_item_equipment_base : [];
   const cashItems = Array.isArray(cashPreset.cash_item_equipment)
     ? cashPreset.cash_item_equipment : baseItems;
-  const additionalItems = Array.isArray(cashSource?.currentData?.cash_item_equipment_additional)
-    ? cashSource.currentData.cash_item_equipment_additional : [];
+  const additionalItems = Array.isArray(cashPreset.additional_cash_item_equipment)
+    ? cashPreset.additional_cash_item_equipment
+    : (cashSource?.currentData?.additional_cash_item_equipment_base || []);
+  const hair = appearance.character_hair;
+  const face = appearance.character_face;
+  const skin = appearance.character_skin_name;
   const lookMode = cashSource?.currentData?.character_look_mode || cashSource?.data?.character_look_mode;
-  const faceColors = appearanceColors(appearance?.character_face_color);
-  const hairColors = appearanceColors(appearance?.character_hair_color);
 
-  function renderCashItem(item, index, keyPrefix = "cash") {
+  const renderCashItem = (item, index, kind = "cash") => {
+    const icon = item.cash_item_icon || item.item_icon;
+    const name = item.cash_item_name || item.item_name || item.cash_item_equipment_slot || "캐시 장비";
     return (
-      <article className="game-cosmetic-card" key={keyPrefix + index}>
-        <div className="game-cosmetic-card-media">
-          {apiImage(item.cash_item_icon || item.item_icon, item.cash_item_name || item.item_name)}
-        </div>
-        <div className="game-cosmetic-card-body">
-          <strong>{item.cash_item_name || item.item_name || "캐시 장비"}</strong>
-          <span>{item.cash_item_equipment_slot || item.item_equipment_slot || item.item_equipment_part || "슬롯 정보 없음"}</span>
-        </div>
+      <article className="game-cosmetic-item" key={kind + "-" + index}>
+        <span className="game-cosmetic-item-icon">{apiImage(icon, name)}</span>
+        <strong>{name}</strong>
+        <span>{item.cash_item_equipment_part || item.cash_item_equipment_slot || item.item_equipment_part || "캐시 아이템"}</span>
       </article>
     );
-  }
+  };
+
+  const appearanceItems = [
+    ["헤어", hair?.hair_name || hair?.name || (typeof hair === "string" ? hair : null), appearanceColors(hair)],
+    ["성형", face?.face_name || face?.name || (typeof face === "string" ? face : null), appearanceColors(face)],
+    ["피부", skin?.skin_name || skin?.name || (typeof skin === "string" ? skin : null), []]
+  ];
 
   return (
-    <div className="game-cosmetic-layout">
-      <section className="game-cosmetic-panel">
-        <div className="game-subpanel-heading game-cosmetic-heading">
+    <div className="game-cosmetics-panel">
+      <section className="game-cosmetics-appearance">
+        <div className="game-subpanel-heading">
+          <span className="game-window-eyebrow">CHARACTER LOOK</span>
+          <h4 className="game-window-title">헤어 · 성형 · 피부</h4>
+        </div>
+        <div className="game-appearance-grid">
+          {appearanceItems.map(([label, name, colors]) => (
+            <article className="game-appearance-item" key={label}>
+              <span className="game-appearance-symbol" aria-hidden="true">{label === "헤어" ? "✂" : label === "성형" ? "◉" : "✧"}</span>
+              <div>
+                <span className="game-cosmetic-overline">{label}</span>
+                <strong>{name || "정보 없음"}</strong>
+                {colors.map(([colorLabel, value]) => (
+                  <small key={colorLabel}>{colorLabel} · {value}</small>
+                ))}
+              </div>
+            </article>
+          ))}
+        </div>
+        <p className="game-cosmetic-note">
+          Nexon Open API의 외형 정보는 헤어·성형·피부 이름과 색상 위주이며, 개별 이미지 URL은 제공하지 않습니다. 별도 게임 리소스 매핑 전에는 임의 아이콘을 붙이지 않습니다.
+        </p>
+      </section>
+      <section className="game-cash-equipment-panel">
+        <div className="game-subpanel-heading game-cash-toolbar">
           <div>
             <span className="game-window-eyebrow">CASH COORDINATION</span>
             <h4 className="game-window-title">캐시 장비 · 외형 프리셋</h4>
@@ -124,12 +153,6 @@ export function CosmeticsSubtab({ appearance, cashSource, selected, onSelect }) 
             onChange={value => onSelect({ cashItemEquipment: value })} label="외형 장비 프리셋" />
         </div>
         <DataState source={cashSource} />
-        {(faceColors.length > 0 || hairColors.length > 0) && (
-          <div className="game-cosmetic-meta">
-            {faceColors.map(([label, value]) => <span key={"face-"+label}>{label}: {value}</span>)}
-            {hairColors.map(([label, value]) => <span key={"hair-"+label}>{label}: {value}</span>)}
-          </div>
-        )}
         <h5 className="game-cosmetic-list-title">
           {cashNumber ? "외형 장비 프리셋 " + cashNumber : "착용 중인 캐시 장비"}
         </h5>
