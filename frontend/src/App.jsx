@@ -560,7 +560,7 @@ function App() {
               <div id="analytics">
                 <AIReport character={character} history={history} analysisHistory={analysisPeriod.history || history} periodDays={analysisPeriod.days} periodSummary={analysisPeriod.summary} />
               </div>
-              <GrowthHistoryTable history={analysisPeriod.history || history} />
+              <div id="history"><GrowthHistoryTable history={analysisPeriod.history || history} /></div>
               <div id="comparison">
                 <GrowthComparison
                   character={character}
