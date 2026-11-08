@@ -113,11 +113,27 @@ test("React preview loads profile data and refreshes only on explicit request", 
   await expect(page.locator(".mgt-snapshot-stat[data-testid='profile-combat-power']")).toContainText("987,654,321");
   await expect(page.getByRole("button", { name: "관심 캐릭터 등록" })).toBeVisible();
   await expect(page.getByText("주간 일일 평균 경험치")).toBeVisible();
-  await expect(page.locator(".history-table thead")).toContainText("경험치 증가량");
+  await expect(page.locator(".history-table thead")).toContainText("경험치");
+  await expect(page.locator(".history-table thead")).not.toContainText("경험치 증가량");
+  await expect(page.locator(".history-table thead tr th")).toHaveCount(5);
   await expect(page.locator(".history-table thead")).not.toContainText("일일 변화");
   const progressRow = page.locator(".history-table tbody tr").filter({ hasText: "2026.11.05" });
   await expect(progressRow.locator(".history-level-progress-change")).toHaveText("+0.375%p");
   await expect(progressRow.locator(".history-level-progress-change")).toHaveClass(/is-positive/);
+  await expect(progressRow.locator(".history-experience-value > span")).toHaveText("1,200");
+  await expect(progressRow.locator(".history-experience-change")).toHaveText("+0.00조");
+  await expect(progressRow.locator(".history-experience-change")).toHaveClass(/is-positive/);
+  await expect(progressRow.locator(".history-experience-value")).toHaveAttribute("aria-label", /경험치 증가량/);
+  const aiHeading = page.getByRole("heading", { name: "AI 성장 리포트" });
+  const historyHeading = page.getByRole("heading", { name: "날짜별 성장 기록" });
+  const aiBeforeHistory = await page.evaluate(() => {
+    const ai = [...document.querySelectorAll("h2")].find(node => node.textContent.trim() === "AI 성장 리포트");
+    const table = document.querySelector("#history");
+    return Boolean(ai && table && (ai.compareDocumentPosition(table) & Node.DOCUMENT_POSITION_FOLLOWING));
+  });
+  expect(aiBeforeHistory).toBe(true);
+  await expect(aiHeading).toBeVisible();
+  await expect(historyHeading).toBeVisible();
   await expect(page.getByRole("heading", { name: "캐릭터 상세 정보" })).toBeVisible();
   await expect(page.locator(".game-stat-detail-grade")).toHaveText("레전드리");
 
@@ -347,6 +363,8 @@ test("30-day AI report reuses cache without automatic LLM calls and only regener
   await page.locator(".history-range-control select").selectOption("30");
   const aiReportSection = page.locator(".section").filter({ has: page.getByRole("heading", { name: "AI 성장 리포트" }) });
   await expect(aiReportSection.locator(".section-description")).toContainText("선택한 30일");
+  await expect(page.locator("#history .history-table tbody tr")).toHaveCount(30);
+  await expect(page.locator("#history .history-table tbody tr").first()).toContainText("2026.11.06");
   expect(aiCalls).toBe(0);
 
   await page.getByRole("button", { name: "AI 다시 분석" }).click();
@@ -358,11 +376,16 @@ test("30-day AI report reuses cache without automatic LLM calls and only regener
 
   await page.reload();
   await expect(page.getByText("기간 분석 테스트 결과입니다.")).toBeVisible();
+  await expect(page.locator("#history .history-table tbody tr")).toHaveCount(30);
   expect(aiCalls).toBe(1);
+
+  await page.locator(".history-range-control select").selectOption("7");
+  await expect(page.locator("#history .history-table tbody tr")).toHaveCount(3);
+  await expect(page.locator("#history .history-table tbody tr").first()).toContainText("2026.11.06");
 });
 
 
-test("diagnostic: report mobile document overflow at common viewport widths", async ({ page }) => {
+test("mobile dashboard stays within the viewport and keeps the report before history", async ({ page }) => {
   await page.route("**/api/character?*", route => route.fulfill({
     status: 200,
     contentType: "application/json",
@@ -481,5 +504,17 @@ test("diagnostic: report mobile document overflow at common viewport widths", as
     });
     measurements.push({ viewport: width, ...measurement });
   }
-  console.log("MGT_MOBILE_LAYOUT_DIAGNOSTIC " + JSON.stringify(measurements));
+  for (const measurement of measurements) {
+    expect(
+      measurement.documentScrollWidth,
+      `document overflow at ${measurement.viewport}px: ${JSON.stringify(measurement.offenders)}`
+    ).toBe(measurement.clientWidth);
+    expect(measurement.bodyScrollWidth).toBe(measurement.clientWidth);
+    expect(measurement.major["#character"].right).toBeLessThanOrEqual(measurement.viewport + 1);
+    expect(measurement.major["#details"].right).toBeLessThanOrEqual(measurement.viewport + 1);
+    expect(measurement.major["#growth"].right).toBeLessThanOrEqual(measurement.viewport + 1);
+    expect(measurement.major["#analytics"].right).toBeLessThanOrEqual(measurement.viewport + 1);
+    expect(measurement.major[".history-table-wrapper"].scrollWidth)
+      .toBeLessThanOrEqual(measurement.major[".history-table-wrapper"].clientWidth + 1);
+  }
 });
