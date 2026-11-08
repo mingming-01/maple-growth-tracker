@@ -1,5 +1,5 @@
 """AI 성장 분석 HTTP 라우트."""
-from datetime import datetime, timedelta
+from datetime import date, datetime, timedelta
 
 from flask import Blueprint, jsonify, request
 
@@ -107,6 +107,17 @@ def ai_analysis():
             history_data = history_response.get_json()
             recent_history = history_data.get("history", [])
         today = datetime.now(KOREA_TIMEZONE).date()
+        # A client-side cache or malformed payload must not make future
+        # snapshots appear as already-observed growth in the AI report.
+        observed_history = []
+        for item in recent_history:
+            try:
+                record_date = date.fromisoformat(str(item.get("date", "")))
+            except (TypeError, ValueError, AttributeError):
+                continue
+            if record_date <= today:
+                observed_history.append(item)
+        recent_history = observed_history
         insight_records = list(recent_history)
 
         # 30일·90일 화면에서 저장한 과거 기록이 있으면 읽기만 한다.
