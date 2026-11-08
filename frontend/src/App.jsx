@@ -299,10 +299,7 @@ function App() {
       const currentCombatPower = statSource?.combatPower ?? data?.combatPower ?? null;
       const next = {
         ...previous,
-        currentCombatPower: currentCombatPower ?? previous.currentCombatPower ?? null,
-        bestCombatPower: data.bestCombatPower ?? previous.bestCombatPower ?? null,
-        bestCombatPowerObservedAt: data.bestCombatPowerObservedAt ?? previous.bestCombatPowerObservedAt ?? null,
-        bestPresetCombination: data.bestPresetCombination ?? previous.bestPresetCombination ?? null
+        currentCombatPower: currentCombatPower ?? previous.currentCombatPower ?? null
       };
       saveTrackerState({character:next});
       return next;

@@ -46,9 +46,6 @@ class CharacterDetailControllerTests(unittest.TestCase):
         with patch(
             "tracker.controller.character_detail_controller.get_character_detail_section",
             return_value=payload,
-        ), patch(
-            "tracker.controller.character_detail_controller.record_best_combat_power",
-            return_value={"value": 123, "observedAt": "2026-11-06T15:00:00+09:00", "presetNumbers": None, "presetSignatures": None},
         ):
             response = self.client.get(
                 "/api/character-details?ocid=sample-ocid&section=stats"
@@ -59,8 +56,9 @@ class CharacterDetailControllerTests(unittest.TestCase):
         self.assertEqual(body["status"], "partial")
         self.assertEqual(body["sources"][0]["combatPower"], "123")
         self.assertEqual(body["sources"][1]["status"], "unavailable")
-        self.assertEqual(body["bestCombatPower"], 123)
-        self.assertIsNone(body["bestPresetCombination"])
+        self.assertNotIn("bestCombatPower", body)
+        self.assertNotIn("bestPresetCombination", body)
+        self.assertNotIn("actualPresetNumbers", body)
         self.assertNotIn("profileRecommendations", body)
         self.assertNotIn("defaultProfile", body)
 

@@ -18,21 +18,6 @@ SECTION_SOURCES = {
         {"id": "ability", "label": "어빌리티", "endpoint": "character/ability",
          "preset_prefix": "ability_preset_", "active_fields": ("preset_no",),
          "current_fields": ("ability_info",), "preset_count": 3},
-        {"id": "itemEquipment", "label": "장비 프리셋", "endpoint": "character/item-equipment",
-         "preset_prefix": "item_equipment_preset_", "active_fields": ("preset_no",),
-         "current_fields": ("item_equipment",), "preset_count": 3},
-        {"id": "linkSkill", "label": "링크 스킬 프리셋", "endpoint": "character/link-skill",
-         "preset_groups": ("character_link_skill_preset_", "character_owned_link_skill_preset_"),
-         "active_fields": ("use_preset_no", "character_link_skill_preset_no"),
-         "current_fields": ("character_link_skill", "character_owned_link_skill"), "preset_count": 3},
-        {"id": "unionStateStat", "label": "유니온 스탯", "endpoint": "user/union-raider",
-         "preset_list_field": "union_state_stat_preset",
-         "preset_number_field": "preset_no",
-         "preset_data_field": "union_state_stat",
-         "current_fields": ("union_state_stat",),
-         "exclude_fields": ("union_raider_stat", "union_occupied_stat", "union_inner_stat",
-                            "union_block", "use_preset_no")},
-
     ],
     "equipment": [
         {"id": "characterAppearance", "label": "헤어·성형·피부", "endpoint": "character/beauty-equipment",
@@ -126,137 +111,7 @@ _PRESET_DATA_KEYS = {
     "ability_preset_": "ability_info",
     "character_link_skill_preset_": "character_link_skill",
     "character_owned_link_skill_preset_": "character_owned_link_skill",
-
 }
-_SOURCE_CATEGORY = {
-    "itemEquipment": "equipment",
-    "ability": "ability",
-    "linkSkill": "link",
-    "unionStateStat": "union",
-}
-
-
-def _flatten_text(value):
-    if isinstance(value, dict):
-        return " ".join(_flatten_text(item) for item in value.values())
-    if isinstance(value, (list, tuple)):
-        return " ".join(_flatten_text(item) for item in value)
-    return str(value) if value is not None else ""
-
-
-def _classify_preset(source_id, value):
-    """장비·링크·하이퍼·어빌리티·유니온별 실제 옵션 신호를 점수화한다."""
-    text = _flatten_text(value).lower()
-    boss = 0
-    hunting = 0
-    signals = []
-
-    if source_id == "itemEquipment":
-        rings = (
-            "리스트레인트 링", "컨티뉴어스 링", "웨폰퍼프 링",
-            "리스크테이커 링", "크라이시스 링", "레벨퍼프 링", "얼티메이덤 링",
-        )
-        matched = [name for name in rings if name in text]
-        if matched:
-            boss += 4
-            signals.extend(matched)
-        if "메소 획득량" in text:
-            hunting += 4
-            signals.append("메소 획득량")
-        if "아이템 드롭률" in text or "드롭률" in text:
-            hunting += 4
-            signals.append("아이템 드롭률")
-        # 드랍/메획이 없다는 이유만으로 보스 프리셋이라 단정하지 않는다.
-        if matched and "메소 획득량" not in text and "드롭률" not in text:
-            boss += 1
-
-    elif source_id == "linkSkill":
-        for name in ("소울 컨트랙트", "데몬스 퓨리"):
-            if name in text:
-                boss += 3
-                signals.append(name)
-        for name in ("엘프의 축복", "룬 퍼시스턴스", "콤보킬 어드밴티지"):
-            if name in text:
-                hunting += 3
-                signals.append(name)
-
-    elif source_id == "hyperStat":
-        # 하이퍼 스탯은 보스/사냥 목적을 자동 판독하지 않는다.
-        pass
-
-    elif source_id == "ability":
-        for name, weight in (
-            ("보스 몬스터 공격 시 데미지", 3), ("보스 데미지", 3),
-            ("공격력", 1), ("마력", 1), ("재사용 대기시간 미적용", 2),
-        ):
-            if name in text:
-                boss += weight
-                signals.append(name)
-        for name, weight in (
-            ("메소 획득량", 4), ("아이템 드롭률", 4), ("드롭률", 4),
-            ("일반 몬스터", 2),
-        ):
-            if name in text:
-                hunting += weight
-                signals.append(name)
-
-    elif source_id == "unionStateStat":
-        # 유니온 프리셋은 사용자가 번호로 식별하므로 자동 보스/사냥 판정을 하지 않는다.
-        pass
-
-    purpose = "unknown"
-    if boss >= 2 and boss > hunting:
-        purpose = "boss"
-    elif hunting >= 2 and hunting > boss:
-        purpose = "hunting"
-    return {
-        "purpose": purpose,
-        "bossScore": boss,
-        "huntingScore": hunting,
-        "signals": list(dict.fromkeys(signals)),
-    }
-
-
-def _recommend_profile(sources, purpose):
-    selected = {}
-    matched = []
-    total_score = 0
-    score_key = "bossScore" if purpose == "boss" else "huntingScore"
-
-    for source in sources:
-        category = _SOURCE_CATEGORY.get(source.get("id"))
-        presets = source.get("presets") or []
-        if not category or not presets:
-            continue
-        ranked = sorted(presets, key=lambda item: int(item.get(score_key, 0) or 0), reverse=True)
-        best = ranked[0]
-        score = int(best.get(score_key, 0) or 0)
-        if score >= 2:
-            selected[category] = best["number"]
-            matched.append(category)
-            total_score += score
-        else:
-            active = next(
-                (item for item in presets if item.get("number") == source.get("activePresetNo")),
-                None,
-            )
-            selected[category] = (active or presets[0])["number"]
-
-    confidence = "high" if len(matched) >= 3 and total_score >= 9 else "medium" if matched else "low"
-    return {
-        "presetNumbers": selected,
-        "matchedCategories": matched,
-        "score": total_score,
-        "confidence": confidence,
-    }
-
-
-def recommend_preset_profiles(sources):
-    """여러 데이터 영역의 신호를 합쳐 보스·사냥 세팅 조합을 추천한다."""
-    return {
-        "boss": _recommend_profile(sources, "boss"),
-        "hunting": _recommend_profile(sources, "hunting"),
-    }
 
 
 def _preset_data_key(prefix):
@@ -267,8 +122,6 @@ def _normalize_source(payload, spec):
     """Nexon 원본 응답을 화면에서 사용하는 공통 데이터 구조로 정규화한다."""
     payload = payload if isinstance(payload, dict) else {}
 
-    # 최신 KMS 유니온 스탯은 preset_1 같은 개별 필드가 아니라
-    # union_state_stat_preset 배열 안에 preset_no와 효과 목록으로 제공된다.
     preset_list_field = spec.get("preset_list_field")
     if preset_list_field:
         number_field = spec.get("preset_number_field", "preset_no")
@@ -287,11 +140,7 @@ def _normalize_source(payload, spec):
                 if not isinstance(values, list):
                     values = []
                 selected = {value_field: values}
-                presets.append({
-                    "number": number,
-                    "data": selected,
-                    **_classify_preset(spec["id"], selected),
-                })
+                presets.append({"number": number, "data": selected})
 
         current_fields = spec.get("current_fields", ())
         current_data = {
@@ -299,8 +148,6 @@ def _normalize_source(payload, spec):
             for field in current_fields
             if _has_data(payload.get(field))
         }
-        # 현 적용 프리셋 번호는 별도 필드로 오지 않을 수 있다.
-        # 현재 효과 목록과 프리셋 효과 목록이 완전히 일치할 때만 활성 번호를 확정한다.
         active_number = None
         current_values = current_data.get(value_field)
         if isinstance(current_values, list) and presets:
@@ -319,25 +166,15 @@ def _normalize_source(payload, spec):
                 )
                 if current_signature == preset_signature:
                     matching_numbers.append(preset["number"])
-            # 같은 효과를 가진 프리셋이 여러 개면 번호를 추측하지 않는다.
             if len(matching_numbers) == 1:
                 active_number = matching_numbers[0]
 
         if not presets and current_data:
-            presets = [{
-                "number": 0,
-                "data": current_data,
-                "currentOnly": True,
-                **_classify_preset(spec["id"], current_data),
-            }]
+            presets = [{"number": 0, "data": current_data, "currentOnly": True}]
             active_number = 0
 
         excluded = set(current_fields) | {preset_list_field} | set(spec.get("exclude_fields", ()))
-        data = {
-            key: value
-            for key, value in payload.items()
-            if key not in excluded
-        }
+        data = {key: value for key, value in payload.items() if key not in excluded}
         return {
             "status": "available" if data or presets or current_data else "empty",
             "activePresetNo": active_number,
@@ -371,11 +208,7 @@ def _normalize_source(payload, spec):
                 else:
                     selected[_preset_data_key(prefix)] = value
         if selected:
-            presets.append({
-                "number": number,
-                "data": selected,
-                **_classify_preset(spec["id"], selected),
-            })
+            presets.append({"number": number, "data": selected})
 
     current_fields = spec.get("current_fields", ())
     current_data = {
@@ -384,12 +217,7 @@ def _normalize_source(payload, spec):
         if _has_data(payload.get(field))
     }
     if not presets and current_data:
-        presets = [{
-            "number": 0,
-            "data": current_data,
-            "currentOnly": True,
-            **_classify_preset(spec["id"], current_data),
-        }]
+        presets = [{"number": 0, "data": current_data, "currentOnly": True}]
 
     excluded = set(current_fields) | set(spec.get("active_fields", ()))
     for prefix in prefixes:
@@ -418,8 +246,6 @@ def _extract_combat_power(payload):
         if isinstance(item, dict) and str(item.get("stat_name", "")).strip() == "전투력":
             return item.get("stat_value")
     return None
-
-
 
 
 _CHAMPION_IMAGE_CACHE = {}
@@ -504,9 +330,6 @@ def _enrich_champion_images(source):
 
 def _fetch_source(ocid, spec, force_refresh=False):
     params = {"ocid": ocid, **spec.get("params", {})}
-    # The same Nexon endpoint may be normalized differently by multiple tabs.
-    # Include the complete source specification to avoid leaking a partial
-    # stats-tab item-equipment payload into the equipment tab's Android data.
     cache_key = "nexon-source:{}:{}:{}:{}".format(
         ocid, spec["endpoint"], json.dumps(params, sort_keys=True, ensure_ascii=False),
         json.dumps(spec, sort_keys=True, ensure_ascii=False)

@@ -8,7 +8,6 @@ from tracker.services.character_detail_service import (
     SECTION_SOURCES,
 )
 
-
 class FakeResponse:
     def __init__(self, status_code=200, payload=None):
         self.status_code = status_code
@@ -16,7 +15,6 @@ class FakeResponse:
 
     def json(self):
         return self._payload
-
 
 class CharacterDetailServiceTests(unittest.TestCase):
     def test_equipment_source_keeps_android_metadata_in_current_data(self):
@@ -145,11 +143,7 @@ class CharacterDetailServiceTests(unittest.TestCase):
         self.assertEqual(result["data"]["union_max_point"], 9000)
         self.assertNotIn("union_block", result["data"])
         self.assertNotIn("union_inner_stat", result["data"])
-        # 유니온 프리셋은 사용자가 번호로 직접 구분하므로 자동 목적 판정을 하지 않는다.
-        self.assertEqual(result["presets"][0]["purpose"], "unknown")
-        self.assertEqual(result["presets"][1]["purpose"], "unknown")
-        self.assertEqual(result["presets"][0]["bossScore"], 0)
-        self.assertEqual(result["presets"][0]["huntingScore"], 0)
+        # 동일 효과가 여러 프리셋에 존재하면 활성 번호를 임의로 선택하지 않는다.
 
     def test_union_state_stat_keeps_unknown_active_preset_unconfirmed(self):
         spec = SECTION_SOURCES["union"][1]
@@ -217,12 +211,6 @@ class CharacterDetailServiceTests(unittest.TestCase):
         self.assertEqual(statuses["stat"], "available")
         self.assertEqual(statuses["hyperStat"], "unavailable")
         self.assertEqual(statuses["ability"], "available")
-
-    def test_preset_classifier_uses_option_signals_and_keeps_ambiguous_unknown(self):
-        from tracker.services.character_detail_service import _classify_preset
-        self.assertEqual(_classify_preset("ability", {"ability_value": "보스 몬스터 공격 시 데미지 +20%"})["purpose"], "boss")
-        self.assertEqual(_classify_preset("ability", {"ability_value": "메소 획득량 +20%"})["purpose"], "hunting")
-        self.assertEqual(_classify_preset("hyperStat", {"stat_type": "STR"})["purpose"], "unknown")
 
     def test_skills_section_requests_sixth_job_skills_and_hexa_data(self):
         payloads = {
@@ -301,35 +289,8 @@ class CharacterDetailServiceTests(unittest.TestCase):
             "재사용 대기시간 미적용 +7.5%",
         )
 
-    def test_hyper_stat_presets_are_not_used_for_boss_or_hunting_classification(self):
-        from tracker.services.character_detail_service import _classify_preset, recommend_preset_profiles
-
-        result = _classify_preset("hyperStat", {"hyper_stat": [
-            {"stat_type": "보스 데미지", "stat_level": 10},
-            {"stat_type": "경험치 획득량", "stat_level": 10},
-        ]})
-        self.assertEqual(result["purpose"], "unknown")
-        self.assertEqual(result["bossScore"], 0)
-        self.assertEqual(result["huntingScore"], 0)
-        profile = recommend_preset_profiles([{
-            "id": "hyperStat", "activePresetNo": 1,
-            "presets": [{"number": 1, "bossScore": 99, "huntingScore": 99}]
-        }])
-        self.assertNotIn("hyperStat", profile["boss"]["presetNumbers"])
-
-    def test_union_stat_presets_are_not_classified_as_boss_or_hunting(self):
-        from tracker.services.character_detail_service import _classify_preset
-
-        result = _classify_preset(
-            "unionStateStat",
-            {"union_state_stat": ["보스 몬스터 공격 시 데미지 20% 증가"]},
-        )
-        self.assertEqual(result["purpose"], "unknown")
-        self.assertEqual(result["bossScore"], 0)
-        self.assertEqual(result["huntingScore"], 0)
-
     def test_link_preset_combines_equipped_and_owned_link_skills(self):
-        spec = SECTION_SOURCES["stats"][4]
+        spec = SECTION_SOURCES["link"][0]
         result = _normalize_source({
             "use_preset_no": 1,
             "character_link_skill_preset_1": [{"skill_name": "소울 컨트랙트"}],
@@ -338,25 +299,6 @@ class CharacterDetailServiceTests(unittest.TestCase):
         preset = result["presets"][0]
         self.assertEqual(preset["data"]["character_link_skill"][0]["skill_name"], "소울 컨트랙트")
         self.assertEqual(preset["data"]["character_owned_link_skill"]["skill_name"], "데몬스 퓨리")
-        self.assertEqual(preset["bossScore"], 6)
-
-    def test_profile_recommendation_combines_equipment_and_link_signals(self):
-        from tracker.services.character_detail_service import recommend_preset_profiles
-        sources = [
-            {"id": "itemEquipment", "activePresetNo": 1, "presets": [
-                {"number": 1, "bossScore": 0, "huntingScore": 4},
-                {"number": 2, "bossScore": 4, "huntingScore": 0},
-            ]},
-            {"id": "linkSkill", "activePresetNo": 1, "presets": [
-                {"number": 1, "bossScore": 0, "huntingScore": 3},
-                {"number": 2, "bossScore": 6, "huntingScore": 0},
-            ]},
-        ]
-        result = recommend_preset_profiles(sources)
-        self.assertEqual(result["boss"]["presetNumbers"]["equipment"], 2)
-        self.assertEqual(result["boss"]["presetNumbers"]["link"], 2)
-        self.assertNotIn("hyperStat", result["boss"]["presetNumbers"])
-        self.assertEqual(result["hunting"]["presetNumbers"]["equipment"], 1)
 
     def test_union_section_fetches_state_presets_artifact_crystals_and_champions(self):
         payloads = {
@@ -448,6 +390,18 @@ class CharacterDetailServiceTests(unittest.TestCase):
     def test_unknown_section_is_rejected(self):
         with self.assertRaises(ValueError):
             get_character_detail_section("sample-ocid", "unknown")
+
+    def test_stats_section_keeps_only_core_sources_after_tab_split(self):
+        self.assertEqual(
+            [source["id"] for source in SECTION_SOURCES["stats"]],
+            ["stat", "hyperStat", "ability"],
+        )
+        self.assertIn("itemEquipment", [source["id"] for source in SECTION_SOURCES["equipment"]])
+        self.assertEqual([source["id"] for source in SECTION_SOURCES["link"]], ["linkSkill"])
+        self.assertIn("unionStateStat", [source["id"] for source in SECTION_SOURCES["union"]])
+
+    def test_skills_section_uses_sixth_grade_source_id(self):
+        self.assertEqual(SECTION_SOURCES["skills"][0]["id"], "skill6")
 
 
 if __name__ == "__main__":
