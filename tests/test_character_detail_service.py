@@ -143,7 +143,7 @@ class CharacterDetailServiceTests(unittest.TestCase):
         self.assertEqual(result["data"]["union_max_point"], 9000)
         self.assertNotIn("union_block", result["data"])
         self.assertNotIn("union_inner_stat", result["data"])
-        # 유니온 프리셋은 사용자가 번호로 직접 구분하므로 자동 목적 판정을 하지 않는다.
+        # 동일 효과가 여러 프리셋에 존재하면 활성 번호를 임의로 선택하지 않는다.
 
     def test_union_state_stat_keeps_unknown_active_preset_unconfirmed(self):
         spec = SECTION_SOURCES["union"][1]
@@ -390,6 +390,7 @@ class CharacterDetailServiceTests(unittest.TestCase):
     def test_unknown_section_is_rejected(self):
         with self.assertRaises(ValueError):
             get_character_detail_section("sample-ocid", "unknown")
+
     def test_stats_section_keeps_only_core_sources_after_tab_split(self):
         self.assertEqual(
             [source["id"] for source in SECTION_SOURCES["stats"]],
