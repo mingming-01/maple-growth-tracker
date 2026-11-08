@@ -4,7 +4,7 @@ import { jsPDF } from "jspdf";
 import { getCharacter, getHistory } from "./services/api.js";
 import CharacterDetails from "./components/character/CharacterDetails.jsx";
 import AdminDashboard from "./components/admin/AdminDashboard.jsx";
-import GrowthDashboard from "./features/growth/GrowthDashboard.jsx";
+import GrowthDashboard, { GrowthHistoryTable } from "./features/growth/GrowthDashboard.jsx";
 import { AIReport, GrowthComparison } from "./features/analytics/AnalyticsAndComparison.jsx";
 import {
   readTrackerState,
@@ -559,6 +559,9 @@ function App() {
               </div>
               <div id="analytics">
                 <AIReport character={character} history={history} analysisHistory={analysisPeriod.history || history} periodDays={analysisPeriod.days} periodSummary={analysisPeriod.summary} />
+              </div>
+              <GrowthHistoryTable history={analysisPeriod.history || history} />
+              <div id="comparison">
                 <GrowthComparison
                   character={character}
                   history={history}
