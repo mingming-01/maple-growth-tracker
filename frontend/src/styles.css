@@ -354,6 +354,7 @@ button:focus-visible,input:focus-visible,select:focus-visible,a:focus-visible { 
   .mgt-snapshot-stat { padding:8px 0; }
 }
 @media (max-width:760px) {
+  .mgt-app-shell { overflow-x:clip; overflow-y:visible; }
   .mgt-topbar { height:62px; padding:0 15px; }
   .mgt-nav { max-width:58vw; gap:13px; overflow-x:auto; scrollbar-width:none; white-space:nowrap; font-size:9px; }
   .mgt-nav::-webkit-scrollbar { display:none; }
