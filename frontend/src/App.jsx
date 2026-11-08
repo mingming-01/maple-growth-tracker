@@ -380,59 +380,70 @@ function App() {
       return;
     }
     setFavorites(next);
-    setFavoriteFeedback(exists ? `${current.name} 캐릭터를 관심 목록에서 제거했습니다.` : `${current.name} 캐릭터를 관심 목록에 추가했습니다.`);
+    setFavoriteFeedback(exists ? `${current.name} 캐릭터를 관심 목록에서 제거했습니다.` : `${current.name} 캐릭터를 관심 목록에 저장했습니다.`);
   }
 
   function removeFavorite(item) {
-    const next = favorites.filter(entry => favoriteKey(entry) !== favoriteKey(item));
+    const next = favorites.filter(saved => favoriteKey(saved) !== favoriteKey(item));
     if (!saveFavorites(next)) {
-      setFavoriteFeedback("브라우저 저장소를 사용할 수 없어 관심 캐릭터를 저장하지 못했습니다.");
+      setFavoriteFeedback("관심 캐릭터를 제거하지 못했습니다.");
       return;
     }
     setFavorites(next);
-    setFavoriteFeedback(`${item.name} 캐릭터를 관심 목록에서 제거했습니다.`);
+    setFavoriteFeedback(item.name+" 캐릭터를 관심 목록에서 제거했습니다.");
   }
 
   async function exportImage() {
-    if (!resultRef.current || exporting) return;
+    if (!resultRef.current) return;
     setExporting("image");
     try {
       const canvas = await html2canvas(resultRef.current,{
-        backgroundColor:null,
+        backgroundColor:"#10101a",
         scale:2,
-        useCORS:true
+        useCORS:true,
+        ignoreElements:element => element.dataset?.exportIgnore === "true"
       });
       const link = document.createElement("a");
-      link.download = `${character?.characterName || "maple"}-growth.png`;
+      link.download = "maple-growth-"+(character?.characterName || "character")+".png";
       link.href = canvas.toDataURL("image/png");
       link.click();
     } catch (exportError) {
-      setError(exportError.message || "이미지를 저장하지 못했습니다.");
+      setError(exportError.message || "이미지 저장 중 오류가 발생했습니다.");
     } finally {
       setExporting("");
     }
   }
 
   async function exportPdf() {
-    if (!resultRef.current || exporting) return;
+    if (!resultRef.current) return;
     setExporting("pdf");
     try {
       const canvas = await html2canvas(resultRef.current,{
-        backgroundColor:"#ffffff",
+        backgroundColor:"#10101a",
         scale:2,
-        useCORS:true
+        useCORS:true,
+        ignoreElements:element => element.dataset?.exportIgnore === "true"
       });
-      const image = canvas.toDataURL("image/jpeg",0.95);
-      const pdf = new jsPDF({orientation:"portrait",unit:"pt",format:"a4"});
+      const imageData = canvas.toDataURL("image/png");
+      const pdf = new jsPDF({orientation:"portrait",unit:"mm",format:"a4"});
       const pageWidth = pdf.internal.pageSize.getWidth();
       const pageHeight = pdf.internal.pageSize.getHeight();
-      const ratio = Math.min(pageWidth / canvas.width, pageHeight / canvas.height);
-      const width = canvas.width * ratio;
-      const height = canvas.height * ratio;
-      pdf.addImage(image,"JPEG",(pageWidth-width)/2,20,width,height);
-      pdf.save(`${character?.characterName || "maple"}-growth.pdf`);
+      const margin = 10;
+      const availableWidth = pageWidth - margin * 2;
+      const imageHeight = canvas.height * availableWidth / canvas.width;
+      let heightLeft = imageHeight;
+      let position = margin;
+      pdf.addImage(imageData,"PNG",margin,position,availableWidth,imageHeight);
+      heightLeft -= pageHeight - margin * 2;
+      while (heightLeft > 0) {
+        position = heightLeft - imageHeight + margin;
+        pdf.addPage();
+        pdf.addImage(imageData,"PNG",margin,position,availableWidth,imageHeight);
+        heightLeft -= pageHeight - margin * 2;
+      }
+      pdf.save("maple-growth-"+(character?.characterName || "character")+".pdf");
     } catch (exportError) {
-      setError(exportError.message || "PDF를 저장하지 못했습니다.");
+      setError(exportError.message || "PDF 저장 중 오류가 발생했습니다.");
     } finally {
       setExporting("");
     }
@@ -476,7 +487,7 @@ function App() {
 
           {character && (
             <div className="mgt-result" ref={resultRef}>
-              <div className="mgt-result-toolbar">
+              <div className="mgt-result-toolbar" data-export-ignore="true">
                 <button type="button" className={isFavorite ? "mgt-favorite-active" : "mgt-secondary-button"} onClick={toggleFavorite}>
                   {isFavorite ? "관심 캐릭터 해제" : "관심 캐릭터 등록"}
                 </button>
