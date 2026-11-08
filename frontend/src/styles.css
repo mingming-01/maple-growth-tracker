@@ -972,3 +972,46 @@ button:focus-visible,input:focus-visible,select:focus-visible,a:focus-visible { 
   .mgt-result-content .history-experience-change,
   .mgt-result-content .history-level-progress-change { font-size:8px; }
 }
+
+/* Growth history: place daily gains on a quiet second line below the main values. */
+.mgt-result-content .history-experience-value {
+  text-align:right;
+  white-space:normal;
+  font-variant-numeric:tabular-nums;
+}
+.mgt-result-content .history-experience-value > span {
+  display:block;
+  white-space:nowrap;
+}
+.mgt-result-content .history-experience-change {
+  display:block;
+  margin-top:3px;
+  text-align:right;
+  font-size:10px;
+  line-height:1.3;
+  white-space:nowrap;
+}
+.mgt-result-content .history-level-progress-cell {
+  display:flex;
+  flex-direction:column;
+  align-items:flex-end;
+  gap:3px;
+  white-space:nowrap;
+}
+.mgt-result-content .history-level-progress-change {
+  display:block;
+  font-size:10px;
+  line-height:1.3;
+}
+@media (max-width:760px) {
+  .mgt-result-content .history-experience-change,
+  .mgt-result-content .history-level-progress-change {
+    font-size:9px;
+  }
+}
+@media (max-width:380px) {
+  .mgt-result-content .history-experience-change,
+  .mgt-result-content .history-level-progress-change {
+    font-size:8px;
+  }
+}
