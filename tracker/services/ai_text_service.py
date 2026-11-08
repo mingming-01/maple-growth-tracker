@@ -17,7 +17,7 @@ def validate_growth_report(value):
     if any(section not in text for section in required_sections):
         return False
     # CJK 한자/가나 문자가 섞인 응답은 그대로 노출하거나 캐시하지 않는다.
-    if re.search(r"[\\u3400-\\u4DBF\\u4E00-\\u9FFF\\uF900-\\uFAFF\\u3040-\\u30FF]", text):
+    if re.search(r"[\u3400-\u4DBF\u4E00-\u9FFF\uF900-\uFAFF\u3040-\u30FF]", text):
         return False
     return True
 
