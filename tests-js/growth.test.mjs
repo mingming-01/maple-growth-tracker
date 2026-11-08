@@ -6,6 +6,7 @@ import {
     calculateAverageGrowth,
     calculateDailyExperienceRateChanges,
     calculateGrowthMetrics,
+    calculatePrediction,
     calculateLevelProgress,
     calculateWeeklyGrowth,
     getDailyGrowth,
@@ -113,6 +114,52 @@ test("growth timeline contains level-up, best-growth, ranking and latest milesto
     assert.ok(events.some(event => event.type === "ranking" && event.date === "2026-11-02"));
     assert.ok(events.length <= 8);
 });
+
+
+test("future snapshots are excluded from growth metrics and timeline", () => {
+    const history = [
+        { date: "2026-11-08", recordStatus: "available", level: 280, experience: 1000, experienceChange: 100 },
+        { date: "2026-11-09", recordStatus: "available", level: 280, experience: 1100, experienceChange: 100 },
+        { date: "2099-12-31", recordStatus: "available", level: 281, experience: 999999, experienceChange: 999000, levelUp: true }
+    ];
+
+    const metrics = calculateGrowthMetrics(
+        { level: 280, experience: 1100, experienceRate: 50 },
+        history
+    );
+
+    assert.equal(metrics.observedChangeDays, 2);
+    assert.equal(metrics.averageDailyGrowth, 100);
+    assert.ok(metrics.timeline.every(event => event.date !== "2099-12-31"));
+});
+
+test("level-up forecast is withheld when recent observed intervals are insufficient", () => {
+    const today = new Date();
+    const dates = [4, 3, 2, 1].map(daysAgo => {
+        const value = new Date(today);
+        value.setDate(value.getDate() - daysAgo);
+        const year = value.getFullYear();
+        const month = String(value.getMonth() + 1).padStart(2, "0");
+        const day = String(value.getDate()).padStart(2, "0");
+        return `${year}-${month}-${day}`;
+    });
+    const history = dates.map((date, index) => ({
+        date,
+        recordStatus: "available",
+        level: 280,
+        experience: 1000 + index * 100,
+        experienceChange: index === 0 ? null : 100
+    }));
+
+    assert.equal(
+        calculatePrediction(
+            { level: 280, experience: 1400, experienceRate: 50 },
+            history
+        ),
+        null
+    );
+});
+
 
 test("growth metrics expose observed-day counts and level-relative pace", () => {
     const character = { level: 280, experience: 250, experienceRate: 25 };
