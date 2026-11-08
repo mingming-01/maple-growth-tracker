@@ -54,7 +54,9 @@ def sanitize_ai_text(value, expected_date=None):
                     matched_date = date.fromisoformat(match.group(0))
                 except ValueError:
                     return match.group(0)
-                return f"{matched_date.month}월 {matched_date.day}일"
+                # Keep unrelated historical ISO dates unchanged; only the
+                # exact forecast date receives the Korean display label.
+                return date_label if matched_date == prediction_date else match.group(0)
 
             def normalize_korean_date(match):
                 year, month, day = match.groups()
