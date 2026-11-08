@@ -162,11 +162,9 @@ class ApiResilienceTests(unittest.TestCase):
 
     def test_empty_ranking_response_is_marked_not_ready(self):
         empty_response = Mock(status_code=200)
+        empty_response.json.return_value = {"ranking": []}
         with patch.object(nexon_service, "get_api_class", return_value="테스트직업"), patch.object(
             nexon_service, "get_ranking_snapshot", return_value=(None, empty_response)
-        ), patch(
-            "tracker.integrations.nexon_api.get_ranking_page",
-            return_value=([], empty_response),
         ):
             with self.app.app_context():
                 result = nexon_service.get_character_rankings(
