@@ -290,7 +290,7 @@ function GoalPanel({ character, metrics, history }) {
         <div>
           <span className="growth-goal-kicker">PERSONAL GOAL</span>
           <h3 id="growth-goal-title">다음 레벨 목표</h3>
-          <p>목표 날짜를 정하고 실제 관측 성장 속도와 비교합니다.</p>
+          <p>목표 날짜를 정하고 실제 성장 기록과 비교합니다.</p>
         </div>
         <span className="growth-goal-status">{!goal ? "목표 미설정" : completed ? "목표 달성" : daysRemaining < 0 ? "목표일 경과" : "진행 중"}</span>
       </div>
@@ -307,7 +307,7 @@ function GoalPanel({ character, metrics, history }) {
               : daysRemaining === 0 ? "목표일이 오늘입니다. 현재 경험치 진행률을 확인하세요."
               : requiredRate === null ? `목표일까지 ${daysRemaining}일 남았습니다. 현재 진행률 자료가 부족합니다.`
               : Number.isFinite(observedRate) && observedRate > 0
-                ? `목표일까지 ${daysRemaining}일 · 필요 ${requiredRate.toFixed(4)}%p/일 · 최근 관측 ${observedRate.toFixed(4)}%p/일. ${observedRate >= requiredRate ? "현재 속도면 목표에 도달할 수 있습니다." : "목표를 맞추려면 성장 속도를 높여야 합니다."}`
+                ? `목표일까지 ${daysRemaining}일 · 필요 ${requiredRate.toFixed(4)}%p/일 · 최근 기록 ${observedRate.toFixed(4)}%p/일. ${observedRate >= requiredRate ? "현재 속도면 목표에 도달할 수 있습니다." : "목표를 맞추려면 성장 속도를 높여야 합니다."}`
                 : `목표일까지 ${daysRemaining}일 · 필요 진척 ${requiredRate.toFixed(4)}%p/일. 비교할 성장 기록이 부족합니다.`}
           </p>
         </div>
@@ -342,7 +342,7 @@ function PeriodSummary({ summary, previous, label }) {
     : null;
   const cells = [
     ["기간 증가량",fmt(summary.growth),summary.confirmedChangeDays + "개 연속 관측 구간"],
-    ["관측 일 평균",fmt(summary.averageGrowth),summary.confirmedChangeDays + "개 구간 기준"],
+    ["기록 구간 일 평균",fmt(summary.averageGrowth),summary.confirmedChangeDays + "개 구간 기준"],
     ["랭킹 변화",summary.rankingChange === null ? "자료 부족" : (summary.rankingChange > 0 ? "▲ " + summary.rankingChange + "위 상승" : summary.rankingChange < 0 ? "▼ " + Math.abs(summary.rankingChange) + "위 하락" : "변화 없음"),"첫 기록과 마지막 기록 비교"],
     ["직전 기간 대비",comparisonPercent === null ? "비교 자료 부족" : (comparisonPercent > 0 ? "+" : "") + comparisonPercent.toFixed(1) + "%",previous ? "직전 동일 기간의 관측 평균과 비교" : "직전 기간 자료 없음"],
     ["기록 충실도",summary.availableDays + " / " + summary.days + "일",`API 미제공 ${summary.notReadyDays}일 · 미수집 ${summary.notCollectedDays}일`],
@@ -583,7 +583,7 @@ export default function GrowthDashboard({ character, history, onHistoryChange, o
       </section>
 
       <section className="section">
-        <div className="section-header"><h2 className="section-title">성장 예측</h2><p className="section-description">최근 관측 성장 속도를 기준으로 다음 레벨업을 예상합니다.</p></div>
+        <div className="section-header"><h2 className="section-title">성장 예측</h2><p className="section-description">최근 성장 기록을 기준으로 다음 레벨업을 예상합니다.</p></div>
         <div className="prediction-card">
           <div className="prediction-grid">
             <div className="prediction-item"><div className="prediction-label">다음 레벨까지</div><div className="prediction-value">{prediction?.requiredExp == null ? "자료 부족" : fmt(prediction.requiredExp) + " (" + prediction.currentRate.toFixed(3) + "%)"}</div></div>
