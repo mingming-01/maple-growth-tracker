@@ -4,7 +4,7 @@ import time
 from datetime import date
 
 from tracker.integrations.ai_provider import request_openrouter, should_use_openrouter
-from tracker.services.ai_text_service import sanitize_ai_text
+from tracker.services.ai_text_service import sanitize_ai_text, validate_growth_report
 from tracker.runtime import (
     get_ai_response_cache,
     get_gemini_client,
@@ -156,6 +156,8 @@ def generate_ai_analysis(character, history, computed_metrics=None, growth_insig
                 response.text or "분석 결과가 비어 있습니다.",
                 expected_date
             )
+            if not validate_growth_report(analysis):
+                return {"error": "AI 분석 결과의 한국어 형식이나 필수 분석 항목을 확인하지 못했습니다. 다시 분석해주세요."}
             set_ai_response_cache(prompt, analysis)
             return {"analysis": analysis, "cacheHit": False, "growthInsights": growth_insights}
         except Exception as error:
@@ -173,6 +175,8 @@ def generate_ai_analysis(character, history, computed_metrics=None, growth_insig
                 response_text or "분석 결과가 비어 있습니다.",
                 expected_date
             )
+            if not validate_growth_report(analysis):
+                return {"error": "AI 분석 결과의 한국어 형식이나 필수 분석 항목을 확인하지 못했습니다. 다시 분석해주세요."}
             set_ai_response_cache(prompt, analysis)
             return {"analysis": analysis, "cacheHit": False}
         except Exception as error:

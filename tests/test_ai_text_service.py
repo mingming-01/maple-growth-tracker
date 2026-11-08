@@ -1,5 +1,5 @@
 import unittest
-from tracker.services.ai_text_service import sanitize_ai_text
+from tracker.services.ai_text_service import sanitize_ai_text, validate_growth_report
 
 
 class SanitizeAITextTests(unittest.TestCase):
@@ -39,6 +39,31 @@ class SanitizeAITextTests(unittest.TestCase):
 
         self.assertIn("2026-10-25", result)
         self.assertIn("11월 19일", result)
+
+
+    def test_growth_report_rejects_chinese_characters(self):
+        report = (
+            "[성장 패턴] 最近 성장 기록입니다.\n"
+            "[성장 변화] 변화가 확인됩니다.\n"
+            "[레벨업 분석] 기록이 부족합니다.\n"
+            "[성장 전망] 예측하기 어렵습니다.\n"
+            "[AI 코멘트] 확인이 필요합니다."
+        )
+        self.assertFalse(validate_growth_report(report))
+
+    def test_growth_report_accepts_korean_required_sections(self):
+        report = (
+            "[성장 패턴] 최근 성장 기록입니다.\n"
+            "[성장 변화] 변화가 확인됩니다.\n"
+            "[레벨업 분석] 기록이 부족합니다.\n"
+            "[성장 전망] 예측하기 어렵습니다.\n"
+            "[AI 코멘트] 확인이 필요합니다."
+        )
+        self.assertTrue(validate_growth_report(report))
+
+    def test_growth_report_rejects_missing_sections(self):
+        report = "[성장 패턴] 분석 결과입니다."
+        self.assertFalse(validate_growth_report(report))
 
 
 

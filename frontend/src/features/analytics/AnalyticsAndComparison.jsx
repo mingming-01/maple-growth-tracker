@@ -98,12 +98,16 @@ export function AIReport({ character, history, analysisHistory = history, period
     setLoading(true);
     setError("");
     const analysisContext = { periodDays:[7,30,90].includes(Number(periodDays)) ? Number(periodDays) : 7, periodSummary:periodSummary || null };
-    // 7일 리포트는 기존처럼 데이터 변경 시 갱신한다. 30·90일 리포트는
-    // 캐시 식별자를 기간+캐릭터로 고정해 하루치 기록 추가로 캐시가 무효화되지 않게 한다.
-    const signature = analysisContext.periodDays > 7
-      ? stableStringify({ cacheVersion: 1, character: character.ocid || character.characterName, periodDays: analysisContext.periodDays })
-      : buildReportSignature(character,analysisHistory,metrics,analysisContext);
-    const cacheType = analysisContext.periodDays > 7 ? "growth-report-long-v1" : "growth-report-v3";
+    // 분석에 실제 전달되는 캐릭터·기록·지표·기간 요약 전체를 캐시 키에 포함한다.
+    // 캐시 버전을 올려 과거에 기간/캐릭터만으로 저장된 장기 리포트를 재사용하지 않는다.
+    const signature = stableStringify({
+      cacheVersion: 2,
+      character,
+      history: analysisHistory,
+      metrics,
+      analysisContext
+    });
+    const cacheType = analysisContext.periodDays > 7 ? "growth-report-long-v2" : "growth-report-v4";
     const cached = !force ? getCachedAI(cacheType,signature) : null;
     if (cached?.analysis) {
       setAnalysis(cached.analysis);

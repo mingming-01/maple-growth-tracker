@@ -3,6 +3,24 @@ import re
 from datetime import date
 
 
+
+def validate_growth_report(value):
+    """성장 리포트의 필수 구분과 한국어 출력 여부를 검사한다."""
+    text = str(value or "")
+    required_sections = (
+        "[성장 패턴]",
+        "[성장 변화]",
+        "[레벨업 분석]",
+        "[성장 전망]",
+        "[AI 코멘트]",
+    )
+    if any(section not in text for section in required_sections):
+        return False
+    # CJK 한자/가나 문자가 섞인 응답은 그대로 노출하거나 캐시하지 않는다.
+    if re.search(r"[\u3400-\u4DBF\u4E00-\u9FFF\uF900-\uFAFF\u3040-\u30FF]", text):
+        return False
+    return True
+
 def sanitize_ai_text(value, expected_date=None):
     """모델 응답의 마크다운과 내부 표현을 정리해 일반 문장만 화면에 전달한다."""
     text = str(value or "")
