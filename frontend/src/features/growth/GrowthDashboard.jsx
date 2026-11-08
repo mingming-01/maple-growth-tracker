@@ -106,7 +106,9 @@ async function fetchArchive(days, character, { end = null, collect = false, onPr
 }
 
 function summarizePeriod(history, days) {
-  const records = sortHistoryAscending(Array.isArray(history) ? history : []);
+  const today = formatLocalISODate(new Date());
+  const records = sortHistoryAscending(Array.isArray(history) ? history : [])
+    .filter(item => item?.date && item.date <= today);
   const valid = records.filter(item =>
     (!item.recordStatus || item.recordStatus === "available") &&
     item.experience !== null && item.experience !== undefined &&
@@ -420,7 +422,9 @@ export default function GrowthDashboard({ character, history, onHistoryChange, o
       chartRef.current.destroy();
       chartRef.current = null;
     }
-    const sorted = sortHistoryAscending(displayHistory);
+    const today = formatLocalISODate(new Date());
+    const sorted = sortHistoryAscending(displayHistory)
+      .filter(item => item?.date && item.date <= today);
     if (!sorted.length) return undefined;
     const { daily, cumulative } = buildExperienceChartSeries(sorted);
     // The history API provides daily levels rather than a levelUp flag.

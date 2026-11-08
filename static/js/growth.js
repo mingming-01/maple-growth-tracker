@@ -130,13 +130,40 @@ export function calculateLevelProgress(character, averageDailyGrowth = null) {
     };
 }
 
+function filterHistoryThroughToday(history, referenceDate = formatLocalISODate(new Date())) {
+    return (history || []).filter(item =>
+        typeof item?.date === "string" &&
+        parseISODate(item.date) !== null &&
+        item.date <= referenceDate
+    );
+}
+
+function parseISODate(value) {
+    const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(String(value || ""));
+    if (!match) return null;
+    const [, year, month, day] = match;
+    const timestamp = Date.UTC(Number(year), Number(month) - 1, Number(day));
+    const parsed = new Date(timestamp);
+    return parsed.getUTCFullYear() === Number(year) &&
+        parsed.getUTCMonth() === Number(month) - 1 &&
+        parsed.getUTCDate() === Number(day) ? timestamp : null;
+}
+
 export function calculatePrediction(character, history) {
-    if (!character || !history?.length) return null;
+    const cutoffDate = new Date();
+    cutoffDate.setDate(cutoffDate.getDate() - 7);
+    const recentStart = formatLocalISODate(cutoffDate);
+    history = filterHistoryThroughToday(history).filter(item => item.date >= recentStart);
+    if (!character || !history.length) return null;
     const currentExp = toFiniteNumber(character.experience);
     const currentLevel = toFiniteNumber(character.level);
     const currentRate = toFiniteNumber(character.experienceRate);
-    const averageGrowth = calculateAverageGrowth(history);
-    if (currentExp === null || currentLevel === null || averageGrowth === null || averageGrowth <= 0) return null;
+    const observedIntervals = history.map(getObservedChange).filter(value => value !== null);
+    // Require at least four observed intervals in the recent week before
+    // projecting a specific level-up date from a sparse or stale sample.
+    if (observedIntervals.length < 4) return null;
+    const averageGrowth = observedIntervals.reduce((sum, value) => sum + value, 0) / observedIntervals.length;
+    if (currentExp === null || currentLevel === null || averageGrowth <= 0) return null;
 
     if (currentRate !== null && currentRate > 0 && currentRate < 100) {
         const estimatedTotalExp = currentExp / (currentRate / 100);
@@ -159,7 +186,7 @@ export function formatLocalISODate(value) {
 }
 
 export function buildGrowthTimeline(history, limit = 8) {
-    const sorted = sortHistoryAscending(history);
+    const sorted = sortHistoryAscending(filterHistoryThroughToday(history));
     if (!sorted.length) return [];
 
     const events = [];
@@ -226,7 +253,7 @@ export function buildGrowthTimeline(history, limit = 8) {
 }
 
 export function calculateGrowthMetrics(character, history, sharedPrediction) {
-    const sorted = sortHistoryAscending(history);
+    const sorted = sortHistoryAscending(filterHistoryThroughToday(history));
     const changes = sorted
         .map(getObservedChange)
         .filter(value => value !== null);

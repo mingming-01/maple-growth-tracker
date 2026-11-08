@@ -46,13 +46,49 @@ def sanitize_ai_text(value, expected_date=None):
         try:
             prediction_date = date.fromisoformat(str(expected_date))
             date_label = f"{prediction_date.month}월 {prediction_date.day}일"
-            date_patterns = (
-                r"\b\d{4}\s*년\s*\d{1,2}\s*월\s*\d{1,2}\s*일",
-                r"\b\d{1,2}\s*월\s*\d{1,2}\s*일",
+
+            # Normalize only the actual prediction date. Historical event dates
+            # in the same AI response must remain tied to their source records.
+            def normalize_iso_date(match):
+                try:
+                    matched_date = date.fromisoformat(match.group(0))
+                except ValueError:
+                    return match.group(0)
+                # Keep unrelated historical ISO dates unchanged; only the
+                # exact forecast date receives the Korean display label.
+                return date_label if matched_date == prediction_date else match.group(0)
+
+            def normalize_korean_date(match):
+                year, month, day = match.groups()
+                try:
+                    matched_date = date(int(year), int(month), int(day))
+                except ValueError:
+                    return match.group(0)
+                return date_label if matched_date == prediction_date else match.group(0)
+
+            def normalize_month_day(match):
+                month, day = match.groups()
+                return (
+                    date_label
+                    if (int(month), int(day)) == (prediction_date.month, prediction_date.day)
+                    else match.group(0)
+                )
+
+            text = re.sub(
                 r"(?<!\d)\d{4}-\d{1,2}-\d{1,2}(?!\d)",
+                normalize_iso_date,
+                text,
             )
-            for pattern in date_patterns:
-                text = re.sub(pattern, date_label, text)
+            text = re.sub(
+                r"\b(\d{4})\s*년\s*(\d{1,2})\s*월\s*(\d{1,2})\s*일",
+                normalize_korean_date,
+                text,
+            )
+            text = re.sub(
+                r"\b(\d{1,2})\s*월\s*(\d{1,2})\s*일",
+                normalize_month_day,
+                text,
+            )
         except (TypeError, ValueError):
             pass
     text = re.sub(r"[*_~\x60]", "", text)
