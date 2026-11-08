@@ -150,13 +150,21 @@ function parseISODate(value) {
 }
 
 export function calculatePrediction(character, history) {
-    history = filterHistoryThroughToday(history);
+    const today = formatLocalISODate(new Date());
+    const cutoffDate = new Date();
+    cutoffDate.setDate(cutoffDate.getDate() - 7);
+    const recentStart = formatLocalISODate(cutoffDate);
+    history = filterHistoryThroughToday(history).filter(item => item.date >= recentStart);
     if (!character || !history.length) return null;
     const currentExp = toFiniteNumber(character.experience);
     const currentLevel = toFiniteNumber(character.level);
     const currentRate = toFiniteNumber(character.experienceRate);
-    const averageGrowth = calculateAverageGrowth(history);
-    if (currentExp === null || currentLevel === null || averageGrowth === null || averageGrowth <= 0) return null;
+    const observedIntervals = history.map(getObservedChange).filter(value => value !== null);
+    // Require at least four observed intervals in the recent week before
+    // projecting a specific level-up date from a sparse or stale sample.
+    if (observedIntervals.length < 4) return null;
+    const averageGrowth = observedIntervals.reduce((sum, value) => sum + value, 0) / observedIntervals.length;
+    if (currentExp === null || currentLevel === null || averageGrowth <= 0) return null;
 
     if (currentRate !== null && currentRate > 0 && currentRate < 100) {
         const estimatedTotalExp = currentExp / (currentRate / 100);
