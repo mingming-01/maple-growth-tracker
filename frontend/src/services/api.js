@@ -47,6 +47,7 @@ export function getHistoryArchive(ocid, days = 30, options = {}) {
   if (options.worldName) params.set("world_name", options.worldName);
   if (options.offset !== undefined) params.set("offset", String(options.offset));
   if (options.limit !== undefined) params.set("limit", String(options.limit));
+  if (options.summaryOnly) params.set("summary_only", "1");
   return requestJson("/api/history/archive?" + params.toString(), {
     signal: options.signal,
     cache: "no-store"
