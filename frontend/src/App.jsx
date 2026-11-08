@@ -153,7 +153,7 @@ function CharacterProfile({ character, history }) {
           </div>
           <p className="mgt-progress-note">
             {progress?.dailyProgressRate != null
-              ? "최근 관측 평균 +" + progress.dailyProgressRate.toFixed(4) + "%p / 일"
+              ? "최근 기록 평균 +" + progress.dailyProgressRate.toFixed(4) + "%p / 일"
               : "성장 기록이 쌓이면 실제 관측 경험치를 이용해 일일 진척률을 계산합니다."}
           </p>
         </div>
