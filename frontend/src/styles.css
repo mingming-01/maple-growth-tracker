@@ -1458,3 +1458,113 @@ button:focus-visible,input:focus-visible,select:focus-visible,a:focus-visible { 
 @media (max-width: 380px) {
   :root { --mgt-content-gutter: 10px; --mgt-section-gap: 12px; }
 }
+
+
+/* P3 Growth Home: hierarchy, readable metrics and responsive content flow. */
+.mgt-growth-home { gap:var(--mgt-space-7); }
+.mgt-growth-home > * { min-width:0; scroll-margin-top:88px; }
+.mgt-growth-section-nav {
+  display:flex; flex-wrap:wrap; align-items:center; gap:8px;
+  padding:10px 12px; border:1px solid var(--mgt-line); border-radius:var(--mgt-radius-md);
+  background:rgba(21,21,34,.72);
+}
+.mgt-growth-section-nav a {
+  display:inline-flex; align-items:center; min-height:36px; padding:0 12px;
+  border-radius:9px; color:var(--mgt-muted-strong); font-size:11px; font-weight:750;
+  transition:color .18s,background .18s;
+}
+.mgt-growth-section-nav a:hover,.mgt-growth-section-nav a:focus-visible {
+  color:var(--mgt-text); background:rgba(172,154,255,.13);
+}
+.mgt-growth-home__dashboard .growth-dashboard {
+  display:grid; gap:var(--mgt-space-6); min-width:0;
+}
+.mgt-growth-home__dashboard .growth-dashboard > .section {
+  min-width:0; padding:clamp(18px,2.4vw,26px);
+  border:1px solid var(--mgt-line); border-radius:var(--mgt-radius-lg);
+  background:linear-gradient(145deg,rgba(24,23,39,.96),rgba(18,18,29,.96));
+}
+.mgt-growth-home__dashboard .growth-dashboard > .section:first-child .summary-grid {
+  display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); gap:var(--mgt-space-3);
+}
+.mgt-growth-home__dashboard .growth-dashboard > .section:first-child .summary-card {
+  min-width:0; padding:16px; border:1px solid var(--mgt-line);
+  border-radius:var(--mgt-radius-md); background:rgba(255,255,255,.025);
+}
+.mgt-growth-home__dashboard .growth-dashboard > .section:first-child .summary-value {
+  overflow-wrap:anywhere; font-size:clamp(17px,2vw,23px);
+}
+.mgt-growth-home__dashboard .growth-dashboard > .section:nth-child(2) .chart-card {
+  min-width:0; padding:clamp(10px,2vw,18px); border:1px solid var(--mgt-line);
+  border-radius:var(--mgt-radius-md); background:rgba(8,8,17,.42);
+}
+.mgt-growth-home__dashboard .growth-dashboard > .section:nth-child(2) .chart-wrapper {
+  width:100%; min-width:0; min-height:280px;
+}
+.mgt-growth-home__dashboard .growth-dashboard > .section:nth-child(3) {
+  display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); align-items:start; gap:var(--mgt-space-4);
+}
+.mgt-growth-home__dashboard .growth-dashboard > .section:nth-child(3) > .section-header {
+  grid-column:1 / -1; margin:0;
+}
+.mgt-growth-home__dashboard .growth-dashboard > .section:nth-child(3) .prediction-card,
+.mgt-growth-home__dashboard .growth-dashboard > .section:nth-child(3) .growth-goal-card {
+  min-width:0; height:100%; margin:0;
+}
+.mgt-growth-insight {
+  padding:clamp(20px,3vw,30px); border:1px solid rgba(172,154,255,.2);
+  border-radius:var(--mgt-radius-lg);
+  background:linear-gradient(120deg,rgba(48,39,78,.42),rgba(21,21,34,.92) 62%);
+}
+.mgt-growth-insight__heading h2 {
+  margin:8px 0 0; color:var(--mgt-text); font-size:clamp(18px,2.2vw,23px);
+  letter-spacing:-.6px;
+}
+.mgt-growth-insight__lead {
+  max-width:760px; margin:16px 0; color:#e2def4; font-size:14px; line-height:1.8;
+}
+.mgt-growth-insight__facts {
+  display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:10px; margin:18px 0;
+}
+.mgt-growth-insight__facts > div {
+  display:flex; flex-direction:column; gap:7px; min-width:0; padding:14px;
+  border:1px solid var(--mgt-line); border-radius:var(--mgt-radius-md);
+  background:rgba(8,8,17,.3);
+}
+.mgt-growth-insight__facts span { color:var(--mgt-muted); font-size:11px; }
+.mgt-growth-insight__facts strong { color:var(--mgt-text); font-size:20px; overflow-wrap:anywhere; }
+.mgt-growth-insight__trend { margin:0; color:var(--mgt-muted-strong); font-size:12px; line-height:1.8; }
+.mgt-growth-insight__link {
+  display:inline-flex; align-items:center; gap:8px; margin-top:18px;
+  color:var(--mgt-violet); font-size:12px; font-weight:850;
+}
+.mgt-growth-home__details,.mgt-growth-home__analytics,.mgt-growth-home__history,.mgt-growth-home__comparison {
+  min-width:0; padding:clamp(16px,2.4vw,24px); border:1px solid var(--mgt-line);
+  border-radius:var(--mgt-radius-lg); background:rgba(21,21,34,.78);
+}
+.mgt-growth-home__details > *,.mgt-growth-home__analytics > *,.mgt-growth-home__history > *,.mgt-growth-home__comparison > * {
+  min-width:0;
+}
+@media(max-width:760px) {
+  .mgt-growth-home { gap:var(--mgt-space-5); }
+  .mgt-growth-section-nav { gap:5px; padding:8px; }
+  .mgt-growth-section-nav a { min-height:34px; padding:0 9px; font-size:10px; }
+  .mgt-growth-home__dashboard .growth-dashboard > .section:first-child .summary-grid {
+    grid-template-columns:repeat(2,minmax(0,1fr));
+  }
+  .mgt-growth-home__dashboard .growth-dashboard > .section:nth-child(3) {
+    grid-template-columns:minmax(0,1fr);
+  }
+  .mgt-growth-home__dashboard .growth-dashboard > .section:nth-child(3) > .section-header {
+    grid-column:auto;
+  }
+  .mgt-growth-home__dashboard .growth-dashboard > .section:nth-child(2) .chart-wrapper { min-height:240px; }
+}
+@media(max-width:420px) {
+  .mgt-growth-home__dashboard .growth-dashboard > .section { padding:14px; }
+  .mgt-growth-home__dashboard .growth-dashboard > .section:first-child .summary-card { padding:12px; }
+  .mgt-growth-insight__facts { gap:7px; }
+  .mgt-growth-insight__facts > div { padding:10px; }
+  .mgt-growth-insight__facts strong { font-size:17px; }
+  .mgt-growth-home__dashboard .growth-dashboard > .section:nth-child(2) .chart-wrapper { min-height:210px; }
+}
