@@ -18,25 +18,25 @@ function buildInsight(metrics) {
   const comparison = metrics.growthComparison;
   if (metrics.observedChangeDays < 2 || comparison.direction === "insufficient_data") {
     return {
-      title: "성장 흐름을 기록하고 있어요",
-      description: "서로 다른 날짜의 성장 기록이 더 쌓이면 이전 구간과 최근 구간의 변화를 비교할 수 있습니다."
+      title: "성장 기록을 모으고 있어요",
+      description: "경험치 기록이 조금 더 쌓이면 최근 사냥과 성장 흐름이 어떻게 달라졌는지 알려드릴게요."
     };
   }
   if (comparison.direction === "increased") {
     return {
-      title: "최근 관측 구간의 성장량이 더 높아요",
-      description: `앞선 구간의 일 평균 ${formatTrillion(comparison.earlierAverage)}에서 최근 구간 ${formatTrillion(comparison.recentAverage)}으로 증가했습니다.`
+      title: "최근에는 경험치를 더 많이 얻었어요",
+      description: `이전에는 하루 평균 ${formatTrillion(comparison.earlierAverage)}, 최근에는 ${formatTrillion(comparison.recentAverage)}의 경험치를 얻었어요.`
     };
   }
   if (comparison.direction === "decreased") {
     return {
-      title: "최근 관측 구간의 성장량이 낮아졌어요",
-      description: `앞선 구간의 일 평균 ${formatTrillion(comparison.earlierAverage)}에서 최근 구간 ${formatTrillion(comparison.recentAverage)}으로 바뀌었습니다. 기록된 구간만 비교한 결과입니다.`
+      title: "최근에는 경험치를 조금 덜 얻었어요",
+      description: `이전에는 하루 평균 ${formatTrillion(comparison.earlierAverage)}, 최근에는 ${formatTrillion(comparison.recentAverage)}의 경험치를 얻었어요. 확인된 기록끼리 비교한 결과예요.`
     };
   }
   return {
-    title: "두 관측 구간의 성장량이 비슷해요",
-    description: `앞선 구간과 최근 구간의 일 평균이 각각 ${formatTrillion(comparison.earlierAverage)}, ${formatTrillion(comparison.recentAverage)}입니다.`
+    title: "최근 성장 속도는 이전과 비슷해요",
+    description: `이전과 최근의 하루 평균 경험치가 각각 ${formatTrillion(comparison.earlierAverage)}, ${formatTrillion(comparison.recentAverage)}로 비슷해요.`
   };
 }
 
@@ -54,7 +54,7 @@ export default function GrowthInsight({ character, history }) {
       <div className="mgt-growth-insight-heading">
         <span className="mgt-eyebrow">GROWTH INSIGHT</span>
         <h3 className="mgt-growth-insight-overline">이번 성장 기록에서 확인한 점</h3>
-        <span className="mgt-insight-record-count">정상 기록 {metrics.recordedDays}일</span>
+        <span className="mgt-insight-record-count">확인된 성장 기록 {metrics.recordedDays}일</span>
       </div>
       <div className="mgt-growth-insight-copy">
         <span className="mgt-insight-spark" aria-hidden="true">✦</span>
