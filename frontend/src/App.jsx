@@ -1,7 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { getCharacter, getHistory } from "./services/api.js";
 import AdminDashboard from "./components/admin/AdminDashboard.jsx";
-import CharacterOverview from "./features/home/CharacterOverview.jsx";
 import FavoriteCharacters from "./features/home/FavoriteCharacters.jsx";
 import GrowthHome from "./features/home/GrowthHome.jsx";
 import {
