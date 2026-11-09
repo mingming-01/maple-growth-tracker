@@ -1,6 +1,6 @@
 # React frontend
 
-The React/Vite dashboard is the primary frontend when the production build exists. Flask continues to own the backend APIs, Nexon integrations, AI services, persistence, and admin authentication.
+The React/Vite dashboard is the only public application frontend. Flask continues to own the backend APIs, Nexon integrations, AI services, persistence, and admin authentication. Flask continues to own the backend APIs, Nexon integrations, AI services, persistence, and admin authentication.
 
 ## Local development
 
