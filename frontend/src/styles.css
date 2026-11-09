@@ -1599,7 +1599,7 @@ button:focus-visible,input:focus-visible,select:focus-visible,a:focus-visible { 
 }
 .mgt-growth-page-content[data-testid="growth-page"] .growth-prediction-layout .prediction-label {
   word-break:keep-all;
-  overflow-wrap:break-word;
+  overflow-wrap:normal;
 }
 .mgt-growth-page-content[data-testid="growth-page"] .growth-prediction-layout .prediction-value {
   min-width:0;
@@ -1622,7 +1622,16 @@ button:focus-visible,input:focus-visible,select:focus-visible,a:focus-visible { 
 .mgt-growth-page-content[data-testid="growth-page"] .growth-goal-storage-note,
 .mgt-growth-page-content[data-testid="growth-page"] .growth-goal-notification span {
   word-break:keep-all;
-  overflow-wrap:break-word;
+  overflow-wrap:normal;
+}
+.mgt-growth-page-content[data-testid="growth-page"] .growth-goal-heading h3,
+.mgt-growth-page-content[data-testid="growth-page"] .growth-goal-status,
+.mgt-growth-page-content[data-testid="growth-page"] .growth-goal-target span,
+.mgt-growth-page-content[data-testid="growth-page"] .growth-goal-target strong,
+.mgt-growth-page-content[data-testid="growth-page"] .growth-goal-date-label {
+  white-space:nowrap;
+  word-break:keep-all;
+  overflow-wrap:normal;
 }
 .mgt-growth-page-content[data-testid="growth-page"] .growth-goal-heading > div {
   min-width:0;
