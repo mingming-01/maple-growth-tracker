@@ -572,7 +572,8 @@ test("React character details exposes all migrated tabs and loads each section o
   });
   await heading.scrollIntoViewIfNeeded();
   await initialStatsResponse;
-  await expect(page.getByRole("tab", { name: "스탯" })).toHaveAttribute("aria-selected", "true");
+  const detailTabs = page.getByLabel("캐릭터 상세 정보 구분");
+  await expect(detailTabs.getByRole("tab", { name: "스탯" })).toHaveAttribute("aria-selected", "true");
 
   const tabs = [
     ["장비", "equipment"],
@@ -583,7 +584,7 @@ test("React character details exposes all migrated tabs and loads each section o
   ];
 
   for (const [label, section] of tabs) {
-    const tab = page.getByRole("tab", { name: label });
+    const tab = detailTabs.getByRole("tab", { name: label });
     const response = page.waitForResponse(response => {
       const url = new URL(response.url());
       return url.pathname === "/api/character-details" &&
