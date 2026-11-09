@@ -56,3 +56,41 @@ test("React JSX legacy class styles remain available in the React compatibility 
     assert.ok(css.includes(selector), `Missing React compatibility selector: ${selector}`);
   }
 });
+
+
+test("React entry and theme import order preserve the legacy boundary", () => {
+  const reactHtml = readFileSync(join(projectRoot, "frontend", "index.html"), "utf8");
+  const legacyHtml = readFileSync(join(projectRoot, "templates", "index.html"), "utf8");
+  const entry = readFileSync(join(frontendSource, "main.jsx"), "utf8");
+  const compatibilityIndex = entry.indexOf('import "./styles/react-compat.css";');
+  const themeIndex = entry.indexOf('import "./styles.css";');
+
+  assert.equal(reactHtml.includes('href="/static/style.css"'), false);
+  assert.ok(legacyHtml.includes("filename='style.css'"));
+  assert.ok(compatibilityIndex >= 0, "React compatibility stylesheet must be imported");
+  assert.ok(themeIndex > compatibilityIndex, "The React theme must load after compatibility rules");
+});
+
+test("Growth route layout selectors match the current React component wrappers", () => {
+  const growthHome = readFileSync(join(frontendSource, "features", "home", "GrowthHome.jsx"), "utf8");
+  const insight = readFileSync(join(frontendSource, "features", "home", "GrowthInsight.jsx"), "utf8");
+  const css = readFileSync(join(frontendSource, "styles.css"), "utf8");
+
+  assert.ok(growthHome.includes('className="mgt-growth-page-content" data-testid="growth-page"'));
+  assert.ok(css.includes('.mgt-growth-page-content[data-testid="growth-page"] .growth-dashboard'));
+  for (const route of ["details", "analytics", "history", "comparison"]) {
+    assert.ok(
+      css.includes(`.mgt-growth-page-content[data-testid="${route}-page"]`),
+      `Missing layout rules for the ${route} route wrapper`
+    );
+  }
+
+  for (const className of [
+    "mgt-growth-insight-copy",
+    "mgt-growth-insight-facts",
+    "mgt-insight-link"
+  ]) {
+    assert.ok(insight.includes(`className="${className}"`), `Missing JSX class ${className}`);
+    assert.ok(css.includes(`.${className}`), `Missing CSS selector .${className}`);
+  }
+});
