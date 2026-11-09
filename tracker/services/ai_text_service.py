@@ -1,6 +1,7 @@
 """AI 응답을 화면에 전달하기 전 표시 형식과 문장 품질을 검증한다."""
 import re
 from datetime import date
+from decimal import Decimal, InvalidOperation
 
 
 REQUIRED_GROWTH_SECTIONS = (
@@ -20,6 +21,38 @@ INVALID_GROWTH_TERMS = (
     "RESOURCE_EXHAUSTED",
     "undefined",
 )
+
+
+
+_SUPERSCRIPT_DIGITS = str.maketrans("⁰¹²³⁴⁵⁶⁷⁸⁹", "0123456789")
+
+
+def _format_experience_amount(raw_value):
+    """큰 경험치 숫자를 한국어 단위로 바꿔 읽기 쉽게 표시한다."""
+    try:
+        value = Decimal(str(raw_value).replace(",", "").strip())
+    except (InvalidOperation, ValueError):
+        return str(raw_value)
+    if abs(value) >= Decimal("1e12"):
+        amount, unit = value / Decimal("1e12"), "조"
+    elif abs(value) >= Decimal("1e8"):
+        amount, unit = value / Decimal("1e8"), "억"
+    else:
+        return str(raw_value)
+    rendered = f"{amount:,.2f}".rstrip("0").rstrip(".")
+    return f"{rendered}{unit}"
+
+
+def _format_scientific_experience(match):
+    raw = match.group(0).strip()
+    normalized = raw.translate(_SUPERSCRIPT_DIGITS)
+    normalized = re.sub(r"\\s*[×x]\\s*10\\s*\\^?\\s*", "e", normalized, flags=re.I)
+    normalized = re.sub(r"\\s*\\*\\s*10\\s*\\^\\s*", "e", normalized, flags=re.I)
+    try:
+        value = Decimal(normalized)
+    except (InvalidOperation, ValueError):
+        return raw
+    return _format_experience_amount(value) if abs(value) >= Decimal("1e8") else raw
 
 
 def validate_growth_report(value):
@@ -46,6 +79,8 @@ def validate_growth_report(value):
     if re.search(r"[\u3400-\u4DBF\u4E00-\u9FFF\uF900-\uFAFF\u3040-\u30FF]", text):
         return False
     if any(term.casefold() in text.casefold() for term in INVALID_GROWTH_TERMS):
+        return False
+    if re.search(r"(?:×|\\b[xX]\\b|\\*)\\s*10\\s*\\^?\\s*[0-9⁰¹²³⁴⁵⁶⁷⁸⁹]+", text):
         return False
 
     # 같은 문장을 연속으로 반복하는 저품질 응답을 차단한다.
@@ -94,9 +129,16 @@ def sanitize_ai_text(value, expected_date=None):
     }
     for pattern, replacement in internal_terms.items():
         text = re.sub(pattern, replacement, text, flags=re.IGNORECASE)
+    # 과학적 표기와 긴 원본 정수를 조 단위·억 단위로 읽기 쉽게 변환한다.
     text = re.sub(
-        r"\(?\s*(?:\d{1,3}(?:,\d{3}){2,}|\d{10,})(?:\.\d+)?\s*\)?",
-        "해당 경험치 수치",
+        r"[+-]?(?:\\d+(?:\\.\\d*)?|\\.\\d+)\\s*(?:[×x]\\s*10\\s*\\^?\\s*[0-9⁰¹²³⁴⁵⁶⁷⁸⁹]+|\\*\\s*10\\s*\\^\\s*\\d+|e[+-]?\\d+)",
+        _format_scientific_experience,
+        text,
+        flags=re.I,
+    )
+    text = re.sub(
+        r"\\(?\\s*(?:\\d{1,3}(?:,\\d{3}){2,}|\\d{10,})(?:\\.\\d+)?\\s*\\)?",
+        lambda match: _format_experience_amount(match.group(0).strip(" ()")),
         text,
     )
     if expected_date:
