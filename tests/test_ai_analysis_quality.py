@@ -1,7 +1,9 @@
 import unittest
 
 from tracker.services.ai_analysis_service import (
+    _apply_deterministic_growth_forecast,
     _build_growth_report_prompt,
+    _deterministic_growth_forecast,
     _error_result,
 )
 from tracker.services.ai_text_service import sanitize_ai_text, validate_growth_report
@@ -101,10 +103,10 @@ class AIAnalysisQualityTests(unittest.TestCase):
 
     def test_growth_forecast_section_is_replaced_before_validation(self):
         report = (
-            "[성장 패턴] 최근 기록이 확인됩니다.\\n"
-            "[성장 변화] 성장량이 확인됩니다.\\n"
-            "[레벨업 분석] 현재 레벨을 유지하고 있습니다.\\n"
-            "[성장 전망] 1.78×10¹³ 경험치로 조건부 전망입니다.\\n"
+            "[성장 패턴] 최근 기록이 확인됩니다.\n"
+            "[성장 변화] 성장량이 확인됩니다.\n"
+            "[레벨업 분석] 현재 레벨을 유지하고 있습니다.\n"
+            "[성장 전망] 1.78×10¹³ 경험치로 조건부 전망입니다.\n"
             "[AI 코멘트] 기록을 계속 확인해 주세요."
         )
         result = _apply_deterministic_growth_forecast(
@@ -117,10 +119,10 @@ class AIAnalysisQualityTests(unittest.TestCase):
 
     def test_report_validator_rejects_scientific_notation(self):
         report = (
-            "[성장 패턴] 최근 기록이 확인됩니다.\\n"
-            "[성장 변화] 평균 성장량은 1.78×10¹³입니다.\\n"
-            "[레벨업 분석] 레벨업 기록은 없습니다.\\n"
-            "[성장 전망] 현재 자료로는 예상하기 어렵습니다.\\n"
+            "[성장 패턴] 최근 기록이 확인됩니다.\n"
+            "[성장 변화] 평균 성장량은 1.78×10¹³입니다.\n"
+            "[레벨업 분석] 레벨업 기록은 없습니다.\n"
+            "[성장 전망] 현재 자료로는 예상하기 어렵습니다.\n"
             "[AI 코멘트] 기록을 이어서 확인해 주세요."
         )
         self.assertFalse(validate_growth_report(report))
