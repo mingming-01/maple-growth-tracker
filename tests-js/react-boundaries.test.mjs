@@ -44,7 +44,7 @@ test("React browser storage access stays inside the storage module", () => {
 
 
 test("React JSX legacy class styles remain available in the React compatibility stylesheet", async () => {
-  const css = await readFile(new URL("../frontend/src/styles/react-compat.css", import.meta.url), "utf8");
+  const css = readFileSync(join(projectRoot, "frontend", "src", "styles", "react-compat.css"), "utf8");
   for (const selector of [
     ".mgt-app-shell .section-title",
     ".mgt-app-shell .growth-goal-card",
