@@ -446,3 +446,1212 @@
 }
 
 .game-hexa-stat-grade { display:block; margin-top:6px; color:#a7b2c8; font-size:9px; }
+
+
+/* React CSS parity: restore styles referenced by React JSX; scoped to the React app shell. */
+.mgt-app-shell .search-input {
+width: 100%; min-width: 0; height: 54px; padding: 0 18px; border: 1px solid #dedde8; border-radius: 14px; outline: none; color: #25233a; background: #fff; transition: border-color .2s, box-shadow .2s;
+}
+.mgt-app-shell .search-input::placeholder {
+color: #aaa8b8;
+}
+.mgt-app-shell .search-input:focus {
+border-color: #8c78ff; box-shadow: 0 0 0 4px rgba(140,120,255,.12);
+}
+.mgt-app-shell .search-button {
+min-height: 54px; padding: 0 25px; border: 0; border-radius: 14px; color: #fff; background: #6957d8; font-weight: 800; transition: transform .15s, background .15s, box-shadow .15s;
+}
+.mgt-app-shell .search-button:hover:not(:disabled) {
+background: #5947c7; transform: translateY(-1px); box-shadow: 0 8px 20px rgba(89,71,199,.22);
+}
+.mgt-app-shell .export-button {
+min-height: 54px; padding: 0 20px; border: 1px solid #e3e1eb; border-radius: 14px; background: #fff; color: #4f4b63; font-size: 14px; font-weight: 800; transition: background .2s, border-color .2s, opacity .2s;
+}
+.mgt-app-shell .export-button:hover:not(:disabled) {
+background: #f4f3f9; border-color: #d6d3e3;
+}
+.mgt-app-shell .export-button:disabled {
+opacity: .45; cursor: not-allowed;
+}
+.mgt-app-shell .data-status-notice.is-warning {
+border-color: #f0d6a8;
+    color: #79541f;
+    background: #fff8e9;
+}
+.mgt-app-shell .section {
+margin-top: 26px;
+}
+.mgt-app-shell .section-title {
+margin: 0; font-size: 21px; font-weight: 850; letter-spacing: -.6px;
+}
+.mgt-app-shell .section-description {
+margin: 6px 0 0; color: #858394; font-size: 14px; line-height: 1.6;
+}
+.mgt-app-shell .history-range-control {
+display: flex; align-items: center; gap: 10px; flex: none; color: #625e76; font-size: 13px; font-weight: 800;
+}
+.mgt-app-shell .history-range-select {
+min-width: 148px; height: 42px; padding: 0 12px; border: 1px solid #dedde8; border-radius: 12px; background: #fff; color: #38354a; font: inherit;
+}
+.mgt-app-shell .history-range-select:focus-visible {
+outline: 3px solid rgba(140,120,255,.25); outline-offset: 2px;
+}
+.mgt-app-shell .history-range-notice {
+margin: 0 0 12px; color: #77758a; font-size: 12px; line-height: 1.6;
+}
+.mgt-app-shell .period-summary-heading {
+display: flex; align-items: center; justify-content: space-between; gap: 14px; margin-bottom: 12px;
+}
+.mgt-app-shell .period-summary-heading h3 {
+margin: 0; color: #302c49; font-size: 16px; font-weight: 900; letter-spacing: -.3px;
+}
+.mgt-app-shell .period-summary-heading p {
+margin: 5px 0 0; color: #858394; font-size: 11px; line-height: 1.5;
+}
+.mgt-app-shell .period-summary-badge {
+flex: none; padding: 7px 10px; border: 1px solid #d7e9dc; border-radius: 999px; color: #31714a; background: #f0faf3; font-size: 11px; font-weight: 900;
+}
+.mgt-app-shell .period-summary-badge.is-warning {
+border-color: #f0d6a8; color: #94601d; background: #fff8e9;
+}
+.mgt-app-shell .period-summary-grid {
+display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 10px;
+}
+.mgt-app-shell .period-summary-card {
+display: flex; flex-direction: column; justify-content: space-between; min-width: 0; min-height: 124px; padding: 16px 15px; border: 1px solid #e9e8f0; border-radius: 16px; background: #fff;
+}
+.mgt-app-shell .period-summary-card.is-primary {
+border-color: #ddd6fb; background: linear-gradient(135deg,#fff 0%,#f7f4ff 100%);
+}
+.mgt-app-shell .period-summary-label {
+color: #858394; font-size: 11px; font-weight: 800; line-height: 1.5;
+}
+.mgt-app-shell .period-summary-value {
+display: block; margin: 10px 0 8px; overflow-wrap: anywhere; color: #302c49; font-size: clamp(16px, 1.5vw, 22px); font-weight: 900; letter-spacing: -.45px;
+}
+.mgt-app-shell .period-summary-card.is-primary .period-summary-value {
+color: #6250ca;
+}
+.mgt-app-shell .period-summary-value.is-positive {
+color: #337b52 !important;
+}
+.mgt-app-shell .period-summary-value.is-negative {
+color: #b64b66 !important;
+}
+.mgt-app-shell .period-summary-value.is-muted {
+color: #a09bad !important; font-size: 15px;
+}
+.mgt-app-shell .period-summary-detail {
+color: #9692a4; font-size: 10px; line-height: 1.5;
+}
+.mgt-app-shell .period-summary-footnote {
+margin: 10px 2px 0; color: #898697; font-size: 11px; line-height: 1.6;
+}
+.mgt-app-shell .summary-grid {
+display: grid; grid-template-columns: repeat(4,minmax(0,1fr)); gap: 15px;
+}
+.mgt-app-shell .summary-card {
+padding: 22px; background: #fff; border: 1px solid #e9e8f0; border-radius: 20px;
+}
+.mgt-app-shell .summary-label {
+color: #858294; font-size: 13px; font-weight: 700;
+}
+.mgt-app-shell .summary-value {
+margin-top: 9px; color: #302c49; font-size: 21px; font-weight: 900;
+}
+.mgt-app-shell .summary-value.positive {
+color: #4f68b8;
+}
+.mgt-app-shell .chart-card {
+padding: 24px; background: #fff; border: 1px solid #e9e8f0; border-radius: 22px; box-shadow: 0 10px 30px rgba(39,35,75,.045);
+}
+.mgt-app-shell .growth-goal-card {
+display: grid;
+    gap: 16px;
+    margin-top: 16px;
+    padding: 22px;
+    border: 1px solid #e5e1fa;
+    border-radius: 20px;
+    background: #fff;
+    box-shadow: 0 10px 26px rgba(80,65,150,.045);
+}
+.mgt-app-shell .growth-goal-card[hidden],
+.mgt-app-shell .growth-goal-progress-panel[hidden] {
+display: none;
+}
+.mgt-app-shell .growth-goal-heading {
+display: flex; align-items: flex-start; justify-content: space-between; gap: 14px;
+}
+.mgt-app-shell .growth-goal-heading h3 {
+margin: 5px 0 0; color: #302c49; font-size: 17px; font-weight: 900;
+}
+.mgt-app-shell .growth-goal-heading p {
+margin: 5px 0 0; color: #858394; font-size: 12px; line-height: 1.55;
+}
+.mgt-app-shell .growth-goal-status {
+flex: none; padding: 7px 10px; border-radius: 999px; color: #5e50b8; background: #f1efff; font-size: 11px; font-weight: 900;
+}
+.mgt-app-shell .growth-goal-progress-panel {
+display: grid; gap: 9px; padding: 15px; border: 1px solid #ece9f7; border-radius: 15px; background: #faf9ff;
+}
+.mgt-app-shell .growth-goal-progress-heading {
+display: flex; justify-content: space-between; gap: 10px; color: #726d84; font-size: 12px; font-weight: 750;
+}
+.mgt-app-shell .growth-goal-progress-heading strong {
+color: #5d4cca; font-size: 15px;
+}
+.mgt-app-shell .growth-goal-progress-track {
+height: 10px; overflow: hidden; border-radius: 999px; background: #e9e6f4;
+}
+.mgt-app-shell .growth-goal-pace {
+margin: 0; color: #777189; font-size: 11px; line-height: 1.65;
+}
+.mgt-app-shell .growth-goal-target,
+.mgt-app-shell .growth-goal-date-label {
+display: grid; align-content: center; gap: 7px; min-width: 0; color: #777189; font-size: 11px; font-weight: 800;
+}
+.mgt-app-shell .growth-goal-target {
+padding: 11px 13px; border: 1px solid #ece9f4; border-radius: 12px; background: #faf9fc;
+}
+.mgt-app-shell .growth-goal-target strong {
+color: #3c365b; font-size: 16px;
+}
+.mgt-app-shell .growth-goal-date-label input {
+width: 100%; min-width: 0; height: 43px; padding: 0 11px; border: 1px solid #dedbe9; border-radius: 11px; color: #38354a; background: #fff; font: inherit;
+}
+.mgt-app-shell .growth-goal-notification {
+display: flex; align-items: center; gap: 8px; color: #777189; font-size: 11px; line-height: 1.5; cursor: pointer;
+}
+.mgt-app-shell .growth-goal-notification input {
+width: 16px; height: 16px; accent-color: #6957d8;
+}
+.mgt-app-shell .growth-goal-clear-button[hidden] {
+display: none;
+}
+.mgt-app-shell .growth-goal-feedback {
+margin: 0; color: #51478b; font-size: 11px; line-height: 1.6;
+}
+.mgt-app-shell .growth-goal-feedback.is-error {
+color: #a23c55;
+}
+.mgt-app-shell .growth-goal-feedback[hidden] {
+display: none;
+}
+.mgt-app-shell .growth-goal-storage-note {
+margin: -5px 0 0; color: #9995a5; font-size: 10px; line-height: 1.55;
+}
+.mgt-app-shell .prediction-card {
+padding: 27px; background: linear-gradient(135deg,#fff 0%,#f8f6ff 100%); border: 1px solid #e5e1fa; border-radius: 23px; box-shadow: 0 12px 35px rgba(80,65,150,.07);
+}
+.mgt-app-shell .prediction-grid {
+display: grid; grid-template-columns: 1.4fr 1fr 1fr 1fr; gap: 15px;
+}
+.mgt-app-shell .prediction-item {
+min-width: 0; padding: 18px; border-radius: 17px; background: rgba(255,255,255,.72);
+}
+.mgt-app-shell .prediction-label {
+color: #858294; font-size: 12px; font-weight: 700;
+}
+.mgt-app-shell .prediction-value {
+margin-top: 8px; color: #302c49; font-size: 20px; font-weight: 900;
+}
+.mgt-app-shell .prediction-item:first-child .prediction-value {
+color: #6552d2; font-size: 24px;
+}
+.mgt-app-shell .prediction-note {
+margin: 16px 0 0; color: #8a8795; font-size: 12px; line-height: 1.6;
+}
+.mgt-app-shell .history-card {
+overflow: hidden; background: #fff; border: 1px solid #e9e8f0; border-radius: 22px; box-shadow: 0 10px 30px rgba(39,35,75,.045);
+}
+.mgt-app-shell .history-table {
+width: 100%; border-collapse: collapse; table-layout: fixed;
+}
+.mgt-app-shell .history-table th,
+.mgt-app-shell .history-table td {
+width: 33.333%;
+}
+.mgt-app-shell .history-table th {
+padding: 16px 20px; color: #817e90; background: #faf9fc; font-size: 12px; font-weight: 800; text-align: left;
+}
+.mgt-app-shell .history-table td {
+padding: 17px 20px; border-top: 1px solid #f0eff4; color: #38354a; font-size: 14px;
+}
+.mgt-app-shell .history-table tbody tr:hover {
+background: #fbfaff;
+}
+.mgt-app-shell .ai-cache-notice.is-warning {
+color: #a05e25;
+}
+.mgt-app-shell .ai-analysis-card {
+position: relative; padding: 30px; border: 1px solid #e6e2f2; border-radius: 24px; background: linear-gradient(135deg,#fff 0%,#faf9ff 100%); box-shadow: 0 16px 40px rgba(63,52,105,.08);
+}
+.mgt-app-shell .ai-analysis-card::before {
+content: ""; position: absolute; top: 0; left: 0; right: 0; height: 4px; border-radius: 24px 24px 0 0; background: linear-gradient(90deg,#8d7cf0,#b59cff);
+}
+.mgt-app-shell .ai-analysis-evidence[hidden] {
+display: none;
+}
+.mgt-app-shell .ai-analysis-item {
+display: grid; grid-template-columns: 110px minmax(0,1fr); gap: 24px; padding: 22px 4px; border-bottom: 1px solid #ece9f3;
+}
+.mgt-app-shell .ai-analysis-item:last-child {
+margin-top: 8px; padding: 22px 20px; border: none; border-radius: 16px; background: #f4f1ff;
+}
+.mgt-app-shell .ai-analysis-item:last-child .ai-analysis-label {
+color: #7561d1;
+}
+.mgt-app-shell .ai-analysis-label {
+padding-top: 2px; color: #756f86; font-size: 13px; font-weight: 800; white-space: nowrap;
+}
+.mgt-app-shell .ai-analysis-text {
+color: #302c42; font-size: 15px; line-height: 1.75; font-weight: 600; word-break: keep-all;
+}
+.mgt-app-shell .comparison-card {
+padding: 26px; background: #fff; border: 1px solid #e9e8f0; border-radius: 22px; box-shadow: 0 10px 30px rgba(39,35,75,.045);
+}
+.mgt-app-shell .comparison-form {
+display: grid; grid-template-columns: auto minmax(180px,1fr) auto; gap: 12px; align-items: center;
+}
+.mgt-app-shell .comparison-input-label {
+color: #625e76; font-size: 14px; font-weight: 800;
+}
+.mgt-app-shell .comparison-grid {
+display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: 16px; margin-top: 22px;
+}
+.mgt-app-shell .comparison-period-character-card:nth-child(2) {
+background: #fff;
+}
+.mgt-app-shell .comparison-period-name {
+margin: 0 0 12px; color: #4f43a7; font-size: 16px; font-weight: 900; overflow-wrap: anywhere;
+}
+.mgt-app-shell .comparison-period-verdict {
+margin: 12px 0 0; padding: 13px 15px; border-radius: 12px; background: #f3f0ff; color: #5f4cb8; font-size: 13px; font-weight: 800; line-height: 1.6;
+}
+.mgt-app-shell .comparison-period-notice {
+margin: 8px 2px 0; color: #898697; font-size: 11px; line-height: 1.6;
+}
+.mgt-app-shell .comparison-period-notice.is-warning {
+color: #a05e25;
+}
+.mgt-app-shell .comparison-character-card {
+min-width: 0; padding: 20px; background: #faf9fd; border: 1px solid #eeeaf6; border-radius: 18px;
+}
+.mgt-app-shell .comparison-name {
+margin: 0 0 12px; color: #4f43a7; font-size: 18px; overflow-wrap: anywhere;
+}
+.mgt-app-shell .comparison-stat {
+display: flex; justify-content: space-between; gap: 12px; padding: 10px 0; border-top: 1px solid #eceaf2; color: #77758a; font-size: 13px;
+}
+.mgt-app-shell .comparison-stat strong {
+color: #302c49; text-align: right; overflow-wrap: anywhere;
+}
+.mgt-app-shell .search-form .search-button {
+min-height: 58px; padding: 0 30px; font-size: 16px;
+}
+.mgt-app-shell .search-form .export-button {
+min-height: 58px;
+}
+.mgt-app-shell .container:has(#resultSection[hidden]) .export-button {
+display: none;
+}
+.mgt-app-shell .favorite-feedback.is-error {
+color: #a23c55;
+}
+.mgt-app-shell .favorite-current-button.is-saved {
+border-color: #e8d99f; color: #846315; background: #fff9e8;
+}
+.mgt-app-shell .admin-login-form .search-button {
+margin-top: 6px;
+}
+.mgt-app-shell .admin-storage-notice.is-warning {
+color: #77521e; background: #fff8e9; border-color: #f0d6a8;
+}
+.mgt-app-shell .admin-storage-notice.is-neutral {
+color: #665b42; background: #fffaf0;
+}
+.mgt-app-shell .admin-filter-actions .search-button,
+.mgt-app-shell .admin-filter-actions .export-button {
+min-height: 44px; padding: 0 15px; font-size: 13px;
+}
+.mgt-app-shell .admin-filter-actions .search-button {
+width: auto;
+}
+.mgt-app-shell .admin-filter-actions .export-button {
+display: inline-flex; align-items: center; justify-content: center; text-decoration: none;
+}
+.mgt-app-shell .admin-result-pill.is-success {
+color: #216a45; background: #e9f7ee;
+}
+.mgt-app-shell .admin-result-pill.is-failure {
+color: #a23e50; background: #fff0f2;
+}
+@media (max-width: 1100px) {
+.mgt-app-shell .period-summary-grid {
+grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+}
+@media (max-width: 900px) {
+.mgt-app-shell .history-range-control {
+width: 100%; justify-content: space-between;
+}
+.mgt-app-shell .history-range-select {
+flex: 1;
+}
+.mgt-app-shell .summary-grid {
+grid-template-columns: repeat(2,minmax(0,1fr));
+}
+.mgt-app-shell .prediction-grid {
+grid-template-columns: repeat(2,minmax(0,1fr));
+}
+}
+@media (max-width: 700px) {
+.mgt-app-shell .ai-analysis-card {
+padding: 22px;
+}
+.mgt-app-shell .ai-analysis-item {
+grid-template-columns: 1fr; gap: 8px; padding: 18px 2px;
+}
+.mgt-app-shell .ai-analysis-label {
+font-size: 12px;
+}
+.mgt-app-shell .ai-analysis-text {
+font-size: 14px; line-height: 1.7;
+}
+.mgt-app-shell .ai-analysis-item:last-child {
+padding: 18px;
+}
+}
+@media (max-width: 620px) {
+.mgt-app-shell .period-summary-grid {
+grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px;
+}
+.mgt-app-shell .period-summary-card {
+min-height: 112px; padding: 13px 12px;
+}
+.mgt-app-shell .period-summary-heading {
+align-items: flex-start;
+}
+.mgt-app-shell .period-summary-heading h3 {
+font-size: 15px;
+}
+.mgt-app-shell .search-button {
+width: 100%;
+}
+.mgt-app-shell .summary-grid,
+.mgt-app-shell .prediction-grid,
+.mgt-app-shell .comparison-grid {
+grid-template-columns: 1fr;
+}
+.mgt-app-shell .chart-card {
+padding: 15px;
+}
+.mgt-app-shell .prediction-card,
+.mgt-app-shell .comparison-card {
+padding: 20px;
+}
+.mgt-app-shell .growth-goal-card {
+padding: 16px; gap: 13px;
+}
+.mgt-app-shell .growth-goal-heading {
+align-items: flex-start;
+}
+.mgt-app-shell .growth-goal-status {
+font-size: 10px;
+}
+.mgt-app-shell .history-table th,
+.mgt-app-shell .history-table td {
+padding-left: 14px; padding-right: 14px;
+}
+.mgt-app-shell .comparison-form {
+grid-template-columns: 1fr;
+}
+.mgt-app-shell .comparison-input-label {
+margin-bottom: -5px;
+}
+}
+.mgt-app-shell .growth-timeline-section {
+margin-top: 18px; padding: 20px 22px; border: 1px solid #e9e8f0; border-radius: 18px; background: #fff;
+}
+.mgt-app-shell .growth-timeline-heading {
+display: flex; align-items: flex-end; justify-content: space-between; gap: 12px; margin-bottom: 14px;
+}
+.mgt-app-shell .growth-timeline-heading h3 {
+margin: 0; color: #302c49; font-size: 16px; font-weight: 900;
+}
+.mgt-app-shell .growth-timeline-heading p {
+margin: 0; color: #898697; font-size: 11px; line-height: 1.5;
+}
+.mgt-app-shell .growth-timeline-item {
+position: relative; display: flex; gap: 12px; min-width: 0; padding: 10px 0 13px; border-top: 1px solid #f0eef5;
+}
+.mgt-app-shell .growth-timeline-date {
+color: #9994a7; font-size: 10px; font-weight: 750;
+}
+.mgt-app-shell .growth-timeline-title {
+color: #37334d; font-size: 12px; font-weight: 900;
+}
+.mgt-app-shell .growth-timeline-description {
+margin: 0; color: #858394; font-size: 11px; line-height: 1.5; overflow-wrap: anywhere;
+}
+@media (max-width: 620px) {
+.mgt-app-shell .growth-timeline-section {
+padding: 17px 15px;
+}
+.mgt-app-shell .growth-timeline-heading {
+align-items: flex-start; flex-direction: column;
+}
+}
+.mgt-app-shell /* Phase 3: lazy character details and per-category presets */
+.character-details-section {
+padding: 22px; border: 1px solid #e9e8f0; border-radius: 20px; background: rgba(255,255,255,.94);
+}
+.mgt-app-shell .character-details-header {
+display: flex; align-items: flex-end; justify-content: space-between; gap: 16px;
+}
+.mgt-app-shell .character-details-header .export-button {
+min-height: 42px; flex: none;
+}
+.mgt-app-shell .detail-tabs {
+display: flex; flex-wrap: wrap; gap: 8px; margin: 18px 0 12px; padding-bottom: 12px; border-bottom: 1px solid #eceaf2;
+}
+.mgt-app-shell .detail-tab {
+min-height: 40px; padding: 0 18px; border: 1px solid #e4e1ef; border-radius: 999px; color: #625e76; background: #fff; font-size: 13px; font-weight: 850;
+}
+.mgt-app-shell .detail-tab:hover:not(:disabled) {
+border-color: #cfc7f5; color: #5947c7; background: #f8f6ff;
+}
+.mgt-app-shell .detail-tab.is-active {
+border-color: #6957d8; color: #fff; background: #6957d8;
+}
+.mgt-app-shell .detail-tab:disabled {
+opacity: .45; cursor: not-allowed;
+}
+.mgt-app-shell .detail-notice {
+margin: 0 0 14px; padding: 11px 14px; border: 1px solid #dcd7f4; border-radius: 11px; color: #51488d; background: #f5f2ff; font-size: 12px; line-height: 1.6;
+}
+.mgt-app-shell .detail-notice.is-warning {
+border-color: #f0d6a8; color: #79541f; background: #fff8e9;
+}
+.mgt-app-shell .detail-notice[hidden] {
+display: none;
+}
+.mgt-app-shell .detail-source-status.is-empty {
+color: #77758a; background: #f2f1f6;
+}
+.mgt-app-shell .detail-message.is-warning {
+color: #94601d;
+}
+.mgt-app-shell .detail-disclaimer {
+margin: 12px 0 0; color: #9692a4; font-size: 10px; line-height: 1.6;
+}
+@media (max-width: 760px) {
+.mgt-app-shell .character-details-header {
+align-items: flex-start; flex-direction: column;
+}
+.mgt-app-shell .character-details-header .export-button {
+width: 100%;
+}
+}
+@media (max-width: 520px) {
+.mgt-app-shell .character-details-section {
+padding: 16px 12px;
+}
+.mgt-app-shell .detail-tabs {
+display: grid; grid-template-columns: repeat(2,minmax(0,1fr));
+}
+.mgt-app-shell .detail-tab {
+width: 100%;
+}
+}
+.mgt-app-shell /* MapleStory in-client inspired character status windows */
+.character-details-section {
+padding: 24px;
+    border: 1px solid #41465e;
+    border-radius: 18px;
+    color: #e9e8f2;
+    background:
+        radial-gradient(ellipse at 8% 0%, rgba(89,79,155,.28), transparent 38%),
+        linear-gradient(145deg,#171b2a 0%,#202638 48%,#171d2c 100%);
+    box-shadow: 0 18px 48px rgba(10,13,25,.18), inset 0 1px rgba(255,255,255,.05);
+}
+.mgt-app-shell .character-details-section .section-title {
+color:#f2efff;
+}
+.mgt-app-shell .character-details-section .section-description {
+color:#aeb4c8;
+}
+.mgt-app-shell .character-details-header {
+align-items:center;
+}
+.mgt-app-shell .character-details-header .export-button {
+min-height:38px; border-color:#555c78; color:#d9d8e8; background:#252c40;
+}
+.mgt-app-shell .character-details-header .export-button:hover {
+border-color:#9b8bdf; background:#303851;
+}
+.mgt-app-shell .detail-tabs {
+display:flex; flex-wrap:wrap; gap:5px; margin:20px 0 14px; padding:5px;
+    border:1px solid #3c435b; border-radius:12px; background:rgba(10,14,27,.44);
+}
+.mgt-app-shell .detail-tab {
+min-height:38px; padding:0 18px; border:1px solid transparent; border-radius:8px;
+    color:#afb5c8; background:transparent; font-size:12px; font-weight:850;
+}
+.mgt-app-shell .detail-tab:hover:not(:disabled) {
+color:#fff; background:rgba(255,255,255,.06);
+}
+.mgt-app-shell .detail-tab.is-active {
+border-color:#7466ba; color:#fff; background:linear-gradient(180deg,#7164b3,#4c477d);
+    box-shadow:inset 0 1px rgba(255,255,255,.16),0 3px 10px rgba(0,0,0,.18);
+}
+.mgt-app-shell .character-details-section .detail-notice {
+border-color:#49536f; color:#bdc6dc; background:#252e43;
+}
+.mgt-app-shell .character-details-section .detail-notice.is-warning {
+border-color:#806b45; color:#e7d2a6; background:#362f2a;
+}
+.mgt-app-shell .game-stat-window,
+.mgt-app-shell .game-equipment-layout>section,
+.mgt-app-shell .game-symbol-window,
+.mgt-app-shell .game-sixth-skill-panel,
+.mgt-app-shell .game-hexa-stat-panel,
+.mgt-app-shell .game-link-window,
+.mgt-app-shell .game-union-window>section {
+min-width:0; padding:17px; border:1px solid #414963; border-radius:13px;
+    background:linear-gradient(145deg,rgba(35,43,63,.98),rgba(25,32,49,.98));
+    box-shadow:inset 0 1px rgba(255,255,255,.035),0 5px 15px rgba(0,0,0,.12);
+}
+.mgt-app-shell .game-window-eyebrow {
+color:#a99be8; font-size:9px; font-weight:950; letter-spacing:.16em;
+}
+.mgt-app-shell .game-window-title {
+margin:0; color:#f1efff; font-size:14px; font-weight:900;
+}
+.mgt-app-shell .game-profile-title-row .game-window-title {
+margin-left:auto;
+}
+.mgt-app-shell .game-profile-mode.is-active {
+border-color:#a28fe5; color:#fff; background:linear-gradient(180deg,#7668b7,#514b83);
+    box-shadow:inset 0 1px rgba(255,255,255,.16);
+}
+.mgt-app-shell .game-preset-select {
+width:100%; min-width:0; height:35px; padding:0 9px; border:1px solid #4b5571;
+    border-radius:7px; color:#e5e5f0; background:#171e30; font:inherit; font-size:11px; font-weight:800;
+}
+.mgt-app-shell .game-preset-select:focus {
+outline:2px solid #a18fe6; outline-offset:1px;
+}
+.mgt-app-shell .game-power-panel {
+display:flex; align-items:baseline; justify-content:space-between; flex-wrap:wrap; gap:7px 18px;
+    padding:13px 15px; border:1px solid #70644e; border-radius:9px;
+    background:linear-gradient(100deg,#302f3d,#292d3a);
+}
+.mgt-app-shell .game-power-caption {
+color:#c8b98e; font-size:10px; font-weight:850;
+}
+.mgt-app-shell .game-power-value {
+color:#f6d77d; font-size:25px; font-weight:950; letter-spacing:-.035em; text-shadow:0 1px 8px rgba(243,207,107,.13);
+}
+.mgt-app-shell .game-power-hint {
+width:100%; color:#b0a993; font-size:9px;
+}
+.mgt-app-shell .game-stat-tile {
+display:grid; gap:5px; min-width:0; padding:9px 10px;
+    border:1px solid #3d465e; border-radius:7px; background:#1a2234;
+}
+.mgt-app-shell .game-stat-name {
+color:#919db8; font-size:9px; font-weight:800;
+}
+.mgt-app-shell .game-stat-number {
+color:#e4e7f1; font-size:12px; font-weight:900; overflow-wrap:anywhere;
+}
+.mgt-app-shell .game-selected-build-window>.game-window-title {
+margin-bottom:12px;
+}
+.mgt-app-shell .equipment-game-slot {
+position:relative; display:flex; min-width:0; min-height:116px; flex-direction:column;
+    align-items:center; gap:5px; padding:7px 5px; border:1px solid #515d77;
+    border-radius:7px; background:linear-gradient(145deg,#303a52,#202a40);
+}
+.mgt-app-shell .equipment-game-slot[data-slot="hat"] {
+grid-area:hat;
+}
+.mgt-app-shell .equipment-game-slot[data-slot="face"] {
+grid-area:face;
+}
+.mgt-app-shell .equipment-game-slot[data-slot="eye"] {
+grid-area:eye;
+}
+.mgt-app-shell .equipment-game-slot[data-slot="ear"] {
+grid-area:ear;
+}
+.mgt-app-shell .equipment-game-slot[data-slot="ring4"] {
+grid-area:ring4;
+}
+.mgt-app-shell .equipment-game-slot[data-slot="ring3"] {
+grid-area:ring3;
+}
+.mgt-app-shell .equipment-game-slot[data-slot="pendant1"] {
+grid-area:pendant1;
+}
+.mgt-app-shell .equipment-game-slot[data-slot="top"] {
+grid-area:top;
+}
+.mgt-app-shell .equipment-game-slot[data-slot="shoulder"] {
+grid-area:shoulder;
+}
+.mgt-app-shell .equipment-game-slot[data-slot="pendant2"] {
+grid-area:pendant2;
+}
+.mgt-app-shell .equipment-game-slot[data-slot="ring2"] {
+grid-area:ring2;
+}
+.mgt-app-shell .equipment-game-slot[data-slot="ring1"] {
+grid-area:ring1;
+}
+.mgt-app-shell .equipment-game-slot[data-slot="belt"] {
+grid-area:belt;
+}
+.mgt-app-shell .equipment-game-slot[data-slot="bottom"] {
+grid-area:bottom;
+}
+.mgt-app-shell .equipment-game-slot[data-slot="weapon"] {
+grid-area:weapon;
+}
+.mgt-app-shell .equipment-game-slot[data-slot="cape"] {
+grid-area:cape;
+}
+.mgt-app-shell .equipment-game-slot[data-slot="subweapon"] {
+grid-area:subweapon;
+}
+.mgt-app-shell .equipment-game-slot[data-slot="emblem"] {
+grid-area:emblem;
+}
+.mgt-app-shell .equipment-game-slot[data-slot="pocket"] {
+grid-area:pocket;
+}
+.mgt-app-shell .equipment-game-slot[data-slot="shoes"] {
+grid-area:shoes;
+}
+.mgt-app-shell .equipment-game-slot[data-slot="gloves"] {
+grid-area:gloves;
+}
+.mgt-app-shell .equipment-game-slot[data-slot="badge"] {
+grid-area:badge;
+}
+.mgt-app-shell .equipment-game-slot[data-slot="medal"] {
+grid-area:medal;
+}
+.mgt-app-shell .equipment-game-slot[data-slot="heart"] {
+grid-area:heart;
+}
+.mgt-app-shell .equipment-game-slot.is-equipped {
+border-color:#71694e; box-shadow:inset 0 0 0 1px rgba(241,207,128,.06);
+}
+.mgt-app-shell .equipment-game-slot.is-empty {
+opacity:.58;
+}
+.mgt-app-shell .equipment-game-slot:hover,
+.mgt-app-shell .equipment-game-slot:focus {
+z-index:8; border-color:#e3c778; box-shadow:0 0 0 1px rgba(227,199,120,.4),0 7px 18px rgba(0,0,0,.3); outline:none;
+}
+.mgt-app-shell .equipment-slot-caption {
+color:#9ca9c1; font-size:9px; font-weight:800;
+}
+.mgt-app-shell .equipment-game-icon-frame {
+display:flex; align-items:center; justify-content:center; width:54px; height:54px;
+    border:1px solid #67718a; border-radius:6px; background:radial-gradient(circle at 50% 25%,#46516c,#222c43 75%);
+}
+.mgt-app-shell .equipment-game-icon-frame img {
+width:46px; height:46px; object-fit:contain;
+}
+.mgt-app-shell .equipment-game-item-name {
+display:-webkit-box; max-width:100%; overflow:hidden; color:#e0d9c5; font-size:9px;
+    font-weight:850; line-height:1.3; text-align:center; overflow-wrap:anywhere;
+    -webkit-line-clamp:2; -webkit-box-orient:vertical;
+}
+.mgt-app-shell .equipment-game-item-name.is-empty {
+color:#7c879d;
+}
+.mgt-app-shell .equipment-game-star {
+color:#f6d577; font-size:10px; font-weight:950;
+}
+.mgt-app-shell .equipment-game-slot[data-slot="ring3"] .equipment-game-tooltip,
+.mgt-app-shell .equipment-game-slot[data-slot="ring1"] .equipment-game-tooltip,
+.mgt-app-shell .equipment-game-slot[data-slot="emblem"] .equipment-game-tooltip,
+.mgt-app-shell .equipment-game-slot[data-slot="badge"] .equipment-game-tooltip,
+.mgt-app-shell .equipment-game-slot[data-slot="pocket"] .equipment-game-tooltip,
+.mgt-app-shell .equipment-game-slot[data-slot="medal"] .equipment-game-tooltip,
+.mgt-app-shell .equipment-game-slot[data-slot="heart"] .equipment-game-tooltip {
+left:auto; right:calc(100% + 10px);
+}
+.mgt-app-shell .equipment-game-slot:hover,
+.mgt-app-shell .equipment-game-slot:focus {
+z-index:120;
+}
+.mgt-app-shell .equipment-game-slot:hover .equipment-game-tooltip,
+.mgt-app-shell .equipment-game-slot:focus .equipment-game-tooltip {
+display:block;
+}
+.mgt-app-shell .game-set-effects {
+padding:13px; border:1px solid #414963; border-radius:12px; background:#20283b;
+}
+.mgt-app-shell .game-set-effects>.game-window-title {
+margin:0 0 9px;
+}
+.mgt-app-shell .game-set-item {
+display:grid; gap:6px; padding:9px 10px; border:1px solid #48536d; border-radius:7px; color:#d8dceb; background:#1a2234; font-size:10px;
+}
+.mgt-app-shell .game-set-item>strong {
+color:#f0d88f; font-size:11px;
+}
+.mgt-app-shell .game-set-unavailable {
+margin:0; color:#9da9c2; font-size:10px; line-height:1.55;
+}
+.mgt-app-shell .game-symbol-window,
+.mgt-app-shell .game-link-window {
+padding:15px; border:1px solid #414963; border-radius:13px; background:#1a2234;
+}
+.mgt-app-shell .game-union-champion-card:hover>.game-champion-hover-tooltip {
+display:block;
+}
+.mgt-app-shell .game-sixth-skill-tile,
+.mgt-app-shell .game-hexa-tile,
+.mgt-app-shell .game-link-tile {
+position:relative;
+}
+.mgt-app-shell .game-sixth-skill-tile:hover,
+.mgt-app-shell .game-hexa-tile:hover,
+.mgt-app-shell .game-link-tile:hover {
+z-index:130;
+}
+.mgt-app-shell .game-symbol-tile {
+display:grid; justify-items:center; gap:5px; min-width:0; padding:11px 6px;
+    border:1px solid #3f4a65; border-radius:9px; background:linear-gradient(145deg,#29334b,#1b2438); text-align:center;
+}
+.mgt-app-shell .game-symbol-name {
+color:#dce0ec; font-size:10px; font-weight:900;
+}
+.mgt-app-shell .game-symbol-level {
+color:#f0d37a; font-size:12px; font-weight:950;
+}
+.mgt-app-shell .game-symbol-force {
+color:#8f9db7; font-size:9px;
+}
+.mgt-app-shell .game-sixth-skill-tile {
+display:grid; justify-items:center; gap:6px; min-width:0; padding:12px 8px;
+    border:1px solid #4a5570; border-radius:9px; background:#1b2437; text-align:center;
+}
+.mgt-app-shell .game-sixth-skill-name {
+color:#e3e3ef; font-size:10px; font-weight:900; line-height:1.4;
+}
+.mgt-app-shell .game-sixth-skill-level {
+color:#f0d37a; font-size:10px; font-weight:950;
+}
+.mgt-app-shell .game-hexa-tile {
+display:grid; gap:4px; min-width:0; padding:9px 10px; border:1px solid #424d67; border-radius:7px; background:#1b2437;
+}
+.mgt-app-shell .game-hexa-name {
+color:#dfe2ee; font-size:10px; font-weight:900; overflow-wrap:anywhere;
+}
+.mgt-app-shell .game-hexa-level {
+color:#f0d37a; font-size:10px; font-weight:850;
+}
+.mgt-app-shell .game-link-tile {
+display:grid; justify-items:center; gap:6px; min-width:0; padding:11px 7px; border:1px solid #424e69; border-radius:8px; background:#202a40; text-align:center;
+}
+.mgt-app-shell .game-link-name {
+color:#dde1ee; font-size:9px; font-weight:850; line-height:1.35;
+}
+.mgt-app-shell .game-link-level {
+color:#f0d37a; font-size:9px; font-weight:900;
+}
+.mgt-app-shell .game-union-stat {
+display:grid; gap:5px; padding:10px; border:1px solid #3e4962; border-radius:8px; background:#1a2234;
+}
+.mgt-app-shell .game-union-stat span {
+color:#9da9c2; font-size:9px;
+}
+.mgt-app-shell .game-union-stat strong {
+color:#e4e4ef; font-size:12px;
+}
+@media (max-width:620px) {
+.mgt-app-shell .character-details-section {
+padding:15px 11px;
+}
+.mgt-app-shell .detail-tabs {
+display:grid; grid-template-columns:repeat(3,minmax(0,1fr));
+}
+.mgt-app-shell .detail-tab {
+min-width:0; padding:0 5px; font-size:10px;
+}
+}
+.mgt-app-shell artifact crystals and champion roster */
+.game-union-window {
+display:grid; gap:14px; min-width:0;
+}
+.mgt-app-shell .game-union-window>section {
+min-width:0; padding:17px; border:1px solid #414963; border-radius:13px;
+    background:linear-gradient(145deg,rgba(35,43,63,.98),rgba(25,32,49,.98));
+    box-shadow:inset 0 1px rgba(255,255,255,.035),0 5px 15px rgba(0,0,0,.12);
+}
+.mgt-app-shell .game-union-section-heading {
+display:flex; align-items:center; gap:10px; margin-bottom:13px;
+}
+.mgt-app-shell .game-union-section-heading .game-window-title {
+margin-left:auto;
+}
+.mgt-app-shell .game-union-stat {
+min-width:0; display:grid; gap:5px; padding:11px; border:1px solid #414c66; border-radius:8px; background:#1a2234;
+}
+.mgt-app-shell .game-union-stat span {
+color:#9da9c2; font-size:10px;
+}
+.mgt-app-shell .game-union-stat strong {
+color:#e7e8f2; font-size:13px; overflow-wrap:anywhere;
+}
+.mgt-app-shell .game-union-point-card {
+display:grid; gap:4px; min-width:145px; padding:9px 12px; border:1px solid #625b80; border-radius:8px; background:#282a42;
+}
+.mgt-app-shell .game-union-point-card span {
+color:#a9a9c6; font-size:9px; font-weight:800;
+}
+.mgt-app-shell .game-union-point-card strong {
+color:#e8dcff; font-size:16px; font-weight:950;
+}
+.mgt-app-shell .game-union-state-stat {
+display:grid; grid-template-columns:28px minmax(0,1fr) auto; align-items:center; gap:8px; min-width:0; padding:10px 11px; border:1px solid #3e4a65; border-radius:8px; background:linear-gradient(130deg,#202a40,#1a2337);
+}
+.mgt-app-shell .game-union-state-index {
+display:grid; place-items:center; width:25px; height:25px; border-radius:6px; color:#a9a1d9; background:#343351; font-size:9px; font-weight:900;
+}
+.mgt-app-shell .game-union-state-name {
+color:#dce2f0; font-size:10px; line-height:1.45; overflow-wrap:anywhere;
+}
+.mgt-app-shell .game-union-subtitle {
+margin:0 0 10px; color:#c9c8e2; font-size:11px; font-weight:900;
+}
+.mgt-app-shell .game-union-crystal {
+min-width:0; padding:11px; border:1px solid #49536d; border-radius:9px; background:linear-gradient(145deg,#232d43,#1a2235);
+}
+.mgt-app-shell .game-union-crystal-order {
+display:grid; place-items:center; flex:none; width:23px; height:23px; border:1px solid #756c9d; border-radius:6px; color:#eee7ff; background:#34314e; font-size:9px; font-weight:950; font-variant-numeric:tabular-nums;
+}
+.mgt-app-shell .game-union-crystal-name {
+min-width:0; color:#efe1b8; font-size:11px; font-weight:900; overflow-wrap:anywhere;
+}
+.mgt-app-shell .game-union-crystal-status {
+display:inline-flex; margin-top:9px; padding:4px 7px; border-radius:5px; font-size:9px; font-weight:850;
+}
+.mgt-app-shell .game-union-crystal-status.is-valid {
+color:#a8e0bb; background:#243e36;
+}
+.mgt-app-shell .game-union-crystal-status.is-expired {
+color:#e5b4a8; background:#48332f;
+}
+.mgt-app-shell .game-union-crystal-option {
+padding:5px 7px; border:1px solid #3e4a64; border-radius:5px; color:#cbd4e5; background:#1a2336; font-size:9px; line-height:1.4;
+}
+.mgt-app-shell .game-union-grade-badge {
+display:inline-grid; place-items:center; min-width:32px; height:24px; padding:0 7px; border:1px solid #897eaa; border-radius:6px; color:#e8ddff; background:linear-gradient(135deg,#5d507e,#332e4f); font-size:10px; font-weight:950;
+}
+.mgt-app-shell .game-union-grade-badge.grade-sss {
+border-color:#dbb65f; color:#ffe6a3; background:linear-gradient(135deg,#80612e,#44351f);
+}
+.mgt-app-shell .game-union-grade-badge.grade-ss {
+border-color:#b5a4e7; color:#eee4ff; background:linear-gradient(135deg,#66568c,#39324f);
+}
+.mgt-app-shell .game-union-grade-badge.grade-s {
+border-color:#83a9d4; color:#d9edff; background:linear-gradient(135deg,#425f83,#293a51);
+}
+.mgt-app-shell .game-union-grade-badge.grade-a {
+border-color:#7dba9a; color:#d9ffea; background:linear-gradient(135deg,#37674e,#233d31);
+}
+.mgt-app-shell .game-union-grade-badge.grade-b {
+border-color:#9aa8ba; color:#e1e8f2; background:linear-gradient(135deg,#566273,#303a49);
+}
+.mgt-app-shell .game-union-champion-avatar {
+width:100%; height:100%; object-fit:contain;
+}
+.mgt-app-shell .game-union-champion-card>.game-champion-hover-tooltip {
+top:calc(100% + 8px); bottom:auto; left:50%; transform:translateX(-50%); width:290px;
+}
+.mgt-app-shell .game-union-champion-card:hover {
+z-index:140; border-color:#bda96e;
+}
+.mgt-app-shell .game-union-champion-card-head {
+display:flex; align-items:center; justify-content:space-between; gap:8px; margin-bottom:9px;
+}
+.mgt-app-shell .game-union-champion-slot {
+color:#8794ad; font-size:9px; font-weight:800; letter-spacing:.08em;
+}
+.mgt-app-shell .game-union-champion-name {
+display:block; color:#e5e7f0; font-size:12px; font-weight:900; overflow-wrap:anywhere;
+}
+.mgt-app-shell .game-union-champion-class {
+display:block; margin-top:4px; color:#a6afc4; font-size:10px;
+}
+.mgt-app-shell .game-union-champion-badges {
+display:grid; gap:5px; margin-top:10px;
+}
+.mgt-app-shell .game-union-champion-total {
+margin-top:13px; padding-top:12px; border-top:1px solid rgba(255,255,255,.1);
+}
+.mgt-app-shell .game-union-champion-total-list {
+display:flex; flex-wrap:wrap; gap:6px;
+}
+.mgt-app-shell .game-set-effects-center>.game-window-title {
+margin:0; font-size:14px;
+}
+.mgt-app-shell .game-set-effects-center .game-set-item {
+min-width:0; padding:8px; border:1px solid #46536d; border-radius:7px; background:rgba(255,255,255,.035);
+}
+.mgt-app-shell .game-union-champion-card-head {
+width:100%;
+}
+@media (max-width:760px) {
+.mgt-app-shell .game-set-effects-center .game-set-item {
+padding:5px;
+}
+}
+.mgt-app-shell .game-equipment-layout>.game-set-effects {
+margin-top:12px; padding:12px 14px; border:1px solid #414963;
+    border-radius:12px; background:#20283b;
+}
+.mgt-app-shell .game-equipment-layout>.game-set-effects>.game-window-title {
+margin:0 0 9px;
+}
+.mgt-app-shell .game-equipment-layout>.game-set-effects .game-set-item {
+display:flex; align-items:center; justify-content:space-between; gap:8px;
+    padding:8px 10px; border:1px solid #46536d; border-radius:7px;
+    background:rgba(255,255,255,.035); font-size:11px;
+}
+.mgt-app-shell .game-stat-detail-card {
+margin-top:12px; padding:13px; border:1px solid #414963; border-radius:11px;
+    background:linear-gradient(145deg,#232d43,#1a2235);
+}
+.mgt-app-shell .game-stat-detail-card>.game-window-title {
+margin:0 0 8px;
+}
+.mgt-app-shell .game-stat-detail-name {
+color:#aebbd1; font-size:11px;
+}
+.mgt-app-shell .game-stat-detail-value {
+color:#edf2fb; font-size:11px; text-align:right;
+}
+.mgt-app-shell .game-hyper-stat-item {
+display:grid; grid-template-columns:1fr auto; gap:3px 8px; padding:8px 10px;
+    border:1px solid #3f4b65; border-radius:7px; background:#1a2336;
+}
+.mgt-app-shell .game-hyper-stat-name {
+color:#cbd5e5; font-size:10px;
+}
+.mgt-app-shell .game-union-champion-card-head {
+grid-column:1/-1; margin:0;
+}
+.mgt-app-shell .game-union-champion-name,
+.mgt-app-shell .game-union-champion-class {
+grid-column:2;
+}
+.mgt-app-shell .game-union-champion-name {
+align-self:end; font-size:13px;
+}
+.mgt-app-shell .game-union-champion-class {
+align-self:start; margin-top:-2px;
+}
+.mgt-app-shell .game-union-champion-badges {
+grid-column:1/-1; display:flex; flex-wrap:wrap; gap:5px; margin-top:2px;
+}
+.mgt-app-shell .game-union-champion-card>.game-champion-hover-tooltip {
+grid-column:1/-1;
+}
+.mgt-app-shell .character-details-section {
+overflow:hidden;
+}
+.mgt-app-shell .detail-tabs {
+min-width:0;
+}
+.mgt-app-shell .detail-tab {
+min-width:0; white-space:normal; overflow-wrap:anywhere;
+}
+.mgt-app-shell .game-union-crystal,
+.mgt-app-shell .game-stat-detail-card {
+min-width:0;
+}
+@media (max-width:760px) {
+.mgt-app-shell .character-details-section {
+padding:15px 12px;
+}
+.mgt-app-shell .character-details-header {
+gap:10px;
+}
+.mgt-app-shell .character-details-header .export-button {
+width:auto; max-width:100%;
+}
+.mgt-app-shell .detail-tabs {
+display:flex; gap:6px; overflow-x:auto; overscroll-behavior-x:contain;
+        padding:2px 1px 8px; scrollbar-width:thin;
+}
+.mgt-app-shell .detail-tab {
+flex:0 0 auto; min-width:92px; min-height:40px; padding:0 12px;
+}
+.mgt-app-shell .equipment-game-icon-frame {
+width:44px; height:44px;
+}
+.mgt-app-shell .equipment-game-icon-frame img {
+width:38px; height:38px;
+}
+.mgt-app-shell .equipment-game-item-name {
+font-size:10px;
+}
+.mgt-app-shell .game-symbol-tile {
+min-width:0; padding:9px;
+}
+.mgt-app-shell .game-set-item {
+min-width:0;
+}
+.mgt-app-shell .game-set-item strong,
+.mgt-app-shell .game-set-item span {
+overflow-wrap:anywhere;
+}
+}
+@media (max-width:420px) {
+.mgt-app-shell .character-details-section {
+padding:12px 9px; border-radius:12px;
+}
+.mgt-app-shell .equipment-slot-caption {
+font-size:9px;
+}
+.mgt-app-shell .equipment-game-item-name {
+font-size:9px;
+}
+.mgt-app-shell .equipment-game-star {
+font-size:9px;
+}
+.mgt-app-shell .game-stat-detail-card,
+.mgt-app-shell .game-equipment-layout>section,
+.mgt-app-shell .game-union-window>section {
+padding:11px;
+}
+.mgt-app-shell .game-preset-select {
+max-width:100%;
+}
+}
+@media (hover:none) {
+.mgt-app-shell .equipment-game-slot:hover,
+.mgt-app-shell .equipment-game-slot:focus {
+border-color:#515d77; box-shadow:none;
+}
+.mgt-app-shell .equipment-game-slot:focus-visible {
+border-color:#e3c778; box-shadow:0 0 0 2px rgba(227,199,120,.35);
+}
+}
+.mgt-app-shell /* Follow-up detail-window corrections: preserve compact cards and prevent stacked tabs. */
+.detail-tabs {
+display:flex;
+    flex-wrap:nowrap !important;
+    overflow-x:auto;
+    overscroll-behavior-x:contain;
+    scrollbar-width:thin;
+}
+.mgt-app-shell .detail-tab {
+flex:0 0 auto;
+    white-space:nowrap;
+    overflow-wrap:normal;
+}
+.mgt-app-shell .game-stat-extra-grid .game-stat-detail-card {
+min-width:0;
+    margin-top:0;
+    padding:10px;
+}
+.mgt-app-shell .game-stat-extra-grid .game-stat-detail-name,
+.mgt-app-shell .game-stat-extra-grid .game-stat-detail-value {
+font-size:10px;
+}
+.mgt-app-shell .game-sixth-overview-grid {
+display:grid;
+    grid-template-columns:minmax(0,1fr) minmax(0,1fr);
+    gap:10px;
+    margin-top:12px;
+}
+.mgt-app-shell .game-sixth-subpanel {
+min-width:0;
+    padding:12px;
+    border:1px solid #414963;
+    border-radius:10px;
+    background:rgba(20,28,44,.55);
+}
+.mgt-app-shell .game-sixth-subtitle {
+margin:0;
+    color:#eeeaff;
+    font-size:12px;
+    font-weight:900;
+}
+.mgt-app-shell .game-hexa-stat-columns {
+display:grid;
+    grid-template-columns:repeat(3,minmax(0,1fr));
+    gap:8px;
+    margin-top:8px;
+}
+.mgt-app-shell .game-hexa-stat-column {
+display:grid;
+    align-content:start;
+    gap:7px;
+    min-width:0;
+    padding:8px;
+    border:1px solid #434e68;
+    border-radius:8px;
+    background:#1a2235;
+}
+.mgt-app-shell .game-union-champion-card-head {
+width:100%;
+}
+@media (max-width:760px) {
+.mgt-app-shell .detail-tabs {
+flex-wrap:nowrap !important;
+        width:100%;
+        gap:6px;
+        overflow-x:auto;
+        -webkit-overflow-scrolling:touch;
+        padding:2px 1px 9px;
+}
+.mgt-app-shell .detail-tab {
+flex:0 0 auto !important;
+        width:auto !important;
+        white-space:nowrap;
+}
+.mgt-app-shell .game-sixth-overview-grid {
+grid-template-columns:minmax(0,1fr);
+}
+.mgt-app-shell .game-hexa-stat-columns {
+grid-template-columns:repeat(3,minmax(0,1fr));
+        gap:5px;
+}
+.mgt-app-shell .game-hexa-stat-column {
+padding:5px;
+}
+}
+@media (max-width:420px) {
+.mgt-app-shell .game-hexa-stat-columns {
+grid-template-columns:repeat(3,minmax(0,1fr));
+}
+}
+.mgt-app-shell .game-hexa-stat-option-name {
+min-width:0;
+    color:#cbd5e5;
+    font-size:10px;
+    overflow-wrap:anywhere;
+}
+.mgt-app-shell .game-hexa-stat-option-level {
+flex:none; color:#f0d28b; font-size:10px;
+}
+@media (max-width:760px) {
+.mgt-app-shell .game-union-crystal {
+min-width:0; padding:7px 5px;
+}
+.mgt-app-shell .game-union-crystal-name,
+.mgt-app-shell .game-union-champion-name {
+overflow-wrap:anywhere;
+}
+}

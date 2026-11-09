@@ -41,3 +41,18 @@ test("React browser storage access stays inside the storage module", () => {
 
   assert.deepEqual(offenders, []);
 });
+
+
+test("React JSX legacy class styles remain available in the React compatibility stylesheet", async () => {
+  const css = readFileSync(join(projectRoot, "frontend", "src", "styles", "react-compat.css"), "utf8");
+  for (const selector of [
+    ".mgt-app-shell .section-title",
+    ".mgt-app-shell .growth-goal-card",
+    ".mgt-app-shell .game-equipment-layout",
+    ".mgt-app-shell .detail-notice",
+    ".mgt-app-shell .ai-analysis-card",
+    ".mgt-app-shell .history-table",
+  ]) {
+    assert.ok(css.includes(selector), `Missing React compatibility selector: ${selector}`);
+  }
+});
