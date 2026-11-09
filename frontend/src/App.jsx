@@ -314,7 +314,7 @@ function App() {
         <nav className="mgt-nav" aria-label="주요 메뉴">
           {view === "admin" ? <a href="#/" onClick={event=>{event.preventDefault();closeAdmin();}}>개요</a> : <>
             <a href="#/" aria-current={view === "overview" ? "page" : undefined}>개요</a>
-            <div className="mgt-nav-dropdown">
+            <div className="mgt-nav-dropdown mgt-nav-dropdown--growth">
               <a href="#/growth" aria-current={view === "growth" ? "page" : undefined} onClick={event => event.currentTarget.blur()}>성장 분석</a>
               <div className="mgt-nav-submenu">
                 <a href="#/growth?section=summary" onClick={event => event.currentTarget.blur()}>성장 요약</a>
@@ -324,7 +324,7 @@ function App() {
                 <a href="#/growth?section=goal" onClick={event => event.currentTarget.blur()}>목표 레벨</a>
               </div>
             </div>
-            <div className="mgt-nav-dropdown">
+            <div className="mgt-nav-dropdown mgt-nav-dropdown--details">
               <a href="#/details" aria-current={view === "details" ? "page" : undefined} onClick={event => event.currentTarget.blur()}>캐릭터 상세</a>
               <div className="mgt-nav-submenu">
                 {[
