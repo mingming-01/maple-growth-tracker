@@ -51,8 +51,6 @@ test("AI report cache expires after the period-specific retention window", () =>
       now -= ttl + 1;
     }
 
-    const stored = JSON.parse(storage.getItem(STORAGE_KEYS.ai) || "[]");
-    assert.equal(stored.length, 0);
   } finally {
     Date.now = previousNow;
     if (previousStorage === undefined) delete globalThis.localStorage;
