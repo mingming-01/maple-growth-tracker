@@ -1321,7 +1321,7 @@ min-width:0; padding:11px; border:1px solid #49536d; border-radius:9px; backgrou
 }
 
 /* Restore the original three-column artifact crystal card board in React. */
-.mgt-app-shell .game-union-crystal-grid {
+.mgt-app-shell .character-details-section .game-union-crystal-grid {
 display:grid !important;
 grid-template-columns:repeat(3,minmax(0,1fr)) !important;
 align-items:stretch;
@@ -1659,7 +1659,7 @@ overflow-wrap:anywhere;
 /* Keep the crystal board three columns while improving panel separation. */
 @media (max-width:760px) {
 .mgt-app-shell .game-union-window { gap:16px; }
-.mgt-app-shell .game-union-crystal-grid {
+.mgt-app-shell .character-details-section .game-union-crystal-grid {
 grid-template-columns:repeat(3,minmax(0,1fr)) !important;
 gap:6px;
 }
@@ -1669,7 +1669,7 @@ gap:6px;
 .mgt-app-shell .game-union-crystal-monster { width:32px; height:32px; }
 }
 @media (max-width:420px) {
-.mgt-app-shell .game-union-crystal-grid {
+.mgt-app-shell .character-details-section .game-union-crystal-grid {
 grid-template-columns:repeat(3,minmax(0,1fr)) !important;
 gap:5px;
 }
