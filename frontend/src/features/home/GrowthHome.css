@@ -145,3 +145,6 @@
   .mgt-growth-route-nav a { min-height:34px; padding:0 9px; font-size:10px; }
   .mgt-growth-page-heading { padding:18px; }
 }
+
+
+.mgt-growth-dashboard [id^="growth-"] { scroll-margin-top: 92px; }
