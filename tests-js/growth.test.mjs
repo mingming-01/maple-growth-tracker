@@ -11,7 +11,7 @@ import {
     calculateWeeklyGrowth,
     getDailyGrowth,
     getRankingChange
-} from "../static/js/growth.js";
+} from "../frontend/src/lib/growth.js";
 
 test("average growth includes positive, zero and negative observed changes", () => {
     const history = [
