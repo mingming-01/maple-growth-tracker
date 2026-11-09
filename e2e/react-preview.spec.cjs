@@ -594,6 +594,13 @@ test("React character details exposes all migrated tabs and loads each section o
   await initialStatsResponse;
   const detailTabs = page.getByLabel("캐릭터 상세 정보 구분");
   await expect(detailTabs.getByRole("tab", { name: "스탯" })).toHaveAttribute("aria-selected", "true");
+  await page.setViewportSize({ width: 390, height: 844 });
+  const tabLayout = await detailTabs.evaluate(element => ({
+    flexWrap: getComputedStyle(element).flexWrap,
+    childTops: [...element.children].map(child => Math.round(child.getBoundingClientRect().top))
+  }));
+  expect(tabLayout.flexWrap).toBe("nowrap");
+  expect(new Set(tabLayout.childTops).size).toBe(1);
 
   const tabs = [
     ["장비", "equipment"],
