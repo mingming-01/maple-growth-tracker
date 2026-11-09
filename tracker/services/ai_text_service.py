@@ -137,8 +137,10 @@ def sanitize_ai_text(value, expected_date=None):
         flags=re.I,
     )
     text = re.sub(
-        r"\(?\s*(?:\d{1,3}(?:,\d{3}){2,}|\d{10,})(?:\.\d+)?\s*\)?",
-        lambda match: _format_experience_amount(match.group(0).strip(" ()")),
+        r"(\(?\s*)(\d{1,3}(?:,\d{3}){2,}|\d{10,})(?:\.\d+)?(\s*\)?)",
+        lambda match: (
+            f"{match.group(1)}{_format_experience_amount(match.group(2))}{match.group(3)}"
+        ),
         text,
     )
     if expected_date:
