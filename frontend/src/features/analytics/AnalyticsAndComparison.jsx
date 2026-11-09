@@ -159,11 +159,11 @@ export function AIReport({ character, history, analysisHistory = history, period
         {growthInsights?.basis && <div className="ai-analysis-evidence" id="aiAnalysisEvidence" data-testid="ai-analysis-evidence">
           <strong>AI 분석 기준 및 데이터 충실도</strong>
           <div className="ai-analysis-evidence-grid">
-            <span>기준일 <b>{growthInsights.basis.referenceDate || "자료 없음"}</b></span>
-            <span>확인된 기록 <b>{growthInsights.basis.availableSnapshots ?? 0} / {growthInsights.basis.expectedSnapshots ?? 0}일</b></span>
-            <span>데이터 충실도 <b>{growthInsights.basis.dataQualityLabel || "자료 부족"} · {Number.isFinite(Number(growthInsights.basis.coveragePercent)) ? Number(growthInsights.basis.coveragePercent).toFixed(1) + "%" : "자료 부족"}</b></span>
-            {growthInsights.weekOverWeek?.status === "available" && <span>전주 대비 일일 평균 성장량 <b>{Number(growthInsights.weekOverWeek.averageDailyGrowthChangePercent).toFixed(1)}%</b></span>}
-            {growthInsights.weekdayWeekend?.status === "available" && <span>주말 성장 비중 <b>{Number(growthInsights.weekdayWeekend.weekendSharePercent).toFixed(1)}%</b></span>}
+            <div className="ai-analysis-evidence-item"><span>기준일</span><strong>{(growthInsights.basis.referenceDate || "자료 없음").replaceAll("-", ".")}</strong></div>
+            <div className="ai-analysis-evidence-item"><span>확인된 기록</span><strong>{growthInsights.basis.availableSnapshots ?? 0} / {growthInsights.basis.expectedSnapshots ?? 0}일</strong></div>
+            <div className="ai-analysis-evidence-item"><span>데이터 충실도</span><strong>{growthInsights.basis.dataQualityLabel || "자료 부족"} · {Number.isFinite(Number(growthInsights.basis.coveragePercent)) ? Number(growthInsights.basis.coveragePercent).toFixed(1) + "%" : "자료 부족"}</strong></div>
+            {growthInsights.weekOverWeek?.status === "available" && <div className="ai-analysis-evidence-item"><span>전주 대비 일일 평균 성장량</span><strong>{Number(growthInsights.weekOverWeek.averageDailyGrowthChangePercent).toFixed(1)}%</strong></div>}
+            {growthInsights.weekdayWeekend?.status === "available" && <div className="ai-analysis-evidence-item"><span>주말 성장 비중</span><strong>{Number(growthInsights.weekdayWeekend.weekendSharePercent).toFixed(1)}%</strong></div>}
           </div>
         </div>}
         {periodDays > 7 && periodSummary && <div className="ai-analysis-period-evidence" data-testid="ai-analysis-period-evidence">
