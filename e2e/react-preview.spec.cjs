@@ -223,13 +223,13 @@ test("React hash routes support direct entry, reload, and browser back/forward n
   await page.getByRole("button", { name: /캐릭터 조회/ }).click();
   await expect(page.getByRole("heading", { name: "라우트테스트" })).toBeVisible();
 
-  await page.locator('.mgt-nav-dropdown').filter({ has: page.getByRole("link", { name: "캐릭터 상세" }) })
+  await page.locator('.mgt-nav-dropdown').nth(1)
     .getByRole("button", { name: "캐릭터 상세 하위 메뉴" }).click();
   await page.getByRole("link", { name: "장비", exact: true }).last().click();
   await expect(page).toHaveURL(/#\/details\?tab=equipment$/);
   await expect(page.locator('[data-detail-tab="equipment"]')).toHaveAttribute("aria-selected", "true");
 
-  await page.locator('.mgt-nav-dropdown').filter({ has: page.getByRole("link", { name: "성장 분석" }) })
+  await page.locator('.mgt-nav-dropdown').nth(0)
     .getByRole("button", { name: "성장 분석 하위 메뉴" }).click();
   await page.getByRole("link", { name: "성장 추이", exact: true }).last().click();
   await expect(page).toHaveURL(/#\/growth\?section=trend$/);
