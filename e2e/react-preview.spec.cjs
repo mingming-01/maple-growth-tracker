@@ -408,7 +408,9 @@ test("30-day AI report reuses cache without automatic LLM calls and only regener
   await page.getByLabel("캐릭터명").fill("기간캐시테스트");
   await page.getByRole("button", { name: /캐릭터 조회/ }).click();
   await expect(page.getByRole("heading", { name: "기간캐시테스트" })).toBeVisible();
-  // The AI page is lazy-mounted; opening the 7-day report is the first LLM request.
+  // Opening the 7-day report checks only the local cache; it must not call the AI provider.
+  await page.locator('.mgt-nav a[href="#/analytics"]').click();
+  await expect(page.getByTestId("ai-analysis-empty")).toContainText("AI 분석 시작");
   expect(aiCalls).toBe(0);
 
   await page.locator('.mgt-nav a[href="#/growth"]').click();
@@ -423,16 +425,26 @@ test("30-day AI report reuses cache without automatic LLM calls and only regener
   await expect(page.locator("#history .history-table tbody tr").first()).toContainText("2026.11.06");
 
   await page.locator('.mgt-nav a[href="#/analytics"]').click();
-  await page.getByRole("button", { name: "AI 다시 분석" }).click();
+  await page.getByRole("button", { name: "AI 분석 시작" }).click();
   await expect(page.getByText("기간 분석 테스트 결과입니다.")).toBeVisible();
   expect(aiCalls).toBe(1);
   expect(submittedPayload.analysisContext.periodDays).toBe(30);
-  expect(submittedPayload.forceRefresh).toBe(true);
+  expect(submittedPayload.forceRefresh).toBe(false);
   expect(submittedPayload.history).toHaveLength(30);
 
   await page.reload();
   await expect(page.getByText("기간 분석 테스트 결과입니다.")).toBeVisible();
   expect(aiCalls).toBe(1);
+
+  // Changing the period on the AI page updates the same shared period used by Growth.
+  await page.locator('.mgt-nav a[href="#/analytics"]').click();
+  await page.getByLabel("AI 분석 기간").selectOption("90");
+  await expect(aiReportSection.locator(".section-description")).toContainText("선택한 90일");
+  expect(aiCalls).toBe(1);
+  await page.locator('.mgt-nav a[href="#/history"]').click();
+  await expect(page.locator("#history .history-table tbody tr")).toHaveCount(90);
+  await page.locator('.mgt-nav a[href="#/growth"]').click();
+  await expect(page.locator(".history-range-control select")).toHaveValue("90");
 
   await page.locator('.mgt-nav a[href="#/growth"]').click();
   await page.locator(".history-range-control select").selectOption("7");
