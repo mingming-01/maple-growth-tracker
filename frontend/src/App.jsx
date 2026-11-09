@@ -3,6 +3,7 @@ import { getCharacter, getHistory } from "./services/api.js";
 import AdminDashboard from "./components/admin/AdminDashboard.jsx";
 import FavoriteCharacters from "./features/home/FavoriteCharacters.jsx";
 import GrowthHome from "./features/home/GrowthHome.jsx";
+import { loadGrowthPeriod } from "./features/growth/GrowthDashboard.jsx";
 import {
   readTrackerState,
   saveTrackerState,
@@ -121,6 +122,31 @@ function App() {
       return next;
     });
   },[]);
+
+  async function selectAnalysisPeriod(value) {
+    const days = [7, 30, 90].includes(Number(value)) ? Number(value) : 7;
+    if (days === 7) {
+      const next = { days: 7, history: history || [], summary: null };
+      setAnalysisPeriod(next);
+      saveTrackerState({
+        historyRange: 7,
+        displayHistory: history || [],
+        historyRangeStatus: null,
+        periodSummary: null
+      });
+      return next;
+    }
+    const loaded = await loadGrowthPeriod(character, days);
+    const next = { days, history: loaded.history, summary: loaded.summary };
+    setAnalysisPeriod(next);
+    saveTrackerState({
+      historyRange: days,
+      displayHistory: loaded.history,
+      historyRangeStatus: loaded.rangeStatus,
+      periodSummary: loaded.summary
+    });
+    return next;
+  }
 
   async function searchName(query, { refresh = false } = {}) {
     const target = String(query || "").trim();
@@ -377,6 +403,7 @@ function App() {
                 onStatsLoaded={onStatsLoaded}
                 onHistoryChange={setHistory}
                 onAnalysisPeriodChange={setAnalysisPeriod}
+                onAnalysisPeriodSelect={selectAnalysisPeriod}
                 onPersist={persistPatch}
                 analysisPeriod={analysisPeriod}
                 comparisonState={comparisonState}
