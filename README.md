@@ -427,13 +427,12 @@ pip install -r requirements.txt && npm --prefix frontend install --no-audit --no
 ```
 
 - 빌드 산출물은 `static/react-preview/`에 생성됩니다.
-- 빌드 산출물이 존재하면 `/`에서 React 화면을 제공합니다.
-- 빌드 산출물이 아직 없으면 `/`는 기존 Flask 화면으로 자동 폴백합니다. 빌드 누락만으로 운영 메인 페이지가 빈 화면이 되지 않도록 한 안전장치입니다.
-- 기존 Vanilla JS 화면은 `/legacy/`에서 계속 접근할 수 있습니다.
-- `/preview/`는 React 검증용 별도 경로로 유지됩니다.
-- React 빌드의 정적 자산은 `/static/react-preview/`에서 제공하므로 메인 경로와 미리보기 경로에서 동일하게 동작합니다.
+- `/`가 유일한 공개 사용자 화면이며 React 빌드 산출물을 제공합니다.
+- React 빌드가 누락되면 기존 화면으로 폴백하지 않고 HTTP 503으로 배포 설정 오류를 드러냅니다.
+- 이전 Vanilla JS 화면의 `/legacy/` 경로와 React 검증용 `/preview/` 경로는 제거했습니다.
+- React 빌드 자산은 `/static/react-preview/`에서 제공합니다.
 
-Render Build Command 변경 후 재배포하고 `/`, `/preview/`, `/legacy/`를 확인하세요.
+Render Build Command에서 프런트엔드 의존성 설치와 React 빌드를 실행한 뒤 `/`와 관리자 로그인·로그 경로를 확인하세요.
 
 ---
 
