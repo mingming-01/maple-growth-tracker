@@ -683,7 +683,7 @@ test("React AI report preserves its data-evidence explanation across reloads", a
   const evidence = page.getByTestId("ai-analysis-evidence");
   await expect(evidence).toBeVisible();
   await expect(evidence).toContainText("AI 분석 기준 및 데이터 충실도");
-  await expect(evidence).toContainText("2026-11-06");
+  await expect(evidence).toContainText("2026.11.06");
   await expect(evidence).toContainText("10 / 15일");
   await expect(evidence).toContainText("보통 · 66.7%");
   await expect(evidence).toContainText("12.5%");
