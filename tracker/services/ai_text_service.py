@@ -1,25 +1,64 @@
-"""AI 응답을 화면에 전달하기 전 표시 형식과 내부 필드명을 정리한다."""
+"""AI 응답을 화면에 전달하기 전 표시 형식과 문장 품질을 검증한다."""
 import re
 from datetime import date
 
 
+REQUIRED_GROWTH_SECTIONS = (
+    "[성장 패턴]",
+    "[성장 변화]",
+    "[레벨업 분석]",
+    "[성장 전망]",
+    "[AI 코멘트]",
+)
+
+# 도메인 문맥에서 의미가 크게 달라지거나 사용자에게 잘못된 상태를 전달하는 표현.
+INVALID_GROWTH_TERMS = (
+    "경보",
+    "API를 호출",
+    "모델을 호출",
+    "프롬프트",
+    "RESOURCE_EXHAUSTED",
+    "undefined",
+)
+
 
 def validate_growth_report(value):
-    """성장 리포트의 필수 구분과 한국어 출력 여부를 검사한다."""
-    text = str(value or "")
-    required_sections = (
-        "[성장 패턴]",
-        "[성장 변화]",
-        "[레벨업 분석]",
-        "[성장 전망]",
-        "[AI 코멘트]",
-    )
-    if any(section not in text for section in required_sections):
+    """필수 항목·한국어·기본 문장 품질을 검사한다."""
+    text = str(value or "").strip()
+    if not text:
         return False
+
+    positions = [text.find(section) for section in REQUIRED_GROWTH_SECTIONS]
+    if any(position < 0 for position in positions):
+        return False
+    if positions != sorted(positions) or len(set(positions)) != len(positions):
+        return False
+
+    # 모든 항목에 설명이 있어야 하며, 다음 제목 전까지의 본문이 비어 있으면 거부한다.
+    for index, section in enumerate(REQUIRED_GROWTH_SECTIONS):
+        body_start = positions[index] + len(section)
+        body_end = positions[index + 1] if index + 1 < len(positions) else len(text)
+        body = text[body_start:body_end].strip()
+        if len(re.sub(r"[\s.!?…·]", "", body)) < 4:
+            return False
+
     # CJK 한자/가나 문자가 섞인 응답은 그대로 노출하거나 캐시하지 않는다.
     if re.search(r"[\u3400-\u4DBF\u4E00-\u9FFF\uF900-\uFAFF\u3040-\u30FF]", text):
         return False
+    if any(term.casefold() in text.casefold() for term in INVALID_GROWTH_TERMS):
+        return False
+
+    # 같은 문장을 연속으로 반복하는 저품질 응답을 차단한다.
+    sentences = [
+        re.sub(r"\s+", " ", sentence).strip()
+        for sentence in re.split(r"(?<=[.!?])\s+", text)
+        if sentence.strip()
+    ]
+    for previous, current in zip(sentences, sentences[1:]):
+        if len(previous) >= 12 and previous == current:
+            return False
     return True
+
 
 def sanitize_ai_text(value, expected_date=None):
     """모델 응답의 마크다운과 내부 표현을 정리해 일반 문장만 화면에 전달한다."""
@@ -65,15 +104,11 @@ def sanitize_ai_text(value, expected_date=None):
             prediction_date = date.fromisoformat(str(expected_date))
             date_label = f"{prediction_date.month}월 {prediction_date.day}일"
 
-            # Normalize only the actual prediction date. Historical event dates
-            # in the same AI response must remain tied to their source records.
             def normalize_iso_date(match):
                 try:
                     matched_date = date.fromisoformat(match.group(0))
                 except ValueError:
                     return match.group(0)
-                # Keep unrelated historical ISO dates unchanged; only the
-                # exact forecast date receives the Korean display label.
                 return date_label if matched_date == prediction_date else match.group(0)
 
             def normalize_korean_date(match):
@@ -92,21 +127,13 @@ def sanitize_ai_text(value, expected_date=None):
                     else match.group(0)
                 )
 
-            text = re.sub(
-                r"(?<!\d)\d{4}-\d{1,2}-\d{1,2}(?!\d)",
-                normalize_iso_date,
-                text,
-            )
+            text = re.sub(r"(?<!\d)\d{4}-\d{1,2}-\d{1,2}(?!\d)", normalize_iso_date, text)
             text = re.sub(
                 r"\b(\d{4})\s*년\s*(\d{1,2})\s*월\s*(\d{1,2})\s*일",
                 normalize_korean_date,
                 text,
             )
-            text = re.sub(
-                r"\b(\d{1,2})\s*월\s*(\d{1,2})\s*일",
-                normalize_month_day,
-                text,
-            )
+            text = re.sub(r"\b(\d{1,2})\s*월\s*(\d{1,2})\s*일", normalize_month_day, text)
         except (TypeError, ValueError):
             pass
     text = re.sub(r"[*_~\x60]", "", text)

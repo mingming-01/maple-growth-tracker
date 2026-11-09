@@ -17,10 +17,43 @@ async function requestJson(path, options = {}) {
   }
 
   if (!response.ok) {
-    throw new Error(payload.error || "요청을 처리하지 못했습니다. 잠시 후 다시 시도해주세요.");
+    const error = new Error(payload.error || "요청을 처리하지 못했습니다. 잠시 후 다시 시도해주세요.");
+    error.status = response.status;
+    const retryAfter = Number(
+      payload.retryAfterSeconds ?? payload.retryAfter ?? response.headers.get("Retry-After")
+    );
+    if (Number.isFinite(retryAfter) && retryAfter > 0) {
+      error.retryAfterSeconds = Math.ceil(retryAfter);
+      if (response.status === 429) {
+        const totalMinutes = Math.ceil(error.retryAfterSeconds / 60);
+        const hours = Math.floor(totalMinutes / 60);
+        const minutes = totalMinutes % 60;
+        const retryLabel = hours > 0
+          ? (minutes > 0 ? `${hours}시간 ${minutes}분` : `${hours}시간`)
+          : `${Math.max(1, minutes)}분`;
+        error.message += ` (약 ${retryLabel} 후 다시 시도할 수 있습니다.)`;
+      }
+    }
+    throw error;
   }
 
   return payload;
+}
+
+function selectAiMetricsForPeriod(metrics, analysisContext) {
+  const periodDays = Number(analysisContext?.periodDays || 7);
+  if (![30, 90].includes(periodDays)) return metrics;
+
+  // 장기 리포트에는 최근 7일의 집계 지표를 섞지 않고,
+  // 최근 속도 기준 예측과 현재 레벨 진행률만 전달한다.
+  const levelProgress = metrics?.levelProgress || {};
+  return {
+    prediction: metrics?.prediction ?? null,
+    levelProgress: {
+      ...(levelProgress.currentRate !== undefined ? { currentRate: levelProgress.currentRate } : {}),
+      ...(levelProgress.remainingRate !== undefined ? { remainingRate: levelProgress.remainingRate } : {})
+    }
+  };
 }
 
 export function getCharacter(name, { refresh = true, signal } = {}) {
@@ -68,9 +101,10 @@ export function getCharacterDetails(ocid, section, { refresh = false, signal } =
 
 export function postAiAnalysis(name, metrics, history = [], analysisContext = {}, { signal, forceRefresh = false } = {}) {
   const params = new URLSearchParams({ name: String(name || "").trim() });
+  const periodMetrics = selectAiMetricsForPeriod(metrics, analysisContext);
   return requestJson("/api/ai-analysis?" + params.toString(), {
     method: "POST",
-    body: JSON.stringify({ metrics, history, analysisContext, forceRefresh }),
+    body: JSON.stringify({ metrics: periodMetrics, history, analysisContext, forceRefresh }),
     signal
   });
 }

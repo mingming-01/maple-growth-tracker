@@ -29,6 +29,18 @@ def _ai_rate_limit_response():
     return response
 
 
+def _service_error_response(result):
+    """서비스 계층의 공급자 상태를 HTTP 응답에 정확히 반영한다."""
+    payload = dict(result)
+    status_code = payload.pop("statusCode", 502)
+    retry_after = payload.get("retryAfterSeconds")
+    response = jsonify(payload)
+    response.status_code = status_code if isinstance(status_code, int) and 400 <= status_code <= 599 else 502
+    if isinstance(retry_after, int) and retry_after > 0:
+        response.headers["Retry-After"] = str(retry_after)
+    return response
+
+
 @ai_bp.route("/ai-analysis", methods=["GET", "POST"])
 def ai_analysis():
     """캐릭터의 계산된 성장 지표를 바탕으로 AI 성장 리포트를 만든다."""
@@ -75,13 +87,13 @@ def ai_analysis():
             for item in (supplied_history or [])[:90]
             if isinstance(item, dict) and item.get("date")
         ]
+
     rate_limit_response = _ai_rate_limit_response()
     if rate_limit_response:
         return rate_limit_response
 
     try:
-        # AI 분석은 랭킹 API에 의존하지 않는다. 기본 캐릭터 정보만 확인해
-        # 랭킹 조회 장애가 성장 분석 전체를 막지 않도록 분리한다.
+        # AI 분석은 랭킹 API에 의존하지 않는다. 기본 캐릭터 정보만 확인한다.
         ocid, basic, basic_response = resolve_character(character_name)
         if not ocid or not basic:
             status = 503 if is_temporary_nexon_failure(basic_response) else 404
@@ -99,16 +111,14 @@ def ai_analysis():
         if supplied_history is not None:
             recent_history = supplied_history
         else:
-            # GET 호환 및 기존 클라이언트용 fallback
             from tracker.controller.history_controller import get_history
             history_response = get_history()
             if history_response.status_code != 200:
                 return jsonify({"error": "성장 기록을 불러오지 못했습니다."}), history_response.status_code
             history_data = history_response.get_json()
             recent_history = history_data.get("history", [])
+
         today = datetime.now(KOREA_TIMEZONE).date()
-        # A client-side cache or malformed payload must not make future
-        # snapshots appear as already-observed growth in the AI report.
         observed_history = []
         for item in recent_history:
             try:
@@ -120,9 +130,8 @@ def ai_analysis():
         recent_history = observed_history
         insight_records = list(recent_history)
 
-        # 30일·90일 화면에서 저장한 과거 기록이 있으면 읽기만 한다.
-        # 이 과정에서는 Nexon API를 추가 호출하거나 누락 날짜를 보정하지 않는다.
-        ocid = character.get("ocid")
+        # 7일 비교 인사이트는 최근 15일의 저장 기록으로만 계산한다.
+        # 선택한 30일·90일 리포트는 클라이언트가 전달한 해당 기간의 history/summary를 사용한다.
         if ocid:
             try:
                 stored_records = get_growth_history_service().get_records(
@@ -140,25 +149,23 @@ def ai_analysis():
                             records_by_date[item["date"]] = item
                 insight_records = list(records_by_date.values())
             except Exception:
-                # 저장소 상태가 AI 기본 분석을 막지 않도록 최근 응답으로 계산한다.
                 print("AI 분석용 장기 성장 기록을 조회하지 못했습니다.")
 
-        growth_insights = build_growth_insights(
-            insight_records, reference_date=today
-        )
+        growth_insights = build_growth_insights(insight_records, reference_date=today)
         result = generate_ai_analysis(
             character, recent_history, metrics, growth_insights, analysis_context, force_refresh
         )
         if "error" in result:
-            return jsonify(result), 500
+            return _service_error_response(result)
         return jsonify(result)
     except Exception as error:
-        print(f"Gemini AI 분석 API 요청에 실패했습니다: {error}")
-        return {"error": "AI 분석을 불러오지 못했습니다."}
+        print(f"AI 성장 분석 API 요청에 실패했습니다: {error}")
+        return jsonify({"error": "AI 분석을 불러오지 못했습니다."}), 502
+
 
 @ai_bp.route("/ai-comparison", methods=["POST"])
 def ai_comparison():
-    """두 캐릭터의 계산된 성장 지표를 바탕으로 비교 설명을 만든다."""
+    """두 캐릭터의 계산된 성장 지표를 바탕으로 AI 비교 설명을 만든다."""
     payload = request.get_json(silent=True) or {}
     primary = payload.get("primary")
     comparison = payload.get("comparison")
@@ -182,5 +189,5 @@ def ai_comparison():
 
     result = generate_ai_comparison(primary, comparison)
     if "error" in result:
-        return jsonify(result), 500
+        return _service_error_response(result)
     return jsonify(result)
