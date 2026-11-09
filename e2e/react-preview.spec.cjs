@@ -390,6 +390,7 @@ test("30-day AI report reuses cache without automatic LLM calls and only regener
   const aiReportSection = page.locator(".section").filter({ has: page.getByRole("heading", { name: "AI 성장 리포트" }) });
   await expect(aiReportSection.locator(".section-description")).toContainText("선택한 30일");
   await expect(page.locator("#history .history-table tbody tr")).toHaveCount(30);
+  await expect(page.locator(".chart-card canvas")).toBeVisible();
   await expect(page.locator("#history .history-table tbody tr").first()).toContainText("2026.11.06");
   expect(aiCalls).toBe(0);
 
