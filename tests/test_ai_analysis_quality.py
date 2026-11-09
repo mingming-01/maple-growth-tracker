@@ -48,6 +48,14 @@ class AIAnalysisQualityTests(unittest.TestCase):
         self.assertNotIn('"weekOverWeek"', prompt)
         self.assertIn('"remainingRate": 14.65', prompt)
 
+    def test_growth_report_prompt_prefers_everyday_maple_language(self):
+        prompt = _build_growth_report_prompt(self.make_source_data(30))
+
+        self.assertIn("친근하고 담백한 해요체", prompt)
+        self.assertIn("하루 평균 경험치", prompt)
+        self.assertIn("관측 구간", prompt)
+        self.assertIn("메이플스토리에서 익숙한", prompt)
+
     def test_ninety_day_prompt_also_omits_seven_day_comparison(self):
         prompt = _build_growth_report_prompt(self.make_source_data(90))
 
@@ -90,7 +98,7 @@ class AIAnalysisQualityTests(unittest.TestCase):
         )
         self.assertEqual(
             forecast,
-            "최근 관측된 경험치 획득 속도가 유지된다면 11월 19일경 299레벨에 도달할 것으로 예상돼요. 실제 달성 시점은 이후 성장 속도에 따라 달라질 수 있어요.",
+            "최근처럼 경험치를 얻는다면 11월 19일쯤 299레벨에 도달할 것으로 예상돼요. 실제 레벨업 날짜는 앞으로의 성장 속도에 따라 달라질 수 있어요.",
         )
 
     def test_growth_forecast_rejects_invalid_or_inconsistent_prediction(self):
