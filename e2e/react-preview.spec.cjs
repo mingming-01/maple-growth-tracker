@@ -42,7 +42,8 @@ test("React preview loads profile data and refreshes only on explicit request", 
       jobWorldRanking: 123,
       jobRanking: 456,
       rankingDataStatus: "available",
-      bestCombatPower: 987654321
+      bestCombatPower: 987654321,
+      bestCombatPowerObservedAt: "2026-11-08T10:00:00+09:00"
     })
   }));
   await page.route("**/api/history?*", route => route.fulfill({
@@ -72,7 +73,7 @@ test("React preview loads profile data and refreshes only on explicit request", 
       actualPresetNumbers: { equipment: 1, ability: 1, hyperStat: 1, link: 1, union: 1 },
       bestCombatPower: 987654321,
       sources: [
-        { id: "stat", label: "주요 스탯", status: "available", combatPower: 987654321, data: { final_stat: [
+        { id: "stat", label: "주요 스탯", status: "available", combatPower: 876543210, data: { final_stat: [
           { stat_name: "전투력", stat_value: "987654321" },
           { stat_name: "STR", stat_value: "45000" },
           { stat_name: "크리티컬 데미지", stat_value: "95.00%" }
@@ -113,7 +114,9 @@ test("React preview loads profile data and refreshes only on explicit request", 
   // Scroll it into view to exercise the same interaction as a real visitor.
   await page.getByRole("heading", { name: "캐릭터 상세 정보" }).scrollIntoViewIfNeeded();
   await expect(page.locator(".mgt-snapshot-stat[data-testid='profile-combat-power']")).toContainText("전투력");
-  await expect(page.locator(".mgt-snapshot-stat[data-testid='profile-combat-power']")).toContainText("987,654,321");
+  await expect(page.locator(".mgt-snapshot-stat[data-testid='profile-combat-power']")).toContainText("876,543,210");
+  await expect(page.locator(".mgt-snapshot-stat[data-testid='profile-best-combat-power']")).toContainText("987,654,321");
+  await expect(page.locator(".mgt-snapshot-stat[data-testid='profile-best-combat-power']")).toContainText("2026. 11. 8.");
   await expect(page.getByRole("button", { name: "관심 캐릭터 등록" })).toBeVisible();
   await expect(page.getByText("주간 일일 평균 경험치")).toBeVisible();
   await expect(page.locator(".history-table thead")).toContainText("경험치");
