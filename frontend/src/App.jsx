@@ -601,7 +601,7 @@ function App() {
         <footer className="mgt-footer">
           <span>MAPLE GROWTH TRACKER</span>
           <span>Powered by NEXON Open API · Flask · React</span>
-          <a href="/admin/login">레거시 관리자 로그인</a>
+          <a href="/admin/login">관리자 로그인</a>
         </footer>
       </main>
     </div>
