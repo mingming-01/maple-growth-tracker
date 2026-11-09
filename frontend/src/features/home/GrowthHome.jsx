@@ -1,3 +1,4 @@
+import "./GrowthHome.css";
 import CharacterOverview from "./CharacterOverview.jsx";
 import GrowthInsight from "./GrowthInsight.jsx";
 import CharacterDetails from "../../components/character/CharacterDetails.jsx";
@@ -6,7 +7,7 @@ import { AIReport, GrowthComparison } from "../analytics/AnalyticsAndComparison.
 
 function GrowthSectionNav() {
   return (
-    <nav className="mgt-growth-section-nav" aria-label="성장 화면 바로가기">
+    <nav className="mgt-growth-home-nav" aria-label="성장 화면 바로가기">
       <a href="#growth">성장 추이</a>
       <a href="#insight">성장 인사이트</a>
       <a href="#details">캐릭터 상세</a>
@@ -29,8 +30,13 @@ export default function GrowthHome({
 }) {
   return (
     <div className="mgt-growth-home mgt-layout-stack">
-      <div id="character" className="mgt-growth-home__profile">
-        <CharacterOverview character={character} history={history} />
+      <div className="mgt-growth-home-top">
+        <div id="character" className="mgt-growth-home__profile">
+          <CharacterOverview character={character} history={history} />
+        </div>
+        <div id="insight" className="mgt-growth-home__insight">
+          <GrowthInsight character={character} history={history} />
+        </div>
       </div>
       <GrowthSectionNav />
       <div id="growth" className="mgt-growth-home__dashboard">
@@ -41,9 +47,6 @@ export default function GrowthHome({
           onAnalysisPeriodChange={onAnalysisPeriodChange}
           onPersist={onPersist}
         />
-      </div>
-      <div id="insight" className="mgt-growth-home__insight">
-        <GrowthInsight character={character} history={history} />
       </div>
       <div id="details" className="mgt-growth-home__details">
         <CharacterDetails ocid={character.ocid} onStatsLoaded={onStatsLoaded} />
