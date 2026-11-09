@@ -2,6 +2,16 @@ const { test, expect } = require("@playwright/test");
 
 test("React dashboard is served at root while the legacy Flask homepage remains available", async ({ page }) => {
   await page.goto("/");
+  await expect(page.locator('link[rel="stylesheet"][href="/static/style.css"]')).toHaveCount(0);
+  const reactStylesheet = await page.locator('link[rel="stylesheet"]').evaluateAll(links =>
+    links.map(link => link.href).find(href => href.includes("/static/react-preview/assets/")) || null
+  );
+  expect(reactStylesheet).not.toBeNull();
+  const reactCssResponse = await page.request.get(reactStylesheet);
+  expect(reactCssResponse.ok()).toBeTruthy();
+  const reactCss = await reactCssResponse.text();
+  expect(reactCss).toContain(".growth-goal-form");
+  expect(reactCss).toContain(".game-equipment-board");
   await expect(page.locator('[data-testid="react-preview-ready"]')).toBeVisible();
   await expect(page.locator('[data-testid="react-character-search"]')).toBeVisible();
   await expect(page.getByRole("heading", { name: "캐릭터 찾기" })).toBeVisible();
