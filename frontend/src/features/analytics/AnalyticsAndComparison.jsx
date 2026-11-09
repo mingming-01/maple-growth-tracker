@@ -332,7 +332,7 @@ export function GrowthComparison({ character, history, initialState, onSave }) {
       const secondSummary = comparisonSummary(second.history,selectedDays);
       const result = {days:selectedDays,primary:firstSummary,secondary:secondSummary};
       setPeriod(result);
-      setNotice(`최근 ${selectedDays}일의 실제 저장 기록을 비교했습니다.`);
+      setNotice(`최근 ${selectedDays}일 동안 확인된 기록을 비교했어요.`);
       return result;
     } catch (requestError) {
       setNotice(requestError.message || "기간 비교 기록을 불러오지 못했습니다.");
@@ -377,7 +377,7 @@ export function GrowthComparison({ character, history, initialState, onSave }) {
       let comparisonReport = cached?.analysis || "";
       if (comparisonReport) {
         setAnalysis(comparisonReport);
-        setNotice("저장된 비교 분석을 재사용했습니다. AI 모델을 다시 호출하지 않았습니다.");
+        setNotice("지난 비교 분석 결과를 불러왔어요.");
       } else {
         const result = await postAiComparison(
           {character,metrics:primaryMetrics,history},
@@ -387,8 +387,8 @@ export function GrowthComparison({ character, history, initialState, onSave }) {
         setAnalysis(comparisonReport);
         saveCachedAI("growth-comparison-v1",signature,comparisonReport);
         setNotice(result.cacheHit
-          ? "서버에 저장된 비교 분석을 재사용했습니다."
-          : "새 비교 분석을 생성했습니다.");
+          ? "지난 비교 분석 결과를 불러왔어요."
+          : "새 비교 분석을 만들었어요.");
       }
       onSave?.({
         comparison:{
@@ -418,7 +418,7 @@ export function GrowthComparison({ character, history, initialState, onSave }) {
 
   return (
     <section className="section">
-      <div className="section-header"><h2 className="section-title">성장 캐릭터 비교</h2><p className="section-description">두 캐릭터의 최근 성장 지표와 동일 기간 저장 기록을 비교합니다.</p></div>
+      <div className="section-header"><h2 className="section-title">성장 캐릭터 비교</h2><p className="section-description">두 캐릭터의 레벨과 경험치 변화를 같은 기간으로 비교합니다.</p></div>
       <div className="comparison-card">
         <form className="comparison-form" onSubmit={runComparison}>
           <label className="comparison-input-label" htmlFor="react-comparison-name">비교할 캐릭터</label>
@@ -427,7 +427,7 @@ export function GrowthComparison({ character, history, initialState, onSave }) {
         </form>
         {error && <div className="error-message" role="alert">{error}</div>}
         {notice && <p className="comparison-period-notice" role="status">{notice}</p>}
-        {busy && <div className="loading-message" role="status">두 캐릭터의 최신 데이터와 성장 기록을 조회하고 있습니다...</div>}
+        {busy && <div className="loading-message" role="status">두 캐릭터의 정보와 성장 기록을 불러오고 있어요...</div>}
         {other && !busy && (
           <div className="comparison-result">
             <div className="comparison-grid">
@@ -452,16 +452,16 @@ export function GrowthComparison({ character, history, initialState, onSave }) {
                       <div className="comparison-period-stat"><span>기록 기준 1일 평균</span><strong>{formatTrillion(item.average)}</strong></div>
                       <div className="comparison-period-stat"><span>랭킹 변화</span><strong>{item.rankingChange == null ? "자료 부족" : (item.rankingChange > 0 ? "▲ " : item.rankingChange < 0 ? "▼ " : "")+formatNumber(Math.abs(item.rankingChange))+"위"}</strong></div>
                       <div className="comparison-period-stat"><span>기록 충실도</span><strong>{item.availableDays} / {item.days}일</strong></div>
-                      <p className="comparison-period-detail">API 미제공 {item.notReady}일 · 미수집 {item.notCollected}일</p>
+                      <p className="comparison-period-detail">아직 공개되지 않은 날짜 {item.notReady}일 · 확인하지 못한 날짜 {item.notCollected}일</p>
                     </article>
                   ))}
                 </div>
               ) : <p className="comparison-period-verdict">기간별 저장 기록을 아직 불러오지 않았습니다.</p>}
-              <p className="comparison-period-notice">경험치 증가량은 연속 관측된 날짜 간 변화만 합산합니다. 결측 날짜는 0으로 계산하지 않습니다.</p>
+              <p className="comparison-period-notice">경험치 증가는 기록이 이어지는 날짜끼리 비교했어요. 기록이 없는 날은 0으로 계산하지 않았습니다.</p>
             </section>
             <div className="comparison-ai">
               <h3>AI 성장 비교 분석</h3>
-              {analysis ? <div className="comparison-ai-text">{analysis}</div> : <p className="comparison-ai-text">AI 비교 분석 결과가 없습니다.</p>}
+              {analysis ? <div className="comparison-ai-text">{analysis}</div> : <p className="comparison-ai-text">아직 비교 분석이 없어요.</p>}
             </div>
           </div>
         )}
