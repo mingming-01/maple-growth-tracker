@@ -103,7 +103,7 @@ test("React preview loads profile data and refreshes only on explicit request", 
   await expect(page.getByRole("heading", { name: "프리뷰테스트" })).toBeVisible();
   await expect(page.getByTestId("growth-insight")).toBeVisible();
   await expect(page.getByRole("heading", { name: "이번 성장 기록에서 확인한 점" })).toBeVisible();
-  await expect(page.locator('.mgt-growth-route-nav a[href="#/analytics"]')).toBeVisible();
+  await expect(page.locator('.mgt-nav a[href="#/analytics"]')).toBeVisible();
   await expect(page.getByText("12,345위")).toBeVisible();
   await expect(page.getByText("6,789위")).toBeVisible();
   await expect(page.getByText("크로아")).toBeVisible();
