@@ -21,11 +21,11 @@ Build the frontend:
 
     npm --prefix frontend run build
 
-The build is written to `static/react-preview/`. In production builds, assets use the absolute `/static/react-preview/` base path, so the same output works when Flask serves the app at both `/` and `/preview/`.
+The build is written to `static/react-preview/`. Flask serves that build at the single public application path, `/`, using the absolute `/static/react-preview/` asset base.
 
-- `/`: serves React when `static/react-preview/index.html` exists; otherwise safely falls back to the legacy Flask page.
-- `/preview/`: serves the React dashboard for verification and comparison.
-- `/legacy/`: preserves the previous Vanilla JS interface.
+- `/`: serves the React dashboard.
+- If the React build is missing, Flask returns HTTP 503. It never falls back to an obsolete UI.
+- The former `/legacy/` and `/preview/` routes have been retired.
 
 For Render, use this Build Command:
 
@@ -36,4 +36,4 @@ For Render, use this Build Command:
 - React owns its own root element and does not mount into the legacy page.
 - Flask APIs and server-side integrations remain the source of truth.
 - Existing sessionStorage/localStorage keys and schemas are preserved for page state, favorites, growth goals, and AI response cache.
-- Keep `/legacy/` available until the production URL has been verified and the migration is accepted.
+- Keep Flask responsible for APIs, integrations, persistence, and administrator authentication; the React build is the only public application UI.
