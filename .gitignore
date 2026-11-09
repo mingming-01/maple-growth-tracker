@@ -9,7 +9,6 @@ backup_after_workbench/
 
 # Node.js dependencies
 node_modules/
-package-lock.json
 
 # Generated frontend build
 static/react-preview/
