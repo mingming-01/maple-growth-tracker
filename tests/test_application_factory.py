@@ -61,13 +61,13 @@ class ApplicationFactoryTests(unittest.TestCase):
         self.assertIn(("/api/ai-comparison", "ai.ai_comparison"), routes)
 
         response = app.test_client().get("/")
-        self.assertEqual(response.status_code, 200)
-        response_html = response.get_data(as_text=True)
         react_build = Path(app.static_folder) / "react-preview" / "index.html"
         if react_build.is_file():
-            self.assertIn("/static/react-preview/assets/", response_html)
+            self.assertEqual(response.status_code, 200)
+            self.assertIn("/static/react-preview/assets/", response.get_data(as_text=True))
         else:
-            self.assertIn("MAPLE GROWTH TRACKER", response_html)
+            self.assertEqual(response.status_code, 503)
+            self.assertIn("React 프런트엔드 빌드가 없습니다", response.get_data(as_text=True))
 
 
 if __name__ == "__main__":
