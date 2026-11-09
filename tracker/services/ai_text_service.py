@@ -105,7 +105,9 @@ def sanitize_ai_text(value, expected_date=None):
     text = re.sub(r"(?m)^\s*(?:[-*+]\s+|\d+[.)]\s+)", "", text)
     text = re.sub(r"\[([^\]]+)\]\([^)]+\)", r"\1", text)
     internal_terms = {
-        r"관측\s*구간": "기록이 남은 날짜",
+        r"최근\s*관측\s*구간": "최근 기간",
+        r"이전\s*관측\s*구간": "이전 기간",
+        r"관측\s*구간": "기록된 기간",
         r"관측\s*기록": "성장 기록",
         r"관측된": "기록된",
         r"관측": "기록",
