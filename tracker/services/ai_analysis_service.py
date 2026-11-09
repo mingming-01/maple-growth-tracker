@@ -68,6 +68,34 @@ def _generate_gemini_content(client, prompt):
                 time.sleep(delay)
 
 
+
+def _deterministic_growth_forecast(character, metrics):
+    """계산된 목표 레벨과 날짜를 사용해 성장 전망을 일관되게 작성한다."""
+    prediction = (metrics or {}).get("prediction")
+    if not isinstance(prediction, dict):
+        return "최근 성장 기록만으로는 다음 레벨 달성 시점을 신뢰도 있게 예측하기 어려워요."
+    try:
+        parsed_date = date.fromisoformat(str(prediction.get("estimatedDate")))
+        target_level = int(prediction.get("nextLevel"))
+        current_level = int(character.get("level"))
+    except (TypeError, ValueError):
+        return "최근 성장 기록만으로는 다음 레벨 달성 시점을 신뢰도 있게 예측하기 어려워요."
+    if target_level != current_level + 1 or target_level <= 0:
+        return "최근 성장 기록만으로는 다음 레벨 달성 시점을 신뢰도 있게 예측하기 어려워요."
+    date_label = f"{parsed_date.month}월 {parsed_date.day}일"
+    return (
+        f"최근 관측된 경험치 획득 속도가 이어진다면 {date_label} 전후로 "
+        f"{target_level}레벨에 도달할 것으로 예상돼요. "
+        "실제 달성 시점은 이후 경험치 획득량에 따라 달라질 수 있어요."
+    )
+
+
+def _apply_deterministic_growth_forecast(analysis, character, metrics):
+    forecast = _deterministic_growth_forecast(character, metrics)
+    pattern = r"(\\[성장 전망\\])([\\s\\S]*?)(?=\\n\\[AI 코멘트\\])"
+    return re.sub(pattern, lambda match: f"{match.group(1)}\\n{forecast}", analysis, count=1)
+
+
 def _build_growth_report_prompt(source_data):
     prompt_data = dict(source_data)
     selected_period = prompt_data.get("selectedPeriod") or {}
@@ -101,8 +129,8 @@ def _build_growth_report_prompt(source_data):
 7. 30일·90일 분석은 selectedPeriod.periodSummary를 최우선 근거로 사용해. 이 경우 metrics에는 최근 7일 예측과 현재 레벨 진행률만 들어 있어. 이를 선택 기간 전체의 평균이나 성장 추세처럼 설명하지 마.
 8. 7일 분석은 growthInsights의 최근 7일·직전 7일 비교를 사용해도 돼. 표본이 충분하지 않으면 기간 변화율을 단정하지 마.
 9. 예측은 metrics.recentSevenDayPrediction 또는 metrics.prediction에 유효한 예상 날짜가 있을 때만 언급해. 예측은 최근 관측 속도가 유지된다는 가정의 참고값이므로 확정 일정처럼 말하지 마. 예측 데이터가 없으면 날짜나 소요 일수를 만들지 마.
-10. 숫자를 나열하지 말고 변화의 의미를 설명해. 화면 카드에 이미 표시되는 숫자를 불필요하게 반복하지 마.
-11. '경보를 기록', '최고 성장일을 찍다', '성장률을 경보하다'처럼 부자연스러운 표현을 쓰지 마. 자연스러운 한국어 문장으로 작성하고 조사와 단위를 확인해.
+10. 경험치처럼 큰 수는 과학적 표기(예: 1.78×10¹³)를 쓰지 말고 '17.8조'처럼 한국어 단위로 표현해. 숫자를 나열하지 말고 변화의 의미를 설명해. 화면 카드에 이미 표시되는 숫자를 불필요하게 반복하지 마.
+11. '경보를 기록', '최고 성장일을 찍다', '성장률을 경보하다', '조건부 전망입니다'처럼 부자연스럽거나 딱딱한 면책 문구를 쓰지 마. 자연스러운 한국어 문장으로 작성하고 조사와 단위를 확인해.
 12. 근거 없는 칭찬, 과장, 플레이 시간·요일별 접속 습관 추측, 같은 뜻의 반복을 피하고 담백하고 친근하게 작성해.
 13. 데이터 필드명, 내부 모델명, API, Python, Gemini, OpenRouter, 프롬프트, 시스템 동작, null, undefined, 영어 상태값을 본문에 노출하지 마.
 
@@ -202,6 +230,8 @@ def generate_ai_analysis(character, history, computed_metrics=None, growth_insig
     cached_analysis = None if force_refresh else get_ai_response_cache(prompt)
     if cached_analysis is not None:
         print("저장된 AI 성장 리포트를 재사용했습니다.")
+        if computed_metrics is not None:
+            cached_analysis = _apply_deterministic_growth_forecast(cached_analysis, character, computed_metrics)
         return {"analysis": cached_analysis, "cacheHit": True, "growthInsights": growth_insights}
 
     gemini_error = None
@@ -209,6 +239,8 @@ def generate_ai_analysis(character, history, computed_metrics=None, growth_insig
         try:
             response = _generate_gemini_content(gemini_client, prompt)
             analysis = sanitize_ai_text(response.text or "분석 결과가 비어 있습니다.", expected_date)
+            if computed_metrics is not None:
+                analysis = _apply_deterministic_growth_forecast(analysis, character, computed_metrics)
             if not validate_growth_report(analysis):
                 return {
                     "error": "AI 분석 결과의 문장 품질이나 필수 항목을 확인하지 못했습니다. 다시 분석해주세요.",
@@ -228,6 +260,8 @@ def generate_ai_analysis(character, history, computed_metrics=None, growth_insig
             response_text = request_openrouter(prompt)
             print("OpenRouter로 성장 분석을 처리했습니다.")
             analysis = sanitize_ai_text(response_text or "분석 결과가 비어 있습니다.", expected_date)
+            if computed_metrics is not None:
+                analysis = _apply_deterministic_growth_forecast(analysis, character, computed_metrics)
             if not validate_growth_report(analysis):
                 return {
                     "error": "AI 분석 결과의 문장 품질이나 필수 항목을 확인하지 못했습니다. 다시 분석해주세요.",
