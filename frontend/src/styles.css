@@ -1606,3 +1606,40 @@ button:focus-visible,input:focus-visible,select:focus-visible,a:focus-visible { 
   .mgt-growth-insight-facts { gap:8px; }
   .mgt-growth-insight-facts > div { padding:11px; }
 }
+
+
+/* Growth Home profile and insight share the first-screen hierarchy. */
+.mgt-growth-home-top {
+  display:grid;
+  grid-template-columns:minmax(0,1.3fr) minmax(280px,.9fr);
+  align-items:stretch;
+  gap:var(--mgt-space-4);
+  min-width:0;
+}
+.mgt-growth-home-top > * { min-width:0; }
+.mgt-growth-home-top .mgt-profile-shell {
+  grid-template-columns:minmax(0,1fr);
+  height:100%;
+}
+.mgt-growth-home-top .mgt-profile-main { padding:var(--mgt-space-5); }
+.mgt-growth-home-top .mgt-profile-side {
+  display:grid;
+  grid-template-columns:repeat(2,minmax(0,1fr));
+  gap:0 var(--mgt-space-4);
+  padding:var(--mgt-space-3) var(--mgt-space-5);
+  border-top:1px solid var(--mgt-line);
+  border-left:0;
+}
+.mgt-growth-home-top .mgt-profile-side > .mgt-eyebrow { grid-column:1/-1; }
+.mgt-growth-home-top .mgt-ranking-panel { padding:var(--mgt-space-4) var(--mgt-space-5); }
+.mgt-growth-home-top .mgt-ranking-grid { grid-template-columns:repeat(2,minmax(0,1fr)); }
+@media(max-width:900px) {
+  .mgt-growth-home-top { grid-template-columns:minmax(0,1fr); }
+}
+@media(max-width:760px) {
+  .mgt-growth-home-top .mgt-profile-main { padding:var(--mgt-space-4); }
+  .mgt-growth-home-top .mgt-profile-side { padding:var(--mgt-space-3) var(--mgt-space-4); }
+}
+@media(max-width:480px) {
+  .mgt-growth-home-top .mgt-profile-side { grid-template-columns:minmax(0,1fr); }
+}
