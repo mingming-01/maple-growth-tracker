@@ -13,6 +13,7 @@ async function requestJson(path, options = {}) {
       ...(options.body ? { "Content-Type": "application/json" } : {}),
       ...options.headers
     },
+    ...options
   });
 
   let payload = {};
