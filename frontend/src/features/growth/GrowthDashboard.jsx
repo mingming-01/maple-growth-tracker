@@ -583,20 +583,20 @@ export default function GrowthDashboard({ character, history, onHistoryChange, o
 
   return (
     <div className="growth-dashboard">
-      <section className="section">
+      <section className="section" id="growth-summary">
         <div className="section-header">
           <h2 className="section-title">성장 요약</h2>
-          <p className="section-description">실제 기록이 확인된 날짜 간 경험치 변화만 집계합니다.</p>
+          <p className="section-description">기록이 남아 있는 날짜를 기준으로 경험치가 얼마나 늘었는지 보여줍니다.</p>
         </div>
         <div className="summary-grid">
           <div className="summary-card"><div className="summary-label">최근 확인된 성장량</div><div className="summary-value">{signedFmt(daily)}</div></div>
           <div className="summary-card"><div className="summary-label">랭킹 변화</div><div className="summary-value">{rankChange === null ? "자료 부족" : rankChange > 0 ? "▲ "+rankChange : rankChange < 0 ? "▼ "+Math.abs(rankChange) : "변동 없음"}</div></div>
           <div className="summary-card"><div className="summary-label">최근 7일 성장</div><div className="summary-value">{signedFmt(weekly)}</div></div>
-          <div className="summary-card"><div className="summary-label">관측 일 평균</div><div className="summary-value">{fmt(average)}</div></div>
+          <div className="summary-card"><div className="summary-label">하루 평균 경험치</div><div className="summary-value">{fmt(average)}</div></div>
         </div>
       </section>
 
-      <section className="section">
+      <section className="section" id="growth-trend">
         <div className="section-header history-chart-header">
           <div><h2 className="section-title">성장 추이</h2><p className="section-description">첫날의 실제 경험치를 기준으로 한 총 경험치 증가량과 일일 경험치 증가량, 레벨업을 표시합니다.</p></div>
           <label className="history-range-control">기록 범위
@@ -607,13 +607,13 @@ export default function GrowthDashboard({ character, history, onHistoryChange, o
         </div>
         <p className="history-range-notice" role="status">
           {busy ? progressText || "기록을 불러오고 있습니다..." : range === 7
-            ? `최근 7일 API 정상 기록 ${(history || []).filter(item=>item.recordStatus==="available").length}일`
-            : `최근 ${range}일 · 정상 ${rangeStatus?.availableDays ?? 0}일 · API 미제공 ${rangeStatus?.notReadyDays ?? 0}일 · 미수집 ${rangeStatus?.notCollectedDays ?? 0}일`}
+            ? `최근 7일 확인된 기록 ${(history || []).filter(item=>item.recordStatus==="available").length}일`
+            : `최근 ${range}일 · 확인된 기록 ${rangeStatus?.availableDays ?? 0}일 · 아직 공개되지 않은 기록 ${rangeStatus?.notReadyDays ?? 0}일 · 확인하지 못한 날짜 ${rangeStatus?.notCollectedDays ?? 0}일`}
         </p>
         {error && !busy && <p className="history-range-notice is-warning" role="alert">{error}</p>}
         {periodSummary && range !== 7 && <PeriodSummary summary={periodSummary} previous={periodSummary.previousSummary} label={`최근 ${range}일`} />}
         <div className="chart-card"><div className="chart-wrapper"><canvas ref={canvasRef} aria-label="기간별 성장 추이 그래프" /></div></div>
-        <section className="growth-timeline-section">
+        <section className="growth-timeline-section" id="growth-timeline">
           <div className="growth-timeline-heading"><h3>주요 성장 타임라인</h3><p>선택 기간에서 확인된 레벨업과 성장·랭킹 기록입니다.</p></div>
           <ol className="growth-timeline-list">
             {timeline.length ? timeline.map((event,index) => (
@@ -630,7 +630,7 @@ export default function GrowthDashboard({ character, history, onHistoryChange, o
         </section>
       </section>
 
-      <section className="section">
+      <section className="section" id="growth-prediction">
         <div className="section-header"><h2 className="section-title">성장 예측</h2><p className="section-description">최근 성장 기록을 기준으로 다음 레벨업을 예상합니다.</p></div>
         <div className="prediction-card">
           <div className="prediction-grid">
@@ -639,9 +639,9 @@ export default function GrowthDashboard({ character, history, onHistoryChange, o
             <div className="prediction-item"><div className="prediction-label">예상 레벨업</div><div className="prediction-value">{prediction?.date ? localDate(formatLocalISODate(prediction.date)) : "자료 부족"}</div></div>
             <div className="prediction-item"><div className="prediction-label">최근 평균</div><div className="prediction-value">{prediction?.averageGrowth > 0 ? fmt(prediction.averageGrowth) : "자료 부족"}</div></div>
           </div>
-          <p className="prediction-note">최근 관측 평균 획득량이 유지된다는 가정의 추정치입니다. API가 제공하지 않은 날짜나 레벨업 경계는 임의로 채우지 않습니다.</p>
+          <p className="prediction-note">최근 관측 평균 획득량이 유지된다는 가정의 추정치입니다. 기록이 없는 날짜나 레벨업으로 경험치 기준이 바뀐 구간은 예상해서 채우지 않습니다.</p>
         </div>
-        <GoalPanel character={character} metrics={metrics} history={history || []} />
+        <div id="growth-goal"><GoalPanel character={character} metrics={metrics} history={history || []} /></div>
       </section>
 
     </div>
