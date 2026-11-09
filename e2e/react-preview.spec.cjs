@@ -71,6 +71,7 @@ test("React preview loads profile data and refreshes only on explicit request", 
       },
       actualPresetNumbers: { equipment: 1, ability: 1, hyperStat: 1, link: 1, union: 1 },
       bestCombatPower: 987654321,
+      bestCombatPowerObservedAt: "2026-11-08T10:00:00+09:00",
       sources: [
         { id: "stat", label: "주요 스탯", status: "available", combatPower: 987654321, data: { final_stat: [
           { stat_name: "전투력", stat_value: "987654321" },
@@ -122,6 +123,8 @@ test("React preview loads profile data and refreshes only on explicit request", 
   await page.locator('.mgt-nav a[href="#/"]').click();
   await expect(page.locator(".mgt-snapshot-stat[data-testid='profile-combat-power']")).toContainText("전투력");
   await expect(page.locator(".mgt-snapshot-stat[data-testid='profile-combat-power']")).toContainText("987,654,321");
+  await expect(page.locator(".mgt-snapshot-stat[data-testid='profile-best-combat-power']")).toContainText("987,654,321");
+  await expect(page.locator(".mgt-snapshot-stat[data-testid='profile-best-combat-power']")).toContainText("2026. 11. 8.");
 
   await page.locator('.mgt-nav a[href="#/growth"]').click();
   await expect(page.locator("#growth").getByRole("heading", { name: "성장 요약" })).toBeVisible();
@@ -581,4 +584,85 @@ test("mobile route pages stay within the viewport at common device widths", asyn
       expect(measurement.historyScrollWidth).toBeLessThanOrEqual(measurement.historyClientWidth + 1);
     }
   }
+});
+
+test("React AI report restores evidence details from cache", async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.route("**/api/character?*", route => route.fulfill({
+    status: 200,
+    contentType: "application/json",
+    body: JSON.stringify({
+      characterName: "근거테스트",
+      ocid: "evidence-test-ocid",
+      worldName: "크로아",
+      job: "전사",
+      guildName: "테스트",
+      level: 280,
+      experience: 1300,
+      experienceRate: "30.000",
+      ranking: 1,
+      worldRanking: 1,
+      jobWorldRanking: 1,
+      jobRanking: 1,
+      rankingDataStatus: "available"
+    })
+  }));
+  await page.route("**/api/history?*", route => route.fulfill({
+    status: 200,
+    contentType: "application/json",
+    body: JSON.stringify({
+      history: [
+        { date: "2026-11-04", level: 280, experience: 700, experienceRate: "29.500", experienceChange: null, recordStatus: "available" },
+        { date: "2026-11-05", level: 280, experience: 1000, experienceRate: "29.750", experienceChange: 300, recordStatus: "available" },
+        { date: "2026-11-06", level: 280, experience: 1300, experienceRate: "30.000", experienceChange: 300, recordStatus: "available" }
+      ],
+      historyStatus: "complete",
+      historyStorage: { backend: "postgres", status: "saved" }
+    })
+  }));
+  await page.route("**/api/ai-analysis?*", route => route.fulfill({
+    status: 200,
+    contentType: "application/json",
+    body: JSON.stringify({
+      analysis: "[성장 패턴] 최근 성장 흐름이 개선됐습니다.\\n[AI 코멘트] 기록을 이어가세요.",
+      cacheHit: false,
+      growthInsights: {
+        basis: {
+          referenceDate: "2026-11-06",
+          expectedSnapshots: 15,
+          availableSnapshots: 10,
+          coveragePercent: 66.7,
+          dataQualityLabel: "보통"
+        },
+        weekOverWeek: { status: "available", averageDailyGrowthChangePercent: 12.5 },
+        weekdayWeekend: { status: "available", weekendSharePercent: 44.2 }
+      }
+    })
+  }));
+
+  await page.goto("/");
+  await page.getByLabel("캐릭터명").fill("근거테스트");
+  await page.getByRole("button", { name: /캐릭터 조회/ }).click();
+  await page.locator('.mgt-nav a[href="#/analytics"]').click();
+  await page.getByRole("button", { name: "AI 분석 시작" }).click();
+
+  const evidence = page.getByTestId("ai-analysis-evidence");
+  await expect(evidence).toBeVisible();
+  await expect(evidence).toContainText("AI 분석 기준 및 데이터 충실도");
+  await expect(evidence).toContainText("2026.11.06");
+  await expect(evidence).toContainText("10 / 15일");
+  await expect(evidence).toContainText("보통 · 66.7%");
+  await expect(evidence).toContainText("12.5%");
+  await expect(evidence).toContainText("44.2%");
+  const bounds = await evidence.evaluate(element => {
+    const rect = element.getBoundingClientRect();
+    return { left: rect.left, right: rect.right, viewportWidth: window.innerWidth };
+  });
+  expect(bounds.left).toBeGreaterThanOrEqual(0);
+  expect(bounds.right).toBeLessThanOrEqual(bounds.viewportWidth);
+
+  await page.reload();
+  const cachedEvidence = page.getByTestId("ai-analysis-evidence");
+  await expect(cachedEvidence).toBeVisible();
+  await expect(cachedEvidence).toContainText("10 / 15일");
 });
