@@ -197,7 +197,7 @@ test("mobile touch opens item tooltips without clipped detail panels", async ({ 
   });
 
   try {
-    await page.goto("/preview/");
+    await page.goto("/");
     await page.getByLabel("캐릭터명").fill("상세정보확장테스트");
     await page.getByRole("button", { name: /캐릭터 조회/ }).tap();
     await expect(page.getByRole("heading", { name: "상세정보확장테스트" })).toBeVisible();
