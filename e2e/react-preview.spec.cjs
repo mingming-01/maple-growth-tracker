@@ -116,7 +116,7 @@ test("React preview loads profile data and refreshes only on explicit request", 
 
   await page.locator('.mgt-nav a[href="#/details"]').click();
   // CharacterDetails loads its data only after entering the dedicated route.
-  await expect(page.getByRole("heading", { name: "캐릭터 상세 정보" })).toBeVisible();
+  await expect(page.locator("#details").getByRole("heading", { name: "캐릭터 상세 정보" })).toBeVisible();
   await expect(page.locator(".mgt-snapshot-stat[data-testid='profile-combat-power']")).toContainText("전투력");
   await expect(page.locator(".mgt-snapshot-stat[data-testid='profile-combat-power']")).toContainText("987,654,321");
   await expect(page.locator(".game-stat-detail-grade")).toHaveText("레전드리");
@@ -138,9 +138,9 @@ test("React preview loads profile data and refreshes only on explicit request", 
   await expect(progressRow.locator(".history-experience-value")).toHaveAttribute("aria-label", /경험치 증가량/);
 
   await page.locator('.mgt-nav a[href="#/analytics"]').click();
-  await expect(page.getByRole("heading", { name: "AI 성장 리포트" })).toBeVisible();
+  await expect(page.locator("#analytics").getByRole("heading", { name: "AI 성장 리포트" })).toBeVisible();
   await page.locator('.mgt-nav a[href="#/comparison"]').click();
-  await expect(page.getByRole("heading", { name: "성장 캐릭터 비교" })).toBeVisible();
+  await expect(page.locator("#comparison").getByRole("heading", { name: "성장 캐릭터 비교" })).toBeVisible();
 
   const refreshRequests = [];
   page.on("request", request => {
