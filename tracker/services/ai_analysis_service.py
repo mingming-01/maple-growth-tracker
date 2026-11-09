@@ -84,9 +84,9 @@ def _deterministic_growth_forecast(character, metrics):
         return "최근 성장 기록만으로는 다음 레벨 달성 시점을 신뢰도 있게 예측하기 어려워요."
     date_label = f"{parsed_date.month}월 {parsed_date.day}일"
     return (
-        f"최근 관측된 경험치 획득 속도가 이어진다면 {date_label} 전후로 "
+        f"최근 관측된 경험치 획득 속도가 유지된다면 {date_label}경 "
         f"{target_level}레벨에 도달할 것으로 예상돼요. "
-        "실제 달성 시점은 이후 경험치 획득량에 따라 달라질 수 있어요."
+        "실제 달성 시점은 이후 성장 속도에 따라 달라질 수 있어요."
     )
 
 
