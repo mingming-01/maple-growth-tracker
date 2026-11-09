@@ -237,6 +237,14 @@ test("React hash routes support direct entry, reload, and browser back/forward n
   await expect(page).toHaveURL(/#\/growth\?section=trend$/);
   await expect(page.locator("#growth-trend")).toBeInViewport();
 
+  // The reverse transition must also keep the details submenu from covering growth.
+  await detailsMenu.hover();
+  await expect(growthMenu.locator(".mgt-nav-submenu")).toBeHidden();
+  await expect(detailsMenu.locator(".mgt-nav-submenu")).toBeVisible();
+  await detailsMenu.getByRole("link", { name: "스탯", exact: true }).click();
+  await expect(page).toHaveURL(/#\/details\?tab=stats$/);
+  await expect(page.locator('[data-detail-tab="stats"]')).toHaveAttribute("aria-selected", "true");
+
   await page.locator('.mgt-nav a[href="#/growth"]').click();
   await expect(page).toHaveURL(/#\/growth$/);
   await page.locator('.mgt-nav a[href="#/history"]').click();
