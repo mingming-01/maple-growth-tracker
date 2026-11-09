@@ -30,6 +30,12 @@ function readRouteFromHash() {
   return routes[raw] || "overview";
 }
 
+function readDetailTabFromHash() {
+  const params = new URLSearchParams(window.location.hash.split("?")[1] || "");
+  const tab = params.get("tab");
+  return ["stats","equipment","symbols","skills","link","union"].includes(tab) ? tab : "stats";
+}
+
 function routeHash(route) {
   return route === "overview" ? "#/" : `#/${route}`;
 }
@@ -50,12 +56,16 @@ function App() {
   const [exporting,setExporting] = useState("");
   const [shareOpen,setShareOpen] = useState(false);
   const [view,setView] = useState(() => readRouteFromHash());
+  const [detailTab,setDetailTab] = useState(() => readDetailTabFromHash());
+  const [openNavMenu,setOpenNavMenu] = useState("");
   const [comparisonState,setComparisonState] = useState(restored?.comparison || null);
   const resultRef = useRef(null);
 
   useEffect(() => {
     const syncView = () => {
       setView(readRouteFromHash());
+      setDetailTab(readDetailTabFromHash());
+      setOpenNavMenu("");
       window.scrollTo(0, 0);
     };
     window.addEventListener("hashchange",syncView);
@@ -304,12 +314,39 @@ function App() {
           <span>MAPLE <b>GROWTH</b></span>
         </a>
         <nav className="mgt-nav" aria-label="주요 메뉴">
-          {view === "admin" ? <a href="#/" onClick={event=>{event.preventDefault();closeAdmin();}}>대시보드</a> : <>
+          {view === "admin" ? <a href="#/" onClick={event=>{event.preventDefault();closeAdmin();}}>개요</a> : <>
             <a href="#/" aria-current={view === "overview" ? "page" : undefined}>개요</a>
-            <a href="#/growth" aria-current={view === "growth" ? "page" : undefined}>성장 분석</a>
-            <a href="#/details" aria-current={view === "details" ? "page" : undefined}>캐릭터 상세</a>
+            <div className={`mgt-nav-dropdown ${openNavMenu === "growth" ? "is-open" : ""}`}
+              onMouseEnter={() => setOpenNavMenu("growth")} onMouseLeave={() => setOpenNavMenu("")}>
+              <a href="#/growth" aria-current={view === "growth" ? "page" : undefined}>성장 분석</a>
+              <button type="button" className="mgt-nav-toggle" aria-label="성장 분석 하위 메뉴"
+                aria-expanded={openNavMenu === "growth"} onClick={() => setOpenNavMenu(value => value === "growth" ? "" : "growth")}>
+                <span aria-hidden="true">⌄</span>
+              </button>
+              <div className="mgt-nav-submenu">
+                <a href="#/growth?section=summary" onClick={() => setOpenNavMenu("")}>성장 요약</a>
+                <a href="#/growth?section=trend" onClick={() => setOpenNavMenu("")}>성장 추이</a>
+                <a href="#/growth?section=timeline" onClick={() => setOpenNavMenu("")}>주요 성장 기록</a>
+                <a href="#/growth?section=prediction" onClick={() => setOpenNavMenu("")}>레벨업 예상</a>
+                <a href="#/growth?section=goal" onClick={() => setOpenNavMenu("")}>목표 레벨</a>
+              </div>
+            </div>
+            <div className={`mgt-nav-dropdown ${openNavMenu === "details" ? "is-open" : ""}`}
+              onMouseEnter={() => setOpenNavMenu("details")} onMouseLeave={() => setOpenNavMenu("")}>
+              <a href="#/details" aria-current={view === "details" ? "page" : undefined}>캐릭터 상세</a>
+              <button type="button" className="mgt-nav-toggle" aria-label="캐릭터 상세 하위 메뉴"
+                aria-expanded={openNavMenu === "details"} onClick={() => setOpenNavMenu(value => value === "details" ? "" : "details")}>
+                <span aria-hidden="true">⌄</span>
+              </button>
+              <div className="mgt-nav-submenu">
+                {[
+                  ["stats","스탯"],["equipment","장비"],["symbols","심볼"],
+                  ["skills","6차 / HEXA"],["link","링크 스킬"],["union","유니온"]
+                ].map(([tab,label]) => <a key={tab} href={`#/details?tab=${tab}`} onClick={() => setOpenNavMenu("")}>{label}</a>)}
+              </div>
+            </div>
             <a href="#/analytics" aria-current={view === "analytics" ? "page" : undefined}>AI 리포트</a>
-            <a href="#/history" aria-current={view === "history" ? "page" : undefined}>성장 기록</a>
+            <a href="#/history" aria-current={view === "history" ? "page" : undefined}>날짜별 기록</a>
             <a href="#/comparison" aria-current={view === "comparison" ? "page" : undefined}>캐릭터 비교</a>
           </>}
           <a href="#/admin" onClick={openAdmin} aria-current={view === "admin" ? "page" : undefined}>관리자</a>
@@ -320,9 +357,9 @@ function App() {
         {view === "admin" ? <AdminDashboard onBack={closeAdmin} /> : <>
         <section className="mgt-hero">
           <div>
-            <div className="mgt-hero-label"><span /> CHARACTER GROWTH DASHBOARD</div>
-            <h1>모험가의 성장을<br /><em>기록하고 분석하다.</em></h1>
-            <p>Nexon Open API 기반의 캐릭터 정보, 성장 통계, 스펙과 프리셋을 하나의 대시보드에서 확인하세요.</p>
+            <div className="mgt-hero-label"><span /> 나의 메이플 성장 기록</div>
+            <h1>캐릭터의 성장을<br /><em>기록하고 돌아보다.</em></h1>
+            <p>레벨업부터 경험치 변화, 장비와 스탯까지. 내 캐릭터의 성장 과정을 한곳에서 살펴보세요.</p>
           </div>
           <div className="mgt-hero-ornament" aria-hidden="true">
             <span className="mgt-orbit mgt-orbit-one" />
@@ -336,8 +373,7 @@ function App() {
 
         <section className="mgt-search-panel" aria-labelledby="mgt-search-title">
           <div className="mgt-search-heading">
-            <div><span className="mgt-eyebrow">CHARACTER SEARCH</span><h2 id="mgt-search-title">모험가 찾기</h2></div>
-            <span className="mgt-api-indicator"><i /> NEXON OPEN API</span>
+            <div><span className="mgt-eyebrow">CHARACTER SEARCH</span><h2 id="mgt-search-title">캐릭터 찾기</h2></div>
           </div>
           <form className="mgt-search-form" onSubmit={handleSearch} data-testid="react-character-search">
             <label className="sr-only" htmlFor="react-character-name">캐릭터명</label>
@@ -345,7 +381,7 @@ function App() {
               placeholder="조회할 캐릭터명을 입력하세요" autoComplete="off" maxLength={30} />
             <button type="submit" disabled={loading || !name.trim()}>{loading ? "조회 중..." : "캐릭터 조회"} <span>→</span></button>
           </form>
-          <div className="mgt-search-footnote">넥슨 Open API에서 최신 공개 데이터를 다시 조회합니다.</div>
+          <div className="mgt-search-footnote">메이플스토리 캐릭터 이름을 입력해 주세요.</div>
           {error && <p className="mgt-error" role="alert">{error}</p>}
           {favoriteFeedback && <p className="mgt-feedback" role="status">{favoriteFeedback}</p>}
           {historyWarning && <p className="mgt-warning" role="status">{historyWarning}</p>}
@@ -408,6 +444,7 @@ function App() {
                 analysisPeriod={analysisPeriod}
                 comparisonState={comparisonState}
                 view={view}
+                detailTab={detailTab}
               />
             </div>
           </>
@@ -418,14 +455,14 @@ function App() {
             <span className="mgt-empty-emblem">✧</span>
             <span className="mgt-eyebrow">YOUR ADVENTURE LOG</span>
             <h2>성장 기록을 시작해 보세요.</h2>
-            <p>캐릭터를 조회하면 프로필, 실시간 공개 랭킹, 장비·능력치, 성장 기록과 AI 분석이 표시됩니다.</p>
+            <p>캐릭터를 찾으면 프로필과 랭킹, 장비와 스탯, 성장 기록을 한눈에 볼 수 있어요.</p>
           </section>
         )}
 
         </>}
         <footer className="mgt-footer">
           <span>MAPLE GROWTH TRACKER</span>
-          <span>Powered by NEXON Open API · Flask · React</span>
+          <span>나의 메이플 성장 기록</span>
           <a href="/admin/login">레거시 관리자 로그인</a>
         </footer>
       </main>
