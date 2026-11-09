@@ -150,6 +150,44 @@ function summarizePeriod(history, days) {
   };
 }
 
+export async function loadGrowthPeriod(character, days, onProgress = null) {
+  const normalizedDays = [30, 90].includes(Number(days)) ? Number(days) : 7;
+  if (!character?.ocid || normalizedDays === 7) {
+    throw new Error("기간별 성장 기록을 불러올 수 없습니다.");
+  }
+  const current = await fetchArchive(normalizedDays, character, {
+    collect: true,
+    onProgress
+  });
+  let previous = null;
+  const previousEnd = shiftDate(current.startDate, -1);
+  if (previousEnd) {
+    try {
+      previous = await fetchArchive(normalizedDays, character, { end: previousEnd, collect: false });
+    } catch {
+      previous = null;
+    }
+  }
+  const summary = summarizePeriod(current.history || [], normalizedDays);
+  summary.startDate = current.startDate || summary.startDate;
+  summary.endDate = current.endDate || summary.endDate;
+  const completeSummary = {
+    ...summary,
+    previousSummary: previous ? summarizePeriod(previous.history || [], normalizedDays) : null
+  };
+  return {
+    days: normalizedDays,
+    history: current.history || [],
+    summary: completeSummary,
+    rangeStatus: {
+      availableDays: current.availableDays || 0,
+      notReadyDays: current.notReadyDays || 0,
+      notCollectedDays: current.notCollectedDays || 0,
+      collection: current.collectionSummary || null
+    }
+  };
+}
+
 function ProgressBar({ value, label }) {
   const valid = Number.isFinite(Number(value)) && Number(value) >= 0 && Number(value) <= 100;
   const percent = valid ? Number(value) : 0;
@@ -260,7 +298,7 @@ function GoalPanel({ character, metrics, history }) {
     all[key] = next;
     if (!saveGrowthGoals(all)) {
       setError(true);
-      setFeedback("브라우저 저장소에 목표를 저장하지 못했습니다.");
+      setFeedback("이 브라우저에 목표를 저장하지 못했어요.");
       return;
     }
     setGoal(next);
@@ -337,7 +375,7 @@ function GoalPanel({ character, metrics, history }) {
         </div>
       </form>
       {feedback && <p className={"growth-goal-feedback " + (error ? "is-error" : "")} role="status">{feedback}</p>}
-      <p className="growth-goal-storage-note">목표는 기존과 동일하게 캐릭터 OCID 기준 브라우저 저장소에 보관됩니다. 기기 간 동기화는 지원하지 않습니다. 브라우저 알림은 사이트가 열려 있고 캐릭터를 다시 조회할 때 감지됩니다.</p>
+      <p className="growth-goal-storage-note">목표는 이 브라우저에 저장돼요. 다른 기기와는 공유되지 않으며, 알림은 사이트를 열고 캐릭터를 다시 조회할 때 확인할 수 있어요.</p>
     </section>
   );
 }
@@ -349,13 +387,13 @@ function PeriodSummary({ summary, previous, label }) {
     ? (summary.averageGrowth - previous.averageGrowth) / Math.abs(previous.averageGrowth) * 100
     : null;
   const cells = [
-    ["기간 증가량",fmt(summary.growth),summary.confirmedChangeDays + "개 연속 관측 구간"],
-    ["기록 구간 일 평균",fmt(summary.averageGrowth),summary.confirmedChangeDays + "개 구간 기준"],
+    ["총 경험치 증가량",fmt(summary.growth),summary.confirmedChangeDays + "일의 경험치 변화 기준"],
+    ["하루 평균 경험치",fmt(summary.averageGrowth),summary.confirmedChangeDays + "일의 기록 기준"],
     ["랭킹 변화",summary.rankingChange === null ? "자료 부족" : (summary.rankingChange > 0 ? "▲ " + summary.rankingChange + "위 상승" : summary.rankingChange < 0 ? "▼ " + Math.abs(summary.rankingChange) + "위 하락" : "변화 없음"),"첫 기록과 마지막 기록 비교"],
-    ["직전 기간 대비",comparisonPercent === null ? "비교 자료 부족" : (comparisonPercent > 0 ? "+" : "") + comparisonPercent.toFixed(1) + "%",previous ? "직전 동일 기간의 관측 평균과 비교" : "직전 기간 자료 없음"],
-    ["기록 충실도",summary.availableDays + " / " + summary.days + "일",`API 미제공 ${summary.notReadyDays}일 · 미수집 ${summary.notCollectedDays}일`],
-    ["기간 최고 성장",fmt(summary.bestDailyGrowth),summary.bestDailyGrowthDate ? localDate(summary.bestDailyGrowthDate) : "확인된 성장 기록 없음"],
-    ["성장 활동일",summary.growthDays + "일",`정체 ${summary.zeroGrowthDays}일 · 감소 ${summary.negativeGrowthDays}일`],
+    ["지난 기간과 비교",comparisonPercent === null ? "비교 자료 부족" : (comparisonPercent > 0 ? "+" : "") + comparisonPercent.toFixed(1) + "%",previous ? "바로 앞선 같은 기간과 비교" : "지난 기간 기록 없음"],
+    ["기록이 남은 날짜",summary.availableDays + " / " + summary.days + "일",`아직 공개되지 않은 날짜 ${summary.notReadyDays}일 · 확인하지 못한 날짜 ${summary.notCollectedDays}일`],
+    ["하루 최고 경험치",fmt(summary.bestDailyGrowth),summary.bestDailyGrowthDate ? localDate(summary.bestDailyGrowthDate) : "확인된 기록 없음"],
+    ["경험치를 얻은 날",summary.growthDays + "일",`변화 없음 ${summary.zeroGrowthDays}일 · 감소 ${summary.negativeGrowthDays}일`],
     ["레벨업",summary.levelUpCount + "회",summary.levelUpDates.length ? summary.levelUpDates.map(localDate).join(" · ") : "기간 내 레벨업 기록 없음"]
   ];
   return (
@@ -374,7 +412,7 @@ function PeriodSummary({ summary, previous, label }) {
         ))}
       </div>
       <p className="period-summary-footnote">
-        평균은 실제 변화량이 확인된 날짜 간 구간 기준입니다. 미수집 날짜는 0으로 간주하지 않으며, 레벨업 경계의 경험치 초기화는 증가량으로 계산하지 않습니다.
+        하루 평균은 경험치 변화가 확인된 날짜를 기준으로 계산했어요. 기록이 없는 날은 0으로 보지 않고, 레벨업으로 경험치가 초기화된 날은 증가량에서 제외했어요.
       </p>
     </section>
   );
@@ -545,22 +583,22 @@ export default function GrowthDashboard({ character, history, onHistoryChange, o
 
   return (
     <div className="growth-dashboard">
-      <section className="section">
+      <section className="section" id="growth-summary">
         <div className="section-header">
           <h2 className="section-title">성장 요약</h2>
-          <p className="section-description">실제 기록이 확인된 날짜 간 경험치 변화만 집계합니다.</p>
+          <p className="section-description">기록이 남아 있는 날짜를 기준으로 경험치가 얼마나 늘었는지 보여줍니다.</p>
         </div>
         <div className="summary-grid">
           <div className="summary-card"><div className="summary-label">최근 확인된 성장량</div><div className="summary-value">{signedFmt(daily)}</div></div>
           <div className="summary-card"><div className="summary-label">랭킹 변화</div><div className="summary-value">{rankChange === null ? "자료 부족" : rankChange > 0 ? "▲ "+rankChange : rankChange < 0 ? "▼ "+Math.abs(rankChange) : "변동 없음"}</div></div>
           <div className="summary-card"><div className="summary-label">최근 7일 성장</div><div className="summary-value">{signedFmt(weekly)}</div></div>
-          <div className="summary-card"><div className="summary-label">관측 일 평균</div><div className="summary-value">{fmt(average)}</div></div>
+          <div className="summary-card"><div className="summary-label">하루 평균 경험치</div><div className="summary-value">{fmt(average)}</div></div>
         </div>
       </section>
 
-      <section className="section">
+      <section className="section" id="growth-trend">
         <div className="section-header history-chart-header">
-          <div><h2 className="section-title">성장 추이</h2><p className="section-description">첫날의 실제 경험치를 기준으로 한 총 경험치 증가량과 일일 경험치 증가량, 레벨업을 표시합니다.</p></div>
+          <div><h2 className="section-title">성장 추이</h2><p className="section-description">첫날보다 경험치가 얼마나 늘었는지와 하루 단위 변화, 레벨업 기록을 보여줍니다.</p></div>
           <label className="history-range-control">기록 범위
             <select className="history-range-select" value={range} onChange={event => changeRange(Number(event.target.value))} disabled={busy}>
               <option value="7">최근 7일</option><option value="30">저장 기록 30일</option><option value="90">저장 기록 90일</option>
@@ -569,13 +607,13 @@ export default function GrowthDashboard({ character, history, onHistoryChange, o
         </div>
         <p className="history-range-notice" role="status">
           {busy ? progressText || "기록을 불러오고 있습니다..." : range === 7
-            ? `최근 7일 API 정상 기록 ${(history || []).filter(item=>item.recordStatus==="available").length}일`
-            : `최근 ${range}일 · 정상 ${rangeStatus?.availableDays ?? 0}일 · API 미제공 ${rangeStatus?.notReadyDays ?? 0}일 · 미수집 ${rangeStatus?.notCollectedDays ?? 0}일`}
+            ? `최근 7일 확인된 기록 ${(history || []).filter(item=>item.recordStatus==="available").length}일`
+            : `최근 ${range}일 · 확인된 기록 ${rangeStatus?.availableDays ?? 0}일 · 아직 공개되지 않은 기록 ${rangeStatus?.notReadyDays ?? 0}일 · 확인하지 못한 날짜 ${rangeStatus?.notCollectedDays ?? 0}일`}
         </p>
         {error && !busy && <p className="history-range-notice is-warning" role="alert">{error}</p>}
         {periodSummary && range !== 7 && <PeriodSummary summary={periodSummary} previous={periodSummary.previousSummary} label={`최근 ${range}일`} />}
         <div className="chart-card"><div className="chart-wrapper"><canvas ref={canvasRef} aria-label="기간별 성장 추이 그래프" /></div></div>
-        <section className="growth-timeline-section">
+        <section className="growth-timeline-section" id="growth-timeline">
           <div className="growth-timeline-heading"><h3>주요 성장 타임라인</h3><p>선택 기간에서 확인된 레벨업과 성장·랭킹 기록입니다.</p></div>
           <ol className="growth-timeline-list">
             {timeline.length ? timeline.map((event,index) => (
@@ -592,7 +630,7 @@ export default function GrowthDashboard({ character, history, onHistoryChange, o
         </section>
       </section>
 
-      <section className="section">
+      <section className="section" id="growth-prediction">
         <div className="section-header"><h2 className="section-title">성장 예측</h2><p className="section-description">최근 성장 기록을 기준으로 다음 레벨업을 예상합니다.</p></div>
         <div className="prediction-card">
           <div className="prediction-grid">
@@ -601,9 +639,9 @@ export default function GrowthDashboard({ character, history, onHistoryChange, o
             <div className="prediction-item"><div className="prediction-label">예상 레벨업</div><div className="prediction-value">{prediction?.date ? localDate(formatLocalISODate(prediction.date)) : "자료 부족"}</div></div>
             <div className="prediction-item"><div className="prediction-label">최근 평균</div><div className="prediction-value">{prediction?.averageGrowth > 0 ? fmt(prediction.averageGrowth) : "자료 부족"}</div></div>
           </div>
-          <p className="prediction-note">최근 관측 평균 획득량이 유지된다는 가정의 추정치입니다. API가 제공하지 않은 날짜나 레벨업 경계는 임의로 채우지 않습니다.</p>
+          <p className="prediction-note">최근과 비슷한 속도로 경험치를 얻는다고 가정한 예상이에요. 기록이 없는 날짜나 레벨업으로 경험치 기준이 바뀐 구간은 예상해서 채우지 않아요.</p>
         </div>
-        <GoalPanel character={character} metrics={metrics} history={history || []} />
+        <div id="growth-goal"><GoalPanel character={character} metrics={metrics} history={history || []} /></div>
       </section>
 
     </div>
@@ -621,7 +659,7 @@ export function GrowthHistoryTable({ history }) {
     <section className="section growth-history-section" aria-labelledby="growth-history-title">
       <div className="section-header">
         <h2 className="section-title" id="growth-history-title">날짜별 성장 기록</h2>
-        <p className="section-description">선택한 기간의 경험치 진행률과 랭킹 변화입니다. API가 진행률을 제공하지 않은 날짜는 추정하지 않고 비워 둡니다.</p>
+        <p className="section-description">선택한 기간의 경험치 진행률과 랭킹 변화입니다. 진행률을 확인할 수 없는 날짜는 빈칸으로 남겨두었어요.</p>
       </div>
       <div className="history-card">
         <div className="history-table-wrapper">

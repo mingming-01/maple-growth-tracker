@@ -201,6 +201,9 @@ test("mobile touch opens item tooltips without clipped detail panels", async ({ 
     await page.getByLabel("캐릭터명").fill("상세정보확장테스트");
     await page.getByRole("button", { name: /캐릭터 조회/ }).tap();
     await expect(page.getByRole("heading", { name: "상세정보확장테스트" })).toBeVisible();
+    await page.locator('.mgt-nav a[href="#/details"]').tap();
+    await expect(page.locator("#details").getByRole("heading", { name: "캐릭터 상세 정보" })).toBeVisible();
+    await page.locator("#details").getByRole("heading", { name: "캐릭터 상세 정보" }).scrollIntoViewIfNeeded();
 
     await expect(page.getByText("프리셋 조합 추천")).toHaveCount(0);
     await page.locator('[data-detail-tab="symbols"]').tap();
@@ -225,7 +228,7 @@ test("mobile touch opens item tooltips without clipped detail panels", async ({ 
     expect(bounds.y).toBeGreaterThanOrEqual(0);
     expect(bounds.x + bounds.width).toBeLessThanOrEqual(391);
 
-    await page.locator(".mgt-topbar").tap();
+    await page.locator(".mgt-growth-page-heading").tap();
     await expect(tooltip).toHaveCount(0);
 
     await page.locator('[data-detail-tab="equipment"]').tap();
@@ -287,7 +290,7 @@ test("mobile touch opens item tooltips without clipped detail panels", async ({ 
     await expect(faceSlot.locator(".equipment-game-star")).toHaveCount(0);
     await faceSlot.tap();
     await expect(page.locator("body > .game-floating-tooltip .game-equipment-tooltip-star")).toHaveCount(0);
-    await page.locator(".mgt-topbar").tap();
+    await page.locator(".mgt-growth-page-heading").tap();
     const seedRing = page.locator('.equipment-game-slot[data-slot="ring1"]');
     await expect(seedRing.locator(".equipment-game-ring-level")).toHaveText("Lv.4");
     await seedRing.evaluate(element => element.scrollIntoView({ block: "center", inline: "center", behavior: "instant" }));
@@ -295,7 +298,7 @@ test("mobile touch opens item tooltips without clipped detail panels", async ({ 
     await expect(page.locator("body > .game-floating-tooltip")).toContainText("시드링 구성");
     await expect(page.locator("body > .game-floating-tooltip")).toContainText("리스트레인트 링 · Lv. 4");
     await expect(page.locator("body > .game-floating-tooltip")).toContainText("컨티뉴어스 링 · Lv. 3");
-    await page.locator(".mgt-topbar").tap();
+    await page.locator(".mgt-growth-page-heading").tap();
 
     await page.getByRole("tab", { name: "치장" }).tap();
     await expect(page.getByText("착용 모드 · COORDINATION")).toBeVisible();
@@ -313,14 +316,14 @@ test("mobile touch opens item tooltips without clipped detail panels", async ({ 
     await expect(androidTooltip).toContainText("레전드리");
     await expect(androidTooltip).toContainText("여성");
 
-    await page.locator(".mgt-topbar").tap();
+    await page.locator(".mgt-growth-page-heading").tap();
     await page.locator('[data-detail-tab="skills"]').tap();
     const skill = page.locator(".game-sixth-skill-tile[data-tooltip-trigger='true']");
     await expect(skill).toBeVisible();
     await skill.tap();
     await expect(page.locator("body > .game-floating-tooltip")).toContainText("스킬 설명 터치 확인");
 
-    await page.locator(".mgt-topbar").tap();
+    await page.locator(".mgt-growth-page-heading").tap();
     await page.locator('[data-detail-tab="union"]').tap();
     const championCard = page.locator(".game-union-champion-card");
     await expect(championCard).toContainText("챔피언 테스트");
@@ -336,14 +339,14 @@ test("mobile touch opens item tooltips without clipped detail panels", async ({ 
     await expect(championTooltip).toContainText("직업 · 아크메이지(썬,콜)");
     await expect(championTooltip).toContainText("레벨 · Lv. 298");
     await expect(championTooltip.locator("img")).toHaveCount(0);
-    await page.locator(".mgt-topbar").tap();
+    await page.locator(".mgt-growth-page-heading").tap();
 
     const crest = championCard.locator(".game-union-champion-crest").first();
     await crest.tap();
     const crestTooltip = page.locator("body > .game-floating-tooltip");
     await expect(crestTooltip).toContainText("보스 몬스터 공격 시 데미지 +1%");
     await expect(crestTooltip.locator("img")).toHaveCount(0);
-    await page.locator(".mgt-topbar").tap();
+    await page.locator(".mgt-growth-page-heading").tap();
 
     // Verify the desktop layout uses the larger avatar size as well.
     await page.setViewportSize({ width: 1440, height: 900 });

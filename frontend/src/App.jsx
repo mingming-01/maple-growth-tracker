@@ -1,223 +1,45 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { getCharacter, getHistory } from "./services/api.js";
-import CharacterDetails from "./components/character/CharacterDetails.jsx";
 import AdminDashboard from "./components/admin/AdminDashboard.jsx";
-import GrowthDashboard, { GrowthHistoryTable } from "./features/growth/GrowthDashboard.jsx";
-import { AIReport, GrowthComparison } from "./features/analytics/AnalyticsAndComparison.jsx";
+import FavoriteCharacters from "./features/home/FavoriteCharacters.jsx";
+import GrowthHome from "./features/home/GrowthHome.jsx";
+import { loadGrowthPeriod } from "./features/growth/GrowthDashboard.jsx";
 import {
   readTrackerState,
   saveTrackerState,
   readFavorites,
   saveFavorites,
   favoriteKey,
-  readGrowthGoals,
   MAX_FAVORITE_CHARACTERS
 } from "./lib/storage.js";
-import {
-  calculateAverageGrowth,
-  calculateLevelProgress,
-  sortHistoryAscending
-} from "./lib/growth.js";
 
-const WORLD_LOGOS = {
-  "스카니아":"/static/images/worlds/SCANIA.PNG",
-  "베라":"/static/images/worlds/BERA.PNG",
-  "루나":"/static/images/worlds/LUNA.png",
-  "제니스":"/static/images/worlds/ZENITH.png",
-  "크로아":"/static/images/worlds/CROA.png",
-  "유니온":"/static/images/worlds/UNION.png",
-  "엘리시움":"/static/images/worlds/ELYSIUM.png",
-  "이노시스":"/static/images/worlds/ENOSIS.png",
-  "레드":"/static/images/worlds/RED.png",
-  "오로라":"/static/images/worlds/AURORA.PNG",
-  "아케인":"/static/images/worlds/ARCANE.png",
-  "노바":"/static/images/worlds/NOVA.png",
-  "에오스":"/static/images/worlds/EOS.png",
-  "헬리오스":"/static/images/worlds/HELIOS.png",
-  "챌린저스":"/static/images/worlds/CHALLENGERS.png"
-};
-
-function formatNumber(value) {
-  if (value === null || value === undefined || value === "" || !Number.isFinite(Number(value))) return "—";
-  return Number(value).toLocaleString("ko-KR");
+function readRouteFromHash() {
+  const raw = window.location.hash.replace(/^#\/?/, "").split(/[?&]/, 1)[0];
+  const routes = {
+    "": "overview",
+    dashboard: "overview",
+    character: "overview",
+    insight: "overview",
+    growth: "growth",
+    details: "details",
+    analytics: "analytics",
+    history: "history",
+    comparison: "comparison",
+    admin: "admin"
+  };
+  return routes[raw] || "overview";
 }
 
-function formatRate(value) {
-  const number = Number(String(value ?? "").replace("%",""));
-  return Number.isFinite(number) && number >= 0 && number <= 100 ? number : null;
+function readDetailTabFromHash() {
+  const params = new URLSearchParams(window.location.hash.split("?")[1] || "");
+  const tab = params.get("tab");
+  return ["stats","equipment","symbols","skills","link","union"].includes(tab) ? tab : "stats";
 }
 
-function rankingFallback(status, label) {
-  if (status === "not_ready") return "당일 집계 전";
-  if (status === "unavailable") return "조회 실패";
-  if (status === "partial") return "일부 조회 실패";
-  if (status === "empty") return "최근 집계자료 없음";
-  return label || "랭킹 자료 없음";
+function routeHash(route) {
+  return route === "overview" ? "#/" : `#/${route}`;
 }
 
-function RankingItem({ label, value, status }) {
-  return (
-    <div className="ranking-item">
-      <span>{label}</span>
-      <strong>{value === null || value === undefined || value === "" ? rankingFallback(status) : formatNumber(value) + "위"}</strong>
-      {value === null || value === undefined || value === "" ? <small>현재 순위 미확인</small> : <small>Nexon 랭킹 API</small>}
-    </div>
-  );
-}
-
-function RankingStatus({ character }) {
-  const status = character.rankingDataStatus;
-  const rankingDate = character.rankingDate
-    ? new Date(character.rankingDate + "T00:00:00+09:00").toLocaleDateString("ko-KR")
-    : "";
-  const dateNote = rankingDate ? " 집계 기준일 · " + rankingDate + "." : "";
-  const warnings = Array.isArray(character.rankingWarnings) ? character.rankingWarnings : [];
-
-  if (status === "available" && [character.ranking,character.worldRanking,character.jobWorldRanking,character.jobRanking].some(value => value !== null && value !== undefined)) {
-    return <p className="mgt-ranking-status is-success">Nexon 공개 랭킹 데이터입니다.{dateNote}</p>;
-  }
-
-  const message = status === "not_ready"
-    ? "오늘 날짜의 랭킹 집계가 아직 준비되지 않았습니다. 잠시 후 최신 정보 다시 조회를 눌러 확인해주세요."
-    : status === "unavailable"
-      ? "Nexon 랭킹 API 요청에 실패했습니다. 캐릭터 기본 정보는 정상 조회됐으며, 최신 정보 다시 조회로 재시도할 수 있습니다."
-      : status === "partial"
-        ? "일부 랭킹만 확인됐습니다. 확인된 순위만 표시하고 누락된 값은 임의로 채우지 않았습니다."
-        : status === "empty"
-          ? "최근 3일의 공개 랭킹 응답에 이 캐릭터의 순위가 없습니다. 집계 대상 외 캐릭터이거나 랭킹 데이터가 아직 제공되지 않았을 수 있습니다."
-          : "현재 응답에서 랭킹을 확인하지 못했습니다. 최신 정보 다시 조회를 눌러 다시 확인해주세요.";
-
-  return (
-    <div className="mgt-ranking-status is-warning" role="status">
-      <p>{message}{dateNote}</p>
-      {warnings.length > 0 && <small>{warnings.join(" ")}</small>}
-      {character.rankingApiDiagnostics && Object.keys(character.rankingApiDiagnostics).length > 0 && (
-        <details className="mgt-ranking-diagnostics">
-          <summary>랭킹 API 응답 상세</summary>
-          <div>
-            {Object.entries(character.rankingApiDiagnostics).map(([key, item]) => (
-              <span key={key}>
-                {({ranking:"종합",worldRanking:"월드",jobWorldRanking:"직업·월드",jobRanking:"직업"})[key] || key}
-                {" · HTTP "}{item.statusCode ?? "응답 없음"}
-                {" · 항목 "}{item.returnedEntries ?? "확인 불가"}건
-                {item.errorCode ? " · " + item.errorCode : ""}
-                {item.errorMessage ? " · " + item.errorMessage : ""}
-              </span>
-            ))}
-          </div>
-        </details>
-      )}
-    </div>
-  );
-}
-
-function CharacterProfile({ character, history }) {
-  const rate = formatRate(character.experienceRate);
-  const weeklyHistory = sortHistoryAscending(history || []).slice(-7);
-  const average = calculateAverageGrowth(weeklyHistory);
-  const progress = calculateLevelProgress(character,average);
-  const logo = WORLD_LOGOS[character.worldName];
-  return (
-    <section className="mgt-profile-shell" aria-label="캐릭터 프로필">
-      <div className="mgt-profile-main">
-        <div className="mgt-character-identity">
-          <div className="mgt-character-avatar-frame">
-            {character.character_image
-              ? <img className="mgt-character-avatar" src={character.character_image}
-                  alt={character.characterName + " 캐릭터 아바타"}
-                  referrerPolicy="no-referrer" />
-              : <span className="mgt-avatar-fallback">M</span>}
-          </div>
-          <div className="mgt-character-copy">
-            <span className="mgt-eyebrow">CHARACTER PROFILE</span>
-            <h2>{character.characterName || "이름 정보 없음"}</h2>
-            <div className="mgt-character-meta">
-              {logo && <img src={logo} alt="" className="mgt-world-logo" />}
-              <span>{character.worldName || "월드 정보 없음"}</span>
-              <span>Lv. {formatNumber(character.level)}</span>
-              <span>{character.job || "직업 정보 없음"}</span>
-              <span>{character.guildName || "길드 없음"}</span>
-            </div>
-          </div>
-        </div>
-        <div className="mgt-profile-progress">
-          <div className="mgt-progress-top">
-            <div><span className="mgt-stat-label">현재 레벨 진행률</span><strong>{rate === null ? "자료 부족" : rate.toFixed(3)+"%"}</strong></div>
-            <span className="mgt-progress-remaining">{rate === null ? "경험치 진행률 미제공" : "다음 레벨까지 "+(100-rate).toFixed(3)+"%"}</span>
-          </div>
-          <div className="mgt-exp-track" role="progressbar" aria-label="현재 레벨 경험치 진행률"
-            aria-valuemin="0" aria-valuemax="100" aria-valuenow={rate ?? 0}>
-            <span className="mgt-exp-fill" style={{width:(rate ?? 0)+"%"}} />
-          </div>
-          <p className="mgt-progress-note">
-            {progress?.dailyProgressRate != null
-              ? "최근 기록 평균 +" + progress.dailyProgressRate.toFixed(4) + "%p / 일"
-              : "성장 기록이 쌓이면 실제 관측 경험치를 이용해 일일 진척률을 계산합니다."}
-          </p>
-        </div>
-      </div>
-      <div className="mgt-profile-side">
-        <div className="mgt-eyebrow">CHARACTER SNAPSHOT</div>
-        <div className="mgt-snapshot-stat"><span>현재 경험치</span><strong>{formatNumber(character.experience)}</strong></div>
-        <div className="mgt-snapshot-stat"><span>주간 일일 평균 경험치</span><strong>{average === null ? "자료 부족" : formatTrillion(average)}</strong></div>
-        <div className="mgt-snapshot-stat" data-testid="profile-combat-power">
-          <span>전투력</span><strong>{character.currentCombatPower == null ? "상세 정보 조회 대기" : formatNumber(character.currentCombatPower)}</strong>
-        </div>
-      </div>
-      <div className="mgt-ranking-panel">
-        <div className="mgt-ranking-heading">
-          <div><span className="mgt-eyebrow">RANKING</span><h3>캐릭터 랭킹</h3></div>
-          <span>공개 랭킹 API</span>
-        </div>
-        <div className="mgt-ranking-grid">
-          <RankingItem label="종합 랭킹" value={character.ranking} status={character.rankingDataStatus} />
-          <RankingItem label="월드 랭킹" value={character.worldRanking} status={character.rankingDataStatus} />
-          <RankingItem label="직업 · 월드" value={character.jobWorldRanking} status={character.rankingDataStatus} />
-          <RankingItem label="직업 전체" value={character.jobRanking} status={character.rankingDataStatus} />
-        </div>
-        <RankingStatus character={character} />
-      </div>
-    </section>
-  );
-}
-
-function formatTrillion(value) {
-  if (value === null || value === undefined || !Number.isFinite(Number(value))) return "자료 부족";
-  const n = Number(value) / 1_000_000_000_000;
-  return (Math.abs(n) >= 100 ? n.toFixed(0) : Math.abs(n) >= 10 ? n.toFixed(1) : n.toFixed(2)) + "조";
-}
-
-function FavoritesPanel({ favorites, current, onOpen, onRemove }) {
-  return (
-    <section className="mgt-favorites-panel">
-      <div className="mgt-section-heading">
-        <div><span className="mgt-eyebrow">FAVORITES</span><h2>관심 캐릭터</h2></div>
-        <span>{favorites.length} / {MAX_FAVORITE_CHARACTERS}명</span>
-      </div>
-      {favorites.length ? (
-        <div className="mgt-favorites-list">
-          {favorites.map(item => {
-            const goal = item.ocid ? readGrowthGoals()[item.ocid] : null;
-            return (
-              <article className="mgt-favorite-card" key={favoriteKey(item)}>
-                <button type="button" className="mgt-favorite-open" onClick={() => onOpen(item)}>
-                  <span className="mgt-favorite-star">★</span>
-                  <span className="mgt-favorite-details">
-                    <strong>{item.name}</strong>
-                    <small>{item.worldName || "월드 정보 없음"}</small>
-                    {goal && <small className="mgt-favorite-goal">{goal.completedAt ? `목표 Lv.${goal.targetLevel} 달성` : `목표 Lv.${goal.targetLevel}`}</small>}
-                  </span>
-                </button>
-                <button type="button" className="mgt-favorite-remove" aria-label={item.name+" 관심 목록에서 제거"} onClick={() => onRemove(item)}>×</button>
-              </article>
-            );
-          })}
-        </div>
-      ) : <p className="mgt-favorites-empty">관심 캐릭터를 등록하면 이곳에서 빠르게 다시 조회할 수 있습니다.</p>}
-      {current && <p className="mgt-favorites-note">관심 캐릭터 목록은 기존 브라우저 저장 데이터와 공유됩니다.</p>}
-    </section>
-  );
-}
 
 function App() {
   const restored = useMemo(() => readTrackerState(), []);
@@ -225,6 +47,7 @@ function App() {
   const [character,setCharacter] = useState(restored?.character || null);
   const [history,setHistory] = useState(Array.isArray(restored?.history) ? restored.history : []);
   const [analysisPeriod,setAnalysisPeriod] = useState(() => ({ days:[7,30,90].includes(Number(restored?.historyRange)) ? Number(restored.historyRange) : 7, history:Array.isArray(restored?.displayHistory) ? restored.displayHistory : (Array.isArray(restored?.history) ? restored.history : []), summary:restored?.periodSummary || null }));
+  const [openNavMenu,setOpenNavMenu] = useState(null);
   const [loading,setLoading] = useState(false);
   const [error,setError] = useState("");
   const [historyWarning,setHistoryWarning] = useState("");
@@ -233,12 +56,17 @@ function App() {
   const [favoriteFeedback,setFavoriteFeedback] = useState("");
   const [exporting,setExporting] = useState("");
   const [shareOpen,setShareOpen] = useState(false);
-  const [view,setView] = useState(() => window.location.hash === "#admin" ? "admin" : "dashboard");
+  const [view,setView] = useState(() => readRouteFromHash());
+  const [detailTab,setDetailTab] = useState(() => readDetailTabFromHash());
   const [comparisonState,setComparisonState] = useState(restored?.comparison || null);
   const resultRef = useRef(null);
 
   useEffect(() => {
-    const syncView = () => setView(window.location.hash === "#admin" ? "admin" : "dashboard");
+    const syncView = () => {
+      setView(readRouteFromHash());
+      setDetailTab(readDetailTabFromHash());
+      window.scrollTo(0, 0);
+    };
     window.addEventListener("hashchange",syncView);
     return () => window.removeEventListener("hashchange",syncView);
   },[]);
@@ -279,13 +107,13 @@ function App() {
 
   function openAdmin(event) {
     event?.preventDefault?.();
-    if (window.location.hash !== "#admin") window.location.hash = "admin";
+    if (window.location.hash !== routeHash("admin")) window.location.hash = routeHash("admin");
     setView("admin");
   }
 
   function closeAdmin() {
-    window.history.replaceState(null,"",window.location.pathname + window.location.search);
-    setView("dashboard");
+    if (window.location.hash !== routeHash("overview")) window.location.hash = routeHash("overview");
+    setView("overview");
   }
 
   const onStatsLoaded = useCallback(data => {
@@ -303,6 +131,31 @@ function App() {
       return next;
     });
   },[]);
+
+  async function selectAnalysisPeriod(value) {
+    const days = [7, 30, 90].includes(Number(value)) ? Number(value) : 7;
+    if (days === 7) {
+      const next = { days: 7, history: history || [], summary: null };
+      setAnalysisPeriod(next);
+      saveTrackerState({
+        historyRange: 7,
+        displayHistory: history || [],
+        historyRangeStatus: null,
+        periodSummary: null
+      });
+      return next;
+    }
+    const loaded = await loadGrowthPeriod(character, days);
+    const next = { days, history: loaded.history, summary: loaded.summary };
+    setAnalysisPeriod(next);
+    saveTrackerState({
+      historyRange: days,
+      displayHistory: loaded.history,
+      historyRangeStatus: loaded.rangeStatus,
+      periodSummary: loaded.summary
+    });
+    return next;
+  }
 
   async function searchName(query, { refresh = false } = {}) {
     const target = String(query || "").trim();
@@ -459,24 +312,43 @@ function App() {
           <span className="mgt-brand-mark">M</span>
           <span>MAPLE <b>GROWTH</b></span>
         </a>
-        <nav className="mgt-nav" aria-label="주요 메뉴">
-          {view === "dashboard" ? <>
-            <a href="#character">캐릭터</a>
-            <a href="#details">스펙</a>
-            <a href="#growth">성장 기록</a>
-            <a href="#analytics">AI 분석</a>
-          </> : <a href="#dashboard" onClick={event=>{event.preventDefault();closeAdmin();}}>대시보드</a>}
-          <a href="#admin" onClick={openAdmin}>관리자</a>
+        <nav className="mgt-nav" aria-label="주요 메뉴" onMouseLeave={() => setOpenNavMenu(null)} onBlur={event => { if (!event.currentTarget.contains(event.relatedTarget)) setOpenNavMenu(null); }}>
+          {view === "admin" ? <a href="#/" onClick={event=>{event.preventDefault();closeAdmin();}}>개요</a> : <>
+            <a href="#/" aria-current={view === "overview" ? "page" : undefined}>개요</a>
+            <div className="mgt-nav-dropdown" data-open={openNavMenu === "growth"} onMouseEnter={() => setOpenNavMenu("growth")} onFocusCapture={() => setOpenNavMenu("growth")}>
+              <a href="#/growth" aria-current={view === "growth" ? "page" : undefined} onClick={event => event.currentTarget.blur()}>성장 분석</a>
+              <div className="mgt-nav-submenu">
+                <a href="#/growth?section=summary" onClick={event => event.currentTarget.blur()}>성장 요약</a>
+                <a href="#/growth?section=trend" onClick={event => event.currentTarget.blur()}>성장 추이</a>
+                <a href="#/growth?section=timeline" onClick={event => event.currentTarget.blur()}>주요 성장 기록</a>
+                <a href="#/growth?section=prediction" onClick={event => event.currentTarget.blur()}>레벨업 예상</a>
+                <a href="#/growth?section=goal" onClick={event => event.currentTarget.blur()}>목표 레벨</a>
+              </div>
+            </div>
+            <div className="mgt-nav-dropdown" data-open={openNavMenu === "details"} onMouseEnter={() => setOpenNavMenu("details")} onFocusCapture={() => setOpenNavMenu("details")}>
+              <a href="#/details" aria-current={view === "details" ? "page" : undefined} onClick={event => event.currentTarget.blur()}>캐릭터 상세</a>
+              <div className="mgt-nav-submenu">
+                {[
+                  ["stats","스탯"],["equipment","장비"],["symbols","심볼"],
+                  ["skills","6차 / HEXA"],["link","링크 스킬"],["union","유니온"]
+                ].map(([tab,label]) => <a key={tab} href={`#/details?tab=${tab}`} onClick={event => event.currentTarget.blur()}>{label}</a>)}
+              </div>
+            </div>
+            <a href="#/analytics" aria-current={view === "analytics" ? "page" : undefined}>AI 리포트</a>
+            <a href="#/history" aria-current={view === "history" ? "page" : undefined}>날짜별 기록</a>
+            <a href="#/comparison" aria-current={view === "comparison" ? "page" : undefined}>캐릭터 비교</a>
+          </>}
+          <a href="#/admin" onClick={openAdmin} aria-current={view === "admin" ? "page" : undefined}>관리자</a>
         </nav>
       </header>
 
-      <main className="mgt-page-content">
+      <main className="mgt-page-content mgt-layout-container">
         {view === "admin" ? <AdminDashboard onBack={closeAdmin} /> : <>
         <section className="mgt-hero">
           <div>
-            <div className="mgt-hero-label"><span /> CHARACTER GROWTH DASHBOARD</div>
-            <h1>모험가의 성장을<br /><em>기록하고 분석하다.</em></h1>
-            <p>Nexon Open API 기반의 캐릭터 정보, 성장 통계, 스펙과 프리셋을 하나의 대시보드에서 확인하세요.</p>
+            <div className="mgt-hero-label"><span /> 나의 메이플 성장 기록</div>
+            <h1>캐릭터의 성장을<br /><em>기록하고 돌아보다.</em></h1>
+            <p>레벨업부터 경험치 변화, 장비와 스탯까지. 내 캐릭터의 성장 과정을 한곳에서 살펴보세요.</p>
           </div>
           <div className="mgt-hero-ornament" aria-hidden="true">
             <span className="mgt-orbit mgt-orbit-one" />
@@ -486,12 +358,11 @@ function App() {
           </div>
         </section>
 
-        <FavoritesPanel favorites={favorites} current={character} onOpen={item => searchName(item.name)} onRemove={removeFavorite} />
+        <FavoriteCharacters favorites={favorites} current={character} onOpen={item => searchName(item.name)} onRemove={removeFavorite} />
 
         <section className="mgt-search-panel" aria-labelledby="mgt-search-title">
           <div className="mgt-search-heading">
-            <div><span className="mgt-eyebrow">CHARACTER SEARCH</span><h2 id="mgt-search-title">모험가 찾기</h2></div>
-            <span className="mgt-api-indicator"><i /> NEXON OPEN API</span>
+            <div><span className="mgt-eyebrow">CHARACTER SEARCH</span><h2 id="mgt-search-title">캐릭터 찾기</h2></div>
           </div>
           <form className="mgt-search-form" onSubmit={handleSearch} data-testid="react-character-search">
             <label className="sr-only" htmlFor="react-character-name">캐릭터명</label>
@@ -499,7 +370,7 @@ function App() {
               placeholder="조회할 캐릭터명을 입력하세요" autoComplete="off" maxLength={30} />
             <button type="submit" disabled={loading || !name.trim()}>{loading ? "조회 중..." : "캐릭터 조회"} <span>→</span></button>
           </form>
-          <div className="mgt-search-footnote">넥슨 Open API에서 최신 공개 데이터를 다시 조회합니다.</div>
+          <div className="mgt-search-footnote">메이플스토리 캐릭터 이름을 입력해 주세요.</div>
           {error && <p className="mgt-error" role="alert">{error}</p>}
           {favoriteFeedback && <p className="mgt-feedback" role="status">{favoriteFeedback}</p>}
           {historyWarning && <p className="mgt-warning" role="status">{historyWarning}</p>}
@@ -551,27 +422,19 @@ function App() {
             </div>
 
             <div ref={resultRef} className="mgt-result-content">
-              <div id="character">
-                <CharacterProfile character={character} history={history} />
-              </div>
-              <div id="details">
-                <CharacterDetails ocid={character.ocid} onStatsLoaded={onStatsLoaded} />
-              </div>
-              <div id="growth">
-                <GrowthDashboard character={character} history={history} onHistoryChange={setHistory} onAnalysisPeriodChange={setAnalysisPeriod} onPersist={persistPatch} />
-              </div>
-              <div id="analytics">
-                <AIReport character={character} history={history} analysisHistory={analysisPeriod.history || history} periodDays={analysisPeriod.days} periodSummary={analysisPeriod.summary} />
-              </div>
-              <div id="history"><GrowthHistoryTable history={analysisPeriod.history || history} /></div>
-              <div id="comparison">
-                <GrowthComparison
-                  character={character}
-                  history={history}
-                  initialState={comparisonState}
-                  onSave={persistPatch}
-                />
-              </div>
+              <GrowthHome
+                character={character}
+                history={history}
+                onStatsLoaded={onStatsLoaded}
+                onHistoryChange={setHistory}
+                onAnalysisPeriodChange={setAnalysisPeriod}
+                onAnalysisPeriodSelect={selectAnalysisPeriod}
+                onPersist={persistPatch}
+                analysisPeriod={analysisPeriod}
+                comparisonState={comparisonState}
+                view={view}
+                detailTab={detailTab}
+              />
             </div>
           </>
         )}
@@ -581,14 +444,14 @@ function App() {
             <span className="mgt-empty-emblem">✧</span>
             <span className="mgt-eyebrow">YOUR ADVENTURE LOG</span>
             <h2>성장 기록을 시작해 보세요.</h2>
-            <p>캐릭터를 조회하면 프로필, 실시간 공개 랭킹, 장비·능력치, 성장 기록과 AI 분석이 표시됩니다.</p>
+            <p>캐릭터를 찾으면 프로필과 랭킹, 장비와 스탯, 성장 기록을 한눈에 볼 수 있어요.</p>
           </section>
         )}
 
         </>}
         <footer className="mgt-footer">
           <span>MAPLE GROWTH TRACKER</span>
-          <span>Powered by NEXON Open API · Flask · React</span>
+          <span>나의 메이플 성장 기록</span>
           <a href="/admin/login">레거시 관리자 로그인</a>
         </footer>
       </main>

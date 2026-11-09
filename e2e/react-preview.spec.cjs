@@ -4,7 +4,7 @@ test("React dashboard is served at root while the legacy Flask homepage remains 
   await page.goto("/");
   await expect(page.locator('[data-testid="react-preview-ready"]')).toBeVisible();
   await expect(page.locator('[data-testid="react-character-search"]')).toBeVisible();
-  await expect(page.getByRole("heading", { name: "모험가 찾기" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "캐릭터 찾기" })).toBeVisible();
   const moduleScript = await page.locator('script[type="module"]').getAttribute("src");
   expect(moduleScript).toContain("/static/react-preview/assets/");
 
@@ -13,13 +13,13 @@ test("React dashboard is served at root while the legacy Flask homepage remains 
 
   await page.goto("/preview/");
   await expect(page.locator('[data-testid="react-preview-ready"]')).toBeVisible();
-  await expect(page.locator('.mgt-nav a[href="#growth"]')).toBeVisible();
+  await expect(page.locator('.mgt-nav a[href="#/growth"]')).toBeVisible();
 });
 
 test("React preview keeps the existing Flask admin route reachable", async ({ page }) => {
   await page.goto("/preview/");
   await expect(page.locator('[data-testid="react-preview-ready"]')).toBeVisible();
-  await expect(page.locator('.mgt-nav a[href="#admin"]')).toBeVisible();
+  await expect(page.locator('.mgt-nav a[href="#/admin"]')).toBeVisible();
   await expect(page.locator('.mgt-footer a[href="/admin/login"]')).toHaveAttribute("href", "/admin/login");
 });
 
@@ -101,21 +101,32 @@ test("React preview loads profile data and refreshes only on explicit request", 
   expect(new URL(historyRequest.url()).searchParams.get("refresh")).toBeNull();
 
   await expect(page.getByRole("heading", { name: "프리뷰테스트" })).toBeVisible();
+  await expect(page.getByTestId("growth-insight")).toBeVisible();
+  await expect(page.getByRole("heading", { name: "이번 성장 기록에서 확인한 점" })).toBeVisible();
+  await expect(page.locator('.mgt-nav a[href="#/analytics"]')).toBeVisible();
   await expect(page.getByText("12,345위")).toBeVisible();
   await expect(page.getByText("6,789위")).toBeVisible();
   await expect(page.getByText("크로아")).toBeVisible();
   await expect(page.getByRole("progressbar", { name: "현재 레벨 경험치 진행률" })).toHaveAttribute("aria-valuenow", "35.6");
   await expect(page.locator(".mgt-character-avatar-frame")).toBeVisible();
   const desktopAvatar = await page.locator(".mgt-character-avatar-frame").boundingBox();
-  expect(desktopAvatar.width).toBeGreaterThanOrEqual(240);
-  expect(desktopAvatar.height).toBeGreaterThanOrEqual(240);
-  // CharacterDetails intentionally lazy-loads stats when its section approaches the viewport.
-  // Scroll it into view to exercise the same interaction as a real visitor.
+  expect(desktopAvatar.width).toBeGreaterThanOrEqual(128);
+  expect(desktopAvatar.height).toBeGreaterThanOrEqual(128);
+  await expect(page.getByRole("button", { name: "관심 캐릭터 등록" })).toBeVisible();
+
+  await page.locator('.mgt-nav a[href="#/details"]').click();
+  // CharacterDetails loads its data only after entering the dedicated route.
+  await expect(page.locator("#details").getByRole("heading", { name: "캐릭터 상세 정보" })).toBeVisible();
   await page.getByRole("heading", { name: "캐릭터 상세 정보" }).scrollIntoViewIfNeeded();
+  await expect(page.locator(".game-stat-detail-grade")).toHaveText("레전드리");
+  await page.locator('.mgt-nav a[href="#/"]').click();
   await expect(page.locator(".mgt-snapshot-stat[data-testid='profile-combat-power']")).toContainText("전투력");
   await expect(page.locator(".mgt-snapshot-stat[data-testid='profile-combat-power']")).toContainText("987,654,321");
-  await expect(page.getByRole("button", { name: "관심 캐릭터 등록" })).toBeVisible();
-  await expect(page.getByText("주간 일일 평균 경험치")).toBeVisible();
+
+  await page.locator('.mgt-nav a[href="#/growth"]').click();
+  await expect(page.locator("#growth").getByRole("heading", { name: "성장 요약" })).toBeVisible();
+
+  await page.locator('.mgt-nav a[href="#/history"]').click();
   await expect(page.locator(".history-table thead")).toContainText("경험치");
   await expect(page.locator(".history-table thead")).not.toContainText("경험치 증가량");
   await expect(page.locator(".history-table thead tr th")).toHaveCount(5);
@@ -127,18 +138,11 @@ test("React preview loads profile data and refreshes only on explicit request", 
   await expect(progressRow.locator(".history-experience-change")).toHaveText("+0.00조");
   await expect(progressRow.locator(".history-experience-change")).toHaveClass(/is-positive/);
   await expect(progressRow.locator(".history-experience-value")).toHaveAttribute("aria-label", /경험치 증가량/);
-  const aiHeading = page.getByRole("heading", { name: "AI 성장 리포트" });
-  const historyHeading = page.getByRole("heading", { name: "날짜별 성장 기록" });
-  const aiBeforeHistory = await page.evaluate(() => {
-    const ai = [...document.querySelectorAll("h2")].find(node => node.textContent.trim() === "AI 성장 리포트");
-    const table = document.querySelector("#history");
-    return Boolean(ai && table && (ai.compareDocumentPosition(table) & Node.DOCUMENT_POSITION_FOLLOWING));
-  });
-  expect(aiBeforeHistory).toBe(true);
-  await expect(aiHeading).toBeVisible();
-  await expect(historyHeading).toBeVisible();
-  await expect(page.getByRole("heading", { name: "캐릭터 상세 정보" })).toBeVisible();
-  await expect(page.locator(".game-stat-detail-grade")).toHaveText("레전드리");
+
+  await page.locator('.mgt-nav a[href="#/analytics"]').click();
+  await expect(page.locator("#analytics").getByRole("heading", { name: "AI 성장 리포트" })).toBeVisible();
+  await page.locator('.mgt-nav a[href="#/comparison"]').click();
+  await expect(page.locator("#comparison").getByRole("heading", { name: "성장 캐릭터 비교" })).toBeVisible();
 
   const refreshRequests = [];
   page.on("request", request => {
@@ -191,9 +195,75 @@ test("React profile keeps a readable avatar and progress bar on mobile", async (
   await expect(page.getByRole("progressbar", { name: "현재 레벨 경험치 진행률" })).toBeVisible();
   await expect(page.locator(".mgt-character-avatar-frame")).toBeVisible();
   const avatar = await page.locator(".mgt-character-avatar-frame").boundingBox();
-  expect(avatar.width).toBeGreaterThanOrEqual(128);
+  expect(avatar.width).toBeGreaterThanOrEqual(88);
 });
 
+
+test("React hash routes support direct entry, reload, and browser back/forward navigation", async ({ page }) => {
+  await page.route("**/api/character?*", route => route.fulfill({
+    status: 200, contentType: "application/json",
+    body: JSON.stringify({
+      characterName: "라우트테스트", ocid: "route-test-ocid", character_image: null,
+      worldName: "크로아", job: "아크메이지", guildName: null, level: 280,
+      experience: 123456, experienceRate: "35.600", ranking: 10,
+      worldRanking: 5, jobWorldRanking: 2, jobRanking: 1, rankingDataStatus: "available"
+    })
+  }));
+  await page.route("**/api/history?*", route => route.fulfill({
+    status: 200, contentType: "application/json",
+    body: JSON.stringify({ history: [], historyStatus: "complete" })
+  }));
+  await page.route("**/api/character-details?*", route => route.fulfill({
+    status: 200, contentType: "application/json",
+    body: JSON.stringify({ section: "stats", status: "available", sources: [] })
+  }));
+
+  await page.goto("/preview/");
+  await page.getByLabel("캐릭터명").fill("라우트테스트");
+  await page.getByRole("button", { name: /캐릭터 조회/ }).click();
+  await expect(page.getByRole("heading", { name: "라우트테스트" })).toBeVisible();
+
+  const detailsMenu = page.locator('.mgt-nav-dropdown').nth(1);
+  await detailsMenu.hover();
+  await expect(detailsMenu.locator(".mgt-nav-submenu")).toBeVisible();
+  await detailsMenu.getByRole("link", { name: "장비", exact: true }).click();
+  await expect(page).toHaveURL(/#\/details\?tab=equipment$/);
+  await expect(page.locator('[data-detail-tab="equipment"]')).toHaveAttribute("aria-selected", "true");
+  const growthMenu = page.locator('.mgt-nav-dropdown').nth(0);
+  await growthMenu.hover();
+  await expect(detailsMenu.locator(".mgt-nav-submenu")).toBeHidden();
+  await expect(growthMenu.locator(".mgt-nav-submenu")).toBeVisible();
+  await growthMenu.getByRole("link", { name: "성장 추이", exact: true }).click();
+  await expect(page).toHaveURL(/#\/growth\?section=trend$/);
+  await expect(page.locator("#growth-trend")).toBeInViewport();
+
+  // The reverse transition must also keep the details submenu from covering growth.
+  await detailsMenu.hover();
+  await expect(growthMenu.locator(".mgt-nav-submenu")).toBeHidden();
+  await expect(detailsMenu.locator(".mgt-nav-submenu")).toBeVisible();
+  await detailsMenu.getByRole("link", { name: "스탯", exact: true }).click();
+  await expect(page).toHaveURL(/#\/details\?tab=stats$/);
+  await expect(page.locator('[data-detail-tab="stats"]')).toHaveAttribute("aria-selected", "true");
+
+  await page.locator('.mgt-nav a[href="#/growth"]').click();
+  await expect(page).toHaveURL(/#\/growth$/);
+  await page.locator('.mgt-nav a[href="#/history"]').click();
+  await expect(page).toHaveURL(/#\/history$/);
+  await page.goBack();
+  await expect(page).toHaveURL(/#\/growth$/);
+  await expect(page.getByTestId("growth-page")).toBeVisible();
+  await page.goForward();
+  await expect(page).toHaveURL(/#\/history$/);
+  await expect(page.getByTestId("history-page")).toBeVisible();
+
+  await page.goto("/preview/#/details");
+  await expect(page.getByTestId("details-page")).toBeVisible();
+  await expect(page.locator("#details").getByRole("heading", { name: "캐릭터 상세 정보" })).toBeVisible();
+  await page.reload();
+  await expect(page).toHaveURL(/#\/details$/);
+  await expect(page.getByTestId("details-page")).toBeVisible();
+  await expect(page.getByTestId("react-character-search")).toBeVisible();
+});
 
 test("React admin panel renders and filters session-protected operations logs", async ({ page }) => {
   const logs = [
@@ -259,7 +329,7 @@ test("React admin panel renders and filters session-protected operations logs", 
   }));
 
   await page.goto("/preview/");
-  await page.locator('.mgt-nav a[href="#admin"]').click();
+  await page.locator('.mgt-nav a[href="#/admin"]').click();
   await expect(page.getByRole("heading", { name: "관리자 로그" })).toBeVisible();
   await expect(page.locator(".mgt-admin-table tbody tr").filter({ hasText: "밍득" })).toBeVisible();
   await expect(page.locator(".mgt-admin-table tbody tr").filter({ hasText: "http_5xx" })).toBeVisible();
@@ -360,35 +430,57 @@ test("30-day AI report reuses cache without automatic LLM calls and only regener
   await page.getByLabel("캐릭터명").fill("기간캐시테스트");
   await page.getByRole("button", { name: /캐릭터 조회/ }).click();
   await expect(page.getByRole("heading", { name: "기간캐시테스트" })).toBeVisible();
-  await expect.poll(() => aiCalls).toBe(1);
-  aiCalls = 0;
-
-  await page.locator(".history-range-control select").selectOption("30");
-  const aiReportSection = page.locator(".section").filter({ has: page.getByRole("heading", { name: "AI 성장 리포트" }) });
-  await expect(aiReportSection.locator(".section-description")).toContainText("선택한 30일");
-  await expect(page.locator("#history .history-table tbody tr")).toHaveCount(30);
-  await expect(page.locator("#history .history-table tbody tr").first()).toContainText("2026.11.06");
+  // Opening the 7-day report checks only the local cache; it must not call the AI provider.
+  await page.locator('.mgt-nav a[href="#/analytics"]').click();
+  await expect(page.getByTestId("ai-analysis-empty")).toContainText("AI 분석 시작");
   expect(aiCalls).toBe(0);
 
-  await page.getByRole("button", { name: "AI 다시 분석" }).click();
+  await page.locator('.mgt-nav a[href="#/growth"]').click();
+  await page.locator(".history-range-control select").selectOption("30");
+  await page.locator('.mgt-nav a[href="#/analytics"]').click();
+  const aiReportSection = page.locator(".section").filter({ has: page.getByRole("heading", { name: "AI 성장 리포트" }) });
+  await expect(aiReportSection.locator(".section-description")).toContainText("최근 30일");
+  expect(aiCalls).toBe(0);
+
+  await page.locator('.mgt-nav a[href="#/history"]').click();
+  await expect(page.locator("#history .history-table tbody tr")).toHaveCount(30);
+  await expect(page.locator("#history .history-table tbody tr").first()).toContainText("2026.11.06");
+
+  await page.locator('.mgt-nav a[href="#/analytics"]').click();
+  await page.getByRole("button", { name: "AI 분석 시작" }).click();
   await expect(page.getByText("기간 분석 테스트 결과입니다.")).toBeVisible();
   expect(aiCalls).toBe(1);
   expect(submittedPayload.analysisContext.periodDays).toBe(30);
   expect(submittedPayload.forceRefresh).toBe(true);
   expect(submittedPayload.history).toHaveLength(30);
 
+  await page.getByRole("button", { name: "다시 분석" }).click();
+  await expect(page.getByText("기간 분석 테스트 결과입니다.")).toBeVisible();
+  expect(aiCalls).toBe(2);
+  expect(submittedPayload.forceRefresh).toBe(true);
+
   await page.reload();
   await expect(page.getByText("기간 분석 테스트 결과입니다.")).toBeVisible();
-  await expect(page.locator("#history .history-table tbody tr")).toHaveCount(30);
-  expect(aiCalls).toBe(1);
+  expect(aiCalls).toBe(2);
+
+  // Changing the period on the AI page updates the same shared period used by Growth.
+  await page.locator('.mgt-nav a[href="#/analytics"]').click();
+  await page.getByLabel("AI 분석 기간").selectOption("90");
+  await expect(aiReportSection.locator(".section-description")).toContainText("최근 90일");
+  expect(aiCalls).toBe(2);
+  await page.locator('.mgt-nav a[href="#/history"]').click();
+  await expect(page.locator("#history .history-table tbody tr")).toHaveCount(90);
+  await page.locator('.mgt-nav a[href="#/growth"]').click();
+  await expect(page.locator(".history-range-control select")).toHaveValue("90");
 
   await page.locator(".history-range-control select").selectOption("7");
+  await page.locator('.mgt-nav a[href="#/history"]').click();
   await expect(page.locator("#history .history-table tbody tr")).toHaveCount(3);
   await expect(page.locator("#history .history-table tbody tr").first()).toContainText("2026.11.06");
 });
 
 
-test("mobile dashboard stays within the viewport and keeps the report before history", async ({ page }) => {
+test("mobile route pages stay within the viewport at common device widths", async ({ page }) => {
   await page.route("**/api/character?*", route => route.fulfill({
     status: 200,
     contentType: "application/json",
@@ -446,78 +538,47 @@ test("mobile dashboard stays within the viewport and keeps the report before his
   await page.getByLabel("캐릭터명").fill("모바일진단");
   await page.getByRole("button", { name: /캐릭터 조회/ }).click();
   await expect(page.getByRole("heading", { name: "모바일진단" })).toBeVisible();
-  await expect(page.getByRole("heading", { name: "날짜별 성장 기록" })).toBeVisible();
+  await expect(page.getByTestId("growth-insight")).toBeVisible();
 
   const measurements = [];
-  for (const width of [360, 390, 412]) {
-    await page.setViewportSize({ width, height: 844 });
-    await page.waitForTimeout(100);
-    const measurement = await page.evaluate(() => {
-      const viewport = document.documentElement.clientWidth;
-      const root = {
-        innerWidth: window.innerWidth,
-        clientWidth: viewport,
-        documentScrollWidth: document.documentElement.scrollWidth,
-        bodyScrollWidth: document.body.scrollWidth
-      };
-      const majorSelectors = [
-        ".mgt-app-shell", ".mgt-page-content", ".mgt-result-content",
-        "#character", "#details", "#growth", "#analytics",
-        ".mgt-profile-shell", ".character-details-section",
-        ".react-equipment-board", ".growth-dashboard",
-        ".history-card", ".history-table-wrapper", ".history-table"
-      ];
-      const major = Object.fromEntries(majorSelectors.map(selector => {
-        const element = document.querySelector(selector);
-        if (!element) return [selector, null];
-        const rect = element.getBoundingClientRect();
-        return [selector, {
-          left: Math.round(rect.left * 10) / 10,
-          right: Math.round(rect.right * 10) / 10,
-          width: Math.round(rect.width * 10) / 10,
-          scrollWidth: element.scrollWidth,
-          clientWidth: element.clientWidth
-        }];
-      }));
-      const offenders = [...document.querySelectorAll("body *")].map(element => {
-        const rect = element.getBoundingClientRect();
-        if (!rect.width || !rect.height) return null;
-        let clipped = false;
-        for (let parent = element.parentElement; parent && parent !== document.body; parent = parent.parentElement) {
-          const overflowX = getComputedStyle(parent).overflowX;
-          if (["auto", "scroll", "hidden", "clip"].includes(overflowX)) {
-            clipped = true;
-            break;
-          }
-        }
+  for (const route of ["overview", "growth", "details", "analytics", "history", "comparison"]) {
+    const href = route === "overview" ? "#/" : `#/${route}`;
+    await page.locator(`.mgt-nav a[href="${href}"]`).click();
+    for (const width of [360, 390, 412]) {
+      await page.setViewportSize({ width, height: 844 });
+      await page.waitForTimeout(80);
+      const measurement = await page.evaluate(() => {
+        const viewport = document.documentElement.clientWidth;
+        const content = document.querySelector(".mgt-result-content");
+        const pageContent = document.querySelector(".mgt-growth-page-content") ||
+          document.querySelector(".mgt-growth-home-top") ||
+          document.querySelector(".mgt-growth-page-index");
+        const historyTable = document.querySelector(".history-table-wrapper");
         return {
-          tag: element.tagName.toLowerCase(),
-          id: element.id || "",
-          className: typeof element.className === "string" ? element.className : "",
-          left: Math.round(rect.left * 10) / 10,
-          right: Math.round(rect.right * 10) / 10,
-          width: Math.round(rect.width * 10) / 10,
-          clippedByAncestor: clipped
+          viewport,
+          documentScrollWidth: document.documentElement.scrollWidth,
+          bodyScrollWidth: document.body.scrollWidth,
+          contentRight: content?.getBoundingClientRect().right ?? null,
+          pageRight: pageContent?.getBoundingClientRect().right ?? null,
+          historyScrollWidth: historyTable?.scrollWidth ?? null,
+          historyClientWidth: historyTable?.clientWidth ?? null
         };
-      }).filter(item => item && !item.clippedByAncestor &&
-        (item.left < -1 || item.right > viewport + 1))
-        .sort((a, b) => Math.max(b.right - viewport, -b.left) - Math.max(a.right - viewport, -a.left))
-        .slice(0, 12);
-      return { ...root, major, offenders };
-    });
-    measurements.push({ viewport: width, ...measurement });
+      });
+      measurements.push({ route, width, ...measurement });
+    }
   }
   for (const measurement of measurements) {
     expect(
       measurement.documentScrollWidth,
-      `document overflow at ${measurement.viewport}px: ${JSON.stringify(measurement.offenders)}`
-    ).toBe(measurement.clientWidth);
-    expect(measurement.bodyScrollWidth).toBe(measurement.clientWidth);
-    expect(measurement.major["#character"].right).toBeLessThanOrEqual(measurement.viewport + 1);
-    expect(measurement.major["#details"].right).toBeLessThanOrEqual(measurement.viewport + 1);
-    expect(measurement.major["#growth"].right).toBeLessThanOrEqual(measurement.viewport + 1);
-    expect(measurement.major["#analytics"].right).toBeLessThanOrEqual(measurement.viewport + 1);
-    expect(measurement.major[".history-table-wrapper"].scrollWidth)
-      .toBeLessThanOrEqual(measurement.major[".history-table-wrapper"].clientWidth + 1);
+      `document overflow on ${measurement.route} at ${measurement.width}px`
+    ).toBe(measurement.viewport);
+    expect(measurement.bodyScrollWidth).toBe(measurement.viewport);
+    expect(measurement.contentRight).toBeLessThanOrEqual(measurement.viewport + 1);
+    if (measurement.pageRight !== null) {
+      expect(measurement.pageRight).toBeLessThanOrEqual(measurement.viewport + 1);
+    }
+    if (measurement.historyScrollWidth !== null) {
+      expect(measurement.historyScrollWidth).toBeLessThanOrEqual(measurement.historyClientWidth + 1);
+    }
   }
 });

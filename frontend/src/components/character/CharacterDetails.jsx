@@ -9,7 +9,7 @@ import { StatsTab } from "./CharacterDetailsStats.jsx";
 import { EquipmentTab } from "./CharacterDetailsEquipment.jsx";
 import { SymbolsTab, SkillsTab, LinkTab, UnionTab } from "./CharacterDetailsOtherTabs.jsx";
 
-export default function CharacterDetails({ ocid, onStatsLoaded }) {
+export default function CharacterDetails({ ocid, onStatsLoaded, initialTab = "stats" }) {
   const sectionRef = useRef(null);
   const [visibleOcid, setVisibleOcid] = useState(null);
   const [tab, setTab] = useState("stats");
@@ -48,6 +48,12 @@ export default function CharacterDetails({ ocid, onStatsLoaded }) {
   }, [ocid]);
 
   useEffect(() => {
+    if (["stats","equipment","symbols","skills","link","union"].includes(initialTab)) {
+      setTab(initialTab);
+    }
+  }, [ocid, initialTab]);
+
+  useEffect(() => {
     if (!ocid || visibleOcid !== ocid) return;
     const key = ocid + ":" + tab;
     const cached = cache[key];
@@ -70,8 +76,8 @@ export default function CharacterDetails({ ocid, onStatsLoaded }) {
         setData(result);
         setCache(previous => ({ ...previous, [key]: result }));
         if (tab === "stats") onStatsLoaded?.(result);
-        if (result.status === "partial") setNotice("일부 공개 데이터만 확인됐습니다. 조회되지 않은 항목은 임의로 채우지 않았습니다.");
-        else setNotice("Nexon Open API에서 제공하는 공개 데이터를 표시합니다. 게임 내 변경 사항은 API 반영 시점과 다를 수 있습니다.");
+        if (result.status === "partial") setNotice("일부 항목만 확인할 수 있어요. 나머지 정보는 현재 공개된 자료에서 찾을 수 없습니다.");
+        else setNotice("넥슨에서 공개한 정보를 바탕으로 표시합니다. 게임 안의 변경 사항이 바로 반영되지 않을 수 있어요.");
       })
       .catch(requestError => {
         if (!cancelled) setError(requestError.message || "캐릭터 상세 정보를 불러오지 못했습니다.");
@@ -105,9 +111,9 @@ export default function CharacterDetails({ ocid, onStatsLoaded }) {
       <div className="section-header character-details-header">
         <div>
           <h2 className="section-title" id="react-detail-title">캐릭터 상세 정보</h2>
-          <p className="section-description">능력치·장비·심볼·6차 스킬·링크·유니온 데이터를 게임 정보창 형태로 확인합니다.</p>
+          <p className="section-description">스탯부터 장비, 심볼, 6차 스킬과 유니온까지 원하는 항목을 골라 살펴보세요.</p>
         </div>
-        <button type="button" className="export-button" onClick={refresh} disabled={loading}>선택 탭 새로고침</button>
+        <button type="button" className="export-button" onClick={refresh} disabled={loading}>정보 새로고침</button>
       </div>
       <div className="detail-tabs" role="tablist" aria-label="캐릭터 상세 정보 구분">
         {DETAIL_TABS.map(([value,label]) => (
@@ -118,7 +124,7 @@ export default function CharacterDetails({ ocid, onStatsLoaded }) {
       </div>
       {notice && <p className="detail-notice" role="status">{notice}</p>}
       {error && <p className="detail-notice is-warning" role="alert">{error}</p>}
-      {loading && <div className="game-loading-window" role="status">캐릭터 {DETAIL_TABS.find(item=>item[0]===tab)?.[1] || "정보"} 조회 중...</div>}
+      {loading && <div className="game-loading-window" role="status">캐릭터 {DETAIL_TABS.find(item=>item[0]===tab)?.[1] || "정보"}을(를) 불러오고 있어요...</div>}
       {!loading && data && (
         <div className="character-details-content">
           {tab === "stats" && <StatsTab data={data} selected={selected} onSelect={changePreset} />}
@@ -130,7 +136,7 @@ export default function CharacterDetails({ ocid, onStatsLoaded }) {
         </div>
       )}
       {!loading && !data && !error && <Empty>캐릭터 상세 정보를 준비하고 있습니다.</Empty>}
-      <p className="detail-disclaimer">프리셋 전환은 조회 데이터만 바꿉니다. 게임 내 프리셋을 적용하지 않으며, Nexon API에서 제공하지 않는 수치와 세트 효과는 임의 계산하지 않습니다.</p>
+      <p className="detail-disclaimer">여기서 프리셋을 바꿔도 게임 안의 설정은 바뀌지 않아요. 확인할 수 없는 능력치나 세트 효과는 표시하지 않습니다.</p>
     </section>
   );
 }

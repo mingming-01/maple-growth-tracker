@@ -82,42 +82,42 @@ function buildReportSignature(character, history, metrics, analysisContext = {})
 }
 
 
-export function AIReport({ character, history, analysisHistory = history, periodDays = 7, periodSummary = null }) {
+export function AIReport({ character, history, analysisHistory = history, periodDays = 7, periodSummary = null, onPeriodSelect }) {
   const [analysis,setAnalysis] = useState("");
   const [loading,setLoading] = useState(false);
   const [error,setError] = useState("");
   const [notice,setNotice] = useState("");
+  const [periodChanging,setPeriodChanging] = useState(false);
 
   const metrics = useMemo(() => {
-    const prediction = calculatePrediction(character,history || []);
-    return calculateGrowthMetrics(character,history || [],prediction);
-  },[character,history]);
+    const sourceHistory = Array.isArray(analysisHistory) ? analysisHistory : [];
+    const prediction = calculatePrediction(character,sourceHistory);
+    return calculateGrowthMetrics(character,sourceHistory,prediction);
+  },[character,analysisHistory]);
 
   const run = useCallback(async ({ force = false, allowGenerate = true } = {}) => {
     if (!character?.characterName || !Array.isArray(history) || !Array.isArray(analysisHistory)) return;
     setLoading(true);
     setError("");
     const analysisContext = { periodDays:[7,30,90].includes(Number(periodDays)) ? Number(periodDays) : 7, periodSummary:periodSummary || null };
-    // 분석에 실제 전달되는 캐릭터·기록·지표·기간 요약 전체를 캐시 키에 포함한다.
-    // 캐시 버전을 올려 과거에 기간/캐릭터만으로 저장된 장기 리포트를 재사용하지 않는다.
+        // 같은 캐릭터·기간의 리포트는 정해진 보관 시간 동안 재사용한다.
+    // 매일 기록이 추가되는 7일 리포트도 6시간 안에는 같은 결과를 보여준다.
     const signature = stableStringify({
-      cacheVersion: 2,
-      character,
-      history: analysisHistory,
-      metrics,
-      analysisContext
+      cacheVersion: 4,
+      characterId: character.ocid || character.characterName,
+      periodDays: analysisContext.periodDays
     });
-    const cacheType = analysisContext.periodDays > 7 ? "growth-report-long-v2" : "growth-report-v4";
+    const cacheType = `growth-report-${analysisContext.periodDays}d`;
     const cached = !force ? getCachedAI(cacheType,signature) : null;
     if (cached?.analysis) {
       setAnalysis(cached.analysis);
-      setNotice(analysisContext.periodDays > 7 ? `최근 ${analysisContext.periodDays}일 분석의 저장 결과를 재사용했습니다.` : "");
+      setNotice(analysisContext.periodDays > 7 ? `지난 ${analysisContext.periodDays}일 분석 결과를 불러왔어요.` : "");
       setLoading(false);
       return;
     }
     if (!allowGenerate && !force) {
       setAnalysis("");
-      setNotice(`최근 ${analysisContext.periodDays}일 분석의 저장 결과가 없습니다. 새 분석은 'AI 다시 분석'을 눌렀을 때만 생성됩니다.`);
+      setNotice(`최근 ${analysisContext.periodDays}일 리포트가 아직 없어요. AI 분석 시작을 누르면 지금 기록으로 새 리포트를 만들어요.`);
       setLoading(false);
       return;
     }
@@ -138,9 +138,25 @@ export function AIReport({ character, history, analysisHistory = history, period
   useEffect(() => {
     setAnalysis("");
     setError("");
-    // 기간 전환 시 30·90일은 캐시만 확인한다. 캐시가 없더라도 자동 LLM 호출은 하지 않는다.
-    run({ allowGenerate: Number(periodDays) <= 7 });
+    // 모든 기간은 보관 시간 안의 결과만 확인한다. 새 분석은 버튼을 눌렀을 때만 실행한다.
+    run({ allowGenerate: false });
   },[run,periodDays]);
+
+  async function handlePeriodChange(event) {
+    const nextDays = Number(event.target.value);
+    if (!onPeriodSelect || nextDays === Number(periodDays)) return;
+    setPeriodChanging(true);
+    setError("");
+    setNotice(`최근 ${nextDays}일 성장 기록을 불러오고 있습니다...`);
+    try {
+      await onPeriodSelect(nextDays);
+    } catch (requestError) {
+      setError(requestError.message || "선택한 기간의 성장 기록을 불러오지 못했습니다.");
+      setNotice("");
+    } finally {
+      setPeriodChanging(false);
+    }
+  }
 
   const sections = useMemo(() => parseAnalysis(analysis),[analysis]);
 
@@ -148,24 +164,33 @@ export function AIReport({ character, history, analysisHistory = history, period
     <section className="section">
       <div className="section-header">
         <h2 className="section-title">AI 성장 리포트</h2>
-        <p className="section-description">선택한 {periodDays}일의 실제 저장 기록을 바탕으로 변화와 흐름을 정리했습니다.</p>
+        <p className="section-description">최근 {periodDays}일 동안의 경험치와 레벨 변화를 정리해요.</p>
       </div>
       <div className="ai-analysis-card">
         {periodDays > 7 && periodSummary && <div className="ai-analysis-period-evidence" data-testid="ai-analysis-period-evidence">
-          <strong>분석 근거 · 최근 {periodDays}일</strong>
+          <strong>최근 {periodDays}일 성장 기록</strong>
           <div className="ai-analysis-period-grid">
-            <span>기록 충실도 <b>{Number.isFinite(Number(periodSummary.coveragePercent)) ? Number(periodSummary.coveragePercent).toFixed(1)+"%" : "자료 부족"}</b></span>
-            <span>확인된 성장 구간 <b>{periodSummary.confirmedChangeDays ?? 0}일</b></span>
-            <span>평균 일일 성장량 <b>{periodSummary.averageGrowth == null ? "자료 부족" : (Number(periodSummary.averageGrowth)/1_000_000_000_000).toFixed(2)+"조"}</b></span>
-            <span>직전 동일 기간 평균 <b>{periodSummary.previousSummary?.averageGrowth == null ? "자료 부족" : (Number(periodSummary.previousSummary.averageGrowth)/1_000_000_000_000).toFixed(2)+"조"}</b></span>
+            <span>기록이 남은 날짜 <b>{Number.isFinite(Number(periodSummary.coveragePercent)) ? Number(periodSummary.coveragePercent).toFixed(1)+"%" : "자료 부족"}</b></span>
+            <span>경험치가 늘어난 날 <b>{periodSummary.confirmedChangeDays ?? 0}일</b></span>
+            <span>하루 평균 경험치 <b>{periodSummary.averageGrowth == null ? "자료 부족" : (Number(periodSummary.averageGrowth)/1_000_000_000_000).toFixed(2)+"조"}</b></span>
+            <span>지난 기간 하루 평균 <b>{periodSummary.previousSummary?.averageGrowth == null ? "자료 부족" : (Number(periodSummary.previousSummary.averageGrowth)/1_000_000_000_000).toFixed(2)+"조"}</b></span>
           </div>
         </div>}
         <div className="ai-analysis-actions">
-          <button className="export-button" type="button" onClick={() => run({force:true,allowGenerate:true})} disabled={loading}>
-            {loading ? "분석 중..." : "AI 다시 분석"}
+          <label className="ai-analysis-period-control">
+            <span>분석 기간</span>
+            <select value={periodDays} onChange={handlePeriodChange} disabled={periodChanging || loading} aria-label="AI 분석 기간">
+              <option value="7">최근 7일</option>
+              <option value="30">최근 30일</option>
+              <option value="90">최근 90일</option>
+            </select>
+          </label>
+          <button className="export-button" type="button" onClick={() => run({force:true,allowGenerate:true})} disabled={loading || periodChanging}>
+            {loading ? "분석 중..." : analysis ? "다시 분석" : "AI 분석 시작"}
           </button>
         </div>
         {loading && <div className="ai-analysis-loading" role="status">성장 기록을 살펴보고 있습니다...</div>}
+        {notice && !loading && <p className="ai-analysis-notice" role="status">{notice}</p>}
         {error && <div className="ai-analysis-error" role="alert">{error}</div>}
         {analysis && !loading && (
           <div className="ai-analysis-result">
@@ -184,7 +209,12 @@ export function AIReport({ character, history, analysisHistory = history, period
 
           </div>
         )}
-        {!analysis && !loading && !error && <p className="ai-analysis-text">분석할 캐릭터 정보가 없습니다.</p>}
+        {!analysis && !loading && !error && (
+          <div className="ai-analysis-empty" data-testid="ai-analysis-empty">
+            <strong>{character?.characterName ? `최근 ${periodDays}일 AI 리포트가 아직 없습니다.` : "먼저 캐릭터를 조회해주세요."}</strong>
+            <p>{character?.characterName ? "AI 분석 시작을 누르면 현재 기록을 바탕으로 새 리포트를 만들어요." : "캐릭터를 조회하면 해당 캐릭터의 성장 기록을 바탕으로 분석할 수 있습니다."}</p>
+          </div>
+        )}
       </div>
     </section>
   );
@@ -300,7 +330,7 @@ export function GrowthComparison({ character, history, initialState, onSave }) {
       const secondSummary = comparisonSummary(second.history,selectedDays);
       const result = {days:selectedDays,primary:firstSummary,secondary:secondSummary};
       setPeriod(result);
-      setNotice(`최근 ${selectedDays}일의 실제 저장 기록을 비교했습니다.`);
+      setNotice(`최근 ${selectedDays}일 동안 확인된 기록을 비교했어요.`);
       return result;
     } catch (requestError) {
       setNotice(requestError.message || "기간 비교 기록을 불러오지 못했습니다.");
@@ -345,7 +375,7 @@ export function GrowthComparison({ character, history, initialState, onSave }) {
       let comparisonReport = cached?.analysis || "";
       if (comparisonReport) {
         setAnalysis(comparisonReport);
-        setNotice("저장된 비교 분석을 재사용했습니다. AI 모델을 다시 호출하지 않았습니다.");
+        setNotice("지난 비교 분석 결과를 불러왔어요.");
       } else {
         const result = await postAiComparison(
           {character,metrics:primaryMetrics,history},
@@ -355,8 +385,8 @@ export function GrowthComparison({ character, history, initialState, onSave }) {
         setAnalysis(comparisonReport);
         saveCachedAI("growth-comparison-v1",signature,comparisonReport);
         setNotice(result.cacheHit
-          ? "서버에 저장된 비교 분석을 재사용했습니다."
-          : "새 비교 분석을 생성했습니다.");
+          ? "지난 비교 분석 결과를 불러왔어요."
+          : "새 비교 분석을 만들었어요.");
       }
       onSave?.({
         comparison:{
@@ -386,7 +416,7 @@ export function GrowthComparison({ character, history, initialState, onSave }) {
 
   return (
     <section className="section">
-      <div className="section-header"><h2 className="section-title">성장 캐릭터 비교</h2><p className="section-description">두 캐릭터의 최근 성장 지표와 동일 기간 저장 기록을 비교합니다.</p></div>
+      <div className="section-header"><h2 className="section-title">성장 캐릭터 비교</h2><p className="section-description">두 캐릭터의 레벨과 경험치 변화를 같은 기간으로 비교합니다.</p></div>
       <div className="comparison-card">
         <form className="comparison-form" onSubmit={runComparison}>
           <label className="comparison-input-label" htmlFor="react-comparison-name">비교할 캐릭터</label>
@@ -395,7 +425,7 @@ export function GrowthComparison({ character, history, initialState, onSave }) {
         </form>
         {error && <div className="error-message" role="alert">{error}</div>}
         {notice && <p className="comparison-period-notice" role="status">{notice}</p>}
-        {busy && <div className="loading-message" role="status">두 캐릭터의 최신 데이터와 성장 기록을 조회하고 있습니다...</div>}
+        {busy && <div className="loading-message" role="status">두 캐릭터의 정보와 성장 기록을 불러오고 있어요...</div>}
         {other && !busy && (
           <div className="comparison-result">
             <div className="comparison-grid">
@@ -404,7 +434,7 @@ export function GrowthComparison({ character, history, initialState, onSave }) {
             </div>
             <section className="comparison-period-section">
               <div className="comparison-period-heading">
-                <div><h3>기간별 성장 비교</h3><p>양쪽 모두 같은 날짜 범위의 저장 기록을 비교합니다.</p></div>
+                <div><h3>기간별 성장 비교</h3><p>두 캐릭터의 같은 날짜 범위 경험치 기록을 비교합니다.</p></div>
                 <label className="comparison-period-control">비교 기간
                   <select className="history-range-select" value={days} onChange={event=>changePeriod(event.target.value)} disabled={periodBusy}>
                     <option value="30">최근 30일</option><option value="90">최근 90일</option>
@@ -419,17 +449,17 @@ export function GrowthComparison({ character, history, initialState, onSave }) {
                       <div className="comparison-period-stat"><span>확인된 경험치 증가</span><strong>{formatTrillion(item.growth)}</strong></div>
                       <div className="comparison-period-stat"><span>기록 기준 1일 평균</span><strong>{formatTrillion(item.average)}</strong></div>
                       <div className="comparison-period-stat"><span>랭킹 변화</span><strong>{item.rankingChange == null ? "자료 부족" : (item.rankingChange > 0 ? "▲ " : item.rankingChange < 0 ? "▼ " : "")+formatNumber(Math.abs(item.rankingChange))+"위"}</strong></div>
-                      <div className="comparison-period-stat"><span>기록 충실도</span><strong>{item.availableDays} / {item.days}일</strong></div>
-                      <p className="comparison-period-detail">API 미제공 {item.notReady}일 · 미수집 {item.notCollected}일</p>
+                      <div className="comparison-period-stat"><span>기록이 남은 날짜</span><strong>{item.availableDays} / {item.days}일</strong></div>
+                      <p className="comparison-period-detail">아직 공개되지 않은 날짜 {item.notReady}일 · 확인하지 못한 날짜 {item.notCollected}일</p>
                     </article>
                   ))}
                 </div>
-              ) : <p className="comparison-period-verdict">기간별 저장 기록을 아직 불러오지 않았습니다.</p>}
-              <p className="comparison-period-notice">경험치 증가량은 연속 관측된 날짜 간 변화만 합산합니다. 결측 날짜는 0으로 계산하지 않습니다.</p>
+              ) : <p className="comparison-period-verdict">기간별 성장 기록을 아직 불러오지 않았어요.</p>}
+              <p className="comparison-period-notice">경험치 증가는 기록이 이어지는 날짜끼리 비교했어요. 기록이 없는 날은 0으로 계산하지 않았습니다.</p>
             </section>
             <div className="comparison-ai">
               <h3>AI 성장 비교 분석</h3>
-              {analysis ? <div className="comparison-ai-text">{analysis}</div> : <p className="comparison-ai-text">AI 비교 분석 결과가 없습니다.</p>}
+              {analysis ? <div className="comparison-ai-text">{analysis}</div> : <p className="comparison-ai-text">아직 비교 분석이 없어요.</p>}
             </div>
           </div>
         )}
