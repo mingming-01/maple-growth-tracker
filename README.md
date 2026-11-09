@@ -418,7 +418,7 @@ Render에 Flask 애플리케이션으로 배포했습니다.
 
 ### React 프론트엔드 운영 전환
 
-React/Vite 프론트엔드가 기본 메인 화면입니다. Flask 백엔드, Nexon API, AI 서비스, DB 및 관리자 인증은 그대로 유지합니다.
+React/Vite 프론트엔드가 유일한 공개 사용자 화면입니다. Flask 백엔드, Nexon API, AI 서비스, DB 및 관리자 인증은 그대로 유지합니다.
 
 Render 서비스의 **Build Command**를 다음 명령으로 설정해야 React 정적 파일이 배포됩니다.
 
