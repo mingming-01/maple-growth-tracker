@@ -375,7 +375,7 @@ function GoalPanel({ character, metrics, history }) {
         </div>
       </form>
       {feedback && <p className={"growth-goal-feedback " + (error ? "is-error" : "")} role="status">{feedback}</p>}
-      <p className="growth-goal-storage-note">목표는 기존과 동일하게 캐릭터 OCID 기준 브라우저 저장소에 보관됩니다. 기기 간 동기화는 지원하지 않습니다. 브라우저 알림은 사이트가 열려 있고 캐릭터를 다시 조회할 때 감지됩니다.</p>
+      <p className="growth-goal-storage-note">목표는 이 브라우저에 저장돼요. 다른 기기와는 공유되지 않으며, 알림은 사이트를 열고 캐릭터를 다시 조회할 때 확인할 수 있어요.</p>
     </section>
   );
 }
@@ -598,7 +598,7 @@ export default function GrowthDashboard({ character, history, onHistoryChange, o
 
       <section className="section" id="growth-trend">
         <div className="section-header history-chart-header">
-          <div><h2 className="section-title">성장 추이</h2><p className="section-description">첫날의 실제 경험치를 기준으로 한 총 경험치 증가량과 일일 경험치 증가량, 레벨업을 표시합니다.</p></div>
+          <div><h2 className="section-title">성장 추이</h2><p className="section-description">첫날보다 경험치가 얼마나 늘었는지와 하루 단위 변화, 레벨업 기록을 보여줍니다.</p></div>
           <label className="history-range-control">기록 범위
             <select className="history-range-select" value={range} onChange={event => changeRange(Number(event.target.value))} disabled={busy}>
               <option value="7">최근 7일</option><option value="30">저장 기록 30일</option><option value="90">저장 기록 90일</option>
@@ -639,7 +639,7 @@ export default function GrowthDashboard({ character, history, onHistoryChange, o
             <div className="prediction-item"><div className="prediction-label">예상 레벨업</div><div className="prediction-value">{prediction?.date ? localDate(formatLocalISODate(prediction.date)) : "자료 부족"}</div></div>
             <div className="prediction-item"><div className="prediction-label">최근 평균</div><div className="prediction-value">{prediction?.averageGrowth > 0 ? fmt(prediction.averageGrowth) : "자료 부족"}</div></div>
           </div>
-          <p className="prediction-note">최근 관측 평균 획득량이 유지된다는 가정의 추정치입니다. 기록이 없는 날짜나 레벨업으로 경험치 기준이 바뀐 구간은 예상해서 채우지 않습니다.</p>
+          <p className="prediction-note">최근과 비슷한 속도로 경험치를 얻는다고 가정한 예상이에요. 기록이 없는 날짜나 레벨업으로 경험치 기준이 바뀐 구간은 예상해서 채우지 않아요.</p>
         </div>
         <div id="growth-goal"><GoalPanel character={character} metrics={metrics} history={history || []} /></div>
       </section>
@@ -659,7 +659,7 @@ export function GrowthHistoryTable({ history }) {
     <section className="section growth-history-section" aria-labelledby="growth-history-title">
       <div className="section-header">
         <h2 className="section-title" id="growth-history-title">날짜별 성장 기록</h2>
-        <p className="section-description">선택한 기간의 경험치 진행률과 랭킹 변화입니다. API가 진행률을 제공하지 않은 날짜는 추정하지 않고 비워 둡니다.</p>
+        <p className="section-description">선택한 기간의 경험치 진행률과 랭킹 변화입니다. 진행률을 확인할 수 없는 날짜는 빈칸으로 남겨두었어요.</p>
       </div>
       <div className="history-card">
         <div className="history-table-wrapper">
