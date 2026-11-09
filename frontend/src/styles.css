@@ -1397,3 +1397,409 @@ button:focus-visible,input:focus-visible,select:focus-visible,a:focus-visible { 
   .mgt-result-content .game-union-display .game-union-champion-podium { height:36px; }
   .mgt-result-content .game-union-display .game-union-champion-avatar { height:170px !important; min-height:170px; }
 }
+
+
+/* P5-3: React에서 사용 중인 기존 공통 UI 규칙을 분리 이전 */
+.loading-message, .error-message { margin-top: 14px; padding: 14px 16px; border-radius: 12px; font-size: 14px; }
+
+.loading-message { color: #6558a9; background: #f0edff; }
+
+.error-message { color: #a23c55; background: #fff0f3; }
+
+.section-header { margin-bottom: 14px; }
+
+.history-chart-header { display: flex; justify-content: space-between; align-items: flex-end; gap: 16px; }
+
+.period-summary-section { margin: 18px 0 16px; }
+
+.period-summary-section[hidden] { display: none; }
+
+.growth-goal-kicker { color: #8274c8; font-size: 10px; font-weight: 900; letter-spacing: 1px; }
+
+.growth-goal-progress-fill { display: block; width: 0; height: 100%; border-radius: inherit; background: linear-gradient(90deg,#9a87f2,#6553d0); transition: width .3s ease; }
+
+.growth-goal-form { display: grid; gap: 13px; }
+
+.growth-goal-fields { display: grid; grid-template-columns: minmax(0,1fr) minmax(0,1fr); gap: 12px; }
+
+.growth-goal-actions { display: flex; flex-wrap: wrap; gap: 8px; }
+
+.growth-goal-save-button, .growth-goal-clear-button { min-height: 40px; padding: 0 15px; border: 0; border-radius: 11px; font: inherit; font-size: 12px; font-weight: 850; cursor: pointer; }
+
+.growth-goal-save-button { color: #fff; background: #6553ce; }
+
+.ai-analysis-loading { padding: 18px 4px; color: #77718a; font-size: 14px; font-weight: 700; text-align: center; }
+
+.ai-analysis-error { padding: 18px; border-radius: 14px; background: #fff5f6; color: #c45b69; font-size: 14px; line-height: 1.6; font-weight: 600; }
+
+.ai-analysis-result { display: grid; gap: 0; }
+
+.comparison-period-section { margin-top: 24px; padding-top: 22px; border-top: 1px solid #eceaf2; }
+
+@media (max-width: 900px) {
+.history-chart-header { align-items: flex-start; flex-direction: column; }
+}
+
+@media (max-width: 620px) {
+.growth-goal-fields { grid-template-columns: 1fr; }
+.growth-goal-actions > button { flex: 1; }
+}
+
+.growth-timeline-list { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0 24px; margin: 0; padding: 0; list-style: none; }
+
+.growth-timeline-marker { flex: none; width: 10px; height: 10px; margin-top: 5px; border: 2px solid #8171e8; border-radius: 50%; background: #fff; box-shadow: 0 0 0 3px #f2efff; }
+
+.growth-timeline-item.is-level-up .growth-timeline-marker { border-color: #d39c22; background: #f8d56c; box-shadow: 0 0 0 3px #fff7df; }
+
+.growth-timeline-item.is-best-growth .growth-timeline-marker { border-color: #399b68; box-shadow: 0 0 0 3px #eaf7ef; }
+
+.growth-timeline-item.is-ranking .growth-timeline-marker { border-color: #4a86c5; box-shadow: 0 0 0 3px #edf5fd; }
+
+.growth-timeline-body { display: grid; gap: 3px; min-width: 0; }
+
+.growth-timeline-empty { grid-column: 1 / -1; padding: 14px 0; color: #9994a7; font-size: 12px; text-align: center; }
+
+@media (max-width: 620px) {
+.growth-timeline-list { grid-template-columns: 1fr; }
+}
+
+.game-loading-window,.game-empty {
+    margin:0; padding:30px 16px; color:#939bb1; font-size:12px; text-align:center;
+}
+
+.game-stats-layout { display:grid; grid-template-columns:minmax(0,1fr); gap:13px; }
+
+.game-window-heading,.game-profile-title-row { display:flex; align-items:center; gap:10px; margin-bottom:13px; }
+
+.game-preset-select-wrap { display:grid; gap:5px; min-width:0; }
+
+.game-preset-select-label { color:#aab2c7; font-size:10px; font-weight:800; }
+
+.game-stat-grid { display:grid; grid-template-columns:repeat(6,minmax(0,1fr)); gap:7px; margin-top:10px; }
+
+.game-equipment-toolbar { display:flex; align-items:center; gap:10px; min-height:38px; }
+
+.game-equipment-toolbar .game-window-title { margin-right:auto; font-size:16px; }
+
+.game-equipment-toolbar .game-preset-select-wrap { display:flex; align-items:center; gap:8px; }
+
+.game-equipment-toolbar .game-preset-select-label { white-space:nowrap; }
+
+.game-equipment-toolbar .game-preset-select { width:130px; }
+
+.game-equipment-toolbar>.game-window-eyebrow { display:none; }
+
+.game-equipment-toolbar::before {
+    content:""; width:4px; height:18px; border-radius:3px;
+    background:linear-gradient(#bcaaf5,#6b63a8);
+}
+
+.game-equipment-board {
+    display:grid; grid-template-columns:repeat(7,minmax(0,1fr));
+    grid-template-areas:
+        ". . hat . . . ."
+        "ring4 face eye ear shoulder emblem ring3"
+        "ring2 pendant1 top pendant2 belt badge ring1"
+        ". cape bottom weapon subweapon pocket ."
+        ". . shoes gloves heart medal .";
+    gap:8px; padding:16px; border:1px solid #4a536e; border-radius:13px;
+    background:
+        radial-gradient(ellipse at 50% 43%,rgba(118,105,161,.13),transparent 46%),
+        linear-gradient(rgba(27,35,52,.96),rgba(19,26,42,.98));
+}
+
+.equipment-empty-icon { color:#77839b; font-size:19px; }
+
+.game-set-grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(190px,1fr)); gap:7px; }
+
+.game-symbol-grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(100px,1fr)); gap:8px; }
+
+.game-skill-window { display:grid; gap:12px; }
+
+.game-sixth-skill-grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(145px,1fr)); gap:9px; margin-top:12px; }
+
+.game-hexa-grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(180px,1fr)); gap:7px; margin-top:12px; }
+
+.game-hexa-stat-heading { margin:0; color:#bdb4e9; font-size:10px; font-weight:900; }
+
+.game-hexa-kind { color:#aa9ce4; font-size:9px; font-weight:850; }
+
+.game-link-grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(115px,1fr)); gap:8px; margin-top:12px; }
+
+.game-union-summary { display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); gap:8px; }
+
+@media (max-width:900px) {
+.game-stat-grid { grid-template-columns:repeat(4,minmax(0,1fr)); }
+.game-equipment-board { grid-template-columns:repeat(5,minmax(0,1fr)); grid-template-areas:none; }
+.game-equipment-board .equipment-game-slot { grid-area:auto!important; }
+}
+
+@media (max-width:620px) {
+.game-stat-grid { grid-template-columns:repeat(2,minmax(0,1fr)); }
+.game-equipment-board { grid-template-columns:repeat(3,minmax(0,1fr)); }
+.game-union-summary { grid-template-columns:repeat(2,minmax(0,1fr)); }
+.game-equipment-toolbar { align-items:flex-start; flex-wrap:wrap; }
+.game-equipment-toolbar .game-preset-select-wrap { width:100%; }
+.game-equipment-toolbar .game-preset-select { flex:1; width:auto; }
+}
+
+.game-union-summary { display:grid; grid-template-columns:repeat(auto-fit,minmax(135px,1fr)); gap:8px; }
+
+.game-union-state-toolbar { display:flex; align-items:end; flex-wrap:wrap; gap:10px; margin-bottom:9px; }
+
+.game-union-state-toolbar .game-preset-select-wrap { display:flex; align-items:center; gap:9px; min-width:210px; }
+
+.game-union-state-toolbar .game-preset-select-label { white-space:nowrap; }
+
+.game-union-state-toolbar .game-preset-select { width:150px; }
+
+.game-union-state-grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(185px,1fr)); gap:7px; }
+
+.game-union-artifact-effect-grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(160px,1fr)); gap:7px; }
+
+.game-union-artifact-effect { display:flex; align-items:center; justify-content:space-between; gap:10px; min-width:0; padding:10px; border:1px solid #404c67; border-radius:8px; background:#1a2336; }
+
+.game-union-artifact-effect strong { color:#dce2ef; font-size:10px; overflow-wrap:anywhere; }
+
+.game-union-artifact-effect span { color:#f0d17d; font-size:10px; font-weight:900; white-space:nowrap; }
+
+.game-union-crystal-top { display:flex; align-items:center; gap:8px; min-width:0; }
+
+.game-union-crystal-level { margin-left:auto; color:#f1d47d; font-size:10px; font-weight:900; white-space:nowrap; }
+
+.game-union-crystal-options { display:grid; gap:4px; margin-top:9px; }
+
+.game-union-crystal-expiry { display:block; margin-top:8px; color:#858fa7; font-size:9px; }
+
+@media (max-width:620px) {
+.game-union-state-toolbar { align-items:stretch; }
+.game-union-state-toolbar .game-preset-select-wrap { width:100%; min-width:0; }
+.game-union-state-toolbar .game-preset-select { flex:1; width:auto; }
+.game-union-state-grid,.game-union-crystal-grid,.game-union-champion-grid { grid-template-columns:1fr; }
+.game-union-artifact-effect { align-items:flex-start; flex-direction:column; }
+}
+
+/* Follow-up: integrated 7-column equipment board with center set-effect panel. */
+.game-equipment-board {
+    position:relative; grid-template-columns:repeat(7,minmax(0,1fr)) !important;
+    grid-template-rows:repeat(4,minmax(104px,auto)) repeat(2,minmax(92px,auto));
+    gap:7px; padding:12px; align-items:stretch;
+}
+
+.game-equipment-board .equipment-game-slot { min-height:94px; grid-area:auto; }
+
+.game-equipment-board .game-set-effects-center {
+    min-width:0; min-height:0; overflow:auto; align-self:stretch;
+    display:flex; flex-direction:column; gap:8px;
+    padding:10px; border:1px solid #596783; border-radius:9px;
+    background:linear-gradient(145deg,rgba(35,44,65,.96),rgba(24,31,48,.98));
+}
+
+.game-set-effects-center .game-set-grid { display:grid; grid-template-columns:1fr; gap:6px; }
+
+@media (max-width:760px) {
+.game-equipment-board { grid-template-columns:repeat(7,minmax(0,1fr)) !important; gap:4px; padding:6px; }
+.game-equipment-board .equipment-game-slot { min-height:74px; padding:5px 2px; }
+.game-equipment-board .equipment-game-item-name { font-size:9px; }
+.game-equipment-board .equipment-slot-caption { font-size:9px; }
+.game-equipment-board .game-set-effects-center { padding:5px; }
+}
+
+@media (max-width:760px) {
+.game-equipment-board { min-width:650px; }
+}
+
+/* Character appearance slots and restored compact set-effect panel. */
+.game-equipment-board .game-set-effects-center { display:none !important; }
+
+.game-equipment-layout>.game-set-effects .game-set-grid {
+    display:grid; grid-template-columns:repeat(auto-fit,minmax(150px,1fr)); gap:7px;
+}
+
+.game-stat-detail-grade { display:inline-block; margin-bottom:8px; color:#e7c77d; font-size:11px; }
+
+.game-stat-detail-list { display:grid; gap:6px; }
+
+.game-stat-detail-row {
+    display:flex; align-items:center; justify-content:space-between; gap:10px;
+    padding:8px 10px; border:1px solid #3f4b65; border-radius:7px; background:#1a2336;
+}
+
+.game-hyper-stat-list { display:grid; grid-template-columns:repeat(auto-fit,minmax(145px,1fr)); gap:6px; }
+
+.game-hyper-stat-level { color:#f0d28b; font-size:11px; }
+
+.game-hyper-stat-increase { grid-column:1/-1; color:#8fa0bb; font-size:10px; }
+
+/* Responsive pass: desktop-first detail panels with touch-friendly mobile layouts. */
+.character-details-section,
+.character-details-content,
+.character-details-content>*,
+.game-equipment-layout,
+.game-equipment-board,
+.game-union-window,
+.game-union-window>* { min-width:0; max-width:100%; }
+
+.game-window-heading,.game-equipment-toolbar,.game-union-state-toolbar {
+    min-width:0; flex-wrap:wrap;
+}
+
+.game-equipment-toolbar .game-preset-select-wrap { min-width:0; }
+
+.game-equipment-board { width:100%; }
+
+.game-symbol-grid { grid-template-columns:repeat(auto-fit,minmax(min(100%,145px),1fr)); }
+
+.game-union-state-grid,.game-union-crystal-grid,.game-union-champion-grid {
+    grid-template-columns:repeat(auto-fit,minmax(min(100%,245px),1fr));
+}
+
+@media (max-width:900px) {
+.game-equipment-board { min-width:0 !important; }
+.game-equipment-board .equipment-game-slot { min-width:0; }
+.game-union-summary { grid-template-columns:repeat(2,minmax(0,1fr)); }
+.game-stat-detail-list { grid-template-columns:minmax(0,1fr); }
+}
+
+@media (max-width:760px) {
+.game-equipment-toolbar { align-items:center; }
+.game-equipment-toolbar .game-window-title { flex:1 1 100%; }
+.game-equipment-toolbar .game-preset-select-wrap { width:100%; }
+.game-equipment-toolbar .game-preset-select { flex:1; width:auto; min-width:0; }
+.game-equipment-board {
+        grid-template-columns:repeat(4,minmax(0,1fr)) !important;
+        grid-template-rows:repeat(4,minmax(88px,auto)) repeat(6,minmax(78px,auto)) !important;
+        gap:6px; padding:8px;
+    }
+.game-equipment-board .equipment-game-slot {
+        min-height:78px; padding:6px 3px;
+        grid-row:auto !important; grid-column:auto !important;
+    }
+/* Upper rows: two left-side and two right-side slots, preserving paired layout. */
+    .game-equipment-board [data-slot="ring1"] { grid-row:1 !important; grid-column:1 !important; }
+.game-equipment-board [data-slot="face"] { grid-row:1 !important; grid-column:2 !important; }
+.game-equipment-board [data-slot="hat"] { grid-row:1 !important; grid-column:3 !important; }
+.game-equipment-board [data-slot="cape"] { grid-row:1 !important; grid-column:4 !important; }
+.game-equipment-board [data-slot="ring2"] { grid-row:2 !important; grid-column:1 !important; }
+.game-equipment-board [data-slot="eye"] { grid-row:2 !important; grid-column:2 !important; }
+.game-equipment-board [data-slot="top"] { grid-row:2 !important; grid-column:3 !important; }
+.game-equipment-board [data-slot="gloves"] { grid-row:2 !important; grid-column:4 !important; }
+.game-equipment-board [data-slot="ring3"] { grid-row:3 !important; grid-column:1 !important; }
+.game-equipment-board [data-slot="ear"] { grid-row:3 !important; grid-column:2 !important; }
+.game-equipment-board [data-slot="bottom"] { grid-row:3 !important; grid-column:3 !important; }
+.game-equipment-board [data-slot="shoes"] { grid-row:3 !important; grid-column:4 !important; }
+.game-equipment-board [data-slot="ring4"] { grid-row:4 !important; grid-column:1 !important; }
+.game-equipment-board [data-slot="pendant1"] { grid-row:4 !important; grid-column:2 !important; }
+.game-equipment-board [data-slot="shoulder"] { grid-row:4 !important; grid-column:3 !important; }
+.game-equipment-board [data-slot="medal"] { grid-row:4 !important; grid-column:4 !important; }
+/* Bottom slots become a readable two-column list rather than seven cramped columns. */
+    .game-equipment-board [data-slot="belt"] { grid-row:5 !important; grid-column:1 !important; }
+.game-equipment-board [data-slot="pendant2"] { grid-row:5 !important; grid-column:2 !important; }
+.game-equipment-board [data-slot="hair"] { grid-row:6 !important; grid-column:1 !important; }
+.game-equipment-board [data-slot="faceStyle"] { grid-row:6 !important; grid-column:2 !important; }
+.game-equipment-board [data-slot="skin"] { grid-row:7 !important; grid-column:1 !important; }
+.game-equipment-board [data-slot="android"] { grid-row:7 !important; grid-column:2 !important; }
+.game-equipment-board [data-slot="heart"] { grid-row:8 !important; grid-column:1 !important; }
+.game-equipment-board [data-slot="pocket"] { grid-row:8 !important; grid-column:2 !important; }
+.game-equipment-board [data-slot="weapon"] { grid-row:9 !important; grid-column:1 !important; }
+.game-equipment-board [data-slot="subweapon"] { grid-row:9 !important; grid-column:2 !important; }
+.game-equipment-board [data-slot="emblem"] { grid-row:10 !important; grid-column:1 !important; }
+.game-equipment-board [data-slot="badge"] { grid-row:10 !important; grid-column:2 !important; }
+.game-equipment-board [data-slot="empty1"],
+    .game-equipment-board [data-slot="empty5"] { display:none; }
+.game-symbol-grid { grid-template-columns:repeat(2,minmax(0,1fr)); gap:7px; }
+.game-sixth-skill-grid,.game-hexa-grid { grid-template-columns:repeat(2,minmax(0,1fr)); }
+.game-union-state-grid,.game-union-crystal-grid,.game-union-champion-grid { grid-template-columns:1fr; }
+.game-union-summary { grid-template-columns:repeat(2,minmax(0,1fr)); }
+.game-set-grid { grid-template-columns:repeat(2,minmax(0,1fr)); }
+}
+
+@media (max-width:420px) {
+.game-equipment-board { gap:4px; padding:6px; }
+.game-equipment-board .equipment-game-slot { min-height:74px; padding:5px 2px; }
+.game-window-heading { align-items:flex-start; }
+.game-symbol-grid { grid-template-columns:repeat(2,minmax(0,1fr)); }
+.game-set-grid { grid-template-columns:1fr; }
+.game-union-summary { grid-template-columns:1fr 1fr; }
+}
+
+.game-stat-extra-grid .game-stat-detail-row {
+    padding:6px 8px;
+}
+
+.game-sixth-subpanel .game-sixth-skill-grid,
+.game-sixth-subpanel .game-hexa-grid {
+    margin-top:10px;
+}
+
+.game-hexa-stat-row {
+    margin-top:13px;
+}
+
+.game-hexa-stat-row:first-of-type {
+    margin-top:9px;
+}
+
+.game-hexa-stat-column-title {
+    color:#d8cafa;
+    font-size:10px;
+    font-weight:950;
+    text-align:center;
+}
+
+.game-hexa-stat-entry {
+    min-width:0;
+    padding:7px;
+}
+
+@media (max-width:760px) {
+.game-stat-grid {
+        grid-template-columns:repeat(3,minmax(0,1fr));
+    }
+.game-hexa-stat-column-title {
+        font-size:9px;
+    }
+.game-hexa-stat-entry {
+        padding:6px 5px;
+    }
+}
+
+@media (max-width:420px) {
+.game-stat-grid {
+        grid-template-columns:repeat(2,minmax(0,1fr));
+    }
+}
+
+/* Exact character-detail corrections requested in the follow-up. */
+.game-stat-detail-card-header {
+    display:flex;
+    align-items:center;
+    justify-content:space-between;
+    gap:8px;
+    margin-bottom:9px;
+}
+
+.game-stat-detail-card-header>.game-window-title { margin:0; }
+
+.game-stat-detail-card-header .game-preset-select-wrap {
+    display:flex;
+    align-items:center;
+    gap:7px;
+    margin:0;
+}
+
+.game-stat-detail-card-header .game-preset-select-label { white-space:nowrap; }
+
+.game-stat-detail-card-header .game-preset-select { min-width:108px; }
+
+.game-hexa-stat-option {
+    display:flex;
+    align-items:center;
+    justify-content:space-between;
+    gap:6px;
+    padding:5px 6px;
+    border-radius:5px;
+    background:rgba(10,16,29,.42);
+}
+
+.game-hexa-stat-grade { display:block; margin-top:6px; color:#a7b2c8; font-size:9px; }
