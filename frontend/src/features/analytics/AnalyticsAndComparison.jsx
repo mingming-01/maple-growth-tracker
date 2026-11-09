@@ -434,7 +434,7 @@ export function GrowthComparison({ character, history, initialState, onSave }) {
             </div>
             <section className="comparison-period-section">
               <div className="comparison-period-heading">
-                <div><h3>기간별 성장 비교</h3><p>양쪽 모두 같은 날짜 범위의 저장 기록을 비교합니다.</p></div>
+                <div><h3>기간별 성장 비교</h3><p>두 캐릭터의 같은 날짜 범위 경험치 기록을 비교합니다.</p></div>
                 <label className="comparison-period-control">비교 기간
                   <select className="history-range-select" value={days} onChange={event=>changePeriod(event.target.value)} disabled={periodBusy}>
                     <option value="30">최근 30일</option><option value="90">최근 90일</option>
@@ -454,7 +454,7 @@ export function GrowthComparison({ character, history, initialState, onSave }) {
                     </article>
                   ))}
                 </div>
-              ) : <p className="comparison-period-verdict">기간별 저장 기록을 아직 불러오지 않았습니다.</p>}
+              ) : <p className="comparison-period-verdict">기간별 성장 기록을 아직 불러오지 않았어요.</p>}
               <p className="comparison-period-notice">경험치 증가는 기록이 이어지는 날짜끼리 비교했어요. 기록이 없는 날은 0으로 계산하지 않았습니다.</p>
             </section>
             <div className="comparison-ai">
