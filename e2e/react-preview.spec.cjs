@@ -124,7 +124,7 @@ test("React preview loads profile data and refreshes only on explicit request", 
   await expect(page.locator(".mgt-snapshot-stat[data-testid='profile-combat-power']")).toContainText("987,654,321");
 
   await page.locator('.mgt-nav a[href="#/growth"]').click();
-  await expect(page.getByText("주간 일일 평균 경험치")).toBeVisible();
+  await expect(page.locator("#growth").getByRole("heading", { name: "성장 요약" })).toBeVisible();
 
   await page.locator('.mgt-nav a[href="#/history"]').click();
   await expect(page.locator(".history-table thead")).toContainText("경험치");
