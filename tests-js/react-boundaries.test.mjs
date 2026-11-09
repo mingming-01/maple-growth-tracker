@@ -26,6 +26,13 @@ test("React API requests stay inside the shared API service", () => {
   assert.deepEqual(offenders, []);
 });
 
+test("React and retained legacy growth calculation modules stay byte-identical", () => {
+  const reactModule = readFileSync(join(frontendSource, "lib", "growth.js"), "utf8");
+  const legacyModule = readFileSync(join(projectRoot, "static", "js", "growth.js"), "utf8");
+
+  assert.equal(reactModule, legacyModule);
+});
+
 test("React browser storage access stays inside the storage module", () => {
   const offenders = sourceFiles
     .filter(file => relative(frontendSource, file) !== join("lib", "storage.js"))
