@@ -1643,3 +1643,6 @@ button:focus-visible,input:focus-visible,select:focus-visible,a:focus-visible { 
 @media(max-width:480px) {
   .mgt-growth-home-top .mgt-profile-side { grid-template-columns:minmax(0,1fr); }
 }
+
+/* P4: active primary route state. */
+.mgt-nav a[aria-current="page"] { color:#e1d9ff; }
