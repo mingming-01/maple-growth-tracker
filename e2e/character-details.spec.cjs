@@ -201,6 +201,9 @@ test("mobile touch opens item tooltips without clipped detail panels", async ({ 
     await page.getByLabel("캐릭터명").fill("상세정보확장테스트");
     await page.getByRole("button", { name: /캐릭터 조회/ }).tap();
     await expect(page.getByRole("heading", { name: "상세정보확장테스트" })).toBeVisible();
+    await page.locator('.mgt-nav a[href="#/details"]').tap();
+    await expect(page.locator("#details").getByRole("heading", { name: "캐릭터 상세 정보" })).toBeVisible();
+    await page.locator("#details").getByRole("heading", { name: "캐릭터 상세 정보" }).scrollIntoViewIfNeeded();
 
     await expect(page.getByText("프리셋 조합 추천")).toHaveCount(0);
     await page.locator('[data-detail-tab="symbols"]').tap();
