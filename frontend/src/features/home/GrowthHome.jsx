@@ -42,19 +42,6 @@ const PAGE_LINKS = [
   { route: "comparison", title: "캐릭터 비교", description: "다른 캐릭터와 성장 흐름 비교" }
 ];
 
-function GrowthSectionNav({ current }) {
-  return (
-    <nav className="mgt-growth-route-nav" aria-label="캐릭터 화면">
-      <a href="#/" aria-current={current === "overview" ? "page" : undefined}>개요</a>
-      {PAGE_LINKS.map(item => (
-        <a key={item.route} href={`#/${item.route}`} aria-current={current === item.route ? "page" : undefined}>
-          {item.title}
-        </a>
-      ))}
-    </nav>
-  );
-}
-
 export default function GrowthHome({
   character,
   history,
@@ -84,8 +71,6 @@ export default function GrowthHome({
 
   return (
     <div className="mgt-growth-home mgt-layout-stack">
-      <GrowthSectionNav current={view} />
-
       {view === "overview" && (
         <>
           <div className="mgt-growth-home-top">
