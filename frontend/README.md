@@ -1,6 +1,6 @@
 # React frontend
 
-The React/Vite dashboard is the only public application frontend. Flask continues to own the backend APIs, Nexon integrations, AI services, persistence, and admin authentication. Flask continues to own the backend APIs, Nexon integrations, AI services, persistence, and admin authentication.
+The React/Vite dashboard is the only public application frontend. Flask continues to own the backend APIs, Nexon integrations, AI services, persistence, and admin authentication.
 
 ## Local development
 
@@ -33,7 +33,7 @@ For Render, use this Build Command:
 
 ## Migration boundaries
 
-- React owns its own root element and does not mount into the legacy page.
+- React is served directly at `/` and owns the public user interface.
 - Flask APIs and server-side integrations remain the source of truth.
 - Existing sessionStorage/localStorage keys and schemas are preserved for page state, favorites, growth goals, and AI response cache.
-- Keep Flask responsible for APIs, integrations, persistence, and administrator authentication; the React build is the only public application UI.
+- Flask remains responsible for APIs, integrations, persistence, and administrator authentication; its server-rendered admin pages remain separate from the React dashboard.
