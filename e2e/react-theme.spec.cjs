@@ -87,6 +87,14 @@ async function installFixtures(page) {
   return character;
 }
 
+async function expectReadableText(page, selector) {
+  const color = await page.locator(selector).first().evaluate(element => getComputedStyle(element).color);
+  const channels = (color.match(/[0-9.]+/g) || []).map(Number);
+  expect(channels.length, `${selector} should have a computed text color, got ${color}`).toBeGreaterThanOrEqual(3);
+  const average = (channels[0] + channels[1] + channels[2]) / 3;
+  expect(average, `${selector} should remain readable on a dark surface, got ${color}`).toBeGreaterThan(120);
+}
+
 async function expectDarkSurface(page, selector) {
   const locator = page.locator(selector).first();
   await expect(locator, `Expected surface ${selector} to be visible`).toBeVisible();
@@ -124,6 +132,7 @@ test("React routes use the purple-dark theme while the legacy page keeps its sty
   await page.locator('.mgt-nav a[href="#/growth"]').click();
   await expect(page.locator("#growth-summary .summary-card").first()).toBeVisible();
   await expectDarkSurface(page, "#growth-summary .summary-card");
+  await expectReadableText(page, "#growth-summary .summary-value");
   await expectDarkSurface(page, "#growth-trend .chart-card");
   await expectDarkSurface(page, "#growth-trend .growth-timeline-section");
   await expectDarkSurface(page, "#growth-prediction .growth-goal-card");
@@ -139,6 +148,7 @@ test("React routes use the purple-dark theme while the legacy page keeps its sty
   await expect(page.locator("#history .history-table tbody tr")).toHaveCount(30);
   await expectDarkSurface(page, "#history .history-table thead th");
   await expectDarkSurface(page, "#history .history-table tbody td");
+  await expectReadableText(page, "#history .history-table tbody td");
 
   await page.locator('.mgt-nav a[href="#/details"]').click();
   await expect(page.locator("#details .character-details-section")).toBeVisible();
