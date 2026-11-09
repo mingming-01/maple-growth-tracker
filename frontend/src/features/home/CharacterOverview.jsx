@@ -135,7 +135,16 @@ export default function CharacterOverview({ character, history }) {
         <div className="mgt-snapshot-stat"><span>현재 경험치</span><strong>{formatNumber(character.experience)}</strong></div>
         <div className="mgt-snapshot-stat"><span>주간 일일 평균 경험치</span><strong>{average === null ? "자료 부족" : formatTrillion(average)}</strong></div>
         <div className="mgt-snapshot-stat" data-testid="profile-combat-power">
-          <span>전투력</span><strong>{character.currentCombatPower == null ? "정보 확인 중" : formatNumber(character.currentCombatPower)}</strong>
+          <span>현재 전투력</span><strong>{character.currentCombatPower == null ? "정보 확인 중" : formatNumber(character.currentCombatPower)}</strong>
+        </div>
+        <div className="mgt-snapshot-stat" data-testid="profile-best-combat-power">
+          <span>최고 관측 전투력</span>
+          <div className="mgt-snapshot-value-group">
+            <strong>{character.bestCombatPower == null ? "기록 없음" : formatNumber(character.bestCombatPower)}</strong>
+            <small>{character.bestCombatPowerObservedAt
+              ? "관측일 " + new Date(character.bestCombatPowerObservedAt).toLocaleDateString("ko-KR")
+              : "관측 날짜 정보 없음"}</small>
+          </div>
         </div>
       </div>
       <div className="mgt-ranking-panel">

@@ -84,6 +84,7 @@ function buildReportSignature(character, history, metrics, analysisContext = {})
 
 export function AIReport({ character, history, analysisHistory = history, periodDays = 7, periodSummary = null, onPeriodSelect }) {
   const [analysis,setAnalysis] = useState("");
+  const [growthInsights,setGrowthInsights] = useState(null);
   const [loading,setLoading] = useState(false);
   const [error,setError] = useState("");
   const [notice,setNotice] = useState("");
@@ -111,12 +112,14 @@ export function AIReport({ character, history, analysisHistory = history, period
     const cached = !force ? getCachedAI(cacheType,signature) : null;
     if (cached?.analysis) {
       setAnalysis(cached.analysis);
+      setGrowthInsights(cached.growthInsights || null);
       setNotice(analysisContext.periodDays > 7 ? `지난 ${analysisContext.periodDays}일 분석 결과를 불러왔어요.` : "");
       setLoading(false);
       return;
     }
     if (!allowGenerate && !force) {
       setAnalysis("");
+      setGrowthInsights(null);
       setNotice(`최근 ${analysisContext.periodDays}일 리포트가 아직 없어요. AI 분석 시작을 누르면 지금 기록으로 새 리포트를 만들어요.`);
       setLoading(false);
       return;
@@ -126,6 +129,7 @@ export function AIReport({ character, history, analysisHistory = history, period
       const result = await postAiAnalysis(character.characterName,metrics,analysisHistory,analysisContext,{forceRefresh:force});
       if (!result.analysis) throw new Error("AI 분석 결과가 비어 있습니다.");
       setAnalysis(result.analysis);
+      setGrowthInsights(result.growthInsights || null);
       setNotice("");
       saveCachedAI(cacheType,signature,result.analysis,result.growthInsights || null);
     } catch (requestError) {
@@ -137,6 +141,7 @@ export function AIReport({ character, history, analysisHistory = history, period
 
   useEffect(() => {
     setAnalysis("");
+    setGrowthInsights(null);
     setError("");
     // 모든 기간은 보관 시간 안의 결과만 확인한다. 새 분석은 버튼을 눌렀을 때만 실행한다.
     run({ allowGenerate: false });
@@ -167,6 +172,16 @@ export function AIReport({ character, history, analysisHistory = history, period
         <p className="section-description">최근 {periodDays}일 동안의 경험치와 레벨 변화를 정리해요.</p>
       </div>
       <div className="ai-analysis-card">
+        {growthInsights?.basis && <div className="ai-analysis-evidence" id="aiAnalysisEvidence" data-testid="ai-analysis-evidence">
+          <strong>AI 분석 기준 및 데이터 충실도</strong>
+          <div className="ai-analysis-evidence-grid">
+            <div className="ai-analysis-evidence-item"><span>기준일</span><strong>{(growthInsights.basis.referenceDate || "자료 없음").replaceAll("-", ".")}</strong></div>
+            <div className="ai-analysis-evidence-item"><span>확인된 기록</span><strong>{growthInsights.basis.availableSnapshots ?? 0} / {growthInsights.basis.expectedSnapshots ?? 0}일</strong></div>
+            <div className="ai-analysis-evidence-item"><span>데이터 충실도</span><strong>{growthInsights.basis.dataQualityLabel || "자료 부족"} · {Number.isFinite(Number(growthInsights.basis.coveragePercent)) ? Number(growthInsights.basis.coveragePercent).toFixed(1) + "%" : "자료 부족"}</strong></div>
+            {growthInsights.weekOverWeek?.status === "available" && <div className="ai-analysis-evidence-item"><span>전주 대비 일일 평균 성장량</span><strong>{Number(growthInsights.weekOverWeek.averageDailyGrowthChangePercent).toFixed(1)}%</strong></div>}
+            {growthInsights.weekdayWeekend?.status === "available" && <div className="ai-analysis-evidence-item"><span>주말 성장 비중</span><strong>{Number(growthInsights.weekdayWeekend.weekendSharePercent).toFixed(1)}%</strong></div>}
+          </div>
+        </div>}
         {periodDays > 7 && periodSummary && <div className="ai-analysis-period-evidence" data-testid="ai-analysis-period-evidence">
           <strong>최근 {periodDays}일 성장 기록</strong>
           <div className="ai-analysis-period-grid">
