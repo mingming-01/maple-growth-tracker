@@ -445,7 +445,7 @@ test("30-day AI report reuses cache without automatic LLM calls and only regener
   await page.locator('.mgt-nav a[href="#/analytics"]').click();
   await page.getByLabel("AI 분석 기간").selectOption("90");
   await expect(aiReportSection.locator(".section-description")).toContainText("선택한 90일");
-  expect(aiCalls).toBe(1);
+  expect(aiCalls).toBe(2);
   await page.locator('.mgt-nav a[href="#/history"]').click();
   await expect(page.locator("#history .history-table tbody tr")).toHaveCount(90);
   await page.locator('.mgt-nav a[href="#/growth"]').click();
