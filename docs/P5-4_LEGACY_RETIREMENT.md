@@ -35,7 +35,8 @@ React를 유일한 공개 사용자 화면으로 확정했다. Flask는 API, 외
 - 빌드 산출물이 없으면 `/`는 HTTP 503이다.
 - React 브라우저 테스트는 `/`에서 실행한다.
 - 관리자 로그인·로그 경로는 기존 Flask 세션과 CSRF 정책을 유지한다.
-- 전체 Python, 성장 지표, React 빌드, Playwright E2E CI 결과는 완료 후 확인한다.
+- CI 최신 커밋 `e7fc91c`: React 빌드 성공, Python 테스트 124개 성공, JavaScript 문법 검사 성공, 성장 지표 단위 테스트 성공, Playwright E2E 13개 성공.
+- 실제 배포 URL 확인은 P5-5에서 별도로 수행한다.
 
 ## 다음 단계
 
