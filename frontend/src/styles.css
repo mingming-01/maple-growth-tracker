@@ -1745,3 +1745,8 @@ button:focus-visible,input:focus-visible,select:focus-visible,a:focus-visible { 
   .mgt-character-avatar-frame { width:165px; height:165px; }
 }
 .growth-dashboard [id^="growth-"] { scroll-margin-top:92px; }
+
+
+@media (max-width:760px) {
+  .growth-dashboard [id^="growth-"] { scroll-margin-top:118px; }
+}
