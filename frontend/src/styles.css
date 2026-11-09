@@ -1558,15 +1558,78 @@ button:focus-visible,input:focus-visible,select:focus-visible,a:focus-visible { 
 .mgt-growth-page-content[data-testid="growth-page"] .growth-dashboard > .section:nth-child(2) .chart-wrapper {
   width:100%; min-width:0; min-height:280px;
 }
-.mgt-growth-page-content[data-testid="growth-page"] .growth-dashboard > .section:nth-child(3) {
-  display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); align-items:start; gap:var(--mgt-space-4);
+.mgt-growth-page-content[data-testid="growth-page"] .growth-prediction-section {
+  display:block;
 }
-.mgt-growth-page-content[data-testid="growth-page"] .growth-dashboard > .section:nth-child(3) > .section-header {
-  grid-column:1 / -1; margin:0;
+.mgt-growth-page-content[data-testid="growth-page"] .growth-prediction-section > .section-header {
+  margin:0 0 var(--mgt-space-4);
 }
-.mgt-growth-page-content[data-testid="growth-page"] .growth-dashboard > .section:nth-child(3) .prediction-card,
-.mgt-growth-page-content[data-testid="growth-page"] .growth-dashboard > .section:nth-child(3) .growth-goal-card {
-  min-width:0; height:100%; margin:0;
+.mgt-growth-page-content[data-testid="growth-page"] .growth-prediction-layout {
+  display:grid;
+  grid-template-columns:repeat(2,minmax(0,1fr));
+  align-items:stretch;
+  gap:var(--mgt-space-4);
+  min-width:0;
+}
+.mgt-growth-page-content[data-testid="growth-page"] .growth-prediction-layout > * {
+  min-width:0;
+}
+.mgt-growth-page-content[data-testid="growth-page"] .growth-prediction-layout > .prediction-card {
+  min-width:0;
+  height:100%;
+  margin:0;
+}
+.mgt-growth-page-content[data-testid="growth-page"] .growth-prediction-layout > #growth-goal {
+  display:flex;
+  min-width:0;
+}
+.mgt-growth-page-content[data-testid="growth-page"] .growth-prediction-layout > #growth-goal > .growth-goal-card {
+  width:100%;
+  min-width:0;
+  height:100%;
+  margin:0;
+}
+.mgt-growth-page-content[data-testid="growth-page"] .growth-prediction-layout .prediction-grid {
+  grid-template-columns:repeat(2,minmax(0,1fr));
+  gap:10px;
+}
+.mgt-growth-page-content[data-testid="growth-page"] .growth-prediction-layout .prediction-item {
+  min-width:0;
+  padding:12px;
+}
+.mgt-growth-page-content[data-testid="growth-page"] .growth-prediction-layout .prediction-label {
+  word-break:keep-all;
+  overflow-wrap:break-word;
+}
+.mgt-growth-page-content[data-testid="growth-page"] .growth-prediction-layout .prediction-value {
+  min-width:0;
+  margin-top:8px;
+  color:#e4ddff;
+  font-size:clamp(12px,1.2vw,16px);
+  line-height:1.35;
+  white-space:nowrap;
+  word-break:normal;
+  overflow-wrap:normal;
+  font-variant-numeric:tabular-nums;
+}
+.mgt-growth-page-content[data-testid="growth-page"] .growth-prediction-layout .prediction-item:first-child .prediction-value {
+  color:#c8baff;
+  font-size:clamp(13px,1.35vw,18px);
+}
+.mgt-growth-page-content[data-testid="growth-page"] .growth-prediction-layout .prediction-note,
+.mgt-growth-page-content[data-testid="growth-page"] .growth-goal-heading p,
+.mgt-growth-page-content[data-testid="growth-page"] .growth-goal-pace,
+.mgt-growth-page-content[data-testid="growth-page"] .growth-goal-storage-note,
+.mgt-growth-page-content[data-testid="growth-page"] .growth-goal-notification span {
+  word-break:keep-all;
+  overflow-wrap:break-word;
+}
+.mgt-growth-page-content[data-testid="growth-page"] .growth-goal-heading > div {
+  min-width:0;
+}
+.mgt-growth-page-content[data-testid="growth-page"] .growth-goal-status {
+  flex:none;
+  white-space:nowrap;
 }
 .mgt-growth-insight {
   padding:clamp(20px,3vw,30px); border:1px solid rgba(172,154,255,.2);
@@ -1609,13 +1672,15 @@ button:focus-visible,input:focus-visible,select:focus-visible,a:focus-visible { 
   .mgt-growth-page-content[data-testid="growth-page"] .growth-dashboard > .section:first-child .summary-grid {
     grid-template-columns:repeat(2,minmax(0,1fr));
   }
-  .mgt-growth-page-content[data-testid="growth-page"] .growth-dashboard > .section:nth-child(3) {
+  .mgt-growth-page-content[data-testid="growth-page"] .growth-prediction-layout {
     grid-template-columns:minmax(0,1fr);
   }
-  .mgt-growth-page-content[data-testid="growth-page"] .growth-dashboard > .section:nth-child(3) > .section-header {
-    grid-column:auto;
-  }
   .mgt-growth-page-content[data-testid="growth-page"] .growth-dashboard > .section:nth-child(2) .chart-wrapper { min-height:240px; }
+}
+@media(max-width:380px) {
+  .mgt-growth-page-content[data-testid="growth-page"] .growth-prediction-layout .prediction-grid {
+    grid-template-columns:minmax(0,1fr);
+  }
 }
 @media(max-width:420px) {
   .mgt-growth-page-content[data-testid="growth-page"] .growth-dashboard > .section { padding:14px; }
