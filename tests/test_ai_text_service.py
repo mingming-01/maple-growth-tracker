@@ -43,14 +43,14 @@ class SanitizeAITextTests(unittest.TestCase):
 
     def test_technical_growth_terms_are_rewritten_for_players(self):
         result = sanitize_ai_text(
-            "최근 관측 구간의 표본이 적고 결측 날짜가 있어 기록 충실도가 낮습니다."
+            "최근 관측 구간의 표본이 적고 결측 날짜가 많습니다."
         )
 
         self.assertNotIn("관측", result)
         self.assertNotIn("표본", result)
         self.assertNotIn("결측", result)
-        self.assertNotIn("기록 충실도", result)
-        self.assertIn("기록이 남은 날짜", result)
+        self.assertIn("최근 기간", result)
+        self.assertIn("기록된 날짜", result)
         self.assertIn("기록이 없는 날짜", result)
 
     def test_growth_report_rejects_chinese_characters(self):
