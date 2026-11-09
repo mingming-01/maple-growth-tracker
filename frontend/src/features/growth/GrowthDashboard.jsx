@@ -387,13 +387,13 @@ function PeriodSummary({ summary, previous, label }) {
     ? (summary.averageGrowth - previous.averageGrowth) / Math.abs(previous.averageGrowth) * 100
     : null;
   const cells = [
-    ["기간 증가량",fmt(summary.growth),summary.confirmedChangeDays + "개 연속 관측 구간"],
-    ["기록 구간 일 평균",fmt(summary.averageGrowth),summary.confirmedChangeDays + "개 구간 기준"],
+    ["총 경험치 증가량",fmt(summary.growth),summary.confirmedChangeDays + "일의 경험치 변화 기준"],
+    ["하루 평균 경험치",fmt(summary.averageGrowth),summary.confirmedChangeDays + "일의 기록 기준"],
     ["랭킹 변화",summary.rankingChange === null ? "자료 부족" : (summary.rankingChange > 0 ? "▲ " + summary.rankingChange + "위 상승" : summary.rankingChange < 0 ? "▼ " + Math.abs(summary.rankingChange) + "위 하락" : "변화 없음"),"첫 기록과 마지막 기록 비교"],
-    ["직전 기간 대비",comparisonPercent === null ? "비교 자료 부족" : (comparisonPercent > 0 ? "+" : "") + comparisonPercent.toFixed(1) + "%",previous ? "직전 동일 기간의 관측 평균과 비교" : "직전 기간 자료 없음"],
-    ["기록 충실도",summary.availableDays + " / " + summary.days + "일",`API 미제공 ${summary.notReadyDays}일 · 미수집 ${summary.notCollectedDays}일`],
-    ["기간 최고 성장",fmt(summary.bestDailyGrowth),summary.bestDailyGrowthDate ? localDate(summary.bestDailyGrowthDate) : "확인된 성장 기록 없음"],
-    ["성장 활동일",summary.growthDays + "일",`정체 ${summary.zeroGrowthDays}일 · 감소 ${summary.negativeGrowthDays}일`],
+    ["지난 기간과 비교",comparisonPercent === null ? "비교 자료 부족" : (comparisonPercent > 0 ? "+" : "") + comparisonPercent.toFixed(1) + "%",previous ? "바로 앞선 같은 기간과 비교" : "지난 기간 기록 없음"],
+    ["기록이 남은 날짜",summary.availableDays + " / " + summary.days + "일",`아직 공개되지 않은 날짜 ${summary.notReadyDays}일 · 확인하지 못한 날짜 ${summary.notCollectedDays}일`],
+    ["하루 최고 경험치",fmt(summary.bestDailyGrowth),summary.bestDailyGrowthDate ? localDate(summary.bestDailyGrowthDate) : "확인된 기록 없음"],
+    ["경험치를 얻은 날",summary.growthDays + "일",`변화 없음 ${summary.zeroGrowthDays}일 · 감소 ${summary.negativeGrowthDays}일`],
     ["레벨업",summary.levelUpCount + "회",summary.levelUpDates.length ? summary.levelUpDates.map(localDate).join(" · ") : "기간 내 레벨업 기록 없음"]
   ];
   return (
