@@ -661,25 +661,9 @@ color: #6552d2; font-size: 24px;
 .mgt-app-shell .prediction-note {
 margin: 16px 0 0; color: #8a8795; font-size: 12px; line-height: 1.6;
 }
-.mgt-app-shell .history-card {
-overflow: hidden; background: #fff; border: 1px solid #e9e8f0; border-radius: 22px; box-shadow: 0 10px 30px rgba(39,35,75,.045);
-}
-.mgt-app-shell .history-table {
-width: 100%; border-collapse: collapse; table-layout: fixed;
-}
-.mgt-app-shell .history-table th,
-.mgt-app-shell .history-table td {
-width: 33.333%;
-}
-.mgt-app-shell .history-table th {
-padding: 16px 20px; color: #817e90; background: #faf9fc; font-size: 12px; font-weight: 800; text-align: left;
-}
-.mgt-app-shell .history-table td {
-padding: 17px 20px; border-top: 1px solid #f0eff4; color: #38354a; font-size: 14px;
-}
-.mgt-app-shell .history-table tbody tr:hover {
-background: #fbfaff;
-}
+/* History table colors are owned by styles.css.
+ * Do not reintroduce the legacy white table palette from the static UI.
+ */
 .mgt-app-shell .ai-cache-notice.is-warning {
 color: #a05e25;
 }
