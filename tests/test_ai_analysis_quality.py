@@ -1,10 +1,12 @@
 import unittest
 
 from tracker.services.ai_analysis_service import (
+    _apply_deterministic_growth_forecast,
     _build_growth_report_prompt,
+    _deterministic_growth_forecast,
     _error_result,
 )
-from tracker.services.ai_text_service import validate_growth_report
+from tracker.services.ai_text_service import sanitize_ai_text, validate_growth_report
 
 
 class AIAnalysisQualityTests(unittest.TestCase):
@@ -74,6 +76,56 @@ class AIAnalysisQualityTests(unittest.TestCase):
 
         self.assertEqual(result["statusCode"], 502)
         self.assertEqual(result["errorType"], "provider_error")
+
+
+    def test_scientific_notation_is_formatted_as_korean_experience_unit(self):
+        self.assertEqual(sanitize_ai_text("평균 약 1.78×10¹³ 경험치"), "평균 약 17.8조 경험치")
+        self.assertEqual(sanitize_ai_text("평균 약 1.78e13 경험치"), "평균 약 17.8조 경험치")
+        self.assertEqual(sanitize_ai_text("평균 약 17,800,000,000,000 경험치"), "평균 약 17.8조 경험치")
+
+    def test_growth_forecast_uses_computed_level_and_date(self):
+        forecast = _deterministic_growth_forecast(
+            {"level": 298},
+            {"prediction": {"nextLevel": 299, "estimatedDate": "2026-11-19"}},
+        )
+        self.assertEqual(
+            forecast,
+            "최근 관측된 경험치 획득 속도가 유지된다면 11월 19일경 299레벨에 도달할 것으로 예상돼요. 실제 달성 시점은 이후 성장 속도에 따라 달라질 수 있어요.",
+        )
+
+    def test_growth_forecast_rejects_invalid_or_inconsistent_prediction(self):
+        self.assertIn("예측하기 어려워요", _deterministic_growth_forecast(
+            {"level": 298}, {"prediction": {"nextLevel": 300, "estimatedDate": "2026-11-19"}}
+        ))
+        self.assertIn("예측하기 어려워요", _deterministic_growth_forecast(
+            {"level": 298}, {"prediction": {"nextLevel": 299, "estimatedDate": "not-a-date"}}
+        ))
+
+    def test_growth_forecast_section_is_replaced_before_validation(self):
+        report = (
+            "[성장 패턴] 최근 기록이 확인됩니다.\n"
+            "[성장 변화] 성장량이 확인됩니다.\n"
+            "[레벨업 분석] 현재 레벨을 유지하고 있습니다.\n"
+            "[성장 전망] 1.78×10¹³ 경험치로 조건부 전망입니다.\n"
+            "[AI 코멘트] 기록을 계속 확인해 주세요."
+        )
+        result = _apply_deterministic_growth_forecast(
+            report, {"level": 298},
+            {"prediction": {"nextLevel": 299, "estimatedDate": "2026-11-19"}},
+        )
+        self.assertNotIn("1.78×10¹³", result)
+        self.assertIn("11월 19일경 299레벨", result)
+        self.assertTrue(validate_growth_report(result))
+
+    def test_report_validator_rejects_scientific_notation(self):
+        report = (
+            "[성장 패턴] 최근 기록이 확인됩니다.\n"
+            "[성장 변화] 평균 성장량은 1.78×10¹³입니다.\n"
+            "[레벨업 분석] 레벨업 기록은 없습니다.\n"
+            "[성장 전망] 현재 자료로는 예상하기 어렵습니다.\n"
+            "[AI 코멘트] 기록을 이어서 확인해 주세요."
+        )
+        self.assertFalse(validate_growth_report(report))
 
     def test_report_rejects_wrong_growth_term(self):
         report = (
