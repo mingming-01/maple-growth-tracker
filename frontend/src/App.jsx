@@ -57,7 +57,6 @@ function App() {
   const [shareOpen,setShareOpen] = useState(false);
   const [view,setView] = useState(() => readRouteFromHash());
   const [detailTab,setDetailTab] = useState(() => readDetailTabFromHash());
-  const [openNavMenu,setOpenNavMenu] = useState("");
   const [comparisonState,setComparisonState] = useState(restored?.comparison || null);
   const resultRef = useRef(null);
 
@@ -65,7 +64,6 @@ function App() {
     const syncView = () => {
       setView(readRouteFromHash());
       setDetailTab(readDetailTabFromHash());
-      setOpenNavMenu("");
       window.scrollTo(0, 0);
     };
     window.addEventListener("hashchange",syncView);
@@ -316,33 +314,23 @@ function App() {
         <nav className="mgt-nav" aria-label="주요 메뉴">
           {view === "admin" ? <a href="#/" onClick={event=>{event.preventDefault();closeAdmin();}}>개요</a> : <>
             <a href="#/" aria-current={view === "overview" ? "page" : undefined}>개요</a>
-            <div className={`mgt-nav-dropdown ${openNavMenu === "growth" ? "is-open" : ""}`}
-              onMouseEnter={() => setOpenNavMenu("growth")} onMouseLeave={() => setOpenNavMenu("")}>
+            <div className="mgt-nav-dropdown">
               <a href="#/growth" aria-current={view === "growth" ? "page" : undefined}>성장 분석</a>
-              <button type="button" className="mgt-nav-toggle" aria-label="성장 분석 하위 메뉴"
-                aria-expanded={openNavMenu === "growth"} onClick={() => setOpenNavMenu(value => value === "growth" ? "" : "growth")}>
-                <span aria-hidden="true">⌄</span>
-              </button>
               <div className="mgt-nav-submenu">
-                <a href="#/growth?section=summary" onClick={() => setOpenNavMenu("")}>성장 요약</a>
-                <a href="#/growth?section=trend" onClick={() => setOpenNavMenu("")}>성장 추이</a>
-                <a href="#/growth?section=timeline" onClick={() => setOpenNavMenu("")}>주요 성장 기록</a>
-                <a href="#/growth?section=prediction" onClick={() => setOpenNavMenu("")}>레벨업 예상</a>
-                <a href="#/growth?section=goal" onClick={() => setOpenNavMenu("")}>목표 레벨</a>
+                <a href="#/growth?section=summary">성장 요약</a>
+                <a href="#/growth?section=trend">성장 추이</a>
+                <a href="#/growth?section=timeline">주요 성장 기록</a>
+                <a href="#/growth?section=prediction">레벨업 예상</a>
+                <a href="#/growth?section=goal">목표 레벨</a>
               </div>
             </div>
-            <div className={`mgt-nav-dropdown ${openNavMenu === "details" ? "is-open" : ""}`}
-              onMouseEnter={() => setOpenNavMenu("details")} onMouseLeave={() => setOpenNavMenu("")}>
+            <div className="mgt-nav-dropdown">
               <a href="#/details" aria-current={view === "details" ? "page" : undefined}>캐릭터 상세</a>
-              <button type="button" className="mgt-nav-toggle" aria-label="캐릭터 상세 하위 메뉴"
-                aria-expanded={openNavMenu === "details"} onClick={() => setOpenNavMenu(value => value === "details" ? "" : "details")}>
-                <span aria-hidden="true">⌄</span>
-              </button>
               <div className="mgt-nav-submenu">
                 {[
                   ["stats","스탯"],["equipment","장비"],["symbols","심볼"],
                   ["skills","6차 / HEXA"],["link","링크 스킬"],["union","유니온"]
-                ].map(([tab,label]) => <a key={tab} href={`#/details?tab=${tab}`} onClick={() => setOpenNavMenu("")}>{label}</a>)}
+                ].map(([tab,label]) => <a key={tab} href={`#/details?tab=${tab}`}>{label}</a>)}
               </div>
             </div>
             <a href="#/analytics" aria-current={view === "analytics" ? "page" : undefined}>AI 리포트</a>
