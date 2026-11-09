@@ -113,13 +113,13 @@ export function AIReport({ character, history, analysisHistory = history, period
     const cached = !force ? getCachedAI(cacheType,signature) : null;
     if (cached?.analysis) {
       setAnalysis(cached.analysis);
-      setNotice(analysisContext.periodDays > 7 ? `최근 ${analysisContext.periodDays}일 분석의 저장 결과를 재사용했습니다.` : "");
+      setNotice(analysisContext.periodDays > 7 ? `지난 ${analysisContext.periodDays}일 분석 결과를 불러왔어요.` : "");
       setLoading(false);
       return;
     }
     if (!allowGenerate && !force) {
       setAnalysis("");
-      setNotice(`최근 ${analysisContext.periodDays}일 분석의 저장 결과가 없습니다. AI 분석 시작을 누르면 새 리포트를 생성합니다.`);
+      setNotice(`최근 ${analysisContext.periodDays}일 리포트가 아직 없어요. AI 분석 시작을 누르면 지금 기록으로 새 리포트를 만들어요.`);
       setLoading(false);
       return;
     }
@@ -166,16 +166,16 @@ export function AIReport({ character, history, analysisHistory = history, period
     <section className="section">
       <div className="section-header">
         <h2 className="section-title">AI 성장 리포트</h2>
-        <p className="section-description">선택한 {periodDays}일의 실제 저장 기록을 바탕으로 변화와 흐름을 정리했습니다.</p>
+        <p className="section-description">최근 {periodDays}일 동안의 경험치와 레벨 변화를 정리해요.</p>
       </div>
       <div className="ai-analysis-card">
         {periodDays > 7 && periodSummary && <div className="ai-analysis-period-evidence" data-testid="ai-analysis-period-evidence">
-          <strong>분석 근거 · 최근 {periodDays}일</strong>
+          <strong>최근 {periodDays}일 성장 기록</strong>
           <div className="ai-analysis-period-grid">
-            <span>기록 충실도 <b>{Number.isFinite(Number(periodSummary.coveragePercent)) ? Number(periodSummary.coveragePercent).toFixed(1)+"%" : "자료 부족"}</b></span>
-            <span>확인된 성장 구간 <b>{periodSummary.confirmedChangeDays ?? 0}일</b></span>
-            <span>평균 일일 성장량 <b>{periodSummary.averageGrowth == null ? "자료 부족" : (Number(periodSummary.averageGrowth)/1_000_000_000_000).toFixed(2)+"조"}</b></span>
-            <span>직전 동일 기간 평균 <b>{periodSummary.previousSummary?.averageGrowth == null ? "자료 부족" : (Number(periodSummary.previousSummary.averageGrowth)/1_000_000_000_000).toFixed(2)+"조"}</b></span>
+            <span>기록이 남은 날짜 <b>{Number.isFinite(Number(periodSummary.coveragePercent)) ? Number(periodSummary.coveragePercent).toFixed(1)+"%" : "자료 부족"}</b></span>
+            <span>경험치가 늘어난 날 <b>{periodSummary.confirmedChangeDays ?? 0}일</b></span>
+            <span>하루 평균 경험치 <b>{periodSummary.averageGrowth == null ? "자료 부족" : (Number(periodSummary.averageGrowth)/1_000_000_000_000).toFixed(2)+"조"}</b></span>
+            <span>지난 기간 하루 평균 <b>{periodSummary.previousSummary?.averageGrowth == null ? "자료 부족" : (Number(periodSummary.previousSummary.averageGrowth)/1_000_000_000_000).toFixed(2)+"조"}</b></span>
           </div>
         </div>}
         <div className="ai-analysis-actions">
@@ -214,7 +214,7 @@ export function AIReport({ character, history, analysisHistory = history, period
         {!analysis && !loading && !error && (
           <div className="ai-analysis-empty" data-testid="ai-analysis-empty">
             <strong>{character?.characterName ? `최근 ${periodDays}일 AI 리포트가 아직 없습니다.` : "먼저 캐릭터를 조회해주세요."}</strong>
-            <p>{character?.characterName ? "선택한 기간의 성장 기록을 확인한 뒤, AI 분석 시작을 누르면 리포트를 생성합니다." : "캐릭터를 조회하면 해당 캐릭터의 성장 기록을 바탕으로 분석할 수 있습니다."}</p>
+            <p>{character?.characterName ? "AI 분석 시작을 누르면 현재 기록을 바탕으로 새 리포트를 만들어요." : "캐릭터를 조회하면 해당 캐릭터의 성장 기록을 바탕으로 분석할 수 있습니다."}</p>
           </div>
         )}
       </div>
