@@ -223,6 +223,18 @@ test("React hash routes support direct entry, reload, and browser back/forward n
   await page.getByRole("button", { name: /캐릭터 조회/ }).click();
   await expect(page.getByRole("heading", { name: "라우트테스트" })).toBeVisible();
 
+  await page.locator('.mgt-nav-dropdown').filter({ has: page.getByRole("link", { name: "캐릭터 상세" }) })
+    .getByRole("button", { name: "캐릭터 상세 하위 메뉴" }).click();
+  await page.getByRole("link", { name: "장비", exact: true }).last().click();
+  await expect(page).toHaveURL(/#\/details\?tab=equipment$/);
+  await expect(page.locator('[data-detail-tab="equipment"]')).toHaveAttribute("aria-selected", "true");
+
+  await page.locator('.mgt-nav-dropdown').filter({ has: page.getByRole("link", { name: "성장 분석" }) })
+    .getByRole("button", { name: "성장 분석 하위 메뉴" }).click();
+  await page.getByRole("link", { name: "성장 추이", exact: true }).last().click();
+  await expect(page).toHaveURL(/#\/growth\?section=trend$/);
+  await expect(page.locator("#growth-trend")).toBeInViewport();
+
   await page.locator('.mgt-nav a[href="#/growth"]').click();
   await expect(page).toHaveURL(/#\/growth$/);
   await page.locator('.mgt-nav a[href="#/history"]').click();
@@ -417,7 +429,7 @@ test("30-day AI report reuses cache without automatic LLM calls and only regener
   await page.locator(".history-range-control select").selectOption("30");
   await page.locator('.mgt-nav a[href="#/analytics"]').click();
   const aiReportSection = page.locator(".section").filter({ has: page.getByRole("heading", { name: "AI 성장 리포트" }) });
-  await expect(aiReportSection.locator(".section-description")).toContainText("선택한 30일");
+  await expect(aiReportSection.locator(".section-description")).toContainText("최근 30일");
   expect(aiCalls).toBe(0);
 
   await page.locator('.mgt-nav a[href="#/history"]').click();
@@ -429,7 +441,7 @@ test("30-day AI report reuses cache without automatic LLM calls and only regener
   await expect(page.getByText("기간 분석 테스트 결과입니다.")).toBeVisible();
   expect(aiCalls).toBe(1);
   expect(submittedPayload.analysisContext.periodDays).toBe(30);
-  expect(submittedPayload.forceRefresh).toBe(false);
+  expect(submittedPayload.forceRefresh).toBe(true);
   expect(submittedPayload.history).toHaveLength(30);
 
   await page.getByRole("button", { name: "다시 분석" }).click();
@@ -444,7 +456,7 @@ test("30-day AI report reuses cache without automatic LLM calls and only regener
   // Changing the period on the AI page updates the same shared period used by Growth.
   await page.locator('.mgt-nav a[href="#/analytics"]').click();
   await page.getByLabel("AI 분석 기간").selectOption("90");
-  await expect(aiReportSection.locator(".section-description")).toContainText("선택한 90일");
+  await expect(aiReportSection.locator(".section-description")).toContainText("최근 90일");
   expect(aiCalls).toBe(2);
   await page.locator('.mgt-nav a[href="#/history"]').click();
   await expect(page.locator("#history .history-table tbody tr")).toHaveCount(90);
