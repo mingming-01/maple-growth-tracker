@@ -9,8 +9,10 @@ const MAX_FAVORITES = 30;
 const MAX_AI_ENTRIES = 40;
 const DEFAULT_AI_TTL_MS = 30 * 24 * 60 * 60 * 1000;
 const AI_TTL_BY_TYPE = Object.freeze({
-  // 30·90일 성장 리포트는 단기 기록 변동에 흔들리지 않도록 7일간 재사용한다.
-  "growth-report-long-v1": 7 * 24 * 60 * 60 * 1000
+  // 최근 7일은 기록이 자주 추가되므로 6시간, 장기 리포트는 기간에 맞춰 재사용한다.
+  "growth-report-7d": 6 * 60 * 60 * 1000,
+  "growth-report-30d": 7 * 24 * 60 * 60 * 1000,
+  "growth-report-90d": 30 * 24 * 60 * 60 * 1000
 });
 
 function getAiTtl(type) {
