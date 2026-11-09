@@ -8,36 +8,36 @@ import { AIReport, GrowthComparison } from "../analytics/AnalyticsAndComparison.
 
 const PAGE_META = {
   growth: {
-    eyebrow: "GROWTH ANALYSIS",
+    eyebrow: "성장 분석",
     title: "성장 분석",
     description: "레벨 진행률과 경험치 변화, 성장 추이와 목표를 확인합니다."
   },
   details: {
-    eyebrow: "CHARACTER DETAILS",
-    title: "캐릭터 스펙",
+    eyebrow: "캐릭터 상세",
+    title: "캐릭터 상세",
     description: "스탯과 장비, 심볼, 6차 스킬과 유니온 정보를 살펴봅니다."
   },
   analytics: {
-    eyebrow: "AI GROWTH REPORT",
-    title: "성장 리포트 분석",
-    description: "저장된 성장 기록을 바탕으로 변화와 흐름을 분석합니다."
+    eyebrow: "AI 리포트",
+    title: "AI 성장 리포트",
+    description: "최근 경험치와 레벨 변화에서 눈에 띄는 점을 정리합니다."
   },
   history: {
-    eyebrow: "GROWTH HISTORY",
-    title: "성장 기록 모아보기",
-    description: "날짜별 레벨과 경험치, 실제로 확인된 성장 변화를 확인합니다."
+    eyebrow: "날짜별 기록",
+    title: "날짜별 기록",
+    description: "날짜마다 레벨과 경험치가 어떻게 달라졌는지 살펴봅니다."
   },
   comparison: {
-    eyebrow: "CHARACTER COMPARISON",
+    eyebrow: "캐릭터 비교",
     title: "캐릭터 성장 비교",
-    description: "두 캐릭터의 최근 성장 지표와 동일 기간의 기록을 비교합니다."
+    description: "두 캐릭터의 레벨과 경험치 변화를 같은 기간으로 비교합니다."
   }
 };
 
 const PAGE_LINKS = [
   { route: "growth", title: "성장 분석", description: "레벨 진행률, 성장 그래프, 목표와 성장 전망" },
-  { route: "details", title: "캐릭터 상세", description: "장비, 능력치, 어빌리티와 프리셋" },
-  { route: "analytics", title: "AI 리포트", description: "기간별 성장 분석과 AI 인사이트" },
+  { route: "details", title: "캐릭터 상세", description: "스탯, 장비, 심볼, 링크 스킬과 유니온" },
+  { route: "analytics", title: "AI 리포트", description: "선택한 기간의 경험치 변화와 AI 분석" },
   { route: "history", title: "날짜별 기록", description: "날짜별 레벨과 경험치 변화" },
   { route: "comparison", title: "캐릭터 비교", description: "다른 캐릭터와 성장 흐름 비교" }
 ];
@@ -71,11 +71,15 @@ export default function GrowthHome({
   const page = PAGE_META[view];
 
   useEffect(() => {
-    if (view !== "growth") return;
-    const section = new URLSearchParams(window.location.hash.split("?")[1] || "").get("section");
-    if (!section) return;
-    const target = document.getElementById(`growth-${section}`);
-    target?.scrollIntoView({ behavior: "smooth", block: "start" });
+    const scrollToGrowthSection = () => {
+      if (view !== "growth") return;
+      const section = new URLSearchParams(window.location.hash.split("?")[1] || "").get("section");
+      if (!section) return;
+      document.getElementById(`growth-${section}`)?.scrollIntoView({ behavior: "smooth", block: "start" });
+    };
+    window.addEventListener("hashchange", scrollToGrowthSection);
+    scrollToGrowthSection();
+    return () => window.removeEventListener("hashchange", scrollToGrowthSection);
   }, [view]);
 
   return (
