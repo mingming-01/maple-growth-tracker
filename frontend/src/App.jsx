@@ -47,6 +47,7 @@ function App() {
   const [character,setCharacter] = useState(restored?.character || null);
   const [history,setHistory] = useState(Array.isArray(restored?.history) ? restored.history : []);
   const [analysisPeriod,setAnalysisPeriod] = useState(() => ({ days:[7,30,90].includes(Number(restored?.historyRange)) ? Number(restored.historyRange) : 7, history:Array.isArray(restored?.displayHistory) ? restored.displayHistory : (Array.isArray(restored?.history) ? restored.history : []), summary:restored?.periodSummary || null }));
+  const [openNavMenu,setOpenNavMenu] = useState(null);
   const [loading,setLoading] = useState(false);
   const [error,setError] = useState("");
   const [historyWarning,setHistoryWarning] = useState("");
@@ -311,10 +312,10 @@ function App() {
           <span className="mgt-brand-mark">M</span>
           <span>MAPLE <b>GROWTH</b></span>
         </a>
-        <nav className="mgt-nav" aria-label="주요 메뉴">
+        <nav className="mgt-nav" aria-label="주요 메뉴" onMouseLeave={() => setOpenNavMenu(null)} onBlur={event => { if (!event.currentTarget.contains(event.relatedTarget)) setOpenNavMenu(null); }}>
           {view === "admin" ? <a href="#/" onClick={event=>{event.preventDefault();closeAdmin();}}>개요</a> : <>
             <a href="#/" aria-current={view === "overview" ? "page" : undefined}>개요</a>
-            <div className="mgt-nav-dropdown mgt-nav-dropdown--growth">
+            <div className="mgt-nav-dropdown" data-open={openNavMenu === "growth"} onMouseEnter={() => setOpenNavMenu("growth")} onFocusCapture={() => setOpenNavMenu("growth")}>
               <a href="#/growth" aria-current={view === "growth" ? "page" : undefined} onClick={event => event.currentTarget.blur()}>성장 분석</a>
               <div className="mgt-nav-submenu">
                 <a href="#/growth?section=summary" onClick={event => event.currentTarget.blur()}>성장 요약</a>
@@ -324,7 +325,7 @@ function App() {
                 <a href="#/growth?section=goal" onClick={event => event.currentTarget.blur()}>목표 레벨</a>
               </div>
             </div>
-            <div className="mgt-nav-dropdown mgt-nav-dropdown--details">
+            <div className="mgt-nav-dropdown" data-open={openNavMenu === "details"} onMouseEnter={() => setOpenNavMenu("details")} onFocusCapture={() => setOpenNavMenu("details")}>
               <a href="#/details" aria-current={view === "details" ? "page" : undefined} onClick={event => event.currentTarget.blur()}>캐릭터 상세</a>
               <div className="mgt-nav-submenu">
                 {[
