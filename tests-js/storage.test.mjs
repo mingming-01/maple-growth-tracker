@@ -38,6 +38,7 @@ test("AI report cache expires after the period-specific retention window", () =>
 
   try {
     for (const [type, ttl] of retention) {
+      storage.removeItem("mapleGrowthTrackerAIResponsesV1");
       const signature = "character-ocid:" + type;
       saveCachedAI(type, signature, "saved report");
 
