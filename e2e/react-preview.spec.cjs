@@ -229,10 +229,9 @@ test("React hash routes support direct entry, reload, and browser back/forward n
   await detailsMenu.getByRole("link", { name: "장비", exact: true }).click();
   await expect(page).toHaveURL(/#\/details\?tab=equipment$/);
   await expect(page.locator('[data-detail-tab="equipment"]')).toHaveAttribute("aria-selected", "true");
-  await expect(detailsMenu.locator(".mgt-nav-submenu")).toBeHidden();
-
   const growthMenu = page.locator('.mgt-nav-dropdown').nth(0);
   await growthMenu.hover();
+  await expect(detailsMenu.locator(".mgt-nav-submenu")).toBeHidden();
   await expect(growthMenu.locator(".mgt-nav-submenu")).toBeVisible();
   await growthMenu.getByRole("link", { name: "성장 추이", exact: true }).click();
   await expect(page).toHaveURL(/#\/growth\?section=trend$/);
