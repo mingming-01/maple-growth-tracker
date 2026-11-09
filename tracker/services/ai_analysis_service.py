@@ -92,8 +92,8 @@ def _deterministic_growth_forecast(character, metrics):
 
 def _apply_deterministic_growth_forecast(analysis, character, metrics):
     forecast = _deterministic_growth_forecast(character, metrics)
-    pattern = r"(\\[성장 전망\\])([\\s\\S]*?)(?=\\n\\[AI 코멘트\\])"
-    return re.sub(pattern, lambda match: f"{match.group(1)}\\n{forecast}", analysis, count=1)
+    pattern = r"(\[성장 전망\])([\s\S]*?)(?=\n\[AI 코멘트\])"
+    return re.sub(pattern, lambda match: f"{match.group(1)}\n{forecast}", analysis, count=1)
 
 
 def _build_growth_report_prompt(source_data):
