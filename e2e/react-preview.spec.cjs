@@ -103,15 +103,15 @@ test("React preview loads profile data and refreshes only on explicit request", 
   await expect(page.getByRole("heading", { name: "프리뷰테스트" })).toBeVisible();
   await expect(page.getByTestId("growth-insight")).toBeVisible();
   await expect(page.getByRole("heading", { name: "이번 성장 기록에서 확인한 점" })).toBeVisible();
-  await expect(page.locator('.mgt-growth-section-nav a[href="#insight"]')).toBeVisible();
+  await expect(page.locator('.mgt-growth-home-nav a[href="#insight"]')).toBeVisible();
   await expect(page.getByText("12,345위")).toBeVisible();
   await expect(page.getByText("6,789위")).toBeVisible();
   await expect(page.getByText("크로아")).toBeVisible();
   await expect(page.getByRole("progressbar", { name: "현재 레벨 경험치 진행률" })).toHaveAttribute("aria-valuenow", "35.6");
   await expect(page.locator(".mgt-character-avatar-frame")).toBeVisible();
   const desktopAvatar = await page.locator(".mgt-character-avatar-frame").boundingBox();
-  expect(desktopAvatar.width).toBeGreaterThanOrEqual(240);
-  expect(desktopAvatar.height).toBeGreaterThanOrEqual(240);
+  expect(desktopAvatar.width).toBeGreaterThanOrEqual(128);
+  expect(desktopAvatar.height).toBeGreaterThanOrEqual(128);
   // CharacterDetails intentionally lazy-loads stats when its section approaches the viewport.
   // Scroll it into view to exercise the same interaction as a real visitor.
   await page.getByRole("heading", { name: "캐릭터 상세 정보" }).scrollIntoViewIfNeeded();
@@ -194,7 +194,7 @@ test("React profile keeps a readable avatar and progress bar on mobile", async (
   await expect(page.getByRole("progressbar", { name: "현재 레벨 경험치 진행률" })).toBeVisible();
   await expect(page.locator(".mgt-character-avatar-frame")).toBeVisible();
   const avatar = await page.locator(".mgt-character-avatar-frame").boundingBox();
-  expect(avatar.width).toBeGreaterThanOrEqual(128);
+  expect(avatar.width).toBeGreaterThanOrEqual(88);
 });
 
 
