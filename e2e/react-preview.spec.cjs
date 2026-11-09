@@ -7,9 +7,12 @@ test("React dashboard is served at root while the legacy Flask homepage remains 
   await expect(page.getByRole("heading", { name: "모험가 찾기" })).toBeVisible();
   const moduleScript = await page.locator('script[type="module"]').getAttribute("src");
   expect(moduleScript).toContain("/static/react-preview/assets/");
+  const reactStylesheets = await page.locator('link[rel="stylesheet"]').evaluateAll(links => links.map(link => new URL(link.href).pathname));
+  expect(reactStylesheets).not.toContain("/static/style.css");
 
   await page.goto("/legacy/");
   await expect(page.locator("#searchForm")).toBeVisible();
+  await expect(page.locator('link[rel="stylesheet"][href="/static/style.css"]')).toHaveCount(1);
 
   await page.goto("/preview/");
   await expect(page.locator('[data-testid="react-preview-ready"]')).toBeVisible();
