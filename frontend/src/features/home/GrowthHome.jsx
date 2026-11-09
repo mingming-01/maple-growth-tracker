@@ -13,22 +13,22 @@ const PAGE_META = {
   },
   details: {
     eyebrow: "CHARACTER DETAILS",
-    title: "캐릭터 상세 정보",
+    title: "캐릭터 스펙",
     description: "장비와 능력치, 프리셋 등 현재 캐릭터의 세부 스펙을 살펴봅니다."
   },
   analytics: {
     eyebrow: "AI GROWTH REPORT",
-    title: "AI 성장 리포트",
+    title: "성장 리포트 분석",
     description: "저장된 성장 기록을 바탕으로 변화와 흐름을 분석합니다."
   },
   history: {
     eyebrow: "GROWTH HISTORY",
-    title: "날짜별 성장 기록",
+    title: "성장 기록 모아보기",
     description: "날짜별 레벨과 경험치, 실제로 확인된 성장 변화를 확인합니다."
   },
   comparison: {
     eyebrow: "CHARACTER COMPARISON",
-    title: "성장 캐릭터 비교",
+    title: "캐릭터 성장 비교",
     description: "두 캐릭터의 최근 성장 지표와 동일 기간의 기록을 비교합니다."
   }
 };
