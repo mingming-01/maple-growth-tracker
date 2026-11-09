@@ -9,7 +9,6 @@ on:
       - ".github/workflows/e2e.yml"
       - "frontend/**"
       - "tracker/controller/page_controller.py"
-      - "tracker/controller/page_controller.py"
       - "tests/test_react_root_route.py"
       - "templates/admin_login.html"
       - "templates/admin_logs.html"
