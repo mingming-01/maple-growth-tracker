@@ -65,7 +65,7 @@ export default function GrowthInsight({ character, history }) {
         <div>
           <span>다음 레벨 예상</span>
           <strong>{prediction?.estimatedDate ? formatDate(prediction.estimatedDate) : "기록 부족"}</strong>
-          <small>{prediction?.estimatedDays != null ? `최근 평균 기준 약 ${prediction.estimatedDays.toFixed(1)}일` : "관측 성장량이 더 필요합니다"}</small>
+          <small>{prediction?.estimatedDays != null ? `최근 평균 기준 약 ${prediction.estimatedDays.toFixed(1)}일` : "경험치 기록이 조금 더 필요해요"}</small>
         </div>
         <div>
           <span>종합 랭킹 변화</span>
