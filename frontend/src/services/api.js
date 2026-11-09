@@ -40,6 +40,22 @@ async function requestJson(path, options = {}) {
   return payload;
 }
 
+function selectAiMetricsForPeriod(metrics, analysisContext) {
+  const periodDays = Number(analysisContext?.periodDays || 7);
+  if (![30, 90].includes(periodDays)) return metrics;
+
+  // 장기 리포트에는 최근 7일의 집계 지표를 섞지 않고,
+  // 최근 속도 기준 예측과 현재 레벨 진행률만 전달한다.
+  const levelProgress = metrics?.levelProgress || {};
+  return {
+    prediction: metrics?.prediction ?? null,
+    levelProgress: {
+      ...(levelProgress.currentRate !== undefined ? { currentRate: levelProgress.currentRate } : {}),
+      ...(levelProgress.remainingRate !== undefined ? { remainingRate: levelProgress.remainingRate } : {})
+    }
+  };
+}
+
 export function getCharacter(name, { refresh = true, signal } = {}) {
   const params = new URLSearchParams({ name: String(name || "").trim() });
   if (refresh) params.set("refresh", "1");
@@ -85,9 +101,10 @@ export function getCharacterDetails(ocid, section, { refresh = false, signal } =
 
 export function postAiAnalysis(name, metrics, history = [], analysisContext = {}, { signal, forceRefresh = false } = {}) {
   const params = new URLSearchParams({ name: String(name || "").trim() });
+  const periodMetrics = selectAiMetricsForPeriod(metrics, analysisContext);
   return requestJson("/api/ai-analysis?" + params.toString(), {
     method: "POST",
-    body: JSON.stringify({ metrics, history, analysisContext, forceRefresh }),
+    body: JSON.stringify({ metrics: periodMetrics, history, analysisContext, forceRefresh }),
     signal
   });
 }
