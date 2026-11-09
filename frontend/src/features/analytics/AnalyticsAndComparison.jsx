@@ -101,8 +101,10 @@ export function AIReport({ character, history, analysisHistory = history, period
     // 분석에 실제 전달되는 캐릭터·기록·지표·기간 요약 전체를 캐시 키에 포함한다.
     // 캐시 버전을 올려 과거에 기간/캐릭터만으로 저장된 장기 리포트를 재사용하지 않는다.
     const signature = stableStringify({
-      cacheVersion: 2,
-      character,
+      // 캐시 키는 실제 분석 요청에 영향을 주는 값만 사용한다.
+      // CharacterDetails가 비동기로 추가하는 전투력 등 분석 입력이 아닌 필드는 제외한다.
+      cacheVersion: 3,
+      characterName: character.characterName,
       history: analysisHistory,
       metrics,
       analysisContext
