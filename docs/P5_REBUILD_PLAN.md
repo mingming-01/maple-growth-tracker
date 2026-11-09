@@ -60,6 +60,13 @@
 - `frontend/index.html`의 `/static/style.css` 링크를 제거한다. `/legacy/` 및 Flask 관리자 템플릿의 링크는 변경하지 않는다.
 - React 루트 E2E에서 레거시 CSS 링크 부재와 React CSS 번들의 핵심 규칙 포함을 검증하도록 보강한다.
 
+### P5-B 검증 결과
+
+- React 루트에서 `/static/style.css`가 로드되지 않고, React CSS 번들에서 성장 목표 및 장비 UI 규칙이 제공되는지 E2E로 확인했다.
+- `/legacy/` 및 `/admin/login`에서는 기존 `/static/style.css`가 계속 로드되는지 확인했다.
+- 기존 모바일 캐릭터 상세 터치·툴팁 E2E를 포함한 브라우저 E2E 17개가 통과했다.
+- React 프로덕션 빌드도 성공했다.
+
 ### P5-C. API·상태 경계 검증
 - 관리자 API 호출이 `frontend/src/services/api.js`에 모였는지 확인
 - 브라우저 저장소 접근이 `frontend/src/lib/storage.js` 경계를 따르는지 확인
@@ -74,6 +81,14 @@
 - 성장 계산 모듈 `frontend/src/lib/growth.js`와 레거시 호환 사본 `static/js/growth.js`는 현재 동일 blob SHA(`9e16bede8dd1a5285bab9589061dfcfb605a434a`)다. 성장 계산 테스트는 React 모듈을 직접 검증하도록 import 경로를 수정하고, 레거시 사본이 남아 있는 동안 바이트 동일성 테스트를 추가했다.
 - 위 경계가 다시 흐트러지지 않도록 `tests-js/react-boundaries.test.mjs`에 API fetch 및 브라우저 저장소 직접 접근 방지 테스트를 추가했다.
 - Flask 세션·CSRF·API 계약은 변경하지 않았다.
+
+### P5-C 검증 결과
+
+- Python 테스트 126개 통과
+- JavaScript 테스트 23개 통과 (신규 API·스토리지·성장 모듈 동기화 경계 테스트 포함)
+- React 프로덕션 빌드 성공
+- Playwright 브라우저 E2E 17개 통과
+- 검증 기준 코드 커밋: `c95f39facaf53441079426dee005bb993c76814c`
 
 ### P5-D. 레거시 퇴역 사전 조건
 - Render 운영 URL에서 React 루트 화면과 주요 기능을 확인
@@ -92,6 +107,14 @@
 - `static/style.css`는 레거시 템플릿뿐 아니라 Flask 관리자 화면에서도 사용될 수 있으므로 파일 전체 삭제는 금지한다.
 - `static/jobs.json`은 Python Nexon 서비스의 직업 매핑 데이터이므로 프런트엔드 정리 대상이 아니다.
 - 현재 main의 `tracker/controller/page_controller.py`는 `/`, `/legacy/`, `/preview/` 경로를 유지하며, React 빌드가 없을 때 루트에서 레거시 템플릿으로 폴백한다.
+
+## 현재 단계 판정
+
+- P5-A: 기능 동등성 코드 대조 완료. 전체 기능별 React E2E 커버리지 보완은 별도 과제로 남음.
+- P5-B: React/레거시 CSS 진입 경계 분리 및 CI 검증 완료.
+- P5-C: API·브라우저 저장소 경계 확인 및 회귀 테스트 추가 완료.
+- P5-D: Render 운영 URL과 관리자 화면 실환경 확인 전이므로 미완료.
+- P5-E: P5-D 승인 전에는 수행하지 않음. 레거시 라우트·템플릿·스크립트 삭제 금지.
 
 ## 완료 기준
 
