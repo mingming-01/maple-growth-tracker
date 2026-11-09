@@ -353,7 +353,7 @@ test("mobile touch opens item tooltips without clipped detail panels", async ({ 
     const crystalCards = crystalGrid.locator(".game-union-crystal");
     await expect(crystalCards).toHaveCount(9);
     const mobileCrystalColumns = await crystalGrid.evaluate(element =>
-      getComputedStyle(element).gridTemplateColumns.trim().split(/\\s+/).length
+      getComputedStyle(element).gridTemplateColumns.trim().split(/\s+/).length
     );
     expect(mobileCrystalColumns, "artifact crystals should remain a three-column card grid on mobile").toBe(3);
     await expect(crystalCards.first().locator(".game-union-crystal-gem img"))
@@ -388,7 +388,7 @@ test("mobile touch opens item tooltips without clipped detail panels", async ({ 
     expect(desktopAvatarBounds.width).toBeGreaterThanOrEqual(180);
     expect(await unionWindow.evaluate(element => getComputedStyle(element).rowGap)).toBe("22px");
     const desktopCrystalColumns = await crystalGrid.evaluate(element =>
-      getComputedStyle(element).gridTemplateColumns.trim().split(/\\s+/).length
+      getComputedStyle(element).gridTemplateColumns.trim().split(/\s+/).length
     );
     expect(desktopCrystalColumns, "artifact crystals should use three desktop columns").toBe(3);
 
