@@ -1,3 +1,4 @@
+import { useEffect } from "react";
 import "./GrowthHome.css";
 import CharacterOverview from "./CharacterOverview.jsx";
 import GrowthInsight from "./GrowthInsight.jsx";
@@ -14,7 +15,7 @@ const PAGE_META = {
   details: {
     eyebrow: "CHARACTER DETAILS",
     title: "캐릭터 스펙",
-    description: "장비와 능력치, 프리셋 등 현재 캐릭터의 세부 스펙을 살펴봅니다."
+    description: "스탯과 장비, 심볼, 6차 스킬과 유니온 정보를 살펴봅니다."
   },
   analytics: {
     eyebrow: "AI GROWTH REPORT",
@@ -37,7 +38,7 @@ const PAGE_LINKS = [
   { route: "growth", title: "성장 분석", description: "레벨 진행률, 성장 그래프, 목표와 성장 전망" },
   { route: "details", title: "캐릭터 상세", description: "장비, 능력치, 어빌리티와 프리셋" },
   { route: "analytics", title: "AI 리포트", description: "기간별 성장 분석과 AI 인사이트" },
-  { route: "history", title: "날짜별 기록", description: "수집된 날짜별 레벨·경험치 기록" },
+  { route: "history", title: "날짜별 기록", description: "날짜별 레벨과 경험치 변화" },
   { route: "comparison", title: "캐릭터 비교", description: "다른 캐릭터와 성장 흐름 비교" }
 ];
 
@@ -64,9 +65,18 @@ export default function GrowthHome({
   onPersist,
   analysisPeriod,
   comparisonState,
-  view = "overview"
+  view = "overview",
+  detailTab = "stats"
 }) {
   const page = PAGE_META[view];
+
+  useEffect(() => {
+    if (view !== "growth") return;
+    const section = new URLSearchParams(window.location.hash.split("?")[1] || "").get("section");
+    if (!section) return;
+    const target = document.getElementById(`growth-${section}`);
+    target?.scrollIntoView({ behavior: "smooth", block: "start" });
+  }, [view]);
 
   return (
     <div className="mgt-growth-home mgt-layout-stack">
@@ -123,7 +133,7 @@ export default function GrowthHome({
 
       {view === "details" && (
         <div id="details" className="mgt-growth-page-content" data-testid="details-page">
-          <CharacterDetails ocid={character.ocid} onStatsLoaded={onStatsLoaded} />
+          <CharacterDetails ocid={character.ocid} onStatsLoaded={onStatsLoaded} initialTab={detailTab} />
         </div>
       )}
 
