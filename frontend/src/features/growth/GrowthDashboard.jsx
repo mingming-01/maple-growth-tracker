@@ -630,9 +630,10 @@ export default function GrowthDashboard({ character, history, onHistoryChange, o
         </section>
       </section>
 
-      <section className="section" id="growth-prediction">
+      <section className="section growth-prediction-section" id="growth-prediction">
         <div className="section-header"><h2 className="section-title">성장 예측</h2><p className="section-description">최근 성장 기록을 기준으로 다음 레벨업을 예상합니다.</p></div>
-        <div className="prediction-card">
+        <div className="growth-prediction-layout">
+          <div className="prediction-card">
           <div className="prediction-grid">
             <div className="prediction-item"><div className="prediction-label">다음 레벨까지</div><div className="prediction-value">{prediction?.requiredExp == null ? "자료 부족" : fmt(prediction.requiredExp) + " (" + prediction.currentRate.toFixed(3) + "%)"}</div></div>
             <div className="prediction-item"><div className="prediction-label">예상 소요</div><div className="prediction-value">{Number.isFinite(prediction?.days) ? "약 "+prediction.days.toFixed(1)+"일" : "자료 부족"}</div></div>
@@ -641,7 +642,8 @@ export default function GrowthDashboard({ character, history, onHistoryChange, o
           </div>
           <p className="prediction-note">최근과 비슷한 속도로 경험치를 얻는다고 가정한 예상이에요. 기록이 없는 날짜나 레벨업으로 경험치 기준이 바뀐 구간은 예상해서 채우지 않아요.</p>
         </div>
-        <div id="growth-goal"><GoalPanel character={character} metrics={metrics} history={history || []} /></div>
+          <div id="growth-goal"><GoalPanel character={character} metrics={metrics} history={history || []} /></div>
+        </div>
       </section>
 
     </div>
