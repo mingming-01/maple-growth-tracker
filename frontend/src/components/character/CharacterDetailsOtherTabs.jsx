@@ -328,24 +328,30 @@ export function UnionTab({ data, selected, onSelect }) {
         )}
         <h4 className="game-union-subtitle">아티팩트 크리스탈</h4>
         <div className="game-union-crystal-grid">
-          {crystals.length ? crystals.map((crystal,index) => (
-            <article className="game-union-crystal" key={index}>
-              <div className="game-union-crystal-top">
-                <span className="game-union-crystal-order">{String(index+1).padStart(2,"0")}</span>
-                <strong className="game-union-crystal-name">{crystal.name || "크리스탈"}</strong>
-                {hasValue(crystal.level) && <span className="game-union-crystal-level">Lv. {crystal.level}</span>}
-              </div>
-              <span className={"game-union-crystal-status " + (String(crystal.validity_flag ?? "0") === "0" ? "is-valid" : "is-expired")}>
-                {String(crystal.validity_flag ?? "0") === "0" ? "효과 적용 상태" : "만료 또는 비활성"}
-              </span>
-              <div className="game-union-crystal-options">
-                {[1,2,3].filter(number => hasValue(crystal["crystal_option_name_"+number])).map(number => (
-                  <span className="game-union-crystal-option" key={number}>{crystal["crystal_option_name_"+number]}</span>
-                ))}
-              </div>
-              {hasValue(crystal.date_expire) && <span className="game-union-crystal-expiry">만료 예정 · {crystal.date_expire}</span>}
-            </article>
-          )) : <Empty>등록된 아티팩트 크리스탈이 없습니다.</Empty>}
+          {crystals.length ? crystals.map((crystal,index) => {
+            const monsterIconUrl = crystal?.mob_icon || crystal?.monster_icon ||
+              crystal?.monster_image || crystal?.image_url || null;
+            const monsterIcon = apiImage(monsterIconUrl,crystal?.name || "몬스터","game-union-crystal-monster");
+            return (
+              <article className="game-union-crystal" key={index}>
+                <div className="game-union-crystal-top">
+                  <span className="game-union-crystal-order">{String(index+1).padStart(2,"0")}</span>
+                  {monsterIcon && <span className="game-union-crystal-gem">{monsterIcon}</span>}
+                  <strong className="game-union-crystal-name">{crystal.name || "크리스탈"}</strong>
+                  {hasValue(crystal.level) && <span className="game-union-crystal-level">Lv. {crystal.level}</span>}
+                </div>
+                <span className={"game-union-crystal-status " + (String(crystal.validity_flag ?? "0") === "0" ? "is-valid" : "is-expired")}>
+                  {String(crystal.validity_flag ?? "0") === "0" ? "효과 적용 상태" : "만료 또는 비활성"}
+                </span>
+                <div className="game-union-crystal-options">
+                  {[1,2,3].filter(number => hasValue(crystal["crystal_option_name_"+number])).map(number => (
+                    <span className="game-union-crystal-option" key={number}>{crystal["crystal_option_name_"+number]}</span>
+                  ))}
+                </div>
+                {hasValue(crystal.date_expire) && <span className="game-union-crystal-expiry">만료 예정 · {crystal.date_expire}</span>}
+              </article>
+            );
+          }) : <Empty>등록된 아티팩트 크리스탈이 없습니다.</Empty>}
         </div>
         <h4 className="game-union-subtitle">아티팩트 효과</h4>
         <div className="game-union-artifact-effect-grid">
