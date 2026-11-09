@@ -150,6 +150,44 @@ function summarizePeriod(history, days) {
   };
 }
 
+export async function loadGrowthPeriod(character, days, onProgress = null) {
+  const normalizedDays = [30, 90].includes(Number(days)) ? Number(days) : 7;
+  if (!character?.ocid || normalizedDays === 7) {
+    throw new Error("기간별 성장 기록을 불러올 수 없습니다.");
+  }
+  const current = await fetchArchive(normalizedDays, character, {
+    collect: true,
+    onProgress
+  });
+  let previous = null;
+  const previousEnd = shiftDate(current.startDate, -1);
+  if (previousEnd) {
+    try {
+      previous = await fetchArchive(normalizedDays, character, { end: previousEnd, collect: false });
+    } catch {
+      previous = null;
+    }
+  }
+  const summary = summarizePeriod(current.history || [], normalizedDays);
+  summary.startDate = current.startDate || summary.startDate;
+  summary.endDate = current.endDate || summary.endDate;
+  const completeSummary = {
+    ...summary,
+    previousSummary: previous ? summarizePeriod(previous.history || [], normalizedDays) : null
+  };
+  return {
+    days: normalizedDays,
+    history: current.history || [],
+    summary: completeSummary,
+    rangeStatus: {
+      availableDays: current.availableDays || 0,
+      notReadyDays: current.notReadyDays || 0,
+      notCollectedDays: current.notCollectedDays || 0,
+      collection: current.collectionSummary || null
+    }
+  };
+}
+
 function ProgressBar({ value, label }) {
   const valid = Number.isFinite(Number(value)) && Number(value) >= 0 && Number(value) <= 100;
   const percent = valid ? Number(value) : 0;
