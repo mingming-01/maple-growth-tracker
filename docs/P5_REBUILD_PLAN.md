@@ -39,7 +39,8 @@
 - React E2E는 `e2e/react-preview.spec.cjs` 9개와 `e2e/character-details.spec.cjs` 1개다. `e2e/app.spec.cjs` 7개는 `/legacy/`를 대상으로 하므로 React 기능 검증으로 계산하지 않는다.
 - `tests/test_preview_route.py`는 React 빌드 부재 시 루트가 레거시로 폴백하는 동작을 명시적으로 검증한다. 이는 운영 전환 전 현재 동작이므로 임의 제거하지 않는다.
 - `frontend/src/App.jsx`에는 직접 API fetch가 없고, 관리자 API는 `services/api.js`를 사용한다. 저장소 접근도 `lib/storage.js`에 모여 있다.
-- React JSX에서 사용하는 일부 클래스가 `static/style.css`에만 정의돼 있다. 정적 분석상 최소 52개 클래스가 React 전용 스타일시트에서 발견되지 않았으므로, 해당 규칙을 이전하기 전 stylesheet 링크를 제거하면 안 된다. 동적 클래스명과 전역 규칙은 별도 수동 확인이 필요하다.
+- React JSX에서 사용하는 일부 클래스가 `static/style.css`에만 정의돼 있었다. PR #64의 React CSS 이전 변경에서 현재 사용 중인 공통·상세 UI 규칙을 선별해 `frontend/src/styles/react-compat.css`로 이식하고, React 진입 HTML의 레거시 stylesheet 링크를 제거한다. 레거시 Flask 템플릿은 기존 `static/style.css`를 계속 사용한다.
+- CSS 클래스명 대조는 정적 분석이므로 동적 클래스명과 전역 규칙은 E2E 및 브라우저 계산 스타일 검증으로 보완한다.
 - `GrowthDashboard.jsx`(734줄), `AnalyticsAndComparison.jsx`(484줄)는 기능 파일로 분리돼 있으나 내부 책임이 크다. P5-A에서는 재분리하지 않고, 테스트와 책임 경계를 확인한 뒤 후속 대상으로 판단한다.
 
 ### P5-A 판정
@@ -51,6 +52,13 @@
 - React 화면이 사용하는 규칙만 React 전용 스타일로 이전
 - 기존 `static/style.css`는 레거시 사용자 화면 및 Flask 관리자 템플릿의 사용처가 남아 있으면 유지
 - React 문서에서 레거시 전역 스타일 의존성이 제거됐는지 테스트
+
+### P5-B 진행 내용
+
+- `frontend/src/styles/react-compat.css`를 추가해 React에서 사용하는 공통 로딩/오류, 성장 목표·타임라인, 기간 요약, 상세 장비·스탯·유니온 UI 규칙을 React 번들에 포함한다.
+- `frontend/src/main.jsx`에서 React 호환 스타일을 명시적으로 import한다.
+- `frontend/index.html`의 `/static/style.css` 링크를 제거한다. `/legacy/` 및 Flask 관리자 템플릿의 링크는 변경하지 않는다.
+- React 루트 E2E에서 레거시 CSS 링크 부재와 React CSS 번들의 핵심 규칙 포함을 검증하도록 보강한다.
 
 ### P5-C. API·상태 경계 검증
 - 관리자 API 호출이 `frontend/src/services/api.js`에 모였는지 확인
