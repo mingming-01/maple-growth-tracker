@@ -102,7 +102,7 @@ class AIAnalysisQualityTests(unittest.TestCase):
         )
 
     def test_growth_forecast_rejects_invalid_or_inconsistent_prediction(self):
-        self.assertIn("예측하기 어려워요", _deterministic_growth_forecast(
+        self.assertIn("예상하기 어려워요", _deterministic_growth_forecast(
             {"level": 298}, {"prediction": {"nextLevel": 300, "estimatedDate": "2026-11-19"}}
         ))
         self.assertIn("예측하기 어려워요", _deterministic_growth_forecast(
