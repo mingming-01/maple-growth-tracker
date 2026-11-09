@@ -20,6 +20,7 @@ test("React dashboard is served at root while the legacy Flask homepage remains 
 
   await page.goto("/legacy/");
   await expect(page.locator("#searchForm")).toBeVisible();
+  await expect(page.locator('link[rel="stylesheet"][href="/static/style.css"]')).toHaveCount(1);
 
   await page.goto("/preview/");
   await expect(page.locator('[data-testid="react-preview-ready"]')).toBeVisible();
@@ -27,6 +28,10 @@ test("React dashboard is served at root while the legacy Flask homepage remains 
 });
 
 test("React preview keeps the existing Flask admin route reachable", async ({ page }) => {
+  await page.goto("/admin/login");
+  await expect(page.locator('link[rel="stylesheet"][href="/static/style.css"]')).toHaveCount(1);
+  await expect(page.locator("form")).toBeVisible();
+
   await page.goto("/preview/");
   await expect(page.locator('[data-testid="react-preview-ready"]')).toBeVisible();
   await expect(page.locator('.mgt-nav a[href="#/admin"]')).toBeVisible();
