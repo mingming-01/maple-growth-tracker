@@ -521,3 +521,67 @@ test("mobile dashboard stays within the viewport and keeps the report before his
       .toBeLessThanOrEqual(measurement.major[".history-table-wrapper"].clientWidth + 1);
   }
 });
+
+test("React character details exposes all migrated tabs and loads each section on demand", async ({ page }) => {
+  await page.route("**/api/character?*", route => route.fulfill({
+    status: 200,
+    contentType: "application/json",
+    body: JSON.stringify({
+      characterName: "상세탭검증",
+      ocid: "react-detail-tabs-ocid",
+      character_image: null,
+      worldName: "크로아",
+      job: "아크메이지",
+      level: 280,
+      experience: 123456,
+      experienceRate: "35.600",
+      ranking: 12345,
+      worldRanking: 6789,
+      jobWorldRanking: 123,
+      jobRanking: 456,
+      rankingDataStatus: "available"
+    })
+  }));
+  await page.route("**/api/history?*", route => route.fulfill({
+    status: 200,
+    contentType: "application/json",
+    body: JSON.stringify({ history: [], historyStatus: "complete" })
+  }));
+  await page.route("**/api/character-details?*", route => {
+    const url = new URL(route.request().url());
+    const section = url.searchParams.get("section") || "stats";
+    return route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({ section, status: "available", sources: [] })
+    });
+  });
+
+  await page.goto("/preview/");
+  await page.getByLabel("캐릭터명").fill("상세탭검증");
+  await page.getByRole("button", { name: /캐릭터 조회/ }).click();
+  const heading = page.getByRole("heading", { name: "캐릭터 상세 정보" });
+  await expect(heading).toBeVisible();
+  await heading.scrollIntoViewIfNeeded();
+
+  const tabs = [
+    ["스탯", "stats"],
+    ["장비", "equipment"],
+    ["심볼", "symbols"],
+    ["6차 / HEXA", "skills"],
+    ["링크 스킬", "link"],
+    ["유니온", "union"]
+  ];
+
+  for (const [label, section] of tabs) {
+    const tab = page.getByRole("tab", { name: label });
+    const response = page.waitForResponse(response => {
+      const url = new URL(response.url());
+      return url.pathname === "/api/character-details" &&
+        url.searchParams.get("section") === section;
+    });
+    await tab.click();
+    await response;
+    await expect(tab).toHaveAttribute("aria-selected", "true");
+  }
+});
