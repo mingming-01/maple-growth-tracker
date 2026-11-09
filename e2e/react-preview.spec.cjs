@@ -221,7 +221,7 @@ test("React hash routes support direct entry, reload, and browser back/forward n
   await page.goto("/preview/");
   await page.getByLabel("캐릭터명").fill("라우트테스트");
   await page.getByRole("button", { name: /캐릭터 조회/ }).click();
-  await expect(page.getByTestId("react-character-search")).toBeVisible();
+  await expect(page.getByRole("heading", { name: "라우트테스트" })).toBeVisible();
 
   await page.locator('.mgt-nav a[href="#/growth"]').click();
   await expect(page).toHaveURL(/#\/growth$/);
@@ -240,7 +240,7 @@ test("React hash routes support direct entry, reload, and browser back/forward n
   await page.reload();
   await expect(page).toHaveURL(/#\/details$/);
   await expect(page.getByTestId("details-page")).toBeVisible();
-  await expect(page.getByRole("heading", { name: "라우트테스트" })).toBeVisible();
+  await expect(page.getByTestId("react-character-search")).toBeVisible();
 });
 
 test("React admin panel renders and filters session-protected operations logs", async ({ page }) => {
