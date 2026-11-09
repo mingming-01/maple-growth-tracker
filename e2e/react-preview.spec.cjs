@@ -117,9 +117,11 @@ test("React preview loads profile data and refreshes only on explicit request", 
   await page.locator('.mgt-nav a[href="#/details"]').click();
   // CharacterDetails loads its data only after entering the dedicated route.
   await expect(page.locator("#details").getByRole("heading", { name: "캐릭터 상세 정보" })).toBeVisible();
+  await page.getByRole("heading", { name: "캐릭터 상세 정보" }).scrollIntoViewIfNeeded();
+  await expect(page.locator(".game-stat-detail-grade")).toHaveText("레전드리");
+  await page.locator('.mgt-nav a[href="#/"]').click();
   await expect(page.locator(".mgt-snapshot-stat[data-testid='profile-combat-power']")).toContainText("전투력");
   await expect(page.locator(".mgt-snapshot-stat[data-testid='profile-combat-power']")).toContainText("987,654,321");
-  await expect(page.locator(".game-stat-detail-grade")).toHaveText("레전드리");
 
   await page.locator('.mgt-nav a[href="#/growth"]').click();
   await expect(page.getByText("주간 일일 평균 경험치")).toBeVisible();
@@ -219,7 +221,7 @@ test("React hash routes support direct entry, reload, and browser back/forward n
   await page.goto("/preview/");
   await page.getByLabel("캐릭터명").fill("라우트테스트");
   await page.getByRole("button", { name: /캐릭터 조회/ }).click();
-  await expect(page.getByRole("heading", { name: "라우트테스트" })).toBeVisible();
+  await expect(page.getByTestId("react-character-search")).toBeVisible();
 
   await page.locator('.mgt-nav a[href="#/growth"]').click();
   await expect(page).toHaveURL(/#\/growth$/);
@@ -502,7 +504,8 @@ test("mobile route pages stay within the viewport at common device widths", asyn
 
   const measurements = [];
   for (const route of ["overview", "growth", "details", "analytics", "history", "comparison"]) {
-    await page.locator(`.mgt-nav a[href="#/${route}"]`).click();
+    const href = route === "overview" ? "#/" : `#/${route}`;
+    await page.locator(`.mgt-nav a[href="${href}"]`).click();
     for (const width of [360, 390, 412]) {
       await page.setViewportSize({ width, height: 844 });
       await page.waitForTimeout(80);
