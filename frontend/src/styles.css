@@ -1679,8 +1679,7 @@ button:focus-visible,input:focus-visible,select:focus-visible,a:focus-visible { 
   box-shadow:0 16px 36px rgba(0,0,0,.38);
   backdrop-filter:blur(16px);
 }
-.mgt-nav-dropdown:hover .mgt-nav-submenu,
-.mgt-nav-dropdown:focus-within .mgt-nav-submenu { display:grid; gap:2px; }
+.mgt-nav-dropdown[data-open="true"] .mgt-nav-submenu { display:grid; gap:2px; }
 .mgt-nav-submenu a {
   display:flex;
   align-items:center;
@@ -1736,12 +1735,3 @@ button:focus-visible,input:focus-visible,select:focus-visible,a:focus-visible { 
   .growth-dashboard [id^="growth-"] { scroll-margin-top:118px; }
 }
 
-/* Keep adjacent navigation submenus out of each other's pointer hit areas. */
-.mgt-nav-dropdown--growth .mgt-nav-submenu {
-  right:0;
-  left:auto;
-}
-.mgt-nav-dropdown--details .mgt-nav-submenu {
-  right:auto;
-  left:0;
-}
