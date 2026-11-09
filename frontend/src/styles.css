@@ -249,6 +249,15 @@ button:focus-visible,input:focus-visible,select:focus-visible,a:focus-visible { 
 .mgt-result-content .comparison-stat span,.mgt-result-content .comparison-period-stat span { color:#9690a8; }
 .mgt-result-content .comparison-stat strong,.mgt-result-content .comparison-period-stat strong { color:#e0d9ff; }
 .mgt-result-content .comparison-period-verdict,.mgt-result-content .comparison-period-notice { color:#a69fb9; }
+.mgt-result-content .comparison-period-character-card:nth-child(2) {
+  border-color:var(--mgt-line);
+  background:#1b1a2a;
+}
+.mgt-result-content .comparison-period-verdict {
+  border:1px solid var(--mgt-line);
+  color:#c5baff;
+  background:rgba(132,105,240,.09);
+}
 .mgt-result-content .comparison-ai { border-color:var(--mgt-line); background:#171624; }
 .mgt-result-content .comparison-ai h3 { color:#eeeaff; }
 .mgt-result-content .comparison-ai-text { color:#c5bfd7; }

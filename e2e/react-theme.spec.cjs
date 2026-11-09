@@ -90,13 +90,27 @@ async function installFixtures(page) {
 async function expectDarkSurface(page, selector) {
   const locator = page.locator(selector).first();
   await expect(locator, `Expected surface ${selector} to be visible`).toBeVisible();
-  const backgroundColor = await locator.evaluate(element => getComputedStyle(element).backgroundColor);
-  const channels = (backgroundColor.match(/[0-9.]+/g) || []).map(Number);
-  expect(channels.length, `${selector} should have a computed background, got ${backgroundColor}`).toBeGreaterThanOrEqual(3);
-  const alpha = backgroundColor.startsWith("rgba(") ? channels[3] : 1;
-  expect(alpha, `${selector} should not be transparent`).toBeGreaterThan(0.5);
-  const average = (channels[0] + channels[1] + channels[2]) / 3;
-  expect(average, `${selector} should use the dark React theme, got ${backgroundColor}`).toBeLessThan(110);
+  const effectiveBackground = await locator.evaluate(element => {
+    const layers = [];
+    for (let node = element; node && node !== document.documentElement; node = node.parentElement) {
+      const color = getComputedStyle(node).backgroundColor;
+      const values = (color.match(/[0-9.]+/g) || []).map(Number);
+      if (values.length < 3) continue;
+      const alpha = color.startsWith("rgba(") ? values[3] : 1;
+      if (alpha > 0) layers.push([values[0], values[1], values[2], alpha]);
+    }
+    let result = [11, 11, 20];
+    for (const [red, green, blue, alpha] of layers.reverse()) {
+      result = [
+        red * alpha + result[0] * (1 - alpha),
+        green * alpha + result[1] * (1 - alpha),
+        blue * alpha + result[2] * (1 - alpha)
+      ];
+    }
+    return result;
+  });
+  const average = effectiveBackground.reduce((sum, channel) => sum + channel, 0) / 3;
+  expect(average, `${selector} should resolve to the dark React theme, got ${effectiveBackground.join(", ")}`).toBeLessThan(110);
 }
 
 test("React routes use the purple-dark theme while the legacy page keeps its stylesheet", async ({ page }) => {
