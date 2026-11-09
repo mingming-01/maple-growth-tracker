@@ -1,65 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
-
-function responseMessage(html, fallback) {
-  try {
-    const doc = new DOMParser().parseFromString(html, "text/html");
-    const message = doc.querySelector(".admin-notice")?.textContent?.trim();
-    return message || fallback;
-  } catch {
-    return fallback;
-  }
-}
-
-async function fetchAdminLogs(params = {}) {
-  const query = new URLSearchParams(
-    Object.entries(params).filter(([,value]) => value !== undefined && value !== null && value !== "")
-  );
-  const response = await fetch("/admin/api/logs" + (query.size ? "?" + query.toString() : ""), {
-    credentials: "same-origin",
-    headers: { Accept: "application/json" },
-    cache: "no-store"
-  });
-  const contentType = response.headers.get("content-type") || "";
-  if (response.redirected || !contentType.includes("application/json")) {
-    throw new Error("관리자 인증이 필요합니다. 아이디와 비밀번호로 로그인해주세요.");
-  }
-  const payload = await response.json();
-  if (!response.ok) throw new Error(payload.error || "관리자 로그를 불러오지 못했습니다.");
-  return payload;
-}
-
-async function loginAdmin(username, password) {
-  const loginPage = await fetch("/admin/login", {
-    credentials: "same-origin",
-    cache: "no-store"
-  });
-  if (!loginPage.ok) throw new Error("관리자 로그인 페이지를 불러오지 못했습니다.");
-  const html = await loginPage.text();
-  const documentNode = new DOMParser().parseFromString(html, "text/html");
-  const csrfToken = documentNode.querySelector('input[name="csrf_token"]')?.value;
-  if (!csrfToken) {
-    throw new Error(responseMessage(html, "CSRF 토큰을 확인할 수 없습니다. 페이지를 새로고침해주세요."));
-  }
-
-  const body = new URLSearchParams({
-    csrf_token: csrfToken,
-    username,
-    password
-  });
-  const response = await fetch("/admin/login", {
-    method: "POST",
-    credentials: "same-origin",
-    headers: { "Content-Type": "application/x-www-form-urlencoded" },
-    body: body.toString(),
-    redirect: "follow"
-  });
-  const resultHtml = await response.text();
-  if (!response.ok || !response.redirected || !response.url.endsWith("/admin/logs")) {
-    throw new Error(responseMessage(resultHtml, "아이디 또는 비밀번호를 확인해주세요."));
-  }
-
-  return fetchAdminLogs();
-}
+import { getAdminLogs, loginAdmin, logoutAdmin } from "../../services/api.js";
 
 function ResultBadge({ result }) {
   const successful = result === "성공";
@@ -149,7 +89,7 @@ function AdminLogs({ initialData, onLogout }) {
     setBusy(true);
     setError("");
     try {
-      const next = await fetchAdminLogs(filters);
+      const next = await getAdminLogs(filters);
       setData(next);
     } catch (requestError) {
       if (requestError.message.includes("인증이 필요합니다")) onLogout();
@@ -165,16 +105,9 @@ function AdminLogs({ initialData, onLogout }) {
   }
 
   async function logout() {
-    const body = new URLSearchParams({csrf_token:data.csrfToken || ""});
     setBusy(true);
     try {
-      await fetch("/admin/logout",{
-        method:"POST",
-        credentials:"same-origin",
-        headers:{"Content-Type":"application/x-www-form-urlencoded"},
-        body:body.toString(),
-        redirect:"follow"
-      });
+      await logoutAdmin(data.csrfToken);
     } finally {
       setBusy(false);
       onLogout();
@@ -233,7 +166,7 @@ export default function AdminDashboard({ onBack }) {
 
   useEffect(() => {
     let cancelled = false;
-    fetchAdminLogs()
+    getAdminLogs()
       .then(result => {
         if (!cancelled) {
           setData(result);
