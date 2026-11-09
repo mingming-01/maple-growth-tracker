@@ -105,7 +105,7 @@ class AIAnalysisQualityTests(unittest.TestCase):
         self.assertIn("예상하기 어려워요", _deterministic_growth_forecast(
             {"level": 298}, {"prediction": {"nextLevel": 300, "estimatedDate": "2026-11-19"}}
         ))
-        self.assertIn("예측하기 어려워요", _deterministic_growth_forecast(
+        self.assertIn("예상하기 어려워요", _deterministic_growth_forecast(
             {"level": 298}, {"prediction": {"nextLevel": 299, "estimatedDate": "not-a-date"}}
         ))
 
@@ -122,7 +122,7 @@ class AIAnalysisQualityTests(unittest.TestCase):
             {"prediction": {"nextLevel": 299, "estimatedDate": "2026-11-19"}},
         )
         self.assertNotIn("1.78×10¹³", result)
-        self.assertIn("11월 19일경 299레벨", result)
+        self.assertIn("11월 19일쯤 299레벨", result)
         self.assertTrue(validate_growth_report(result))
 
     def test_report_validator_rejects_scientific_notation(self):
