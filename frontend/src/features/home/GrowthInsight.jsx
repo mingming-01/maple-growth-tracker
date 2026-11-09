@@ -50,7 +50,7 @@ export default function GrowthInsight({ character, history }) {
   const rankingChange = metrics.rankingChange;
 
   return (
-    <aside className="mgt-growth-insight" aria-labelledby="mgt-growth-insight-title">
+    <aside className="mgt-growth-insight" aria-labelledby="mgt-growth-insight-title" data-testid="growth-insight">
       <div className="mgt-growth-insight-heading">
         <span className="mgt-eyebrow">GROWTH INSIGHT</span>
         <span className="mgt-insight-record-count">정상 기록 {metrics.recordedDays}일</span>
