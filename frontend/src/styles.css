@@ -258,6 +258,46 @@ button:focus-visible,input:focus-visible,select:focus-visible,a:focus-visible { 
   color:#c5baff;
   background:rgba(132,105,240,.09);
 }
+
+/* React state surfaces and timeline markers use the same dark palette as content cards. */
+.mgt-result-content .loading-message {
+  border:1px solid var(--mgt-line);
+  color:#c5baff;
+  background:rgba(132,105,240,.09);
+}
+.mgt-result-content .error-message,
+.mgt-result-content .ai-analysis-error {
+  border:1px solid rgba(243,113,139,.22);
+  color:#f0a2b4;
+  background:rgba(143,47,70,.13);
+}
+.mgt-result-content .ai-analysis-loading {
+  color:#aaa3bc;
+}
+.mgt-result-content .comparison-period-section {
+  border-color:var(--mgt-line);
+}
+.mgt-result-content .comparison-period-notice.is-warning {
+  color:#e7c58c;
+}
+.mgt-result-content .growth-timeline-marker {
+  border-color:#9884ed;
+  background:#201e31;
+  box-shadow:0 0 0 3px rgba(132,105,240,.14);
+}
+.mgt-result-content .growth-timeline-item.is-level-up .growth-timeline-marker {
+  border-color:#d39c22;
+  background:#f8d56c;
+  box-shadow:0 0 0 3px rgba(131,91,30,.16);
+}
+.mgt-result-content .growth-timeline-item.is-best-growth .growth-timeline-marker {
+  border-color:#399b68;
+  box-shadow:0 0 0 3px rgba(57,137,105,.16);
+}
+.mgt-result-content .growth-timeline-item.is-ranking .growth-timeline-marker {
+  border-color:#4a86c5;
+  box-shadow:0 0 0 3px rgba(74,134,197,.16);
+}
 .mgt-result-content .comparison-ai { border-color:var(--mgt-line); background:#171624; }
 .mgt-result-content .comparison-ai h3 { color:#eeeaff; }
 .mgt-result-content .comparison-ai-text { color:#c5bfd7; }

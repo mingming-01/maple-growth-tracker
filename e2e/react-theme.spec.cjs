@@ -135,6 +135,7 @@ test("React routes use the purple-dark theme while the legacy page keeps its sty
   await expectReadableText(page, "#growth-summary .summary-value");
   await expectDarkSurface(page, "#growth-trend .chart-card");
   await expectDarkSurface(page, "#growth-trend .growth-timeline-section");
+  await expectDarkSurface(page, "#growth-trend .growth-timeline-marker");
   await expectDarkSurface(page, "#growth-prediction .growth-goal-card");
 
   await page.locator("#growth-trend .history-range-select").selectOption("30");
