@@ -100,9 +100,7 @@ export function AIReport({ character, history, analysisHistory = history, period
     setLoading(true);
     setError("");
     const analysisContext = { periodDays:[7,30,90].includes(Number(periodDays)) ? Number(periodDays) : 7, periodSummary:periodSummary || null };
-    // 분석에 실제 전달되는 캐릭터·기록·지표·기간 요약 전체를 캐시 키에 포함한다.
-    // 캐시 버전을 올려 과거에 기간/캐릭터만으로 저장된 장기 리포트를 재사용하지 않는다.
-    // 같은 캐릭터·기간의 리포트는 정해진 보관 시간 동안 재사용한다.
+        // 같은 캐릭터·기간의 리포트는 정해진 보관 시간 동안 재사용한다.
     // 매일 기록이 추가되는 7일 리포트도 6시간 안에는 같은 결과를 보여준다.
     const signature = stableStringify({
       cacheVersion: 4,
@@ -140,7 +138,7 @@ export function AIReport({ character, history, analysisHistory = history, period
   useEffect(() => {
     setAnalysis("");
     setError("");
-    // 모든 기간은 저장된 캐시만 확인한다. AI 요청은 사용자가 버튼을 눌렀을 때만 실행한다.
+    // 모든 기간은 보관 시간 안의 결과만 확인한다. 새 분석은 버튼을 눌렀을 때만 실행한다.
     run({ allowGenerate: false });
   },[run,periodDays]);
 
@@ -451,7 +449,7 @@ export function GrowthComparison({ character, history, initialState, onSave }) {
                       <div className="comparison-period-stat"><span>확인된 경험치 증가</span><strong>{formatTrillion(item.growth)}</strong></div>
                       <div className="comparison-period-stat"><span>기록 기준 1일 평균</span><strong>{formatTrillion(item.average)}</strong></div>
                       <div className="comparison-period-stat"><span>랭킹 변화</span><strong>{item.rankingChange == null ? "자료 부족" : (item.rankingChange > 0 ? "▲ " : item.rankingChange < 0 ? "▼ " : "")+formatNumber(Math.abs(item.rankingChange))+"위"}</strong></div>
-                      <div className="comparison-period-stat"><span>기록 충실도</span><strong>{item.availableDays} / {item.days}일</strong></div>
+                      <div className="comparison-period-stat"><span>기록이 남은 날짜</span><strong>{item.availableDays} / {item.days}일</strong></div>
                       <p className="comparison-period-detail">아직 공개되지 않은 날짜 {item.notReady}일 · 확인하지 못한 날짜 {item.notCollected}일</p>
                     </article>
                   ))}
