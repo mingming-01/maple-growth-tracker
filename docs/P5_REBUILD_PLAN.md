@@ -65,6 +65,15 @@
 - 브라우저 저장소 접근이 `frontend/src/lib/storage.js` 경계를 따르는지 확인
 - Flask 세션·CSRF·API 계약은 불필요하게 변경하지 않음
 
+### P5-C 진행 내용 및 점검 결과
+
+- 현재 `frontend/src`의 JavaScript/JSX 18개 파일을 확인했다. API 요청의 직접 `fetch()` 호출은 `services/api.js` 안에만 존재한다.
+- `localStorage` 및 `sessionStorage` 접근은 `lib/storage.js`에만 존재한다.
+- 관리자 로그 조회·로그인·로그아웃은 `services/api.js`의 공통 API 함수로 연결돼 있다.
+- 저장소 단위 테스트는 기존 `tests-js/storage.test.mjs`가 AI 캐시 만료 동작을 검증한다.
+- 위 경계가 다시 흐트러지지 않도록 `tests-js/react-boundaries.test.mjs`에 API fetch 및 브라우저 저장소 직접 접근 방지 테스트를 추가했다.
+- Flask 세션·CSRF·API 계약은 변경하지 않았다.
+
 ### P5-D. 레거시 퇴역 사전 조건
 - Render 운영 URL에서 React 루트 화면과 주요 기능을 확인
 - 관리자 로그인·로그 화면 및 정적 자산 확인
