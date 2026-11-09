@@ -46,8 +46,8 @@ def _format_experience_amount(raw_value):
 def _format_scientific_experience(match):
     raw = match.group(0).strip()
     normalized = raw.translate(_SUPERSCRIPT_DIGITS)
-    normalized = re.sub(r"\\s*[×x]\\s*10\\s*\\^?\\s*", "e", normalized, flags=re.I)
-    normalized = re.sub(r"\\s*\\*\\s*10\\s*\\^\\s*", "e", normalized, flags=re.I)
+    normalized = re.sub(r"\s*[×x]\s*10\s*\^?\s*", "e", normalized, flags=re.I)
+    normalized = re.sub(r"\s*\*\s*10\s*\^\s*", "e", normalized, flags=re.I)
     try:
         value = Decimal(normalized)
     except (InvalidOperation, ValueError):
@@ -80,7 +80,7 @@ def validate_growth_report(value):
         return False
     if any(term.casefold() in text.casefold() for term in INVALID_GROWTH_TERMS):
         return False
-    if re.search(r"(?:×|\\b[xX]\\b|\\*)\\s*10\\s*\\^?\\s*[0-9⁰¹²³⁴⁵⁶⁷⁸⁹]+", text):
+    if re.search(r"(?:×|\b[xX]\b|\*)\s*10\s*\^?\s*[0-9⁰¹²³⁴⁵⁶⁷⁸⁹]+", text):
         return False
 
     # 같은 문장을 연속으로 반복하는 저품질 응답을 차단한다.
@@ -131,13 +131,13 @@ def sanitize_ai_text(value, expected_date=None):
         text = re.sub(pattern, replacement, text, flags=re.IGNORECASE)
     # 과학적 표기와 긴 원본 정수를 조 단위·억 단위로 읽기 쉽게 변환한다.
     text = re.sub(
-        r"[+-]?(?:\\d+(?:\\.\\d*)?|\\.\\d+)\\s*(?:[×x]\\s*10\\s*\\^?\\s*[0-9⁰¹²³⁴⁵⁶⁷⁸⁹]+|\\*\\s*10\\s*\\^\\s*\\d+|e[+-]?\\d+)",
+        r"[+-]?(?:\d+(?:\.\d*)?|\.\d+)\s*(?:[×x]\s*10\s*\^?\s*[0-9⁰¹²³⁴⁵⁶⁷⁸⁹]+|\*\s*10\s*\^\s*\d+|e[+-]?\d+)",
         _format_scientific_experience,
         text,
         flags=re.I,
     )
     text = re.sub(
-        r"\\(?\\s*(?:\\d{1,3}(?:,\\d{3}){2,}|\\d{10,})(?:\\.\\d+)?\\s*\\)?",
+        r"\(?\s*(?:\d{1,3}(?:,\d{3}){2,}|\d{10,})(?:\.\d+)?\s*\)?",
         lambda match: _format_experience_amount(match.group(0).strip(" ()")),
         text,
     )
