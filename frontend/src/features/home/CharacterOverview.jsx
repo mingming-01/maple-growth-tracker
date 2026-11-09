@@ -51,7 +51,7 @@ function RankingItem({ label, value, status }) {
     <div className="ranking-item">
       <span>{label}</span>
       <strong>{value === null || value === undefined || value === "" ? rankingFallback(status) : formatNumber(value) + "위"}</strong>
-      {value === null || value === undefined || value === "" ? <small>현재 순위 미확인</small> : <small>Nexon 랭킹 API</small>}
+      {value === null || value === undefined || value === "" ? <small>현재 순위 미확인</small> : <small>넥슨 순위</small>}
     </div>
   );
 }
@@ -62,42 +62,24 @@ function RankingStatus({ character }) {
     ? new Date(character.rankingDate + "T00:00:00+09:00").toLocaleDateString("ko-KR")
     : "";
   const dateNote = rankingDate ? " 집계 기준일 · " + rankingDate + "." : "";
-  const warnings = Array.isArray(character.rankingWarnings) ? character.rankingWarnings : [];
 
   if (status === "available" && [character.ranking,character.worldRanking,character.jobWorldRanking,character.jobRanking].some(value => value !== null && value !== undefined)) {
-    return <p className="mgt-ranking-status is-success">Nexon 공개 랭킹 데이터입니다.{dateNote}</p>;
+    return <p className="mgt-ranking-status is-success">캐릭터 순위를 확인했어요.{dateNote}</p>;
   }
 
   const message = status === "not_ready"
-    ? "오늘 날짜의 랭킹 집계가 아직 준비되지 않았습니다. 잠시 후 최신 정보 다시 조회를 눌러 확인해주세요."
+    ? "오늘 순위는 아직 집계되지 않았어요. 잠시 후 다시 확인해 주세요."
     : status === "unavailable"
-      ? "Nexon 랭킹 API 요청에 실패했습니다. 캐릭터 기본 정보는 정상 조회됐으며, 최신 정보 다시 조회로 재시도할 수 있습니다."
+      ? "순위를 불러오지 못했어요. 최신 정보 다시 조회를 눌러주세요."
       : status === "partial"
-        ? "일부 랭킹만 확인됐습니다. 확인된 순위만 표시하고 누락된 값은 임의로 채우지 않았습니다."
+        ? "일부 순위만 확인했어요. 확인된 순위만 표시합니다."
         : status === "empty"
-          ? "최근 3일의 공개 랭킹 응답에 이 캐릭터의 순위가 없습니다. 집계 대상 외 캐릭터이거나 랭킹 데이터가 아직 제공되지 않았을 수 있습니다."
-          : "현재 응답에서 랭킹을 확인하지 못했습니다. 최신 정보 다시 조회를 눌러 다시 확인해주세요.";
+          ? "최근 3일 동안 순위를 확인하지 못했어요. 랭킹 집계 대상이 아닐 수도 있습니다."
+          : "현재 순위를 확인하지 못했어요. 최신 정보 다시 조회를 눌러주세요.";
 
   return (
     <div className="mgt-ranking-status is-warning" role="status">
       <p>{message}{dateNote}</p>
-      {warnings.length > 0 && <small>{warnings.join(" ")}</small>}
-      {character.rankingApiDiagnostics && Object.keys(character.rankingApiDiagnostics).length > 0 && (
-        <details className="mgt-ranking-diagnostics">
-          <summary>랭킹 API 응답 상세</summary>
-          <div>
-            {Object.entries(character.rankingApiDiagnostics).map(([key, item]) => (
-              <span key={key}>
-                {({ranking:"종합",worldRanking:"월드",jobWorldRanking:"직업·월드",jobRanking:"직업"})[key] || key}
-                {" · HTTP "}{item.statusCode ?? "응답 없음"}
-                {" · 항목 "}{item.returnedEntries ?? "확인 불가"}건
-                {item.errorCode ? " · " + item.errorCode : ""}
-                {item.errorMessage ? " · " + item.errorMessage : ""}
-              </span>
-            ))}
-          </div>
-        </details>
-      )}
     </div>
   );
 }
