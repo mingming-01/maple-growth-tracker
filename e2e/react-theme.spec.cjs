@@ -149,8 +149,22 @@ test("React routes use the purple-dark theme while the legacy page keeps its sty
   );
   expect(predictionColumns, "prediction metrics should use a two-by-two grid").toBe(2);
   await expect(page.locator("#growth-prediction .prediction-value").first()).toHaveCSS("white-space", "nowrap");
-  await expect(page.locator("#growth-prediction .prediction-note")).toHaveCSS("word-break", "keep-all");
-  await expect(page.locator("#growth-prediction .growth-goal-heading p")).toHaveCSS("word-break", "keep-all");
+  const noMidWordBreakSelectors = [
+    "#growth-prediction .prediction-label",
+    "#growth-prediction .prediction-note",
+    "#growth-prediction .growth-goal-heading h3",
+    "#growth-prediction .growth-goal-heading p",
+    "#growth-prediction .growth-goal-status",
+    "#growth-prediction .growth-goal-pace",
+    "#growth-prediction .growth-goal-storage-note",
+    "#growth-prediction .growth-goal-notification span"
+  ];
+  for (const selector of noMidWordBreakSelectors) {
+    await expect(page.locator(selector).first(), selector).toHaveCSS("word-break", "keep-all");
+    await expect(page.locator(selector).first(), selector).toHaveCSS("overflow-wrap", "normal");
+  }
+  await expect(page.locator("#growth-prediction .growth-goal-heading h3")).toHaveCSS("white-space", "nowrap");
+  await expect(page.locator("#growth-prediction .growth-goal-status")).toHaveCSS("white-space", "nowrap");
 
   await page.setViewportSize({ width: 390, height: 844 });
   const mobileColumns = await predictionLayout.evaluate(element =>
