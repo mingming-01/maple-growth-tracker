@@ -90,9 +90,10 @@ export function AIReport({ character, history, analysisHistory = history, period
   const [periodChanging,setPeriodChanging] = useState(false);
 
   const metrics = useMemo(() => {
-    const prediction = calculatePrediction(character,history || []);
-    return calculateGrowthMetrics(character,history || [],prediction);
-  },[character,history]);
+    const sourceHistory = Array.isArray(analysisHistory) ? analysisHistory : [];
+    const prediction = calculatePrediction(character,sourceHistory);
+    return calculateGrowthMetrics(character,sourceHistory,prediction);
+  },[character,analysisHistory]);
 
   const run = useCallback(async ({ force = false, allowGenerate = true } = {}) => {
     if (!character?.characterName || !Array.isArray(history) || !Array.isArray(analysisHistory)) return;
@@ -120,7 +121,7 @@ export function AIReport({ character, history, analysisHistory = history, period
     }
     if (!allowGenerate && !force) {
       setAnalysis("");
-      setNotice(`최근 ${analysisContext.periodDays}일 분석의 저장 결과가 없습니다. 새 분석은 'AI 다시 분석'을 눌렀을 때만 생성됩니다.`);
+      setNotice(`최근 ${analysisContext.periodDays}일 분석의 저장 결과가 없습니다. AI 분석 시작을 누르면 새 리포트를 생성합니다.`);
       setLoading(false);
       return;
     }
@@ -193,6 +194,7 @@ export function AIReport({ character, history, analysisHistory = history, period
           </button>
         </div>
         {loading && <div className="ai-analysis-loading" role="status">성장 기록을 살펴보고 있습니다...</div>}
+        {notice && !loading && <p className="ai-analysis-notice" role="status">{notice}</p>}
         {error && <div className="ai-analysis-error" role="alert">{error}</div>}
         {analysis && !loading && (
           <div className="ai-analysis-result">
