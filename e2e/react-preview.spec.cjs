@@ -1,6 +1,6 @@
 const { test, expect } = require("@playwright/test");
 
-test("React dashboard is served at root while the legacy Flask homepage remains available", async ({ page }) => {
+test("React dashboard is the only public application entry point", async ({ page }) => {
   await page.goto("/");
   await expect(page.locator('[data-testid="react-preview-ready"]')).toBeVisible();
   await expect(page.locator('[data-testid="react-character-search"]')).toBeVisible();
@@ -19,23 +19,20 @@ test("React dashboard is served at root while the legacy Flask homepage remains 
   });
   expect(migratedStyleDisplay).toBe("grid");
 
-  await page.goto("/legacy/");
-  await expect(page.locator("#searchForm")).toBeVisible();
-  await expect(page.locator('link[rel="stylesheet"][href="/static/style.css"]')).toHaveCount(1);
-
-  await page.goto("/preview/");
-  await expect(page.locator('[data-testid="react-preview-ready"]')).toBeVisible();
-  await expect(page.locator('.mgt-nav a[href="#growth"]')).toBeVisible();
+  for (const retiredPath of ["/legacy", "/legacy/", "/preview", "/preview/"]) {
+    const response = await page.request.get(retiredPath);
+    expect(response.status(), retiredPath).toBe(404);
+  }
 });
 
-test("React preview keeps the existing Flask admin route reachable", async ({ page }) => {
-  await page.goto("/preview/");
+test("React dashboard keeps the existing Flask admin route reachable", async ({ page }) => {
+  await page.goto("/");
   await expect(page.locator('[data-testid="react-preview-ready"]')).toBeVisible();
   await expect(page.locator('.mgt-nav a[href="#admin"]')).toBeVisible();
   await expect(page.locator('.mgt-footer a[href="/admin/login"]')).toHaveAttribute("href", "/admin/login");
 });
 
-test("React preview loads profile data and refreshes only on explicit request", async ({ page }) => {
+test("React dashboard loads profile data and refreshes only on explicit request", async ({ page }) => {
   await page.route("**/api/character?*", route => route.fulfill({
     status: 200,
     contentType: "application/json",
@@ -99,7 +96,7 @@ test("React preview loads profile data and refreshes only on explicit request", 
     })
   }));
 
-  await page.goto("/preview/");
+  await page.goto("/");
   await page.getByLabel("캐릭터명").fill("프리뷰테스트");
   const characterRequestPromise = page.waitForRequest(request =>
     request.url().includes("/api/character?") && request.method() === "GET"
@@ -200,7 +197,7 @@ test("React profile keeps a readable avatar and progress bar on mobile", async (
     status: 200, contentType: "application/json",
     body: JSON.stringify({section:"stats",status:"available",sources:[]})
   }));
-  await page.goto("/preview/");
+  await page.goto("/");
   await page.getByLabel("캐릭터명").fill("모바일테스트");
   await page.getByRole("button", { name: /캐릭터 조회/ }).click();
   await expect(page.getByRole("progressbar", { name: "현재 레벨 경험치 진행률" })).toBeVisible();
@@ -273,7 +270,7 @@ test("React admin panel renders and filters session-protected operations logs", 
     body: "logged out"
   }));
 
-  await page.goto("/preview/");
+  await page.goto("/");
   await page.locator('.mgt-nav a[href="#admin"]').click();
   await expect(page.getByRole("heading", { name: "관리자 로그" })).toBeVisible();
   await expect(page.locator(".mgt-admin-table tbody tr").filter({ hasText: "밍득" })).toBeVisible();
@@ -371,7 +368,7 @@ test("30-day AI report reuses cache without automatic LLM calls and only regener
     });
   });
 
-  await page.goto("/preview/");
+  await page.goto("/");
   await page.getByLabel("캐릭터명").fill("기간캐시테스트");
   await page.getByRole("button", { name: /캐릭터 조회/ }).click();
   await expect(page.getByRole("heading", { name: "기간캐시테스트" })).toBeVisible();
@@ -457,7 +454,7 @@ test("mobile dashboard stays within the viewport and keeps the report before his
   }));
 
   await page.setViewportSize({ width: 360, height: 800 });
-  await page.goto("/preview/");
+  await page.goto("/");
   await page.getByLabel("캐릭터명").fill("모바일진단");
   await page.getByRole("button", { name: /캐릭터 조회/ }).click();
   await expect(page.getByRole("heading", { name: "모바일진단" })).toBeVisible();
@@ -572,7 +569,7 @@ test("React character details exposes all migrated tabs and loads each section o
     });
   });
 
-  await page.goto("/preview/");
+  await page.goto("/");
   await page.getByLabel("캐릭터명").fill("상세탭검증");
   await page.getByRole("button", { name: /캐릭터 조회/ }).click();
   const heading = page.getByRole("heading", { name: "캐릭터 상세 정보" });
