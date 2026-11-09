@@ -1735,3 +1735,13 @@ button:focus-visible,input:focus-visible,select:focus-visible,a:focus-visible { 
 @media (max-width:760px) {
   .growth-dashboard [id^="growth-"] { scroll-margin-top:118px; }
 }
+
+/* Keep adjacent navigation submenus out of each other's pointer hit areas. */
+.mgt-nav-dropdown--growth .mgt-nav-submenu {
+  right:0;
+  left:auto;
+}
+.mgt-nav-dropdown--details .mgt-nav-submenu {
+  right:auto;
+  left:0;
+}
