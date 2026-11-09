@@ -87,6 +87,7 @@ export function AIReport({ character, history, analysisHistory = history, period
   const [loading,setLoading] = useState(false);
   const [error,setError] = useState("");
   const [notice,setNotice] = useState("");
+  const [periodChanging,setPeriodChanging] = useState(false);
 
   const metrics = useMemo(() => {
     const prediction = calculatePrediction(character,history || []);
@@ -140,9 +141,25 @@ export function AIReport({ character, history, analysisHistory = history, period
   useEffect(() => {
     setAnalysis("");
     setError("");
-    // 기간 전환 시 30·90일은 캐시만 확인한다. 캐시가 없더라도 자동 LLM 호출은 하지 않는다.
-    run({ allowGenerate: Number(periodDays) <= 7 });
+    // 모든 기간은 저장된 캐시만 확인한다. AI 요청은 사용자가 버튼을 눌렀을 때만 실행한다.
+    run({ allowGenerate: false });
   },[run,periodDays]);
+
+  async function handlePeriodChange(event) {
+    const nextDays = Number(event.target.value);
+    if (!onPeriodSelect || nextDays === Number(periodDays)) return;
+    setPeriodChanging(true);
+    setError("");
+    setNotice(`최근 ${nextDays}일 성장 기록을 불러오고 있습니다...`);
+    try {
+      await onPeriodSelect(nextDays);
+    } catch (requestError) {
+      setError(requestError.message || "선택한 기간의 성장 기록을 불러오지 못했습니다.");
+      setNotice("");
+    } finally {
+      setPeriodChanging(false);
+    }
+  }
 
   const sections = useMemo(() => parseAnalysis(analysis),[analysis]);
 
@@ -163,8 +180,16 @@ export function AIReport({ character, history, analysisHistory = history, period
           </div>
         </div>}
         <div className="ai-analysis-actions">
-          <button className="export-button" type="button" onClick={() => run({force:true,allowGenerate:true})} disabled={loading}>
-            {loading ? "분석 중..." : "AI 다시 분석"}
+          <label className="ai-analysis-period-control">
+            <span>분석 기간</span>
+            <select value={periodDays} onChange={handlePeriodChange} disabled={periodChanging || loading} aria-label="AI 분석 기간">
+              <option value="7">최근 7일</option>
+              <option value="30">최근 30일</option>
+              <option value="90">최근 90일</option>
+            </select>
+          </label>
+          <button className="export-button" type="button" onClick={() => run({force:Boolean(analysis),allowGenerate:true})} disabled={loading || periodChanging}>
+            {loading ? "분석 중..." : analysis ? "다시 분석" : "AI 분석 시작"}
           </button>
         </div>
         {loading && <div className="ai-analysis-loading" role="status">성장 기록을 살펴보고 있습니다...</div>}
@@ -186,7 +211,12 @@ export function AIReport({ character, history, analysisHistory = history, period
 
           </div>
         )}
-        {!analysis && !loading && !error && <p className="ai-analysis-text">분석할 캐릭터 정보가 없습니다.</p>}
+        {!analysis && !loading && !error && (
+          <div className="ai-analysis-empty" data-testid="ai-analysis-empty">
+            <strong>{character?.characterName ? `최근 ${periodDays}일 AI 리포트가 아직 없습니다.` : "먼저 캐릭터를 조회해주세요."}</strong>
+            <p>{character?.characterName ? "선택한 기간의 성장 기록을 확인한 뒤, AI 분석 시작을 누르면 리포트를 생성합니다." : "캐릭터를 조회하면 해당 캐릭터의 성장 기록을 바탕으로 분석할 수 있습니다."}</p>
+          </div>
+        )}
       </div>
     </section>
   );
