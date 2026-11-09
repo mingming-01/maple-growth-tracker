@@ -53,6 +53,7 @@ export default function GrowthInsight({ character, history }) {
     <aside className="mgt-growth-insight" aria-labelledby="mgt-growth-insight-title" data-testid="growth-insight">
       <div className="mgt-growth-insight-heading">
         <span className="mgt-eyebrow">GROWTH INSIGHT</span>
+        <h3 className="mgt-growth-insight-overline">이번 성장 기록에서 확인한 점</h3>
         <span className="mgt-insight-record-count">정상 기록 {metrics.recordedDays}일</span>
       </div>
       <div className="mgt-growth-insight-copy">
