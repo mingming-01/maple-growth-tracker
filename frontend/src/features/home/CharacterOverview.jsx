@@ -135,7 +135,7 @@ export default function CharacterOverview({ character, history }) {
         <div className="mgt-profile-progress">
           <div className="mgt-progress-top">
             <div><span className="mgt-stat-label">현재 레벨 진행률</span><strong>{rate === null ? "자료 부족" : rate.toFixed(3)+"%"}</strong></div>
-            <span className="mgt-progress-remaining">{rate === null ? "경험치 진행률 미제공" : "다음 레벨까지 "+(100-rate).toFixed(3)+"%"}</span>
+            <span className="mgt-progress-remaining">{rate === null ? "진행률 정보 없음" : "다음 레벨까지 "+(100-rate).toFixed(3)+"%"}</span>
           </div>
           <div className="mgt-exp-track" role="progressbar" aria-label="현재 레벨 경험치 진행률"
             aria-valuemin="0" aria-valuemax="100" aria-valuenow={rate ?? 0}>
@@ -143,8 +143,8 @@ export default function CharacterOverview({ character, history }) {
           </div>
           <p className="mgt-progress-note">
             {progress?.dailyProgressRate != null
-              ? "최근 기록 평균 +" + progress.dailyProgressRate.toFixed(4) + "%p / 일"
-              : "성장 기록이 쌓이면 실제 관측 경험치를 이용해 일일 진척률을 계산합니다."}
+              ? "최근 하루 평균 +" + progress.dailyProgressRate.toFixed(4) + "%p / 일"
+              : "성장 기록이 쌓이면 하루에 레벨이 얼마나 가까워지는지 보여드려요."}
           </p>
         </div>
       </div>
@@ -153,13 +153,13 @@ export default function CharacterOverview({ character, history }) {
         <div className="mgt-snapshot-stat"><span>현재 경험치</span><strong>{formatNumber(character.experience)}</strong></div>
         <div className="mgt-snapshot-stat"><span>주간 일일 평균 경험치</span><strong>{average === null ? "자료 부족" : formatTrillion(average)}</strong></div>
         <div className="mgt-snapshot-stat" data-testid="profile-combat-power">
-          <span>전투력</span><strong>{character.currentCombatPower == null ? "상세 정보 조회 대기" : formatNumber(character.currentCombatPower)}</strong>
+          <span>전투력</span><strong>{character.currentCombatPower == null ? "정보 확인 중" : formatNumber(character.currentCombatPower)}</strong>
         </div>
       </div>
       <div className="mgt-ranking-panel">
         <div className="mgt-ranking-heading">
           <div><span className="mgt-eyebrow">RANKING</span><h3>캐릭터 랭킹</h3></div>
-          <span>공개 랭킹 API</span>
+          <span>현재 순위</span>
         </div>
         <div className="mgt-ranking-grid">
           <RankingItem label="종합 랭킹" value={character.ranking} status={character.rankingDataStatus} />
