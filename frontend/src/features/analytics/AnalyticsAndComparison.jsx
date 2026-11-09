@@ -82,7 +82,7 @@ function buildReportSignature(character, history, metrics, analysisContext = {})
 }
 
 
-export function AIReport({ character, history, analysisHistory = history, periodDays = 7, periodSummary = null }) {
+export function AIReport({ character, history, analysisHistory = history, periodDays = 7, periodSummary = null, onPeriodSelect }) {
   const [analysis,setAnalysis] = useState("");
   const [loading,setLoading] = useState(false);
   const [error,setError] = useState("");
