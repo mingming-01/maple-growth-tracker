@@ -55,7 +55,7 @@ button:focus-visible,input:focus-visible,select:focus-visible,a:focus-visible { 
 .mgt-brand-mark { display:grid; place-items:center; width:35px; height:35px; border-radius:11px; color:#171325; background:linear-gradient(145deg,#c9bdff,#8269f0); font-size:17px; font-weight:950; box-shadow:0 5px 20px rgba(130,105,240,.25); }
 .mgt-nav { display:flex; align-items:center; gap:23px; color:var(--mgt-muted-strong); font-size:11px; font-weight:750; }
 .mgt-nav a:hover { color:#fff; }
-.mgt-page-content { width:min(calc(100% - (var(--mgt-content-gutter) * 2)),var(--mgt-content-max)); margin:0 auto; }
+.mgt-page-content { min-width:0; }
 .mgt-hero { position:relative; display:flex; align-items:center; justify-content:space-between; min-height:270px; padding:43px 48px; margin:27px 0 20px; overflow:hidden; border:1px solid var(--mgt-line); border-radius:24px; background:linear-gradient(112deg,rgba(35,31,58,.98),rgba(20,19,34,.94) 57%,rgba(34,27,59,.88)); }
 .mgt-hero::after { content:""; position:absolute; top:-250px; right:-90px; width:420px; height:420px; border-radius:50%; background:rgba(144,119,255,.12); filter:blur(8px); }
 .mgt-hero>div:first-child { position:relative; z-index:1; max-width:650px; }
@@ -381,7 +381,6 @@ button:focus-visible,input:focus-visible,select:focus-visible,a:focus-visible { 
   .mgt-topbar { height:62px; padding:0 15px; }
   .mgt-nav { max-width:58vw; gap:13px; overflow-x:auto; scrollbar-width:none; white-space:nowrap; font-size:9px; }
   .mgt-nav::-webkit-scrollbar { display:none; }
-  .mgt-page-content { width:min(100% - 26px,680px); }
   .mgt-hero { min-height:235px; padding:32px 23px; margin-top:15px; border-radius:19px; }
   .mgt-hero h1 { font-size:34px; }
   .mgt-hero p { max-width:430px; font-size:10px; }
@@ -412,7 +411,6 @@ button:focus-visible,input:focus-visible,select:focus-visible,a:focus-visible { 
   .mgt-brand { gap:7px; font-size:10px; letter-spacing:.8px; }
   .mgt-brand-mark { width:30px; height:30px; }
   .mgt-nav { gap:10px; font-size:8px; }
-  .mgt-page-content { width:calc(100% - 20px); }
   .mgt-hero { min-height:210px; padding:25px 18px; }
   .mgt-hero h1 { font-size:29px; letter-spacing:-1.2px; }
   .mgt-hero p { max-width:285px; font-size:9px; line-height:1.7; }
@@ -575,7 +573,6 @@ button:focus-visible,input:focus-visible,select:focus-visible,a:focus-visible { 
 @media (max-width: 480px) {
   .mgt-topbar { height: auto; min-height: 58px; flex-wrap: wrap; padding: 8px 10px; }
   .mgt-nav { order: 2; max-width: 100%; width: 100%; justify-content: space-between; gap: 9px; font-size: 10px; }
-  .mgt-page-content { width: calc(100% - 18px); }
   .mgt-hero { padding: 23px 16px; border-radius: 17px; }
   .mgt-hero h1 { font-size: 27px; }
   .mgt-hero p { font-size: 11px; }

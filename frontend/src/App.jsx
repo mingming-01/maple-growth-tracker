@@ -263,7 +263,7 @@ function App() {
         </nav>
       </header>
 
-      <main className="mgt-page-content">
+      <main className="mgt-page-content mgt-layout-container">
         {view === "admin" ? <AdminDashboard onBack={closeAdmin} /> : <>
         <section className="mgt-hero">
           <div>
