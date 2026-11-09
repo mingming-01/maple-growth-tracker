@@ -139,6 +139,12 @@ test("React routes use the purple-dark theme while the legacy page keeps its sty
   await expectDarkSurface(page, "#growth-prediction .prediction-card");
   await expectDarkSurface(page, "#growth-prediction .growth-goal-card");
 
+  // The pace paragraph only exists after a goal has been saved.
+  const goalDate = new Date(Date.now() + 7 * 86400000).toISOString().slice(0, 10);
+  await page.getByLabel("목표 날짜").fill(goalDate);
+  await page.getByRole("button", { name: "목표 설정" }).click();
+  await expect(page.locator("#growth-prediction .growth-goal-pace")).toBeVisible();
+
   const predictionLayout = page.locator("#growth-prediction .growth-prediction-layout");
   const desktopColumns = await predictionLayout.evaluate(element =>
     getComputedStyle(element).gridTemplateColumns.trim().split(/\s+/).length
