@@ -26,3 +26,11 @@
 @media(max-width:480px) {
   .mgt-growth-home__profile .mgt-profile-side { grid-template-columns:minmax(0,1fr); }
 }
+
+.mgt-growth-insight-overline {
+  margin:8px 0 0;
+  color:var(--mgt-text);
+  font-size:13px;
+  font-weight:850;
+  letter-spacing:-.2px;
+}
