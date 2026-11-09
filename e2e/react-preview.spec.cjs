@@ -236,7 +236,7 @@ test("React hash routes support direct entry, reload, and browser back/forward n
   await expect(page.getByTestId("details-page")).toBeVisible();
   await expect(page.locator("#details").getByRole("heading", { name: "캐릭터 상세 정보" })).toBeVisible();
   await page.reload();
-  await expect(page).toHaveURL(/#\\/details$/);
+  await expect(page).toHaveURL(/#\/details$/);
   await expect(page.getByTestId("details-page")).toBeVisible();
   await expect(page.getByRole("heading", { name: "라우트테스트" })).toBeVisible();
 });
