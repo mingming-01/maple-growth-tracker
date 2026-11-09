@@ -298,7 +298,7 @@ function GoalPanel({ character, metrics, history }) {
     all[key] = next;
     if (!saveGrowthGoals(all)) {
       setError(true);
-      setFeedback("브라우저 저장소에 목표를 저장하지 못했습니다.");
+      setFeedback("이 브라우저에 목표를 저장하지 못했어요.");
       return;
     }
     setGoal(next);
@@ -412,7 +412,7 @@ function PeriodSummary({ summary, previous, label }) {
         ))}
       </div>
       <p className="period-summary-footnote">
-        평균은 실제 변화량이 확인된 날짜 간 구간 기준입니다. 미수집 날짜는 0으로 간주하지 않으며, 레벨업 경계의 경험치 초기화는 증가량으로 계산하지 않습니다.
+        하루 평균은 경험치 변화가 확인된 날짜를 기준으로 계산했어요. 기록이 없는 날은 0으로 보지 않고, 레벨업으로 경험치가 초기화된 날은 증가량에서 제외했어요.
       </p>
     </section>
   );
