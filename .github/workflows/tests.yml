@@ -30,7 +30,7 @@ jobs:
           node-version: "20"
 
       - name: Install frontend dependencies
-        run: npm --prefix frontend install --no-audit --no-fund
+        run: npm --prefix frontend ci --no-audit --no-fund
 
       - name: Build React preview
         run: npm --prefix frontend run build
