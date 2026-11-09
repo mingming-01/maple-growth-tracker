@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { getCachedAI, saveCachedAI, STORAGE_KEYS } from "../frontend/src/lib/storage.js";
+import { getCachedAI, saveCachedAI } from "../frontend/src/lib/storage.js";
 
 class MemoryStorage {
   constructor() {
