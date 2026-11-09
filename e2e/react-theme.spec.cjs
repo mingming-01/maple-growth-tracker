@@ -136,7 +136,42 @@ test("React routes use the purple-dark theme while the legacy page keeps its sty
   await expectDarkSurface(page, "#growth-trend .chart-card");
   await expectDarkSurface(page, "#growth-trend .growth-timeline-section");
   await expectDarkSurface(page, "#growth-trend .growth-timeline-marker");
+  await expectDarkSurface(page, "#growth-prediction .prediction-card");
   await expectDarkSurface(page, "#growth-prediction .growth-goal-card");
+
+  const predictionLayout = page.locator("#growth-prediction .growth-prediction-layout");
+  const desktopColumns = await predictionLayout.evaluate(element =>
+    getComputedStyle(element).gridTemplateColumns.trim().split(/\s+/).length
+  );
+  expect(desktopColumns, "prediction and goal should sit in two desktop columns").toBe(2);
+  const predictionColumns = await page.locator("#growth-prediction .prediction-grid").evaluate(element =>
+    getComputedStyle(element).gridTemplateColumns.trim().split(/\s+/).length
+  );
+  expect(predictionColumns, "prediction metrics should use a two-by-two grid").toBe(2);
+  await expect(page.locator("#growth-prediction .prediction-value").first()).toHaveCSS("white-space", "nowrap");
+  await expect(page.locator("#growth-prediction .prediction-note")).toHaveCSS("word-break", "keep-all");
+  await expect(page.locator("#growth-prediction .growth-goal-heading p")).toHaveCSS("word-break", "keep-all");
+
+  await page.setViewportSize({ width: 390, height: 844 });
+  const mobileColumns = await predictionLayout.evaluate(element =>
+    getComputedStyle(element).gridTemplateColumns.trim().split(/\s+/).length
+  );
+  expect(mobileColumns, "prediction and goal should stack on mobile").toBe(1);
+  const mobileOverflow = await page.locator("#growth-prediction").evaluate(element =>
+    element.scrollWidth > element.clientWidth
+  );
+  expect(mobileOverflow, "prediction section should not overflow horizontally on mobile").toBe(false);
+
+  await page.setViewportSize({ width: 320, height: 740 });
+  const narrowMetricColumns = await page.locator("#growth-prediction .prediction-grid").evaluate(element =>
+    getComputedStyle(element).gridTemplateColumns.trim().split(/\s+/).length
+  );
+  expect(narrowMetricColumns, "very narrow screens should use a single metric column").toBe(1);
+  const narrowOverflow = await page.locator("#growth-prediction").evaluate(element =>
+    element.scrollWidth > element.clientWidth
+  );
+  expect(narrowOverflow, "prediction section should not overflow at 320px").toBe(false);
+  await page.setViewportSize({ width: 1280, height: 900 });
 
   await page.locator("#growth-trend .history-range-select").selectOption("30");
   await expect(page.locator(".period-summary-section")).toBeVisible();
