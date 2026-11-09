@@ -166,6 +166,17 @@ test("React dashboard loads profile data and refreshes only on explicit request"
   await page.keyboard.press("Escape");
   await page.getByRole("button", { name: "최신 정보 다시 조회" }).click();
   await expect.poll(() => refreshRequests.length).toBe(2);
+
+  await page.getByRole("button", { name: "관심 캐릭터 등록" }).click();
+  await expect(page.locator(".mgt-favorite-card")).toContainText("프리뷰테스트");
+  const savedFavorites = await page.evaluate(() =>
+    JSON.parse(localStorage.getItem("mapleGrowthTrackerFavorites") || "[]")
+  );
+  expect(savedFavorites).toHaveLength(1);
+  expect(savedFavorites[0].ocid).toBe("react-preview-test-ocid");
+
+  await page.reload();
+  await expect(page.locator(".mgt-favorite-card")).toContainText("프리뷰테스트");
 });
 
 test("React profile keeps a readable avatar and progress bar on mobile", async ({ page }) => {
@@ -603,4 +614,162 @@ test("React character details exposes all migrated tabs and loads each section o
     await response;
     await expect(tab).toHaveAttribute("aria-selected", "true");
   }
+});
+
+
+test("React AI report preserves its data-evidence explanation across reloads", async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  const timestamp = "2026-11-06T04:00:00+09:00";
+  await page.route("**/api/character?*", route => route.fulfill({
+    status: 200,
+    contentType: "application/json",
+    body: JSON.stringify({
+      characterName: "근거테스트", worldName: "크로아", job: "전사", guildName: "테스트",
+      level: 280, experience: 1300, experienceRate: "30.000",
+      ranking: 1, worldRanking: 1, jobWorldRanking: 1, jobRanking: 1,
+      ocid: "evidence-test-ocid", rankingDataStatus: "available",
+      dataStatus: "current", dataAsOf: timestamp
+    })
+  }));
+  await page.route("**/api/history?*", route => route.fulfill({
+    status: 200,
+    contentType: "application/json",
+    body: JSON.stringify({
+      characterName: "근거테스트", worldName: "크로아", level: 280,
+      history: [
+        { date: "2026-10-31", ranking: 7, level: 280, experience: 100, experienceChange: null, recordStatus: "available" },
+        { date: "2026-11-01", ranking: 6, level: 280, experience: 300, experienceChange: 200, recordStatus: "available" },
+        { date: "2026-11-02", ranking: null, level: null, experience: null, experienceChange: null, recordStatus: "not_ready" },
+        { date: "2026-11-03", ranking: 5, level: 280, experience: 700, experienceChange: 400, recordStatus: "available" },
+        { date: "2026-11-04", ranking: null, level: null, experience: null, experienceChange: null, recordStatus: "not_collected" },
+        { date: "2026-11-05", ranking: 4, level: 280, experience: 1000, experienceChange: 300, recordStatus: "available" },
+        { date: "2026-11-06", ranking: 3, level: 280, experience: 1300, experienceChange: 300, recordStatus: "available" }
+      ],
+      historyStatus: "complete",
+      historyStorage: { backend: "postgres", status: "saved", savedRecords: 5 },
+      dataStatus: "current", dataAsOf: timestamp
+    })
+  }));
+  await page.route("**/api/ai-analysis?*", route => route.fulfill({
+    status: 200,
+    contentType: "application/json",
+    body: JSON.stringify({
+      analysis: "[성장 패턴] 최근 성장 흐름이 개선됐습니다.\\n[성장 변화] 주말에 성장이 집중됐습니다.\\n[레벨업 분석] 확인된 레벨업은 없습니다.\\n[성장 전망] 현재 자료를 참고하세요.\\n[AI 코멘트] 기록을 이어가세요.",
+      cacheHit: false,
+      growthInsights: {
+        basis: {
+          referenceDate: "2026-11-06",
+          periodStartDate: "2026-10-24",
+          periodEndDate: "2026-11-06",
+          snapshotStartDate: "2026-10-23",
+          expectedSnapshots: 15,
+          availableSnapshots: 10,
+          missingSnapshots: 5,
+          coveragePercent: 66.7,
+          dataQuality: "medium",
+          dataQualityLabel: "보통"
+        },
+        recentPeriod: { validGrowthIntervals: 5 },
+        previousPeriod: { validGrowthIntervals: 4 },
+        weekOverWeek: { status: "available", averageDailyGrowthChangePercent: 12.5, direction: "increase" },
+        weekdayWeekend: { status: "available", weekendSharePercent: 44.2 }
+      }
+    })
+  }));
+
+  await page.goto("/");
+  await page.getByLabel("캐릭터명").fill("근거테스트");
+  await page.getByRole("button", { name: /캐릭터 조회/ }).click();
+  const evidence = page.getByTestId("ai-analysis-evidence");
+  await expect(evidence).toBeVisible();
+  await expect(evidence).toContainText("AI 분석 기준 및 데이터 충실도");
+  await expect(evidence).toContainText("2026-11-06");
+  await expect(evidence).toContainText("10 / 15일");
+  await expect(evidence).toContainText("보통 · 66.7%");
+  await expect(evidence).toContainText("12.5%");
+  await expect(evidence).toContainText("44.2%");
+  const bounds = await evidence.evaluate(element => {
+    const rect = element.getBoundingClientRect();
+    return { left: rect.left, right: rect.right, viewportWidth: window.innerWidth };
+  });
+  expect(bounds.left).toBeGreaterThanOrEqual(0);
+  expect(bounds.right).toBeLessThanOrEqual(bounds.viewportWidth);
+
+  await page.reload();
+  await expect(page.getByTestId("ai-analysis-evidence")).toContainText("10 / 15일");
+});
+
+test("React next-level goal persists and completes when refreshed character reaches its target", async ({ page }) => {
+  let characterLookups = 0;
+  await page.route("**/api/character?*", route => {
+    characterLookups += 1;
+    const level = characterLookups === 1 ? 280 : 281;
+    const experienceRate = characterLookups === 1 ? "30.000" : "0.000";
+    return route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({
+        characterName: "목표테스트", worldName: "크로아", job: "전사", guildName: "테스트",
+        level, experience: 10000, experienceRate,
+        ranking: 1, worldRanking: 1, jobWorldRanking: 1, jobRanking: 1,
+        ocid: "growth-goal-test-ocid", rankingDataStatus: "available",
+        dataStatus: "current", dataAsOf: "2026-11-06T04:00:00+09:00"
+      })
+    });
+  });
+  let historyLookups = 0;
+  await page.route("**/api/history?*", route => {
+    historyLookups += 1;
+    const latestLevel = historyLookups === 1 ? 280 : 281;
+    return route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({
+        characterName: "목표테스트", worldName: "크로아", level: latestLevel,
+        history: [
+          { date: "2026-11-05", ranking: 2, level: 280, experience: 9000, experienceChange: null, recordStatus: "available" },
+          { date: "2026-11-06", ranking: 1, level: latestLevel, experience: 10000, experienceChange: latestLevel === 280 ? 1000 : null, levelUp: latestLevel === 281, recordStatus: "available" }
+        ],
+        historyStatus: "complete",
+        historyStorage: { backend: "postgres", status: "saved", savedRecords: 2 },
+        dataStatus: "current", dataAsOf: "2026-11-06T04:00:00+09:00"
+      })
+    });
+  });
+  await page.route("**/api/ai-analysis?*", route => route.fulfill({
+    status: 200,
+    contentType: "application/json",
+    body: JSON.stringify({ analysis: "[성장 패턴] 기록을 확인했습니다.", cacheHit: false, growthInsights: null })
+  }));
+  await page.route("**/api/character-details?*", route => route.fulfill({
+    status: 200,
+    contentType: "application/json",
+    body: JSON.stringify({ section: "stats", status: "available", sources: [] })
+  }));
+
+  await page.goto("/");
+  await page.getByLabel("캐릭터명").fill("목표테스트");
+  await page.getByRole("button", { name: /캐릭터 조회/ }).click();
+  const goal = page.locator(".growth-goal-card");
+  await expect(goal.getByRole("heading", { name: "다음 레벨 목표" })).toBeVisible();
+  await expect(goal.locator(".growth-goal-target")).toContainText("Lv. 281");
+  await goal.getByLabel("목표 날짜").fill("2099-12-31");
+  await goal.getByRole("button", { name: "목표 설정" }).click();
+  await expect(goal.locator(".growth-goal-status")).toHaveText("진행 중");
+  const savedGoals = await page.evaluate(() =>
+    JSON.parse(localStorage.getItem("mapleGrowthTrackerGoals") || "{}")
+  );
+  expect(savedGoals["growth-goal-test-ocid"].targetLevel).toBe(281);
+  expect(savedGoals["growth-goal-test-ocid"].targetDate).toBe("2099-12-31");
+
+  await page.getByRole("button", { name: "최신 정보 다시 조회" }).click();
+  await expect(goal.locator(".growth-goal-status")).toHaveText("목표 달성");
+  await expect(goal.getByRole("status")).toContainText("목표를 달성했습니다");
+  const completedGoals = await page.evaluate(() =>
+    JSON.parse(localStorage.getItem("mapleGrowthTrackerGoals") || "{}")
+  );
+  expect(completedGoals["growth-goal-test-ocid"].completedAt).toBeTruthy();
+
+  await page.reload();
+  await expect(page.locator(".growth-goal-card .growth-goal-status")).toHaveText("목표 달성");
 });
