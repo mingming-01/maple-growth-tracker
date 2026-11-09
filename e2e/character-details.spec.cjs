@@ -160,6 +160,21 @@ test("mobile touch opens item tooltips without clipped detail panels", async ({ 
     ] : section === "union" ? [
       { id: "union", label: "유니온 기본 정보", status: "available",
         data: { union_level: 9000, union_grade: "그랜드 마스터 유니온" } },
+      { id: "unionStateStat", label: "유니온 스탯", status: "available",
+        currentData: { union_state_stat: ["STR + 10", "DEX + 10", "INT + 10"] }, data: {} },
+      { id: "unionArtifact", label: "유니온 아티팩트", status: "available",
+        currentData: {
+          union_artifact_remain_ap: 120,
+          union_artifact_crystal: Array.from({ length: 9 }, (_, index) => ({
+            name: "테스트 크리스탈 " + (index + 1),
+            level: 10 + index,
+            validity_flag: "0",
+            mob_icon: "https://example.com/crystal-" + (index + 1) + ".png",
+            crystal_option_name_1: "STR + 10%",
+            crystal_option_name_2: "DEX + 10%"
+          })),
+          union_artifact_effect: [{ name: "공격력", level: 10 }]
+        }, data: {} },
       { id: "unionChampion", label: "유니온 챔피언", status: "available",
         currentData: {
           union_champion: [{
@@ -325,6 +340,25 @@ test("mobile touch opens item tooltips without clipped detail panels", async ({ 
 
     await page.locator(".mgt-growth-page-heading").tap();
     await page.locator('[data-detail-tab="union"]').tap();
+
+    const unionWindow = page.locator(".game-union-window");
+    const unionStatePanel = page.locator(".game-union-state-panel");
+    const unionArtifactPanel = page.locator(".game-union-artifact-panel");
+    await expect(unionStatePanel).toBeVisible();
+    await expect(unionArtifactPanel).toBeVisible();
+    expect(await unionWindow.evaluate(element => getComputedStyle(element).display)).toBe("grid");
+    expect(await unionWindow.evaluate(element => getComputedStyle(element).rowGap)).toBe("16px");
+
+    const crystalGrid = page.locator(".game-union-crystal-grid");
+    const crystalCards = crystalGrid.locator(".game-union-crystal");
+    await expect(crystalCards).toHaveCount(9);
+    const mobileCrystalColumns = await crystalGrid.evaluate(element =>
+      getComputedStyle(element).gridTemplateColumns.trim().split(/\\s+/).length
+    );
+    expect(mobileCrystalColumns, "artifact crystals should remain a three-column card grid on mobile").toBe(3);
+    await expect(crystalCards.first().locator(".game-union-crystal-gem img"))
+      .toHaveAttribute("src", "https://example.com/crystal-1.png");
+
     const championCard = page.locator(".game-union-champion-card");
     await expect(championCard).toContainText("챔피언 테스트");
     const championAvatar = championCard.locator(".game-union-champion-avatar-preview");
@@ -352,6 +386,11 @@ test("mobile touch opens item tooltips without clipped detail panels", async ({ 
     await page.setViewportSize({ width: 1440, height: 900 });
     const desktopAvatarBounds = await championAvatar.boundingBox();
     expect(desktopAvatarBounds.width).toBeGreaterThanOrEqual(180);
+    expect(await unionWindow.evaluate(element => getComputedStyle(element).rowGap)).toBe("22px");
+    const desktopCrystalColumns = await crystalGrid.evaluate(element =>
+      getComputedStyle(element).gridTemplateColumns.trim().split(/\\s+/).length
+    );
+    expect(desktopCrystalColumns, "artifact crystals should use three desktop columns").toBe(3);
 
     const scrollState = await page.evaluate(() => ({
       scrollHeight: document.documentElement.scrollHeight,
