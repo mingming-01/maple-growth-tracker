@@ -562,10 +562,16 @@ test("React character details exposes all migrated tabs and loads each section o
   await page.getByRole("button", { name: /캐릭터 조회/ }).click();
   const heading = page.getByRole("heading", { name: "캐릭터 상세 정보" });
   await expect(heading).toBeVisible();
+  const initialStatsResponse = page.waitForResponse(response => {
+    const url = new URL(response.url());
+    return url.pathname === "/api/character-details" &&
+      url.searchParams.get("section") === "stats";
+  });
   await heading.scrollIntoViewIfNeeded();
+  await initialStatsResponse;
+  await expect(page.getByRole("tab", { name: "스탯" })).toHaveAttribute("aria-selected", "true");
 
   const tabs = [
-    ["스탯", "stats"],
     ["장비", "equipment"],
     ["심볼", "symbols"],
     ["6차 / HEXA", "skills"],
