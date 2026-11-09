@@ -9,6 +9,15 @@ test("React dashboard is served at root while the legacy Flask homepage remains 
   expect(moduleScript).toContain("/static/react-preview/assets/");
   const reactStylesheets = await page.locator('link[rel="stylesheet"]').evaluateAll(links => links.map(link => new URL(link.href).pathname));
   expect(reactStylesheets).not.toContain("/static/style.css");
+  const migratedStyleDisplay = await page.evaluate(() => {
+    const probe = document.createElement("div");
+    probe.className = "game-stat-grid";
+    document.body.appendChild(probe);
+    const display = getComputedStyle(probe).display;
+    probe.remove();
+    return display;
+  });
+  expect(migratedStyleDisplay).toBe("grid");
 
   await page.goto("/legacy/");
   await expect(page.locator("#searchForm")).toBeVisible();
