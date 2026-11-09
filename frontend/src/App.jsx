@@ -12,6 +12,28 @@ import {
   MAX_FAVORITE_CHARACTERS
 } from "./lib/storage.js";
 
+function readRouteFromHash() {
+  const raw = window.location.hash.replace(/^#\/?/, "").split(/[?&]/, 1)[0];
+  const routes = {
+    "": "overview",
+    dashboard: "overview",
+    character: "overview",
+    insight: "overview",
+    growth: "growth",
+    details: "details",
+    analytics: "analytics",
+    history: "history",
+    comparison: "comparison",
+    admin: "admin"
+  };
+  return routes[raw] || "overview";
+}
+
+function routeHash(route) {
+  return route === "overview" ? "#/" : `#/${route}`;
+}
+
+
 function App() {
   const restored = useMemo(() => readTrackerState(), []);
   const [name,setName] = useState(restored?.character?.characterName || "");
@@ -26,12 +48,15 @@ function App() {
   const [favoriteFeedback,setFavoriteFeedback] = useState("");
   const [exporting,setExporting] = useState("");
   const [shareOpen,setShareOpen] = useState(false);
-  const [view,setView] = useState(() => window.location.hash === "#admin" ? "admin" : "dashboard");
+  const [view,setView] = useState(() => readRouteFromHash());
   const [comparisonState,setComparisonState] = useState(restored?.comparison || null);
   const resultRef = useRef(null);
 
   useEffect(() => {
-    const syncView = () => setView(window.location.hash === "#admin" ? "admin" : "dashboard");
+    const syncView = () => {
+      setView(readRouteFromHash());
+      window.scrollTo(0, 0);
+    };
     window.addEventListener("hashchange",syncView);
     return () => window.removeEventListener("hashchange",syncView);
   },[]);
@@ -72,13 +97,13 @@ function App() {
 
   function openAdmin(event) {
     event?.preventDefault?.();
-    if (window.location.hash !== "#admin") window.location.hash = "admin";
+    if (window.location.hash !== routeHash("admin")) window.location.hash = routeHash("admin");
     setView("admin");
   }
 
   function closeAdmin() {
-    window.history.replaceState(null,"",window.location.pathname + window.location.search);
-    setView("dashboard");
+    if (window.location.hash !== routeHash("overview")) window.location.hash = routeHash("overview");
+    setView("overview");
   }
 
   const onStatsLoaded = useCallback(data => {
@@ -253,13 +278,15 @@ function App() {
           <span>MAPLE <b>GROWTH</b></span>
         </a>
         <nav className="mgt-nav" aria-label="주요 메뉴">
-          {view === "dashboard" ? <>
-            <a href="#character">캐릭터</a>
-            <a href="#details">스펙</a>
-            <a href="#growth">성장 기록</a>
-            <a href="#analytics">AI 분석</a>
-          </> : <a href="#dashboard" onClick={event=>{event.preventDefault();closeAdmin();}}>대시보드</a>}
-          <a href="#admin" onClick={openAdmin}>관리자</a>
+          {view === "admin" ? <a href="#/" onClick={event=>{event.preventDefault();closeAdmin();}}>대시보드</a> : <>
+            <a href="#/" aria-current={view === "overview" ? "page" : undefined}>개요</a>
+            <a href="#/growth" aria-current={view === "growth" ? "page" : undefined}>성장 분석</a>
+            <a href="#/details" aria-current={view === "details" ? "page" : undefined}>캐릭터 상세</a>
+            <a href="#/analytics" aria-current={view === "analytics" ? "page" : undefined}>AI 리포트</a>
+            <a href="#/history" aria-current={view === "history" ? "page" : undefined}>성장 기록</a>
+            <a href="#/comparison" aria-current={view === "comparison" ? "page" : undefined}>캐릭터 비교</a>
+          </>}
+          <a href="#/admin" onClick={openAdmin} aria-current={view === "admin" ? "page" : undefined}>관리자</a>
         </nav>
       </header>
 
@@ -353,6 +380,7 @@ function App() {
                 onPersist={persistPatch}
                 analysisPeriod={analysisPeriod}
                 comparisonState={comparisonState}
+                view={view}
               />
             </div>
           </>
