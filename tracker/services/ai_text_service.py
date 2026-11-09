@@ -80,7 +80,7 @@ def validate_growth_report(value):
         return False
     if any(term.casefold() in text.casefold() for term in INVALID_GROWTH_TERMS):
         return False
-    if re.search(r"(?:×|\b[xX]\b|\*)\s*10\s*\^?\s*[0-9⁰¹²³⁴⁵⁶⁷⁸⁹]+", text):
+    if re.search(r"(?:×|\b[xX]\b|\*)\s*10\s*\^?\s*[0-9⁰¹²³⁴⁵⁶⁷⁸⁹]+|\b\d+(?:\.\d+)?e[+-]?\d+\b", text, re.I):
         return False
 
     # 같은 문장을 연속으로 반복하는 저품질 응답을 차단한다.
