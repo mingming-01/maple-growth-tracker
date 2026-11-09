@@ -90,7 +90,7 @@ class AIAnalysisQualityTests(unittest.TestCase):
         )
         self.assertEqual(
             forecast,
-            "최근 관측된 경험치 획득 속도가 이어진다면 11월 19일 전후로 299레벨에 도달할 것으로 예상돼요. 실제 달성 시점은 이후 경험치 획득량에 따라 달라질 수 있어요.",
+            "최근 관측된 경험치 획득 속도가 유지된다면 11월 19일경 299레벨에 도달할 것으로 예상돼요. 실제 달성 시점은 이후 성장 속도에 따라 달라질 수 있어요.",
         )
 
     def test_growth_forecast_rejects_invalid_or_inconsistent_prediction(self):
@@ -114,7 +114,7 @@ class AIAnalysisQualityTests(unittest.TestCase):
             {"prediction": {"nextLevel": 299, "estimatedDate": "2026-11-19"}},
         )
         self.assertNotIn("1.78×10¹³", result)
-        self.assertIn("11월 19일 전후로 299레벨", result)
+        self.assertIn("11월 19일경 299레벨", result)
         self.assertTrue(validate_growth_report(result))
 
     def test_report_validator_rejects_scientific_notation(self):
