@@ -60,6 +60,7 @@ export default function GrowthHome({
   onStatsLoaded,
   onHistoryChange,
   onAnalysisPeriodChange,
+  onAnalysisPeriodSelect,
   onPersist,
   analysisPeriod,
   comparisonState,
@@ -134,6 +135,7 @@ export default function GrowthHome({
             analysisHistory={analysisPeriod.history || history}
             periodDays={analysisPeriod.days}
             periodSummary={analysisPeriod.summary}
+            onPeriodSelect={onAnalysisPeriodSelect}
           />
         </div>
       )}
