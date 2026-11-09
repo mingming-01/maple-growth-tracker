@@ -228,7 +228,7 @@ test("mobile touch opens item tooltips without clipped detail panels", async ({ 
     expect(bounds.y).toBeGreaterThanOrEqual(0);
     expect(bounds.x + bounds.width).toBeLessThanOrEqual(391);
 
-    await page.locator(".mgt-topbar").tap();
+    await page.locator(".mgt-growth-page-heading").tap();
     await expect(tooltip).toHaveCount(0);
 
     await page.locator('[data-detail-tab="equipment"]').tap();
