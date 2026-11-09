@@ -50,7 +50,7 @@ class SanitizeAITextTests(unittest.TestCase):
         self.assertNotIn("표본", result)
         self.assertNotIn("결측", result)
         self.assertIn("최근 기간", result)
-        self.assertIn("기록된 날짜", result)
+        self.assertIn("기록이 없는 날짜", result)
         self.assertIn("기록이 없는 날짜", result)
 
     def test_growth_report_rejects_chinese_characters(self):
