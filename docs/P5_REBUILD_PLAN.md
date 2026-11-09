@@ -71,6 +71,7 @@
 - `localStorage` 및 `sessionStorage` 접근은 `lib/storage.js`에만 존재한다.
 - 관리자 로그 조회·로그인·로그아웃은 `services/api.js`의 공통 API 함수로 연결돼 있다.
 - 저장소 단위 테스트는 기존 `tests-js/storage.test.mjs`가 AI 캐시 만료 동작을 검증한다.
+- 성장 계산 모듈 `frontend/src/lib/growth.js`와 레거시 호환 사본 `static/js/growth.js`는 현재 동일 blob SHA(`9e16bede8dd1a5285bab9589061dfcfb605a434a`)다. 성장 계산 테스트는 React 모듈을 직접 검증하도록 import 경로를 수정하고, 레거시 사본이 남아 있는 동안 바이트 동일성 테스트를 추가했다.
 - 위 경계가 다시 흐트러지지 않도록 `tests-js/react-boundaries.test.mjs`에 API fetch 및 브라우저 저장소 직접 접근 방지 테스트를 추가했다.
 - Flask 세션·CSRF·API 계약은 변경하지 않았다.
 
