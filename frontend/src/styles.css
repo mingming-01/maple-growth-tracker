@@ -1665,6 +1665,20 @@ button:focus-visible,input:focus-visible,select:focus-visible,a:focus-visible { 
   min-height:38px;
 }
 .mgt-nav-dropdown > a { display:inline-flex; align-items:center; min-height:38px; }
+.mgt-nav-submenu {
+  position:absolute;
+  z-index:50;
+  top:100%;
+  left:-12px;
+  display:none;
+  min-width:166px;
+  padding:7px;
+  border:1px solid rgba(180,163,255,.22);
+  border-radius:12px;
+  background:rgba(22,20,35,.98);
+  box-shadow:0 16px 36px rgba(0,0,0,.38);
+  backdrop-filter:blur(16px);
+}
 .mgt-nav-dropdown:hover .mgt-nav-submenu,
 .mgt-nav-dropdown:focus-within .mgt-nav-submenu { display:grid; gap:2px; }
 .mgt-nav-submenu a {
