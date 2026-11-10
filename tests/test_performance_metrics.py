@@ -1,3 +1,5 @@
+import os
+import tempfile
 import unittest
 from unittest.mock import Mock, patch
 
@@ -6,7 +8,7 @@ from tracker.services.performance_metrics import (
     PerformanceMetrics,
     get_performance_metrics,
 )
-from tracker import create_app
+from tracker import create_app, runtime
 
 
 class PerformanceMetricsTests(unittest.TestCase):
@@ -74,6 +76,45 @@ class PerformanceMetricsTests(unittest.TestCase):
         self.assertEqual(
             counters["nexon.responses{endpoint=character/basic,status=200}"], 1
         )
+
+
+class AdminLogQueryMetricsTests(unittest.TestCase):
+    def test_html_and_json_routes_record_each_query_separately(self):
+        metrics = get_performance_metrics()
+        metrics.reset()
+        try:
+            with tempfile.TemporaryDirectory() as temp_dir:
+                app = create_app({
+                    "TESTING": True,
+                    "GROWTH_DATABASE_URL": "",
+                    "NEXON_API_KEY": "",
+                })
+                with app.app_context():
+                    state = runtime.get_runtime_state()
+                    state.log_db_backend = "sqlite"
+                    state.log_db_path = os.path.join(temp_dir, "admin_logs.sqlite3")
+                    runtime.initialize_log_db()
+
+                client = app.test_client()
+                with client.session_transaction() as session:
+                    session["admin_authenticated"] = True
+
+                self.assertEqual(client.get("/admin/api/logs").status_code, 200)
+                self.assertEqual(client.get("/admin/logs").status_code, 200)
+
+                snapshot = metrics.snapshot()
+                for query_name in ("count", "page", "actions"):
+                    labels = f"{{backend=sqlite,query={query_name},store=admin_logs}}"
+                    self.assertEqual(
+                        snapshot["counters"].get("db.query_executions" + labels),
+                        2,
+                    )
+                    self.assertEqual(
+                        snapshot["timings"]["db.query_ms" + labels]["count"],
+                        2,
+                    )
+        finally:
+            metrics.reset()
 
 
 class PerformanceMetricsEndpointTests(unittest.TestCase):
