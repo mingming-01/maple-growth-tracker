@@ -1,5 +1,4 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import Chart from "chart.js/auto";
 import { detectLevelUpEvents, buildLevelUpMarkers, buildExperienceChartSeries, dailyGrowthSegmentDash } from "./growthChartData.js";
 import { fetchHistoryArchive } from "../../lib/historyCollection.js";
 import {
@@ -419,6 +418,7 @@ export default function GrowthDashboard({ character, history, onHistoryChange, o
   );
 
   useEffect(() => {
+    let cancelled = false;
     if (!canvasRef.current) return undefined;
     if (chartRef.current) {
       chartRef.current.destroy();
@@ -433,7 +433,9 @@ export default function GrowthDashboard({ character, history, onHistoryChange, o
     // Detect level changes locally so the yellow star is drawn on actual events.
     const levelUpEvents = detectLevelUpEvents(sorted);
     const levelUps = buildLevelUpMarkers(sorted, cumulative);
-    chartRef.current = new Chart(canvasRef.current.getContext("2d"), {
+    import("chart.js/auto").then(({ default: Chart }) => {
+      if (cancelled || !canvasRef.current) return;
+      chartRef.current = new Chart(canvasRef.current.getContext("2d"), {
       type: "line",
       data: {
         labels: sorted.map(item => String(item.date || "").slice(5)),
