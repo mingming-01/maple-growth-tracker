@@ -1,8 +1,9 @@
 """캐릭터 정보 조회 HTTP 라우트."""
+from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime
 
 import requests
-from flask import Blueprint, jsonify, request
+from flask import Blueprint, current_app, jsonify, request
 
 from tracker.services.nexon_service import (
     get_character_rankings,
@@ -66,17 +67,30 @@ def get_character():
             return jsonify({"error": "캐릭터 정보를 확인할 수 없습니다."}), response.status_code
 
         character_class = basic["character_class"]
-        character_rankings = get_character_rankings(
-            target_date=datetime.now(KOREA_TIMEZONE).strftime("%Y-%m-%d"),
-            world_name=basic["world_name"],
-            character_class=character_class,
-            ocid=ocid,
-        )
-        # 메인 프로필도 현재 스탯 API를 조회해 상세 탭 진입 여부와 무관하게 전투력을 표시한다.
-        # 상세 탭과 같은 소스 캐시를 사용하므로 동일 조회 흐름에서 중복 호출하지 않는다.
-        current_combat_power = get_current_combat_power(
-            ocid, force_refresh=force_refresh
-        )
+
+        # OCID가 확보된 뒤에는 랭킹 조회와 메인 프로필 전투력 조회가 서로 독립적이다.
+        # 넥슨 API 전역 요청 간격 제한은 그대로 두고 두 작업의 네트워크 대기 시간을 겹친다.
+        # 별도 앱 컨텍스트를 전달해 작업 스레드에서도 Flask 설정값을 동일하게 사용한다.
+        app = current_app._get_current_object()
+
+        def fetch_current_combat_power():
+            with app.app_context():
+                return get_current_combat_power(
+                    ocid, force_refresh=force_refresh
+                )
+
+        with ThreadPoolExecutor(max_workers=2) as executor:
+            rankings_future = executor.submit(
+                get_character_rankings,
+                target_date=datetime.now(KOREA_TIMEZONE).strftime("%Y-%m-%d"),
+                world_name=basic["world_name"],
+                character_class=character_class,
+                ocid=ocid,
+            )
+            combat_power_future = executor.submit(fetch_current_combat_power)
+            character_rankings = rankings_future.result()
+            current_combat_power = combat_power_future.result()
+
         best_power = record_best_combat_power(ocid, current_combat_power) or {}
         if current_combat_power is not None:
             # 새 전투력과 이전 상세 응답 캐시가 함께 남지 않도록 스탯 응답만 무효화한다.
@@ -111,7 +125,6 @@ def get_character():
         "bestCombatPowerObservedAt": best_power.get("observedAt"),
         "bestPresetCombination": best_power.get("presetNumbers"),
     }
-
 
     data_status = "partial" if character_rankings["rankingDataStatus"] in ("partial", "unavailable", "empty", "not_ready") else "current"
     saved_at = datetime.now().astimezone().isoformat(timespec="seconds")
