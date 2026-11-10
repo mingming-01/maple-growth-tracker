@@ -1,7 +1,7 @@
 """캐릭터 상세 정보 탭의 지연 조회 API."""
 from flask import Blueprint, jsonify, request
 
-from tracker.runtime import get_cache, set_cache
+from tracker.runtime import get_cache, record_best_combat_power, set_cache
 from tracker.services.character_detail_service import (
     VALID_SECTIONS,
     get_character_detail_section,
@@ -34,5 +34,18 @@ def get_character_details():
 
     result = get_character_detail_section(ocid, section, force_refresh=force_refresh)
     result["dataStatus"] = "current"
+    if section == "stats":
+        stat_source = next(
+            (source for source in result.get("sources", []) if source.get("id") == "stat"),
+            {},
+        )
+        current_power = stat_source.get("combatPower")
+        best_power = record_best_combat_power(ocid, current_power) or {}
+        result.update({
+            "currentCombatPower": current_power,
+            "bestCombatPower": best_power.get("value"),
+            "bestCombatPowerObservedAt": best_power.get("observedAt"),
+            "bestPresetCombination": best_power.get("presetNumbers"),
+        })
     set_cache(cache_key, result, DETAIL_CACHE_TTL)
     return jsonify(result)
