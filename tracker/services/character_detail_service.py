@@ -388,6 +388,20 @@ def _fetch_source(ocid, spec, force_refresh=False):
     return source
 
 
+def get_current_combat_power(ocid, force_refresh=False):
+    """메인 프로필에서 실제 적용 중인 전투력을 조회한다.
+
+    스탯 상세 탭과 같은 소스 캐시를 사용하므로, 메인 프로필 조회 직후
+    상세 스탯 화면을 열어도 character/stat API를 중복 호출하지 않는다.
+    """
+    if not ocid:
+        return None
+    source = _fetch_source(
+        ocid, SECTION_SOURCES["stats"][0], force_refresh=force_refresh
+    )
+    return source.get("combatPower") if source.get("status") == "available" else None
+
+
 def get_character_detail_section(ocid, section, force_refresh=False):
     """선택된 상세 탭에 필요한 API만 병렬 조회한다."""
     if section not in VALID_SECTIONS:
