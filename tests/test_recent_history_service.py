@@ -103,6 +103,22 @@ class RecentHistoryServiceTests(unittest.TestCase):
         self.assertTrue(result[0]["retryable"])
         self.basic_lookup.assert_not_called()
 
+    def test_returns_records_in_chronological_display_order(self):
+        older = self.today - timedelta(days=2)
+        middle = self.today - timedelta(days=1)
+        self.ranking.side_effect = [
+            ({"ranking": 30, "character_level": 290, "character_exp": 300}, self.response),
+            ({"ranking": 20, "character_level": 290, "character_exp": 200}, self.response),
+            ({"ranking": 10, "character_level": 290, "character_exp": 100}, self.response),
+        ]
+
+        result = self.collect([self.today, middle, older])
+
+        self.assertEqual(
+            [item["date"] for item in result],
+            ["2026-11-08", "2026-11-09", "2026-11-10"],
+        )
+
     def test_reuses_today_ranking_from_character_snapshot(self):
         basic = {
             "character_name": "테스트",
