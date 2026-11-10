@@ -1,6 +1,8 @@
 # Maple Growth Tracker
 
-메이플스토리 캐릭터의 현재 스펙이 아니라 **성장 과정**을 기록하고, 계산된 성장 데이터를 이해하기 쉽게 보여주는 웹 서비스입니다. React/Vite 기반 화면과 Flask 백엔드를 사용하며, 기존 Vanilla JS 화면도 `/legacy/`에서 유지합니다.
+메이플스토리 캐릭터의 **현재 정보뿐 아니라, 시간에 따라 쌓이는 성장 과정**을 기록하고 돌아보는 개인 성장 기록·분석 서비스입니다.
+
+레벨과 경험치, 랭킹의 변화를 날짜별로 모으고, 실제로 확인된 기록을 바탕으로 성장 흐름과 다음 레벨 목표를 살펴봅니다. 다른 캐릭터와의 비교, 장비·스탯 상세 조회, AI 성장 리포트까지 한곳에서 이어서 확인할 수 있습니다.
 
 <p align="center">
 
@@ -12,338 +14,231 @@
 ![Chart.js](https://img.shields.io/badge/Chart.js-FF6384?style=flat-square&logo=chart.js&logoColor=white)
 ![PostgreSQL](https://img.shields.io/badge/PostgreSQL-4169E1?style=flat-square&logo=postgresql&logoColor=white)
 ![SQLite](https://img.shields.io/badge/SQLite-003B57?style=flat-square&logo=sqlite&logoColor=white)
-![Gemini](https://img.shields.io/badge/Gemini%20API-4285F4?style=flat-square&logo=google&logoColor=white)
-![OpenRouter](https://img.shields.io/badge/OpenRouter-6467F2?style=flat-square)
 
 </p>
 
-- 서비스: https://maple-growth-tracker.onrender.com/
-- GitHub: https://github.com/mingming-01/maple-growth-tracker
+- **서비스:** https://maple-growth-tracker.onrender.com/
+- **GitHub:** https://github.com/mingming-01/maple-growth-tracker
 
 ---
 
-## 프로젝트 소개
+## 프로젝트가 해결하려는 것
 
-캐릭터 검색 사이트는 대부분 지금의 레벨, 직업, 순위를 보여주는 데 집중합니다.
-이 프로젝트는 방향을 조금 바꿔서 **"이 캐릭터가 최근 어떻게 성장했는가"** 를 보여주는 것을 목표로 만들었습니다.
+캐릭터 조회 한 번으로 확인할 수 있는 것은 대부분 현재 시점의 정보입니다. 하지만 캐릭터가 얼마나 성장했는지 알려면 오늘의 레벨만이 아니라, 며칠 전과 비교해 경험치가 얼마나 늘었는지, 레벨업은 언제 있었는지, 랭킹은 어떻게 움직였는지 함께 봐야 합니다.
 
-캐릭터명을 입력하면 NEXON Open API로 캐릭터 정보와 최근 7일의 경험치·랭킹 기록을 가져오고, 서버와 브라우저에서 성장량과 레벨업 여부, 성장 지표를 계산합니다. 계산된 결과는 카드, 표, 그래프로 보여주고, 같은 지표를 AI에게 전달해 성장 흐름을 문장으로 해석한 리포트를 만듭니다.
+Maple Growth Tracker는 이 변화를 날짜별 기록으로 쌓아 **현재 상태와 성장의 흐름을 함께 살펴볼 수 있도록** 만든 서비스입니다.
 
-메인 화면은 서비스 소개(성장 기록 / 성장 분석 / AI 성장 리포트)와 캐릭터 검색 영역으로 구성했고, 검색 결과는 같은 화면 아래에 이어서 표시됩니다. 상단 헤더의 로고를 누르면 저장된 결과를 지우고 처음 화면으로 돌아가며, 헤더에서 관리자 페이지로 이동할 수 있습니다.
+주요 화면은 다음과 같이 구성되어 있습니다.
 
----
-
-## 핵심 데이터 흐름
-
-```text
-NEXON Open API
-      ↓
-캐릭터 / 성장 데이터 수집
-      ↓
-Flask / Python
-      ↓
-데이터 가공 및 계산
-      ↓
-React / JavaScript / Chart.js
-      ↓
-성장 데이터 시각화
-      ↓
-Gemini / OpenRouter
-      ↓
-AI 성장 데이터 해석
-```
-
-실제 요청 흐름은 아래와 같습니다.
-
-```text
-[캐릭터 조회]
-브라우저 ─ /api/character ─→ Flask ─→ NEXON API (기본 정보 + 랭킹 4종 병렬 조회)
-브라우저 ─ /api/history   ─→ Flask ─→ NEXON API (최근 7일 랭킹 기록 병렬 조회)
-                              └ 경험치 증가량 / 레벨업 여부 / 랭킹 변화 계산
-브라우저: 성장 요약 · 예측 · 그래프 렌더링, 성장 지표(metrics) 계산
-
-[AI 성장 리포트]
-브라우저 ─ metrics ─→ /api/ai-analysis ─→ Gemini (제한·일시 오류 시 OpenRouter)
-브라우저 ←─ 리포트 문장 ─ 후처리(sanitize) ─┘
-```
-
----
+| 화면 | 살펴볼 수 있는 내용 |
+| --- | --- |
+| 개요 | 캐릭터 프로필, 현재 레벨 진행률·전투력, 랭킹, 자동 성장 인사이트 |
+| 성장 분석 | 7·30·90일 성장 요약, 추이 그래프, 주요 성장 타임라인, 레벨업 예상, 목표 레벨 |
+| 날짜별 기록 | 날짜별 레벨·경험치·랭킹·레벨 진행률 |
+| 캐릭터 상세 | 스탯, 장비, 심볼, 6차·HEXA, 링크 스킬, 유니온 |
+| AI 리포트 | 선택 기간의 성장 기록을 바탕으로 한 5개 항목의 자연어 분석 |
+| 캐릭터 비교 | 두 캐릭터의 성장 지표와 동일 기간 기록 비교, AI 비교 설명 |
+| 관리자 | 서비스 이용 로그와 서버 성능 계측 |
 
 ## 주요 기능
 
-### 캐릭터 정보와 랭킹
-- 캐릭터명, 월드(월드 로고 표시), 직업, 길드, 현재 레벨, 경험치 진행도
-- 종합 랭킹, 월드 랭킹, 직업 랭킹(월드), 직업 랭킹(전체)
+### 캐릭터 현황과 성장 인사이트
 
-### 성장 기록과 분석
-- 최근 7일 날짜별 레벨 / 경험치 / 랭킹 기록
-- 어제보다 늘어난 경험치(일일 성장량), 최근 7일 성장량, 일 평균 성장량
-- 전일 대비 랭킹 변화
-- 레벨업 판단과 표시
+캐릭터명으로 조회하면 캐릭터 이미지, 월드, 직업, 길드, 레벨, 현재 경험치와 레벨 진행률을 확인할 수 있습니다. 종합·월드·직업별 랭킹 네 종류와 현재 전투력도 함께 표시합니다.
 
-### 성장 그래프
-- Chart.js 이중 축 그래프: 누적 경험치(선) + 일일 상승량(점선)
-- 레벨업한 날은 별 모양으로 표시하고, 툴팁에 이전 레벨 → 현재 레벨 표시
-- 레벨업으로 경험치가 초기화되어도 그래프가 급락하지 않도록 별도 처리 (아래 "주요 문제 해결" 참고)
+개요 화면의 **성장 인사이트**는 AI가 아니라 애플리케이션에서 계산하는 요약입니다. 최근 기록이 충분하면 직전 기간과 최근 기간의 일일 평균 경험치를 비교하고, 다음 레벨 예상과 저장된 랭킹 변화 등 확인 가능한 정보를 보여줍니다.
 
-### 기간별 성장 요약
-- 처음 캐릭터를 검색하면 기존대로 최근 7일 기록만 조회합니다.
-- 사용자가 저장 기록 30일·90일을 선택하면 해당 날짜 구간에서 DB에 없는 날짜를 넥슨 API에 요청해 보충합니다. 요청은 10일 단위로 진행되고 진행 상태가 표시됩니다.
-- API가 제공하는 경우에만 과거 레벨·경험치·랭킹을 저장합니다. 이미 저장된 날짜는 재요청하지 않고, API가 제공하지 않는 날짜는 빈 기록으로 남깁니다.
-- 기간별 요약은 확인된 경험치 증가량, 관측된 일평균, 첫 기록과 마지막 기록 사이의 랭킹 변화, 기록 충실도를 보여줍니다. 같은 길이의 직전 기간도 저장 기록이 있을 때 비교하며, 데이터가 부족하면 자료 부족으로 표시합니다.
-- 경험치 증가량은 연속된 날짜에서 확인된 변화만 합산합니다. 누락 날짜를 건너뛰거나 레벨업으로 경험치 기준이 바뀐 구간은 추정하지 않습니다.
+전투력은 Nexon API에서 확인한 현재 값을 표시하며, 저장된 관측값 중 최고값과 갱신 시점도 별도로 기록합니다. 랭킹은 Nexon API가 반환한 집계 기준의 스냅샷이며 실시간 순위 변화를 스트리밍하는 기능은 아닙니다.
 
-### 성장 예측
-- 현재 경험치와 진행률로 해당 레벨의 전체 필요 경험치를 역산하고, 최근 평균 성장량이 유지된다고 가정해 다음 레벨까지 남은 경험치, 예상 소요일, 예상 날짜를 계산합니다.
-- 어디까지나 가정에 기반한 예상치이며, 화면에도 그 점을 안내합니다. 최근 평균 성장량을 구할 수 없으면 예측 카드를 비우고, 진행률이 0%이거나 100% 이상이라 역산할 수 없으면 남은 경험치·소요일·예상 날짜를 `-`로 표시합니다.
+### 성장 기록과 추이 분석
 
-### AI 성장 리포트
-- 계산된 지표를 바탕으로 성장 패턴 / 성장 변화 / 레벨업 분석 / 성장 전망 / AI 코멘트 5개 항목을 생성합니다. (자세한 내용은 아래 섹션)
+- 기본 캐릭터 조회 시 최근 7일의 날짜별 레벨·경험치·랭킹 기록을 가져옵니다.
+- 성장 분석 화면에서 30일 또는 90일을 선택하면 해당 기간의 저장 기록을 조회하고, 사용자가 요청한 경우 비어 있는 날짜를 Nexon API에서 보충합니다.
+- 과거 기록 보충은 10일 단위로 나누어 진행하며, 이미 저장된 기록은 재사용합니다.
+- 성장 요약은 최근 확인된 경험치 증가량, 최근 7일 합계와 평균, 랭킹 변화 등을 보여줍니다.
+- 30일·90일 분석은 같은 길이의 바로 이전 기간 기록이 있을 때 성장량과 평균을 비교합니다.
+- 성장 타임라인에는 확인된 레벨업과 주요 성장·랭킹 기록을 표시합니다.
+
+성장 추이 그래프는 첫 기록 이후 누적된 경험치 증가량, 날짜별 경험치 증가량, 레벨업 시점을 함께 보여줍니다. **Chart.js는 여전히 사용합니다.** React 화면에서는 성장 분석 화면에 진입할 때 동적으로 불러오고, 기존 `/legacy/` 화면에서는 `templates/index.html`의 CDN 스크립트로 불러옵니다.
+
+### 날짜별 성장 기록과 계산 기준
+
+날짜별 기록 화면에서는 레벨, 경험치, 경험치 증가량, 랭킹, 현재 레벨 진행률을 확인할 수 있습니다. 같은 레벨로 이어지는 연속 날짜의 진행률 변화는 `%p`로 표시합니다.
+
+수치가 그럴듯해 보이는 것보다 실제 기록에 근거하는 것을 우선합니다.
+
+- 기록이 없는 날짜는 경험치 증가량 0으로 취급하지 않습니다.
+- 날짜가 끊긴 구간이나 레벨업으로 경험치 기준이 바뀐 구간은 임의로 보간하지 않습니다.
+- 경험치 증가량과 일평균은 계산 가능한 관측 구간을 기준으로 산출합니다.
+- Nexon API가 아직 당일 자료를 공개하지 않은 경우와 조회에 실패한 경우, 아직 수집하지 않은 경우를 구분합니다.
+- 다음 레벨 예상은 최근 7일에 최소 네 개의 계산 가능한 경험치 변화가 있고 평균 성장량이 양수일 때만 구체적인 날짜를 표시합니다. 최근 평균 속도가 유지된다는 가정의 참고값이며 확정 일정은 아닙니다.
+
+### 레벨업 목표
+
+다음 레벨의 목표 날짜를 설정하고 목표 진척률을 확인할 수 있습니다. 목표일까지 필요한 하루 진척률과 최근 기록에서 관측된 하루 진척률을 비교합니다.
+
+목표는 브라우저에 저장됩니다. 브라우저 알림을 허용하면 캐릭터를 다시 조회해 레벨업이나 목표 달성을 확인했을 때 알림을 표시할 수 있습니다. 백그라운드 푸시 알림은 제공하지 않습니다.
+
+### 캐릭터 상세 정보
+
+상세 화면은 탭을 선택했을 때 해당 영역의 정보를 별도로 조회합니다. 기본 캐릭터 검색에 모든 상세 API를 한꺼번에 묶지 않으며, 상세 영역의 응답은 서버에서 짧은 시간 캐시합니다.
+
+| 탭 | 포함 정보 |
+| --- | --- |
+| 스탯 | 주요 스탯, 하이퍼 스탯, 어빌리티 |
+| 장비 | 장비 프리셋, 헤어·성형·피부, 안드로이드, 세트 효과, 캐시 장비·외형, 펫 |
+| 심볼 | 아케인·어센틱 심볼 |
+| 스킬 | 6차 스킬, HEXA 코어, HEXA 스탯 |
+| 링크 | 링크 스킬 프리셋 |
+| 유니온 | 유니온 기본 정보·스탯, 아티팩트, 챔피언 |
+
+Nexon API가 제공하는 프리셋을 선택해 내용을 비교할 수 있습니다. 화면에서 프리셋을 선택해도 게임 내 설정은 변경되지 않습니다. 각 상세 API의 일부가 실패해도 기본 캐릭터 정보와 성장 기록 조회는 별도로 동작합니다.
 
 ### 캐릭터 성장 비교
-- 현재 조회한 캐릭터와 비교할 캐릭터를 같은 기준의 지표(레벨, 경험치 진행도, 최근·평균·7일 성장량, 랭킹 변화, 예상 레벨업)로 나란히 비교합니다.
-- 30일·90일 기간을 선택해 두 캐릭터의 확인된 경험치 증가량, 관측된 일평균, 랭킹 변화, 기록 충실도를 동일한 날짜 범위로 비교합니다.
-- 누락 날짜와 레벨업 전환 구간을 추정하지 않으며, 기록이 부족하면 자료 부족으로 표시합니다.
-- 두 캐릭터의 계산된 지표를 AI에게 전달해 성장 흐름의 차이를 설명하는 비교 분석을 생성합니다.
-- 같은 캐릭터끼리의 비교는 브라우저와 서버 양쪽에서 막습니다.
 
-### 이미지 / PDF 저장
-- 결과 화면을 html2canvas로 캡처해 PNG로 저장하거나, jsPDF로 A4 PDF(여러 페이지)로 저장합니다.
+다른 캐릭터를 검색해 두 캐릭터의 레벨, 현재 레벨 진행률, 최근·평균 성장량, 랭킹 변화와 레벨업 예상 등을 나란히 확인합니다.
 
-### 화면 상태 유지
-- 검색 결과, AI 리포트, 비교 결과를 `sessionStorage`에 저장합니다. 새로고침(F5, Ctrl+Shift+R) 후에도 같은 탭에서는 결과가 유지되고, 탭을 닫거나 헤더의 로고를 누르면 초기 화면으로 돌아갑니다.
+7일·30일·90일의 동일한 기간으로 성장 기록을 비교할 수 있으며, 확인된 경험치 증가량과 일평균, 랭킹 변화, 기록이 남은 날짜를 함께 표시합니다. 데이터가 부족하거나 확인되지 않은 날짜는 별도로 구분하며, 누락 구간을 임의로 추정하지 않습니다. 두 캐릭터의 성장 흐름을 설명하는 AI 비교 분석도 제공합니다.
 
-### 관심 캐릭터 목록
-- 조회한 캐릭터를 최대 30명까지 관심 목록에 등록하고, 목록에서 바로 다시 조회하거나 삭제할 수 있습니다.
-- 목록은 브라우저의 `localStorage`에 저장되므로 같은 브라우저에서는 다시 방문해도 유지됩니다. 다른 브라우저나 기기와 동기화되지는 않으며, 사이트 데이터를 삭제하면 목록도 사라질 수 있습니다.
+### AI 성장 리포트
 
-### 성장 목표 및 레벨업 알림
-- 캐릭터별로 다음 레벨 달성 목표일을 설정하고, 현재 레벨 경험치 진행률을 기준으로 목표 진척률을 표시합니다.
-- 목표일까지 필요한 일일 진척률과 최근 7일 관측 진척률을 비교합니다.
-- 캐릭터를 다시 조회하거나 최신 정보를 갱신할 때 레벨업 및 목표 달성을 감지해 화면 안에 알립니다.
-- 브라우저 알림은 사용자가 직접 권한을 허용한 경우에만 사용할 수 있습니다. 브라우저 알림은 페이지가 열려 있고 캐릭터를 다시 조회할 때 감지되며, 백그라운드 푸시 알림은 제공하지 않습니다.
-- 목표는 캐릭터 OCID별로 브라우저 `localStorage`에 저장합니다. 로그인 기반 저장이나 기기 간 동기화는 지원하지 않습니다.
+AI 리포트는 선택한 7일·30일·90일 성장 기록을 바탕으로 다음 다섯 항목을 작성합니다.
+
+1. 성장 패턴
+2. 성장 변화
+3. 레벨업 분석
+4. 성장 전망
+5. AI 코멘트
+
+경험치 증가량과 기간별 비교 등 수치 계산은 애플리케이션에서 수행하고, AI는 계산된 값과 기록을 자연어로 해석합니다. 분석 화면에는 기준일, 확인된 기록 수, 데이터 충실도 등 분석 근거도 표시합니다. 기록이 충분하지 않으면 근거 없는 추세나 예측을 단정하지 않도록 구성했습니다.
+
+새 AI 리포트는 사용자가 분석을 시작할 때 생성합니다. 이전 결과가 브라우저 캐시에 남아 있으면 보관 기간 안에서 다시 불러올 수 있으며, 새 결과를 원할 때는 다시 분석할 수 있습니다. AI 제공자는 Gemini를 우선 사용하고, 설정 및 오류 조건에 따라 OpenRouter를 대체 경로로 사용합니다.
+
+### 관심 캐릭터와 결과 저장
+
+- 관심 캐릭터를 최대 30명까지 브라우저에 저장하고 다시 조회할 수 있습니다.
+- 검색 결과와 화면 상태는 현재 탭의 `sessionStorage`에 저장되어 같은 탭에서 새로고침해도 복원됩니다.
+- 관심 캐릭터, 레벨업 목표와 AI 리포트 캐시는 브라우저 `localStorage`를 사용합니다. 브라우저 또는 기기 사이에 자동 동기화되지는 않습니다.
+- 검색 결과 화면을 PNG 이미지 또는 여러 페이지의 A4 PDF로 저장할 수 있습니다.
 
 ### 관리자 기능
-- 관리자 로그인 후 최근 사용 로그(캐릭터 조회, AI 성장 분석, 캐릭터 비교, 서비스 오류)를 최대 500건까지 확인할 수 있습니다.
-- 로그 시각과 날짜 필터는 한국 시간(KST) 기준입니다. `GROWTH_DATABASE_URL`을 통한 PostgreSQL 저장이 연결되어 있으면 로그는 브라우저가 아니라 서버 DB에 보관되므로 관리자 권한으로 접속한 다른 브라우저에서도 같은 기록을 볼 수 있습니다.
+
+관리자 화면에서 로그인 후 캐릭터 조회, AI 분석, 비교 등 서비스 이용 로그를 검색하고 확인할 수 있습니다. 별도의 성능 API는 현재 서버 프로세스에서 수집한 요청·캐시·외부 API·DB 관련 계측값을 제공합니다. 성능 계측은 프로세스 단위이므로 여러 워커의 값을 하나로 합산한 지표는 아닙니다.
 
 ---
 
-## AI 성장 리포트
+## 기술 구성
 
-AI 리포트는 아래 구조로 동작합니다.
-
-```text
-성장 데이터 계산 (Python / JavaScript)
-      ↓
-Gemini API
-      ↓
-정상 응답 ─────────────────────→ AI 성장 리포트
-
-Gemini 요청 제한 / 일시적 오류
-      ↓
-OpenRouter fallback ───────────→ AI 성장 리포트
-```
-
-fallback은 코드에서 다음 조건으로 동작합니다.
-
-- Gemini 호출이 실패했을 때 오류 내용에 `429`, `RESOURCE_EXHAUSTED`, `QUOTA`, `503`, `504`, `TIMEOUT` 중 하나가 포함되면 OpenRouter로 다시 요청합니다.
-- 위에 해당하지 않는 오류는 fallback 없이 안내 메시지만 반환합니다.
-- `GEMINI_API_KEY`가 없고 `OPENROUTER_API_KEY`만 설정되어 있으면 OpenRouter로 바로 요청합니다.
-- OpenRouter까지 실패하면 "AI 분석을 불러오지 못했습니다."라는 안내만 표시하고, 내부 오류 내용은 화면에 노출하지 않습니다.
-- 사용할 OpenRouter 모델은 `OPENROUTER_MODEL` 환경변수로 바꿀 수 있고, 기본값은 `openrouter/free`입니다.
-- 성장 리포트와 캐릭터 비교 분석에 같은 방식이 적용됩니다.
-- 동일한 입력 데이터의 분석 결과는 브라우저 `localStorage`에 최대 40건 보관하며, 리포트 유형별 만료 시간은 7일 분석 6시간, 30일 분석 7일, 90일 분석 30일입니다. 서버도 동일한 프롬프트의 성공한 결과를 프로세스 메모리에 최대 6시간 보관합니다. 서버 재시작 시 서버 캐시는 초기화되며, 데이터가 달라지면 새로운 분석을 생성합니다.
-- 비교 분석 프롬프트에는 캐릭터 식별자·조회 시각 같은 부가 메타데이터를 보내지 않고, 비교에 필요한 캐릭터 정보와 성장 지표·기록만 전달합니다.
-
-AI 응답은 그대로 쓰지 않고 서버에서 후처리합니다(`sanitize_ai_text`).
-
-- 마크다운 기호(제목, 굵게, 목록, 코드 블록 등) 제거
-- 프롬프트에 넘긴 내부 키 이름(`rankingChange`, `levelUps` 등)이나 `null` 같은 값이 응답에 섞여 나오면 자연스러운 한국어로 치환
-- 긴 원본 경험치 숫자가 그대로 노출되면 문구로 대체
-- 성장 전망에 적힌 날짜를 화면의 예측 카드와 같은 날짜로 맞춤
-
----
-
-## 데이터와 AI의 역할 분리
-
-이 프로젝트에서 가장 신경 쓴 부분은 **계산은 애플리케이션이, 해석은 AI가** 맡도록 나눈 것입니다.
-
-| 역할 | 담당 |
-| --- | --- |
-| 게임 데이터 수집 | NEXON Open API |
-| 랭킹·기록 조회, 경험치 증가량 계산, 레벨업 판단, 전일 대비 랭킹 변화 | Flask / Python |
-| 일일·평균·7일 성장량, 성장 예측, AI에 전달할 성장 지표(metrics) 계산 | JavaScript |
-| 성장 데이터 시각화 | Chart.js |
-| 성장 패턴 해석, 자연어 리포트 | Gemini API / OpenRouter |
-
-LLM은 숫자 계산이 틀리거나 없는 내용을 그럴듯하게 채워 넣을 수 있습니다. 그래서 경험치 증가량, 레벨업 여부, 평균, 예측 날짜처럼 코드로 정확히 구할 수 있는 값은 먼저 계산하고, AI에게는 **계산 결과를 해석하는 일만** 시킵니다.
-
-프롬프트에는 다음 규칙을 넣었습니다.
-
-- 새 숫자를 계산하거나 추정하지 않는다.
-- 기록이 부족하면 판단하기 어렵다고 말한다.
-- 레벨업은 기록에서 확인될 때만 언급한다.
-- 플레이 방식이나 플레이 시간을 추측하지 않는다.
-- 이미 화면에 표시되는 숫자는 되풀이하지 않는다.
-
----
-
-## 기술 스택
-
-| 구분 | 기술 |
+| 영역 | 사용 기술 |
 | --- | --- |
 | Backend | Python, Flask, Requests, Gunicorn |
-| Frontend | React 19, React DOM, Vite 6 |
-| Legacy frontend | HTML, CSS, Vanilla JavaScript (`/legacy/`) |
-| 시각화 | Chart.js 4 |
-| 이미지 / PDF 저장 | html2canvas, jsPDF |
-| AI | Google Gemini API, OpenRouter |
+| Frontend | React 19, React DOM, Vite 6, JavaScript |
+| 그래프 | Chart.js 4 — 성장 분석 화면에서 지연 로딩 |
+| 이미지·PDF 저장 | html2canvas, jsPDF |
 | 게임 데이터 | NEXON Open API |
-| 데이터 저장 | PostgreSQL (`GROWTH_DATABASE_URL`) / SQLite 로컬 개발 저장소 |
+| AI | Google Gemini API, OpenRouter |
+| 서버 데이터 저장 | PostgreSQL, SQLite |
 | 테스트 | Python unittest, Node.js test runner, Playwright |
 | 배포 | Render |
-| 개발 도구 | Python 3.12 및 Node.js 20 기준 CI, npm, Git, GitHub |
 
-React 화면의 Chart.js, html2canvas, jsPDF는 npm 의존성으로 빌드에 포함합니다. 기존 `/legacy/` 화면은 CDN 스크립트를 사용합니다.
-
-## 프로젝트 구조
+### 주요 디렉터리
 
 ```text
 maple-growth-tracker/
-├── app.py                         # Flask WSGI 진입점 및 개발 서버
-├── package.json                   # 루트 개발·테스트 명령
-├── requirements.txt               # Python 의존성
+├── app.py
+├── package.json
+├── requirements.txt
 ├── frontend/
-│   ├── package.json               # React/Vite 의존성 및 스크립트
-│   ├── vite.config.js
+│   ├── package.json
 │   └── src/
-│       ├── App.jsx
-│       ├── components/            # 관리자·캐릭터 상세 UI
-│       ├── features/              # 홈·성장·분석 기능
-│       ├── lib/                   # 성장 계산·브라우저 저장소
-│       ├── services/              # Flask API 클라이언트
-│       └── styles/                # React 전용 스타일
+│       ├── components/       # 캐릭터 상세·관리자 등 공통 UI
+│       ├── features/         # 개요·성장·분석 화면
+│       ├── lib/              # 성장 계산·기록 수집·브라우저 저장
+│       ├── services/         # Flask API 클라이언트
+│       └── styles/
 ├── tracker/
-│   ├── application.py             # Flask Application Factory
-│   ├── config.py                  # 환경변수 및 기본 설정
-│   ├── runtime.py                 # 앱별 런타임 상태와 호환 진입점
-│   ├── controller/                # HTTP 라우트와 요청 처리
-│   ├── domain/                    # 프레임워크 독립 계산 규칙
-│   ├── integrations/              # Nexon·AI 외부 API 연동
-│   ├── repositories/              # 성장 기록·스냅샷·관리자 로그 저장
-│   └── services/                  # 수집·분석·캐시·요청 제한 서비스
-├── static/                        # 레거시 자산 및 React 빌드 산출물 경로
-├── templates/                     # 레거시·관리자 템플릿
-├── migrations/                    # PostgreSQL 스키마 SQL
-├── tests/                         # Python 단위·통합 테스트
-├── tests-js/                      # Node.js JavaScript 단위 테스트
-├── e2e/                           # Playwright 브라우저 E2E 테스트
-├── scripts/                       # 테스트용 서버 실행 스크립트
-└── docs/                           # 운영·설계·검증 문서
+│   ├── application.py        # Flask 앱 팩토리와 Blueprint 등록
+│   ├── config.py
+│   ├── runtime.py
+│   ├── controller/           # HTTP 요청·응답
+│   ├── domain/               # 성장 지표·AI 분석 근거 계산
+│   ├── integrations/         # Nexon·AI 외부 API 연동
+│   ├── repositories/         # DB·스냅샷 저장소
+│   └── services/             # 수집·캐시·분석·요청 제한
+├── static/                   # 레거시 화면 자산 및 React 빌드 산출물
+├── templates/                # 레거시·관리자 템플릿
+├── migrations/
+├── tests/                    # Python 테스트
+├── tests-js/                 # JavaScript 단위 테스트
+├── e2e/                      # 브라우저 테스트
+└── docs/
 ```
 
-### API
+## API 개요
 
 | 경로 | 설명 |
 | --- | --- |
-| `GET /` | React 빌드가 있으면 기본 화면, 없으면 레거시 화면 |
-| `GET /legacy/` | 기존 Vanilla JS 화면 |
-| `GET /preview/` | React 화면 검증용 경로 |
-| `GET /api/character?name=` | 캐릭터 기본 정보, 랭킹 4종, 현재 전투력 |
-| `GET /api/history?name=` | 최근 7일 성장 기록과 경험치·레벨업·랭킹 변화 |
-| `GET /api/history/archive?ocid=&days=30|90` | 저장된 30일·90일 기록 및 사용자가 요청한 누락 날짜 보충 |
-| `GET /api/character-details?ocid=&section=` | 선택한 상세 탭 조회. `stats`, `equipment`, `symbols`, `skills`, `link`, `union` |
-| `POST /api/ai-analysis?name=` | 계산된 지표와 기록을 전달해 AI 성장 리포트 생성 |
-| `POST /api/ai-comparison` | 두 캐릭터의 계산된 지표를 AI로 비교 |
-| `GET /admin/login`, `POST /admin/login` | 관리자 로그인 |
-| `GET /admin/logs`, `GET /admin/api/logs` | 관리자 로그 화면 및 React용 JSON API |
-| `GET /admin/api/performance` | 현재 서버 프로세스의 성능 계측 조회 |
-| `POST /admin/logout` | 관리자 로그아웃 |
+| `GET /api/character?name=` | 캐릭터 기본 정보, 네 종류 랭킹, 현재 전투력 |
+| `GET /api/history?name=&ocid=` | 최근 7일 성장 기록 |
+| `GET /api/history/archive?ocid=&days=` (days는 30 또는 90) | 저장된 기간 기록 조회 및 요청된 과거 기록 보충 |
+| `GET /api/character-details?ocid=&section=` | 선택 영역의 상세 정보 조회 |
+| `POST /api/ai-analysis?name=` | 선택 기간의 성장 지표·기록을 바탕으로 AI 리포트 생성 |
+| `POST /api/ai-comparison` | 두 캐릭터의 성장 지표 비교 설명 생성 |
+| `GET /admin/api/logs` | 관리자 이용 로그 조회 |
+| `GET /admin/api/performance` | 현재 프로세스의 성능 계측 조회 |
 
-AI 분석의 `GET /api/ai-analysis`는 이전 호출 방식과의 호환용으로 남아 있으며, 현재 프런트엔드는 계산된 지표를 전달하는 `POST` 방식을 사용합니다.
+`/api/character-details`의 `section`은 `stats`, `equipment`, `symbols`, `skills`, `link`, `union`을 사용합니다. AI 분석의 `GET /api/ai-analysis`는 과거 호출과의 호환을 위해 남아 있으며, 현재 프런트엔드는 `POST`를 사용합니다.
 
-## 주요 문제 해결
+## 데이터와 운영 기준
 
-### 1. 레벨업 시 경험치 그래프가 급락하는 문제
+### 서버 저장소
 
-레벨이 오르면 경험치 진행도가 초기화되기 때문에, 날짜별 경험치를 그대로 빼면 레벨업한 날의 증가량이 큰 음수가 됩니다. 그래프도 갑자기 떨어지는 것처럼 보였습니다.
+`GROWTH_DATABASE_URL`에 유효한 PostgreSQL 연결 문자열을 설정하면 성장 기록, API 스냅샷, 관리자 로그 등 서버 측 저장소가 PostgreSQL을 사용합니다. 로컬에서 이 값이 없으면 SQLite를 개발용 저장소로 사용합니다. 저장소별 연결 실패 처리와 폴백 방식은 다를 수 있으므로 관리자 화면의 저장 상태와 서버 로그를 함께 확인해야 합니다. Render에서 재배포 이후에도 기록을 유지하려면 영속 PostgreSQL 연결을 설정하는 편이 안전합니다.
 
-- 서버: 전날보다 레벨이 올랐으면 그날의 `experienceChange`를 계산하지 않고(`None`) `levelUp: true`로 표시합니다.
-- 브라우저: 누적 경험치 그래프는 첫 기록을 기준으로 **양수인 증가분만 더해서** 만들고, 레벨업한 날의 차이는 건너뜁니다. 대신 별 마커와 툴팁(이전 레벨 → 현재 레벨)으로 레벨업을 따로 보여줍니다.
-- 평균·7일 성장량은 유효한 증가분(양수)만으로 계산합니다. 즉, 레벨업한 날의 성장량은 집계에서 제외됩니다.
+서버 메모리 캐시와 성능 계측값은 프로세스가 재시작되면 초기화됩니다. 관리자 성능 화면은 현재 요청을 처리한 프로세스의 계측 결과를 보여줍니다.
 
-### 2. 여러 랭킹 API를 병렬로 조회
+### 외부 API와 데이터 한계
 
-캐릭터 한 명을 보여주려면 NEXON 랭킹 API를 여러 번 불러야 합니다. 종합 / 월드 / 직업+월드 / 직업 랭킹 4종은 서로 독립적인 요청이라서 `ThreadPoolExecutor`로 동시에 조회합니다. 최근 7일 기록도 날짜별 요청 7개를 같은 방식으로 병렬 처리합니다. 순차 호출로 하면 응답 시간이 요청 수만큼 늘어나기 때문입니다.
+NEXON Open API가 반환하는 정보와 공개 시점에 따라 기록을 확보할 수 있는 범위가 달라집니다. 특히 당일 랭킹이나 과거 날짜 데이터가 아직 공개되지 않았거나 API에서 조회되지 않을 수 있습니다. 이런 경우 실제 기록과 미수집·조회 실패 상태를 구분해 표시하며, 없는 데이터를 만들어 채우지 않습니다.
 
-### 3. API 호출 캐시
+AI 분석은 참고용 자연어 해석입니다. 성장량·평균·랭킹 변화 등 계산이 가능한 수치는 코드에서 산출하고, AI 응답은 검증과 후처리를 거쳐 표시합니다.
 
-같은 캐릭터에 대한 요청이 반복되는 구조였습니다. 조회 후 AI 분석을 요청하면 서버가 캐릭터 정보와 성장 기록을 다시 조회하기 때문입니다. 그래서 서버 메모리에 TTL 캐시를 두었습니다.
-
-- 캐릭터 정보: 5분
-- 성장 기록: 30분
-
-외부 API 호출 횟수와 응답 시간을 줄이는 것이 목적입니다. 프로세스 메모리에 저장하는 단순한 방식이라 서버가 재시작되면 캐시도 초기화됩니다.
-
-### 4. NEXON 직업 분류와 랭킹 조회 기준의 차이
-
-캐릭터 기본 정보에서 받는 직업명과, 직업 랭킹을 조회할 때 `class` 파라미터로 쓰는 값이 서로 달랐습니다. 그래서 `static/jobs.json`에 직업명 → 랭킹 조회용 값 매핑을 두고, 서버가 캐릭터의 직업으로 조회 기준을 찾아서 직업 랭킹을 요청합니다. 매핑이 없거나 파일을 읽지 못하면 직업 랭킹 2종만 조회하지 않고, 나머지 정보는 정상적으로 표시합니다.
-
-### 5. AI에게 계산을 맡기지 않기
-
-위의 "데이터와 AI의 역할 분리"와 같은 문제 의식입니다. 계산 결과를 만들어서 넘기고, 응답은 후처리까지 거쳐서 화면에 보여줍니다.
-
-### 6. Gemini 오류가 서비스 장애로 번지지 않도록 분리
-
-AI 호출은 요청 제한이나 일시적인 오류가 날 수 있는 외부 의존성입니다.
-
-- 캐릭터 조회와 성장 기록 조회가 끝난 뒤에 AI 리포트를 별도로 요청하기 때문에, AI가 실패해도 캐릭터 정보, 랭킹, 그래프는 그대로 표시됩니다.
-- 요청 제한·일시 오류는 OpenRouter fallback으로 한 번 더 시도합니다.
-- 그래도 실패하면 AI 리포트 영역에만 안내 메시지를 보여줍니다.
+운영 환경의 관리자 인증에는 `ADMIN_PASSWORD_HASH`를 사용합니다. 평문 `ADMIN_PASSWORD`는 로컬 개발 환경에서만 허용됩니다. API 키와 비밀번호 등 민감한 값은 코드에 작성하지 말고 환경변수로 관리합니다.
 
 ---
 
-## 보안 / API Key 관리
+## 로컬 개발 환경
 
-- **API Key는 코드에 넣지 않고 환경변수로 관리합니다.** 코드에 직접 넣으면 GitHub에 올라가는 순간 외부에 노출되고, 한 번 공개된 키는 되돌리기 어렵기 때문입니다. 로컬에서는 `.env`(저장소에 포함하지 않음)를, Render에서는 Environment Variables를 사용합니다.
-- 관리자 비밀번호는 해시(`ADMIN_PASSWORD_HASH`)로 설정할 수 있고, 로그인과 로그아웃 요청에는 CSRF 토큰 검증을 적용했습니다. 세션 쿠키는 `HttpOnly`, `SameSite=Lax`이며, HTTPS 배포 시 `FLASK_COOKIE_SECURE=true`로 Secure 속성을 켤 수 있습니다.
-- 관리자 로그에는 행동 종류, 캐릭터명, 월드, 비교 대상, 성공/실패 여부만 저장합니다. 인증 정보나 요청 본문 전체는 저장하지 않습니다.
-- 처리되지 않은 서버 오류는 상세 내용을 응답으로 내보내지 않고 일반 메시지만 반환합니다.
-
----
-
-## 실행 방법
-
-### 1. 프로젝트 클론
+### 1. 저장소 복제 및 가상환경 준비
 
 ```bash
 git clone https://github.com/mingming-01/maple-growth-tracker.git
 cd maple-growth-tracker
-```
 
-### 2. 가상환경 생성 및 활성화
-
-```bash
 python -m venv .venv
 ```
 
-Linux / macOS:
+Windows Git Bash:
+
+```bash
+source .venv/Scripts/activate
+```
+
+Windows PowerShell:
+
+```powershell
+.venv\Scripts\Activate.ps1
+```
+
+macOS / Linux:
 
 ```bash
 source .venv/bin/activate
 ```
 
-Windows:
+### 2. 의존성 설치
 
-```bash
-.venv\Scripts\activate
-```
-
-### 3. 패키지 설치
-
-Python 의존성과 루트·프런트엔드 npm 의존성을 설치합니다. Node.js 20 이상 환경을 권장합니다.
+Python, 루트 개발 도구, React 프런트엔드 의존성을 설치합니다.
 
 ```bash
 pip install -r requirements.txt
@@ -351,57 +246,43 @@ npm ci
 npm --prefix frontend ci
 ```
 
-### 4. 환경변수 설정
+### 3. 환경변수 설정
 
-프로젝트 루트에 `.env` 파일을 만듭니다.
+프로젝트 루트에 `.env` 파일을 만들고 필요한 값을 설정합니다.
 
 ```env
-# 필수
 NEXON_API_KEY=YOUR_NEXON_API_KEY
 
-# AI (둘 중 하나 이상. 둘 다 있으면 Gemini 우선, 제한·일시 오류 시 OpenRouter)
+# AI 기능을 사용할 때 설정
 GEMINI_API_KEY=YOUR_GEMINI_API_KEY
 OPENROUTER_API_KEY=YOUR_OPENROUTER_API_KEY
 OPENROUTER_MODEL=openrouter/free
 
-# 관리자 페이지 (설정하지 않으면 관리자 로그인을 사용할 수 없음)
+# 관리자 기능
 ADMIN_USERNAME=YOUR_ADMIN_ID
 ADMIN_PASSWORD_HASH=YOUR_PASSWORD_HASH
 
-# 선택
-FLASK_SECRET_KEY=RANDOM_SECRET
-FLASK_COOKIE_SECURE=false
+# 영속 PostgreSQL 저장소를 사용할 때 설정
+GROWTH_DATABASE_URL=postgresql://...
 
-# 외부 API 재시도 정책 (기본값 사용 시 생략 가능)
-NEXON_API_RETRIES=2
-NEXON_API_RETRY_BACKOFF=0.35
-AI_API_TIMEOUT=30
-AI_API_RETRIES=1
-AI_API_RETRY_BACKOFF=0.5
+# 운영 환경에서 고정된 세션 키 사용
+FLASK_SECRET_KEY=YOUR_LONG_RANDOM_SECRET
 ```
 
-| 변수 | 설명 |
+| 변수 | 용도 |
 | --- | --- |
-| `NEXON_API_KEY` | NEXON Open API 키 |
-| `GEMINI_API_KEY` | Gemini API 키 |
-| `OPENROUTER_API_KEY` / `OPENROUTER_MODEL` | fallback용 OpenRouter 키 / 모델 (모델 기본값 `openrouter/free`) |
-| `ADMIN_USERNAME` / `ADMIN_PASSWORD_HASH` | 관리자 계정. 운영 환경에서는 `ADMIN_PASSWORD_HASH`가 필요하며, `ADMIN_PASSWORD` 평문 대체는 로컬 개발 환경에서만 사용 가능 |
-| `FLASK_SECRET_KEY` | 세션 서명 키. 없으면 실행할 때마다 임의로 생성되어 재시작 시 로그인 세션이 풀림 |
-| `FLASK_COOKIE_SECURE` | `true`면 세션 쿠키에 Secure 속성 적용 (HTTPS 환경) |
-| `NEXON_API_CONNECT_TIMEOUT` / `NEXON_API_READ_TIMEOUT` | Nexon API 연결·응답 제한 시간 (초, 기본값 3.05 / 10) |
-| `NEXON_API_RETRIES` / `NEXON_API_RETRY_BACKOFF` | Nexon API 추가 재시도 횟수와 최초 대기 시간 (기본값 2회 / 0.35초) |
-| `AI_API_TIMEOUT` / `AI_API_RETRIES` / `AI_API_RETRY_BACKOFF` | OpenRouter 요청 제한 시간, 추가 재시도 횟수, 최초 대기 시간 (기본값 30초 / 1회 / 0.5초) |
+| `NEXON_API_KEY` | NEXON Open API 인증 키 |
+| `GEMINI_API_KEY` | 기본 AI 제공자 인증 키 |
+| `OPENROUTER_API_KEY` / `OPENROUTER_MODEL` | 대체 AI 제공자 및 모델 |
+| `ADMIN_USERNAME` / `ADMIN_PASSWORD_HASH` | 관리자 계정 |
+| `GROWTH_DATABASE_URL` | PostgreSQL 연결 문자열. 미설정 시 로컬 SQLite 사용 |
+| `FLASK_SECRET_KEY` | Flask 세션 서명 키 |
 
-- Nexon/OpenRouter 호출은 연결 오류, 시간 초과, 429 및 일시적인 5xx 응답만 제한적으로 재시도합니다. 인증·요청 오류 등 일반 4xx 응답은 반복하지 않습니다.
-- `*_RETRIES` 값은 최초 호출을 제외한 추가 재시도 횟수이며, 과도한 요청을 막기 위해 실제 전체 시도 횟수는 최대 4회로 제한됩니다.
+AI와 관리자 기능은 관련 환경변수가 설정되지 않으면 사용할 수 없습니다. 운영 환경에서는 관리자 비밀번호 해시와 충분히 긴 고정 세션 키를 설정해야 합니다.
 
-- NEXON Open API는 NEXON_API_KEY가 필요합니다.
-- AI 분석은 GEMINI_API_KEY 또는 OPENROUTER_API_KEY 중 하나 이상을 사용할 수 있습니다.
-- 두 키가 모두 있으면 Gemini를 우선 사용하고, 제한·일시 오류 조건에서는 OpenRouter를 fallback으로 사용합니다.
+### 4. 개발 서버 실행
 
-### 5. 서버 실행
-
-루트 디렉터리에서 다음 명령을 실행하면 Flask 백엔드와 Vite 개발 서버가 함께 시작됩니다.
+저장소 루트에서 다음 명령 하나로 Flask 백엔드와 Vite 개발 서버를 함께 실행합니다.
 
 ```bash
 npm run dev
@@ -410,134 +291,57 @@ npm run dev
 - React 개발 화면: http://127.0.0.1:5173/
 - Flask 백엔드: http://127.0.0.1:5000/
 
-Vite는 `/api`, `/static`, `/admin` 요청을 Flask 백엔드로 프록시합니다. 기본 백엔드 주소를 바꾸려면 `FLASK_API_PROXY_TARGET` 환경변수를 설정합니다.
+프런트엔드 개발 서버는 `/api`, `/static`, `/admin` 요청을 Flask로 프록시합니다. 필요하면 `FLASK_API_PROXY_TARGET`으로 백엔드 주소를 변경할 수 있습니다.
 
-백엔드와 프런트엔드를 별도로 실행해야 할 때는 두 터미널에서 각각 `npm run dev:backend`, `npm run dev:frontend`를 사용할 수 있습니다. `python app.py`만 실행하면 Flask 서버만 시작되며, React 빌드 산출물이 없는 경우 기본 경로는 레거시 화면으로 폴백합니다.
-
----
-
-## 테스트 및 검증
-
-Python, JavaScript, React 빌드, 브라우저 테스트는 다음 명령으로 실행합니다.
+별도 실행이 필요할 때는 다음 명령을 각각 사용할 수 있습니다.
 
 ```bash
-# Python 테스트
+npm run dev:backend
+npm run dev:frontend
+```
+
+## 테스트와 빌드
+
+```bash
+# Python 단위·통합 테스트
 python -m unittest discover -s tests -v
 
-# JavaScript 성장·저장소·경계 테스트
+# JavaScript 성장 지표 테스트
 npm run test:growth
 
 # React 프로덕션 빌드
 npm --prefix frontend run build
 
-# Playwright 브라우저 E2E (최초 1회 브라우저 설치)
-npx playwright install chromium
+# Playwright 브라우저 테스트
 npm run test:e2e
 ```
 
-테스트 실행 전 Python 의존성과 루트·프런트엔드 npm 의존성이 설치되어 있어야 합니다. 루트 GitHub Actions의 Tests 워크플로는 Python 테스트, React 빌드, 레거시 JavaScript 구문 검사, JavaScript 성장 테스트를 실행합니다. 브라우저 E2E는 별도 Browser E2E 워크플로에서 실행합니다.
+현재 `Tests` GitHub Actions 워크플로는 Python 테스트, React 빌드, 레거시 JavaScript 구문 검사, JavaScript 성장 지표 테스트를 실행합니다. Playwright 명령은 별도 실행 스크립트이며 해당 워크플로의 기본 검사 항목과는 구분됩니다.
 
 ## 배포
 
-Render에 Flask 애플리케이션으로 배포했습니다.
+서비스는 Render에서 운영합니다.
 
-- 서비스: https://maple-growth-tracker.onrender.com/
-- `.env` 대신 Render의 Environment Variables에 위의 환경변수를 등록합니다. (`NEXON_API_KEY`, `GEMINI_API_KEY`, `OPENROUTER_API_KEY`, 관리자 계정 관련 값 등)
-- 관리자 로그는 `GROWTH_DATABASE_URL`이 설정된 경우 Supabase PostgreSQL의 `action_logs` 테이블에 저장합니다. 연결이 없으면 개발용 SQLite를 사용하며, 영구 저장 여부는 관리자 로그 화면의 저장 상태를 확인합니다.
+- 서비스 주소: https://maple-growth-tracker.onrender.com/
+- React 프로덕션 빌드 산출물: `static/react-preview/`
+- React 빌드가 존재하면 `/`에서 React 화면을 제공하고, 빌드 산출물이 없으면 `/`는 기존 레거시 화면으로 폴백합니다.
+- 기존 화면은 `/legacy/`, React 빌드 미리보기는 `/preview/`에서 확인할 수 있습니다.
 
-### React 프론트엔드 운영 전환
-
-React/Vite 프론트엔드가 기본 메인 화면입니다. Flask 백엔드, Nexon API, AI 서비스, DB 및 관리자 인증은 그대로 유지합니다.
-
-Render 서비스의 **Build Command**를 다음 명령으로 설정해야 React 정적 파일이 배포됩니다.
+Render 빌드 과정에서는 Python 의존성과 프런트엔드 의존성을 설치한 뒤 React 빌드를 생성해야 합니다.
 
 ```bash
-pip install -r requirements.txt && npm --prefix frontend install --no-audit --no-fund && npm --prefix frontend run build
+pip install -r requirements.txt && npm --prefix frontend ci --no-audit --no-fund && npm --prefix frontend run build
 ```
 
-- 빌드 산출물은 `static/react-preview/`에 생성됩니다.
-- 빌드 산출물이 존재하면 `/`에서 React 화면을 제공합니다.
-- 빌드 산출물이 아직 없으면 `/`는 기존 Flask 화면으로 자동 폴백합니다. 빌드 누락만으로 운영 메인 페이지가 빈 화면이 되지 않도록 한 안전장치입니다.
-- 기존 Vanilla JS 화면은 `/legacy/`에서 계속 접근할 수 있습니다.
-- `/preview/`는 React 검증용 별도 경로로 유지됩니다.
-- React 빌드의 정적 자산은 `/static/react-preview/`에서 제공하므로 메인 경로와 미리보기 경로에서 동일하게 동작합니다.
-
-Render Build Command 변경 후 재배포하고 `/`, `/preview/`, `/legacy/`를 확인하세요.
+배포 환경변수에는 Nexon API 키, 필요한 AI 제공자 키, 관리자 인증 값, 고정 Flask 세션 키, PostgreSQL 연결 문자열 등을 등록합니다.
 
 ---
 
-## 프로젝트에서 배운 점
+## 관련 문서
 
-- **외부 API는 느리고 실패할 수 있다는 전제로 설계해야 한다.** 병렬 조회와 캐시로 호출 비용을 줄이고, AI 같은 부가 기능이 실패해도 핵심 조회가 막히지 않도록 영역을 분리했습니다.
-- **데이터의 의미를 먼저 이해해야 한다.** 레벨업 때 경험치가 초기화되는 게임 규칙을 처리하지 않으면 그래프, 평균, 예측이 모두 틀어집니다. 화면을 만들기 전에 데이터가 어떻게 변하는지 확인하는 것이 먼저였습니다.
-- **AI는 역할을 좁힐수록 쓸 만해진다.** 계산은 코드로 하고 AI에게는 해석만 시키며, 응답은 후처리를 거쳐 보여주는 구조로 만들었습니다.
-- **운영 관점의 기본기.** API Key 관리, 관리자 인증과 CSRF, 로그에 남길 정보의 범위, 오류 메시지 노출 범위를 고민하면서 "동작하는 것"과 "운영할 수 있는 것"의 차이를 배웠습니다.
-
----
-
-## 알아둘 점
-
-- NEXON Open API가 제공하는 데이터와 정책에 따라 조회 가능한 정보가 달라질 수 있습니다.
-- NEXON Open API, Gemini API(또는 OpenRouter)를 쓰려면 각각의 API Key가 필요하고, 사용량 한도가 적용될 수 있습니다.
-- 성장 예측은 최근 평균 성장량이 유지된다는 가정의 예상치입니다.
-- API Key 등 민감한 정보는 환경변수로 관리하고, 공개 저장소에 올리지 마세요.
-
-
-## Phase 1 운영 안정성 설정
-
-`GROWTH_DATABASE_URL`은 장기 성장 기록, API 스냅샷, 관리자 로그 및 PostgreSQL 기반 공유 요청 제한 저장소에 사용됩니다. URL이 설정되지 않은 로컬 환경에서는 성장 기록·스냅샷·관리자 로그가 SQLite를 사용하고 요청 제한은 프로세스 메모리를 사용합니다. 운영 중 PostgreSQL 초기 연결에 실패하면 API 스냅샷과 관리자 로그 저장소는 SQLite로 전환해 경고를 표시할 수 있으며, 공개 API 요청 제한은 일시적으로 프로세스 메모리로 폴백합니다. SQLite는 Render 인스턴스의 영속 디스크가 보장되지 않는 한 재배포 후 보존되지 않을 수 있습니다.
-
-추가 선택 환경변수:
-
-| 변수 | 기본값 | 설명 |
-|---|---:|---|
-| `NEXON_API_MIN_INTERVAL` | `0.22` | 모든 Nexon API 요청 시도 사이의 최소 간격(초) |
-| `AI_MAX_REQUESTS_PER_MINUTE` | `5` | IP별 AI API 분당 요청 상한 |
-| `AI_MAX_REQUESTS_PER_DAY_PER_IP` | `20` | IP별 KST 일일 AI 요청 상한 |
-| `AI_MAX_REQUESTS_PER_DAY_GLOBAL` | `100` | 앱 인스턴스별 KST 일일 AI 요청 상한 |
-| `ADMIN_LOGIN_MAX_ATTEMPTS` | `5` | 관리자 로그인 실패 허용 횟수 |
-| `ADMIN_LOGIN_WINDOW_SECONDS` | `900` | 로그인 실패 관찰 구간(초) |
-| `ADMIN_LOGIN_LOCKOUT_SECONDS` | `900` | 초과 시 잠금 시간(초) |
-
-AI 요청 카운터와 로그인 잠금은 현재 앱 인스턴스의 메모리에서 관리합니다. 프로세스 재시작 또는 다중 인스턴스에서 누적되지 않으므로, 실제 과금 상한은 Gemini/OpenRouter 공급자 계정의 예산 제한과 함께 설정해야 합니다. 운영 환경(`RENDER=true` 또는 `FLASK_ENV=production`)에서는 `ADMIN_PASSWORD_HASH` 사용이 필요하며 `ADMIN_PASSWORD` 평문 대체는 비활성화됩니다. `FLASK_SECRET_KEY`에는 고정된 32자 이상의 값을 설정하세요.
-
-Playwright 브라우저 E2E는 의존성 설치 후 `npx playwright install chromium`, `npm run test:e2e`로 실행합니다. 상세 제한과 미지원 범위는 `docs/PHASE1_HARDENING.md`를 참고하세요.
-
-
-## Phase 3 캐릭터 상세 정보
-
-캐릭터 검색 결과에서 상세 정보 탭을 선택하면 스탯, 장비, 심볼, 스킬, 링크, 유니온 정보를 별도로 불러옵니다. 상세 조회는 지연 로딩 방식이며, 일부 Nexon API가 실패해도 기본 캐릭터 검색과 성장 분석은 계속 사용할 수 있습니다.
-
-각 영역은 API가 반환하는 현재 적용 프리셋을 기본으로 선택하고, 응답에 포함된 다른 프리셋도 개별 선택해 볼 수 있습니다. 전투력은 Nexon API가 반환하는 현재 적용 상태의 값을 표시하며, 비활성 프리셋의 전투력이나 환산 점수는 근거 없이 추정하지 않습니다.
-
-상세 API 경로, 프리셋 처리 규칙, 데이터 한계는 [Phase 3 캐릭터 상세 정보 문서](docs/PHASE3_CHARACTER_DETAILS.md)를 참고하세요.
-
-
-### 공개 API 요청 보호 설정 (Phase 2)
-
-캐릭터·최근 성장 기록·상세정보 API는 **서버 캐시를 반환하는 요청에는 IP별 한도를 적용하지 않습니다.** 캐시 미스 또는 명시적인 강제 새로고침처럼 Nexon API 호출로 이어질 수 있는 요청만 제한 대상입니다. refresh=1과 과거 기록 보충 수집(collect=1)은 일반 조회 한도와 별도로 더 엄격한 한도를 적용합니다.
-
-| 변수 | 기본값 | 설명 |
-|---|---:|---|
-| API_REQUEST_LIMITS_ENABLED | true | 공개 데이터 API 요청 제한 활성화 |
-| API_REQUEST_LIMIT_WINDOW_SECONDS | 60 | 요청 관찰 구간(초) |
-| API_REQUESTS_PER_MINUTE_PER_IP | 60 | IP별 캐시 미스 요청 허용 수 |
-| API_REFRESHES_PER_MINUTE_PER_IP | 12 | IP별 강제 갱신 및 보충 수집 허용 수 |
-| TRUSTED_PROXY_HOPS | 0 | 신뢰할 프록시 hop 수. 실제 배포 프록시 체인을 확인한 값만 설정 |
-
-로컬 loopback 접속(127.0.0.1, ::1)은 개발 및 반복 E2E 테스트가 요청 제한에 걸리지 않도록 IP별 제한에서 제외합니다. 제한기 자체는 외부 테스트 IP를 사용한 백엔드 단위 테스트에서 별도로 검증합니다.
-
-운영 환경에서 TRUSTED_PROXY_HOPS=0이면 프록시 주소 하나로 모든 방문자를 오인해 함께 제한하는 일을 방지하기 위해 IP별 일반 API 제한을 적용하지 않습니다. Render의 실제 프록시 hop 수를 확인한 뒤 해당 값으로 설정해야 합니다. ProxyFix는 설정된 x_for hop 수만 신뢰하며, 임의로 X-Forwarded-For 전체를 신뢰하지 않습니다.
-
-
-| EXTERNAL_API_MAX_RETRY_AFTER_WAIT_SECONDS | 5.0 | 외부 API가 지정한 재시도 대기 시간이 이 값보다 길면 현재 응답을 그대로 반환하고 재시도하지 않음 |
-
-
-#### 요청 제한 저장소와 멀티 워커
-
-GROWTH_DATABASE_URL이 PostgreSQL을 가리키면 IP별 공개 API 요청 기록은 api_request_limit_state 테이블에 저장됩니다. 캐시 미스 및 강제 갱신 요청이 같은 IP에서 여러 Gunicorn 워커로 분산되어도 PostgreSQL 행 잠금으로 한도를 공유합니다. Redis나 새 인프라는 필요하지 않습니다.
-
-로컬 개발처럼 PostgreSQL을 사용하지 않는 환경에서는 기존 프로세스 메모리 제한기를 사용합니다. PostgreSQL 연결에 일시적인 문제가 생기면 조회 기능을 차단하지 않도록 30초 동안 메모리 제한기로 폴백하고, 로그에는 전환 사실만 남깁니다. 이 폴백 구간에는 워커 간 요청 수가 완전히 공유되지 않습니다.
-
-
-요청 제한의 프로세스 메모리 기록은 64회 제한기 사용마다 만료된 AI IP 기록, 일일 카운터, 만료된 관리자 로그인 기록을 정리하며 관리자 실패 기록은 최대 10,000개로 제한합니다. 캐릭터 상세 원본 응답 캐시는 5분 TTL, 1,000개 항목 상한을 가지며 만료 항목을 주기적으로 제거하고 최근 사용 항목을 유지합니다.
+- [문서 안내](docs/README.md)
+- [새로고침과 데이터 최신성](docs/REFRESH_BEHAVIOR.md)
+- [성장 기록 저장](docs/GROWTH_HISTORY_STORAGE.md)
+- [캐릭터 상세 정보](docs/PHASE3_CHARACTER_DETAILS.md)
+- [Phase 1 운영 안정성](docs/PHASE1_HARDENING.md)
+- [성능 계측](docs/PERFORMANCE_METRICS.md)
