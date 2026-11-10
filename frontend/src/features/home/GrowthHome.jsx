@@ -66,15 +66,43 @@ export default function GrowthHome({
   const page = PAGE_META[view];
 
   useEffect(() => {
+    let retryTimer = null;
+    let attempts = 0;
+
     const scrollToGrowthSection = () => {
       if (view !== "growth") return;
       const section = new URLSearchParams(window.location.hash.split("?")[1] || "").get("section");
       if (!section) return;
-      document.getElementById(`growth-${section}`)?.scrollIntoView({ behavior: "smooth", block: "start" });
+
+      const target = document.getElementById(`growth-${section}`);
+      if (target) {
+        window.clearTimeout(retryTimer);
+        retryTimer = null;
+        target.scrollIntoView({ behavior: "smooth", block: "start" });
+        return;
+      }
+
+      // A lazy-loaded route may still be behind Suspense. Retry briefly until its
+      // section anchors are mounted, rather than losing the hash navigation.
+      if (attempts < 40) {
+        attempts += 1;
+        retryTimer = window.setTimeout(scrollToGrowthSection, 50);
+      }
     };
-    window.addEventListener("hashchange", scrollToGrowthSection);
+
+    const handleHashChange = () => {
+      window.clearTimeout(retryTimer);
+      retryTimer = null;
+      attempts = 0;
+      scrollToGrowthSection();
+    };
+
+    window.addEventListener("hashchange", handleHashChange);
     scrollToGrowthSection();
-    return () => window.removeEventListener("hashchange", scrollToGrowthSection);
+    return () => {
+      window.removeEventListener("hashchange", handleHashChange);
+      window.clearTimeout(retryTimer);
+    };
   }, [view]);
 
   return (
