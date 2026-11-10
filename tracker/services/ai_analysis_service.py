@@ -5,7 +5,11 @@ import time
 from datetime import date
 
 from tracker.integrations.ai_provider import request_openrouter, should_use_openrouter
-from tracker.services.ai_text_service import sanitize_ai_text, validate_growth_report
+from tracker.services.ai_text_service import (
+    REQUIRED_GROWTH_SECTIONS,
+    sanitize_ai_text,
+    validate_growth_report,
+)
 from tracker.runtime import (
     get_ai_response_cache,
     get_gemini_client,
@@ -207,17 +211,19 @@ def generate_ai_analysis(character, history, computed_metrics=None, growth_insig
         }
         prompt = _build_growth_report_prompt(source_data)
     else:
+        required_sections = "\n".join(REQUIRED_GROWTH_SECTIONS)
         prompt = f"""
 너는 메이플스토리 캐릭터의 성장 데이터를 해석하는 도우미야.
 제공된 사실만 이용하고 경험치, 평균, 추세, 예측 날짜 등 숫자를 새로 계산하거나 미래를 추정하지 마.
 경험치 증가는 '경험치 증가량' 또는 '경험치 획득량'이라고 표현하고 '경보'라는 단어는 사용하지 마.
 기록이 부족한 경우 데이터 부족을 밝히고, 근거 없는 행동이나 플레이 스타일을 추측하지 마.
 마크다운 없이 자연스러운 한국어 문장만 작성해. 개발용 키 이름, 영어 상태값, null, undefined를 답변에 쓰지 마.
-아래 네 구분 표시는 그대로 사용해.
-[성장 패턴]
-[성장 분석]
-[레벨업]
-[AI 판단]
+아래 필수 구분 표시는 표시된 이름과 순서를 그대로 지켜 각각 한 번씩 사용해.
+{required_sections}
+성장 패턴과 변화는 제공된 날짜별 기록으로 확인되는 사실만 설명해.
+레벨업 분석은 실제 레벨 변화가 기록에 있을 때만 설명해.
+계산된 전망 지표가 제공되지 않았으므로 구체적인 레벨업 날짜나 남은 기간을 만들지 말고, 기록만으로 예측하기 어렵다면 그 점을 밝혀.
+마지막 코멘트는 확인된 기록에 근거해 짧고 자연스럽게 작성해.
 
 캐릭터:
 {character.get("characterName")} / {character.get("worldName")} / Lv.{character.get("level")}
