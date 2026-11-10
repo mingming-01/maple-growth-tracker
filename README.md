@@ -312,6 +312,9 @@ npm run test:growth
 # React 프로덕션 빌드
 npm --prefix frontend run build
 
+# Playwright 브라우저 설치 (최초 1회)
+npx playwright install chromium
+
 # Playwright 브라우저 테스트
 npm run test:e2e
 ```
