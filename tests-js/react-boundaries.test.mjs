@@ -94,3 +94,13 @@ test("Growth route layout selectors match the current React component wrappers",
     assert.ok(css.includes(`.${className}`), `Missing CSS selector .${className}`);
   }
 });
+
+
+test("React tracker state persistence is centralized outside state updater callbacks", () => {
+  const app = readFileSync(join(frontendSource, "App.jsx"), "utf8");
+  const updater = app.match(/const onStatsLoaded = useCallback\\(data => \\{([\\s\\S]*?)\\n  \\},\\[\\]\\);/);
+
+  assert.ok(updater, "The stats-loaded state updater must remain present");
+  assert.doesNotMatch(updater[1], /saveTrackerState\\s*\\(/);
+  assert.equal((app.match(/saveTrackerState\\s*\\(/g) || []).length, 1);
+});
