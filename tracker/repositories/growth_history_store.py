@@ -376,12 +376,11 @@ class GrowthHistoryStore:
                 if self.uses_postgres:
                     connection.execute(
                         """
-                        INSERT INTO api_request_limit_state
-                            (client_key, request_timestamps, refresh_timestamps, updated_at)
-                        VALUES (%s, %s, %s, CURRENT_TIMESTAMP)
+                        INSERT INTO api_request_limit_state (client_key)
+                        VALUES (%s)
                         ON CONFLICT (client_key) DO NOTHING
                         """,
-                        (client_key, [], []),
+                        (client_key,),
                     )
                     row = connection.execute(
                         """
@@ -450,12 +449,16 @@ class GrowthHistoryStore:
                     connection.execute(
                         """
                         UPDATE api_request_limit_state
-                        SET request_timestamps = %s,
-                            refresh_timestamps = %s,
+                        SET request_timestamps = COALESCE(%s::DOUBLE PRECISION[], ARRAY[]::DOUBLE PRECISION[]),
+                            refresh_timestamps = COALESCE(%s::DOUBLE PRECISION[], ARRAY[]::DOUBLE PRECISION[]),
                             updated_at = CURRENT_TIMESTAMP
                         WHERE client_key = %s
                         """,
-                        (request_timestamps, refresh_timestamps, client_key),
+                        (
+                            request_timestamps or None,
+                            refresh_timestamps or None,
+                            client_key,
+                        ),
                     )
                     if cleanup:
                         # 다른 워커의 정리 작업과 충돌하지 않도록 정리 트랜잭션은 하나만 수행한다.
