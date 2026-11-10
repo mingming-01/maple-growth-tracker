@@ -1900,3 +1900,26 @@ button:focus-visible,input:focus-visible,select:focus-visible,a:focus-visible { 
   border-spacing:0;
   overflow:hidden;
 }
+
+
+/* Daily growth history: keep each heading aligned with its values and
+   leave enough inset for long dates near the rounded lower-left corner. */
+.mgt-growth-page-content[data-testid="history-page"] .history-table th,
+.mgt-growth-page-content[data-testid="history-page"] .history-table td {
+  text-align:right;
+  padding-right:12px;
+  padding-left:10px;
+  font-variant-numeric:tabular-nums;
+}
+.mgt-growth-page-content[data-testid="history-page"] .history-table th:first-child,
+.mgt-growth-page-content[data-testid="history-page"] .history-table td:first-child {
+  text-align:left;
+  padding-left:14px;
+  padding-right:10px;
+}
+.mgt-growth-page-content[data-testid="history-page"] .history-table tbody tr:last-child td:first-child {
+  border-bottom-left-radius:12px;
+}
+.mgt-growth-page-content[data-testid="history-page"] .history-table tbody tr:last-child td:last-child {
+  border-bottom-right-radius:12px;
+}
