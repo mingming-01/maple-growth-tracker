@@ -94,17 +94,17 @@ function App() {
     return favorites.some(item => favoriteKey(item) === favoriteKey(current));
   },[favorites,character]);
 
-  useEffect(() => {
-    if (!character) return;
-    saveTrackerState({character,history});
-  },[character,history]);
-
   const persistPatch = useCallback(patch => {
     saveTrackerState(patch);
     if (Object.prototype.hasOwnProperty.call(patch || {}, "comparison")) {
       setComparisonState(patch.comparison || null);
     }
   },[]);
+
+  useEffect(() => {
+    if (!character) return;
+    persistPatch({character,history});
+  },[character,history,persistPatch]);
 
   function openAdmin(event) {
     event?.preventDefault?.();
@@ -131,7 +131,6 @@ function App() {
         bestCombatPowerObservedAt: data?.bestCombatPowerObservedAt ?? previous.bestCombatPowerObservedAt ?? null,
         bestPresetCombination: data?.bestPresetCombination ?? previous.bestPresetCombination ?? null
       };
-      saveTrackerState({character:next});
       return next;
     });
   },[]);
@@ -141,7 +140,7 @@ function App() {
     if (days === 7) {
       const next = { days: 7, history: history || [], summary: null };
       setAnalysisPeriod(next);
-      saveTrackerState({
+      persistPatch({
         historyRange: 7,
         displayHistory: history || [],
         historyRangeStatus: null,
@@ -152,7 +151,7 @@ function App() {
     const loaded = await loadGrowthPeriod(character, days);
     const next = { days, history: loaded.history, summary: loaded.summary };
     setAnalysisPeriod(next);
-    saveTrackerState({
+    persistPatch({
       historyRange: days,
       displayHistory: loaded.history,
       historyRangeStatus: loaded.rangeStatus,
@@ -189,7 +188,7 @@ function App() {
       setAnalysisPeriod({days:7,history:records,summary:null});
       setComparisonState(null);
       setLastSearched(new Date().toLocaleTimeString("ko-KR",{hour:"2-digit",minute:"2-digit"}));
-      saveTrackerState({
+      persistPatch({
         character:nextCharacter,
         history:records,
         aiAnalysis:null,
