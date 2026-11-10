@@ -1,5 +1,6 @@
 """앱 인스턴스 단위의 AI 요청 한도와 관리자 로그인 잠금 정책."""
 import hashlib
+import ipaddress
 import math
 import time
 from datetime import datetime, time as datetime_time, timedelta
@@ -21,6 +22,37 @@ def _seconds_until_kst_midnight():
     return max(1, math.ceil((midnight - now).total_seconds()))
 
 
+def _cleanup_request_limit_state(state, now, today, admin_window, max_clients=10000):
+    """요청 제한 기록의 만료 항목과 과도한 IP 키를 주기적으로 정리한다.
+
+    호출자는 state.request_limit_lock을 보유해야 한다.
+    """
+    state.request_limit_cleanup_counter += 1
+    if state.request_limit_cleanup_counter % 64 != 0:
+        return
+
+    _prune_timestamp_store(state.ai_request_timestamps, now, 60, max_clients)
+
+    for daily_key in list(state.ai_daily_usage):
+        if not daily_key.startswith(f"{today}:"):
+            state.ai_daily_usage.pop(daily_key, None)
+    for stale_day in list(state.ai_global_daily_usage):
+        if stale_day != today:
+            state.ai_global_daily_usage.pop(stale_day, None)
+
+    for client_key, entry in list(state.admin_login_failures.items()):
+        locked_until = entry.get("locked_until", 0)
+        window_started = entry.get("window_started", now)
+        if locked_until <= now and now - window_started >= admin_window:
+            state.admin_login_failures.pop(client_key, None)
+
+    while len(state.admin_login_failures) > max_clients:
+        oldest_key = next(iter(state.admin_login_failures), None)
+        if oldest_key is None:
+            break
+        state.admin_login_failures.pop(oldest_key, None)
+
+
 def consume_ai_request(remote_addr):
     """분당·IP별 일일·인스턴스 전체 일일 요청 한도를 원자적으로 적용한다."""
     state = get_runtime_state()
@@ -32,6 +64,10 @@ def consume_ai_request(remote_addr):
     global_daily_limit = max(1, int(_setting("AI_MAX_REQUESTS_PER_DAY_GLOBAL", 100)))
 
     with state.request_limit_lock:
+        _cleanup_request_limit_state(
+            state, now, today,
+            max(60, int(_setting("ADMIN_LOGIN_WINDOW_SECONDS", 900))),
+        )
         timestamps = state.ai_request_timestamps.setdefault(key, [])
         timestamps[:] = [stamp for stamp in timestamps if now - stamp < 60]
         if len(timestamps) >= per_minute_limit:
@@ -61,6 +97,9 @@ def admin_login_lockout_remaining(remote_addr):
     now = time.monotonic()
     window = max(60, int(_setting("ADMIN_LOGIN_WINDOW_SECONDS", 900)))
     with state.request_limit_lock:
+        _cleanup_request_limit_state(
+            state, now, datetime.now(KOREA_TIMEZONE).date().isoformat(), window
+        )
         entry = state.admin_login_failures.get(key)
         if not entry:
             return 0
@@ -80,6 +119,9 @@ def record_admin_login_failure(remote_addr):
     window = max(60, int(_setting("ADMIN_LOGIN_WINDOW_SECONDS", 900)))
     lockout = max(60, int(_setting("ADMIN_LOGIN_LOCKOUT_SECONDS", 900)))
     with state.request_limit_lock:
+        _cleanup_request_limit_state(
+            state, now, datetime.now(KOREA_TIMEZONE).date().isoformat(), window
+        )
         entry = state.admin_login_failures.get(key)
         if not entry or now - entry.get("window_started", now) >= window:
             entry = {"window_started": now, "attempts": 0, "locked_until": 0}
@@ -98,3 +140,175 @@ def clear_admin_login_failures(remote_addr):
     key = _client_key(remote_addr)
     with state.request_limit_lock:
         state.admin_login_failures.pop(key, None)
+
+
+def _api_rate_limit_identity_ready(remote_addr):
+    """신뢰할 수 있는 실제 접속자 IP를 확인할 수 있을 때만 IP별 제한을 적용한다."""
+    if not _setting("API_REQUEST_LIMITS_ENABLED", True):
+        return False
+    if (
+        _setting("IS_PRODUCTION", False)
+        and int(_setting("TRUSTED_PROXY_HOPS", 0) or 0) < 1
+    ):
+        # 프록시 주소를 모든 방문자의 IP로 오인해 전체 사용자를 함께 제한하지 않는다.
+        return False
+    try:
+        address = ipaddress.ip_address(str(remote_addr or "").strip())
+    except ValueError:
+        return False
+    return not (
+        address.is_loopback
+        or address.is_unspecified
+        or address.is_multicast
+    )
+
+
+def _prune_timestamp_store(store, now, window_seconds, max_clients):
+    """만료된 IP별 요청 기록을 정리하고 저장 항목 수도 제한한다."""
+    for client_key, timestamps in list(store.items()):
+        active = [
+            stamp for stamp in timestamps
+            if now - stamp < window_seconds
+        ]
+        if active:
+            store[client_key] = active
+        else:
+            store.pop(client_key, None)
+
+    while len(store) > max_clients:
+        oldest_key = next(iter(store), None)
+        if oldest_key is None:
+            break
+        store.pop(oldest_key, None)
+
+
+def _consume_api_request_memory(
+    state,
+    key,
+    now,
+    window_seconds,
+    request_limit,
+    refresh_limit,
+    force_refresh,
+    max_clients,
+    cleanup,
+):
+    with state.request_limit_lock:
+        if cleanup:
+            _prune_timestamp_store(
+                state.api_request_timestamps,
+                now,
+                window_seconds,
+                max_clients,
+            )
+            _prune_timestamp_store(
+                state.api_refresh_timestamps,
+                now,
+                window_seconds,
+                max_clients,
+            )
+
+        requests = state.api_request_timestamps.setdefault(key, [])
+        requests[:] = [
+            stamp for stamp in requests
+            if now - stamp < window_seconds
+        ]
+
+        refreshes = state.api_refresh_timestamps.get(key, [])
+        if force_refresh:
+            refreshes = [
+                stamp for stamp in refreshes
+                if now - stamp < window_seconds
+            ]
+
+        if len(requests) >= request_limit:
+            retry_after = max(
+                1, math.ceil(window_seconds - (now - requests[0]))
+            )
+            return False, retry_after, "requests_per_minute"
+
+        if force_refresh and len(refreshes) >= refresh_limit:
+            retry_after = max(
+                1, math.ceil(window_seconds - (now - refreshes[0]))
+            )
+            return False, retry_after, "refreshes_per_minute"
+
+        requests.append(now)
+        if force_refresh:
+            state.api_refresh_timestamps[key] = refreshes
+            state.api_refresh_timestamps[key].append(now)
+
+    return True, 0, ""
+
+
+def consume_api_request(remote_addr, force_refresh=False):
+    """캐시 미스 요청과 강제 새로고침에 IP별 완화된 한도를 적용한다.
+
+    PostgreSQL이 설정된 운영 환경에서는 앱 인스턴스가 공유하는 행 잠금으로
+    워커 간 한도를 일관되게 적용한다. 로컬 SQLite는 프로세스 메모리를 사용한다.
+    캐시 hit 경로에서는 이 함수를 호출하지 않는다.
+    """
+    if not _api_rate_limit_identity_ready(remote_addr):
+        return True, 0, ""
+
+    state = get_runtime_state()
+    key = _client_key(remote_addr)
+    now = time.monotonic()
+    window_seconds = max(
+        1, int(_setting("API_REQUEST_LIMIT_WINDOW_SECONDS", 60))
+    )
+    request_limit = max(
+        1, int(_setting("API_REQUESTS_PER_MINUTE_PER_IP", 60))
+    )
+    refresh_limit = max(
+        1, int(_setting("API_REFRESHES_PER_MINUTE_PER_IP", 12))
+    )
+    max_clients = max(
+        100, int(_setting("API_RATE_LIMIT_MAX_CLIENTS", 10000))
+    )
+
+    with state.request_limit_lock:
+        state.api_limit_cleanup_counter += 1
+        cleanup = state.api_limit_cleanup_counter % 64 == 0
+        shared_store_available = (
+            now >= state.api_rate_limit_storage_unavailable_until
+        )
+
+    repository = getattr(state, "growth_history_repository", None)
+    if (
+        shared_store_available
+        and getattr(repository, "uses_postgres", False)
+        and callable(getattr(repository, "consume_api_rate_limit", None))
+    ):
+        try:
+            return repository.consume_api_rate_limit(
+                client_key=key,
+                now=time.time(),
+                window_seconds=window_seconds,
+                request_limit=request_limit,
+                refresh_limit=refresh_limit,
+                force_refresh=force_refresh,
+                max_clients=max_clients,
+                cleanup=cleanup,
+            )
+        except Exception:
+            with state.request_limit_lock:
+                state.api_rate_limit_storage_unavailable_until = time.monotonic() + 30
+                should_log = not state.api_rate_limit_storage_warning_logged
+                state.api_rate_limit_storage_warning_logged = True
+            if should_log and has_app_context():
+                current_app.logger.warning(
+                    "공유 API 요청 제한 저장소를 사용할 수 없어 프로세스 메모리 제한기로 전환했습니다."
+                )
+
+    return _consume_api_request_memory(
+        state=state,
+        key=key,
+        now=now,
+        window_seconds=window_seconds,
+        request_limit=request_limit,
+        refresh_limit=refresh_limit,
+        force_refresh=force_refresh,
+        max_clients=max_clients,
+        cleanup=cleanup,
+    )

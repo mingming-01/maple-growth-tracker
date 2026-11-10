@@ -92,6 +92,12 @@ class RuntimeState:
         self.ai_daily_usage = {}
         self.ai_global_daily_usage = {}
         self.admin_login_failures = {}
+        self.api_request_timestamps = {}
+        self.api_refresh_timestamps = {}
+        self.api_limit_cleanup_counter = 0
+        self.request_limit_cleanup_counter = 0
+        self.api_rate_limit_storage_unavailable_until = 0.0
+        self.api_rate_limit_storage_warning_logged = False
 
 
 _fallback_runtime_state = None

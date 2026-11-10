@@ -5,13 +5,14 @@ from unittest.mock import Mock, patch
 from werkzeug.security import generate_password_hash
 
 from tracker import create_app
-from tracker.controller import ai_controller
+from tracker.controller import ai_controller, character_controller
 from tracker.integrations import nexon_api
 from tracker.runtime import get_runtime_state
 from tracker.services.request_limits import (
     admin_login_lockout_remaining,
     clear_admin_login_failures,
     consume_ai_request,
+    consume_api_request,
     record_admin_login_failure,
 )
 
@@ -139,6 +140,281 @@ class RequestLimitTests(unittest.TestCase):
             callback()
             state = get_runtime_state()
             self.assertEqual(state.nexon_request_count, 1)
+
+
+    def test_public_api_limit_is_per_client_and_returns_retry_window(self):
+        app = self.make_app(
+            API_REQUESTS_PER_MINUTE_PER_IP=1,
+            API_REFRESHES_PER_MINUTE_PER_IP=5,
+        )
+        with app.app_context():
+            first = consume_api_request("198.51.100.10")
+            second = consume_api_request("198.51.100.10")
+            other_client = consume_api_request("198.51.100.11")
+
+        self.assertTrue(first[0])
+        self.assertFalse(second[0])
+        self.assertGreater(second[1], 0)
+        self.assertEqual(second[2], "requests_per_minute")
+        self.assertTrue(other_client[0])
+
+    def test_force_refresh_has_a_separate_limit(self):
+        app = self.make_app(
+            API_REQUESTS_PER_MINUTE_PER_IP=10,
+            API_REFRESHES_PER_MINUTE_PER_IP=1,
+        )
+        with app.app_context():
+            first = consume_api_request("198.51.100.12", force_refresh=True)
+            second = consume_api_request("198.51.100.12", force_refresh=True)
+            normal = consume_api_request("198.51.100.12", force_refresh=False)
+
+        self.assertTrue(first[0])
+        self.assertFalse(second[0])
+        self.assertEqual(second[2], "refreshes_per_minute")
+        self.assertTrue(normal[0])
+
+    def test_loopback_requests_are_not_limited_for_local_e2e_runs(self):
+        app = self.make_app(API_REQUESTS_PER_MINUTE_PER_IP=1)
+        with app.app_context():
+            first = consume_api_request("127.0.0.1")
+            second = consume_api_request("127.0.0.1")
+        self.assertTrue(first[0])
+        self.assertTrue(second[0])
+
+    def test_production_api_limits_wait_for_trusted_proxy_configuration(self):
+        app = self.make_app(
+            IS_PRODUCTION=True,
+            TRUSTED_PROXY_HOPS=0,
+            API_REQUESTS_PER_MINUTE_PER_IP=1,
+        )
+        with app.app_context():
+            first = consume_api_request("203.0.113.10")
+            second = consume_api_request("203.0.113.10")
+        self.assertTrue(first[0])
+        self.assertTrue(second[0])
+
+    def test_cached_character_response_is_not_counted_against_api_limit(self):
+        app = self.make_app(API_REQUESTS_PER_MINUTE_PER_IP=1)
+        with app.app_context():
+            self.assertTrue(consume_api_request("198.51.100.14")[0])
+            from tracker.runtime import set_cache, CHARACTER_CACHE_TTL
+            set_cache(
+                "character:캐시테스트",
+                {"characterName": "캐시테스트", "level": 280},
+                CHARACTER_CACHE_TTL,
+            )
+
+        client = app.test_client()
+        response = client.get(
+            "/api/character?name=캐시테스트",
+            environ_overrides={"REMOTE_ADDR": "198.51.100.14"},
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.get_json()["dataStatus"], "cached")
+
+    def test_character_cache_miss_is_limited_before_external_api_call(self):
+        app = self.make_app(API_REQUESTS_PER_MINUTE_PER_IP=1)
+        client = app.test_client()
+        not_found = Mock(status_code=404)
+
+        with patch.object(
+            character_controller,
+            "resolve_character",
+            return_value=(None, None, not_found),
+        ) as resolve:
+            first = client.get(
+                "/api/character?name=첫번째",
+                environ_overrides={"REMOTE_ADDR": "198.51.100.15"},
+            )
+            second = client.get(
+                "/api/character?name=두번째",
+                environ_overrides={"REMOTE_ADDR": "198.51.100.15"},
+            )
+
+        self.assertEqual(first.status_code, 404)
+        self.assertEqual(second.status_code, 429)
+        self.assertEqual(second.headers.get("Retry-After"), "60")
+        self.assertEqual(second.get_json()["limitType"], "requests_per_minute")
+        self.assertEqual(resolve.call_count, 1)
+
+    def test_repeated_force_refresh_is_limited_before_external_api_call(self):
+        app = self.make_app(
+            API_REQUESTS_PER_MINUTE_PER_IP=10,
+            API_REFRESHES_PER_MINUTE_PER_IP=1,
+        )
+        client = app.test_client()
+        not_found = Mock(status_code=404)
+
+        with patch.object(
+            character_controller,
+            "resolve_character",
+            return_value=(None, None, not_found),
+        ) as resolve:
+            first = client.get(
+                "/api/character?name=첫번째&refresh=1",
+                environ_overrides={"REMOTE_ADDR": "198.51.100.16"},
+            )
+            second = client.get(
+                "/api/character?name=두번째&refresh=1",
+                environ_overrides={"REMOTE_ADDR": "198.51.100.16"},
+            )
+
+        self.assertEqual(first.status_code, 404)
+        self.assertEqual(second.status_code, 429)
+        self.assertEqual(second.get_json()["limitType"], "refreshes_per_minute")
+        self.assertEqual(resolve.call_count, 1)
+
+
+    def test_nexon_throttle_does_not_hold_lock_while_sleeping(self):
+        app = self.make_app(NEXON_API_MIN_INTERVAL=0.1)
+        original_last_request_at = nexon_api._fallback_last_request_at
+        lock_was_available_during_sleep = []
+
+        def verify_lock_is_free(delay):
+            acquired = nexon_api._fallback_rate_limit_lock.acquire(blocking=False)
+            lock_was_available_during_sleep.append(acquired)
+            if acquired:
+                nexon_api._fallback_rate_limit_lock.release()
+
+        try:
+            nexon_api._fallback_last_request_at = 100.0
+            with app.app_context(), patch.object(
+                nexon_api.time, "monotonic", side_effect=[100.0, 100.11]
+            ), patch.object(
+                nexon_api.time, "sleep", side_effect=verify_lock_is_free
+            ):
+                nexon_api._throttle_nexon_request()
+        finally:
+            nexon_api._fallback_last_request_at = original_last_request_at
+
+        self.assertEqual(lock_was_available_during_sleep, [True])
+
+    def test_trusted_proxy_header_identifies_separate_clients(self):
+        app = self.make_app(
+            IS_PRODUCTION=True,
+            TRUSTED_PROXY_HOPS=1,
+            API_REQUESTS_PER_MINUTE_PER_IP=1,
+        )
+        client = app.test_client()
+        not_found = Mock(status_code=404)
+
+        with patch.object(
+            character_controller,
+            "resolve_character",
+            return_value=(None, None, not_found),
+        ) as resolve:
+            first_client = client.get(
+                "/api/character?name=첫번째",
+                environ_overrides={
+                    "REMOTE_ADDR": "203.0.113.1",
+                    "HTTP_X_FORWARDED_FOR": "198.51.100.20",
+                },
+            )
+            same_client = client.get(
+                "/api/character?name=두번째",
+                environ_overrides={
+                    "REMOTE_ADDR": "203.0.113.1",
+                    "HTTP_X_FORWARDED_FOR": "198.51.100.20",
+                },
+            )
+            other_client = client.get(
+                "/api/character?name=세번째",
+                environ_overrides={
+                    "REMOTE_ADDR": "203.0.113.1",
+                    "HTTP_X_FORWARDED_FOR": "198.51.100.21",
+                },
+            )
+
+        self.assertEqual(first_client.status_code, 404)
+        self.assertEqual(same_client.status_code, 429)
+        self.assertEqual(other_client.status_code, 404)
+        self.assertEqual(resolve.call_count, 2)
+
+
+    def test_postgres_repository_is_used_for_shared_request_limits(self):
+        app = self.make_app(API_REQUESTS_PER_MINUTE_PER_IP=1)
+
+        class SharedRepository:
+            uses_postgres = True
+            def __init__(self):
+                self.calls = []
+            def consume_api_rate_limit(self, **kwargs):
+                self.calls.append(kwargs)
+                return False, 17, "requests_per_minute"
+
+        repository = SharedRepository()
+        with app.app_context():
+            state = get_runtime_state()
+            state.growth_history_repository = repository
+            result = consume_api_request("198.51.100.30")
+        self.assertEqual(result, (False, 17, "requests_per_minute"))
+        self.assertEqual(len(repository.calls), 1)
+        self.assertEqual(repository.calls[0]["request_limit"], 1)
+
+    def test_shared_repository_failure_falls_back_to_memory_without_breaking_request(self):
+        app = self.make_app(API_REQUESTS_PER_MINUTE_PER_IP=1)
+
+        class FailingRepository:
+            uses_postgres = True
+            def __init__(self):
+                self.calls = 0
+            def consume_api_rate_limit(self, **kwargs):
+                self.calls += 1
+                raise RuntimeError("database unavailable")
+
+        repository = FailingRepository()
+        with app.app_context():
+            state = get_runtime_state()
+            state.growth_history_repository = repository
+            first = consume_api_request("198.51.100.31")
+            second = consume_api_request("198.51.100.31")
+        self.assertTrue(first[0])
+        self.assertFalse(second[0])
+        self.assertEqual(repository.calls, 1)
+
+
+    def test_periodic_cleanup_removes_expired_ai_and_admin_ip_records(self):
+        app = self.make_app()
+        with app.app_context():
+            state = get_runtime_state()
+            state.request_limit_cleanup_counter = 63
+            state.ai_request_timestamps["expired-ai-ip"] = [1.0, 2.0]
+            state.ai_request_timestamps["active-ai-ip"] = [999.0]
+            state.ai_daily_usage["2000-01-01:expired"] = 3
+            state.ai_global_daily_usage["2000-01-01"] = 4
+            state.admin_login_failures["expired-admin-ip"] = {
+                "window_started": 1.0,
+                "attempts": 1,
+                "locked_until": 0.0,
+            }
+
+            with patch("tracker.services.request_limits.time.monotonic", return_value=1000.0):
+                consume_ai_request("192.0.2.99")
+
+            self.assertNotIn("expired-ai-ip", state.ai_request_timestamps)
+            self.assertIn("active-ai-ip", state.ai_request_timestamps)
+            self.assertFalse(any(key.startswith("2000-01-01:") for key in state.ai_daily_usage))
+            self.assertNotIn("2000-01-01", state.ai_global_daily_usage)
+            self.assertNotIn("expired-admin-ip", state.admin_login_failures)
+
+    def test_admin_failure_records_are_capped_after_periodic_cleanup(self):
+        app = self.make_app()
+        with app.app_context():
+            state = get_runtime_state()
+            state.request_limit_cleanup_counter = 63
+            state.admin_login_failures = {
+                f"expired-{index}": {
+                    "window_started": 1.0,
+                    "attempts": 1,
+                    "locked_until": 0.0,
+                }
+                for index in range(10002)
+            }
+
+            with patch("tracker.services.request_limits.time.monotonic", return_value=1000.0):
+                record_admin_login_failure("192.0.2.100")
+
+            self.assertLessEqual(len(state.admin_login_failures), 10000)
 
 
 if __name__ == "__main__":

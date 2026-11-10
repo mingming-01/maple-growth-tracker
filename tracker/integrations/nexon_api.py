@@ -35,15 +35,22 @@ def _throttle_nexon_request():
     except (TypeError, ValueError):
         min_interval = DEFAULT_NEXON_API_MIN_INTERVAL
 
-    with lock:
-        elapsed = time.monotonic() - _fallback_last_request_at
-        if elapsed < min_interval:
-            time.sleep(min_interval - elapsed)
-        requested_at = time.monotonic()
-        _fallback_last_request_at = requested_at
-        if state:
-            state.last_nexon_request_at = requested_at
-            state.nexon_request_count += 1
+    while True:
+        with lock:
+            now = time.monotonic()
+            elapsed = now - _fallback_last_request_at
+            if elapsed >= min_interval:
+                requested_at = now
+                _fallback_last_request_at = requested_at
+                if state:
+                    state.last_nexon_request_at = requested_at
+                    state.nexon_request_count += 1
+                break
+            wait_seconds = min_interval - elapsed
+
+        # 락을 해제한 뒤 대기하고, 다시 진입해 다른 스레드가 먼저 예약했는지 확인한다.
+        if wait_seconds > 0:
+            time.sleep(wait_seconds)
 
 
 def request_nexon_api(endpoint, params, historical=False):
@@ -73,6 +80,7 @@ def request_nexon_api(endpoint, params, historical=False):
         timeout=timeout,
         max_attempts=retries + 1,
         backoff_factor=max(0.0, backoff),
+        max_retry_after_wait=max(0.0, float(_setting("EXTERNAL_API_MAX_RETRY_AFTER_WAIT_SECONDS", 5.0))),
         before_attempt=_throttle_nexon_request,
     )
 

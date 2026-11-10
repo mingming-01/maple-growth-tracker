@@ -13,6 +13,7 @@ import requests
 # 429 is returned immediately so the API route can serve a saved snapshot.
 # Waiting through Retry-After inside a fan-out request can freeze the whole dashboard.
 RETRYABLE_STATUS_CODES = {408, 425, 500, 502, 503, 504}
+DEFAULT_MAX_RETRY_AFTER_WAIT_SECONDS = 5.0
 
 
 def _retry_after_seconds(value):
@@ -40,6 +41,7 @@ def request_with_retries(
     max_backoff=3.0,
     before_attempt=None,
     retry_status_codes=None,
+    max_retry_after_wait=DEFAULT_MAX_RETRY_AFTER_WAIT_SECONDS,
     **kwargs,
 ):
     """요청 실패를 제한적으로 재시도하고, 마지막 응답/예외는 호출자에게 전달한다."""
@@ -68,15 +70,22 @@ def request_with_retries(
         if response.status_code not in retry_codes or attempt >= attempts:
             return response
 
-        # 다음 시도 전에 응답 연결을 반환해 연결 풀을 고갈시키지 않는다.
+        response_headers = getattr(response, "headers", {}) or {}
+        retry_after = _retry_after_seconds(response_headers.get("Retry-After"))
+        try:
+            retry_after_cap = max(0.0, float(max_retry_after_wait))
+        except (TypeError, ValueError):
+            retry_after_cap = DEFAULT_MAX_RETRY_AFTER_WAIT_SECONDS
+
+        # upstream 대기 지시가 너무 길면 더 일찍 재시도하지 않고 현재 응답을 돌려준다.
+        if retry_after is not None and retry_after > retry_after_cap:
+            return response
+
+        # 실제 재시도하기로 한 경우에만 응답 연결을 반환한다.
         close_response = getattr(response, "close", None)
         if callable(close_response):
             close_response()
 
-        response_headers = getattr(response, "headers", {}) or {}
-        retry_after = _retry_after_seconds(response_headers.get("Retry-After"))
-        # Retry-After is an explicit upstream instruction; do not shorten it
-        # to max_backoff. The exponential fallback remains bounded.
         delay = (
             retry_after
             if retry_after is not None

@@ -1,5 +1,7 @@
 """Tests for bounded retries around external HTTP requests."""
 import unittest
+from datetime import datetime, timedelta, timezone
+from email.utils import format_datetime
 from unittest.mock import Mock, patch
 
 import requests
@@ -76,6 +78,58 @@ class HttpClientRetryTests(unittest.TestCase):
         self.assertIs(result, bad_request)
         self.assertEqual(get.call_count, 1)
 
+
+    @patch("tracker.integrations.http_client.time.sleep")
+    @patch("tracker.integrations.http_client.requests.get")
+    def test_long_numeric_retry_after_returns_response_without_retry(self, get, sleep):
+        upstream_busy = self.response(503, {"Retry-After": "30"})
+        get.return_value = upstream_busy
+
+        result = request_with_retries(
+            "get", "https://example.test/api",
+            timeout=1, max_attempts=3, max_retry_after_wait=5,
+        )
+
+        self.assertIs(result, upstream_busy)
+        get.assert_called_once()
+        sleep.assert_not_called()
+        upstream_busy.close.assert_not_called()
+
+    @patch("tracker.integrations.http_client.time.sleep")
+    @patch("tracker.integrations.http_client.requests.get")
+    def test_long_http_date_retry_after_returns_response_without_retry(self, get, sleep):
+        retry_at = datetime.now(timezone.utc) + timedelta(minutes=2)
+        upstream_busy = self.response(
+            503, {"Retry-After": format_datetime(retry_at, usegmt=True)}
+        )
+        get.return_value = upstream_busy
+
+        result = request_with_retries(
+            "get", "https://example.test/api",
+            timeout=1, max_attempts=3, max_retry_after_wait=5,
+        )
+
+        self.assertIs(result, upstream_busy)
+        get.assert_called_once()
+        sleep.assert_not_called()
+        upstream_busy.close.assert_not_called()
+
+    @patch("tracker.integrations.http_client.time.sleep")
+    @patch("tracker.integrations.http_client.requests.get")
+    def test_short_retry_after_is_honored_before_retry(self, get, sleep):
+        first = self.response(503, {"Retry-After": "2"})
+        success = self.response(200)
+        get.side_effect = [first, success]
+
+        result = request_with_retries(
+            "get", "https://example.test/api",
+            timeout=1, max_attempts=2, max_retry_after_wait=5,
+        )
+
+        self.assertIs(result, success)
+        self.assertEqual(get.call_count, 2)
+        sleep.assert_called_once_with(2.0)
+        first.close.assert_called_once()
 
 if __name__ == "__main__":
     unittest.main()

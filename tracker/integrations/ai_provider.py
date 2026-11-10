@@ -46,6 +46,7 @@ def request_openrouter(prompt):
         timeout=timeout,
         max_attempts=max(1, retries + 1),
         backoff_factor=max(0.0, backoff),
+        max_retry_after_wait=max(0.0, float(_setting("EXTERNAL_API_MAX_RETRY_AFTER_WAIT_SECONDS", 5.0))),
     )
     response.raise_for_status()
 

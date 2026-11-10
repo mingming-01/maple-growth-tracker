@@ -85,6 +85,9 @@ VALID_SECTIONS = frozenset(SECTION_SOURCES)
 _SOURCE_CACHE = {}
 _SOURCE_CACHE_LOCK = Lock()
 _SOURCE_CACHE_TTL = 300
+_SOURCE_CACHE_MAX_ENTRIES = 1000
+_SOURCE_CACHE_CLEANUP_INTERVAL = 64
+_SOURCE_CACHE_WRITE_COUNT = 0
 
 
 def _has_data(value):
@@ -339,6 +342,7 @@ def _fetch_source(ocid, spec, force_refresh=False):
         with _SOURCE_CACHE_LOCK:
             cached_item = _SOURCE_CACHE.get(cache_key)
             if cached_item and cached_item["expires_at"] > now:
+                cached_item["used_at"] = now
                 return cached_item["source"]
             if cached_item:
                 _SOURCE_CACHE.pop(cache_key, None)
@@ -380,11 +384,25 @@ def _fetch_source(ocid, spec, force_refresh=False):
     }
     if spec["id"] == "unionChampion" and source["status"] == "available":
         source = _enrich_champion_images(source)
+    global _SOURCE_CACHE_WRITE_COUNT
     with _SOURCE_CACHE_LOCK:
+        cached_at = time.monotonic()
         _SOURCE_CACHE[cache_key] = {
             "source": source,
-            "expires_at": time.monotonic() + _SOURCE_CACHE_TTL,
+            "expires_at": cached_at + _SOURCE_CACHE_TTL,
+            "used_at": cached_at,
         }
+        _SOURCE_CACHE_WRITE_COUNT += 1
+        if _SOURCE_CACHE_WRITE_COUNT % _SOURCE_CACHE_CLEANUP_INTERVAL == 0:
+            for existing_key, item in list(_SOURCE_CACHE.items()):
+                if item.get("expires_at", 0) <= cached_at:
+                    _SOURCE_CACHE.pop(existing_key, None)
+        while len(_SOURCE_CACHE) > _SOURCE_CACHE_MAX_ENTRIES:
+            oldest_key = min(
+                _SOURCE_CACHE,
+                key=lambda item_key: _SOURCE_CACHE[item_key].get("used_at", 0),
+            )
+            _SOURCE_CACHE.pop(oldest_key, None)
     return source
 
 
