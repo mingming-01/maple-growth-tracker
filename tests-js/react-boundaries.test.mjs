@@ -104,3 +104,12 @@ test("React tracker state persistence is centralized outside state updater callb
   assert.doesNotMatch(updater[1], /saveTrackerState\s*\(/);
   assert.equal((app.match(/saveTrackerState\s*\(/g) || []).length, 1);
 });
+
+
+test("Chart.js is loaded only when the growth dashboard chart effect runs", () => {
+  const growthDashboard = readFileSync(join(frontendSource, "features", "growth", "GrowthDashboard.jsx"), "utf8");
+
+  assert.doesNotMatch(growthDashboard, /^import\s+Chart\s+from\s+["']chart\.js\/auto["']/m);
+  assert.match(growthDashboard, /import\(["']chart\.js\/auto["']\)/);
+  assert.match(growthDashboard, /if\s*\(cancelled\s*\|\|\s*!canvasRef\.current\)/);
+});
