@@ -265,5 +265,29 @@ class RequestLimitTests(unittest.TestCase):
         self.assertEqual(resolve.call_count, 1)
 
 
+    def test_nexon_throttle_does_not_hold_lock_while_sleeping(self):
+        app = self.make_app(NEXON_API_MIN_INTERVAL=0.1)
+        original_last_request_at = nexon_api._fallback_last_request_at
+        lock_was_available_during_sleep = []
+
+        def verify_lock_is_free(delay):
+            acquired = nexon_api._fallback_rate_limit_lock.acquire(blocking=False)
+            lock_was_available_during_sleep.append(acquired)
+            if acquired:
+                nexon_api._fallback_rate_limit_lock.release()
+
+        try:
+            nexon_api._fallback_last_request_at = 100.0
+            with app.app_context(), patch.object(
+                nexon_api.time, "monotonic", side_effect=[100.0, 100.11]
+            ), patch.object(
+                nexon_api.time, "sleep", side_effect=verify_lock_is_free
+            ):
+                nexon_api._throttle_nexon_request()
+        finally:
+            nexon_api._fallback_last_request_at = original_last_request_at
+
+        self.assertEqual(lock_was_available_during_sleep, [True])
+
 if __name__ == "__main__":
     unittest.main()
