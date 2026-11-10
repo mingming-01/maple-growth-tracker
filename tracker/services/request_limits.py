@@ -1,5 +1,6 @@
 """앱 인스턴스 단위의 AI 요청 한도와 관리자 로그인 잠금 정책."""
 import hashlib
+import ipaddress
 import math
 import time
 from datetime import datetime, time as datetime_time, timedelta
@@ -98,3 +99,117 @@ def clear_admin_login_failures(remote_addr):
     key = _client_key(remote_addr)
     with state.request_limit_lock:
         state.admin_login_failures.pop(key, None)
+
+
+def _api_rate_limit_identity_ready(remote_addr):
+    """신뢰할 수 있는 실제 접속자 IP를 확인할 수 있을 때만 IP별 제한을 적용한다."""
+    if not _setting("API_REQUEST_LIMITS_ENABLED", True):
+        return False
+    if (
+        _setting("IS_PRODUCTION", False)
+        and int(_setting("TRUSTED_PROXY_HOPS", 0) or 0) < 1
+    ):
+        # 프록시 주소를 모든 방문자의 IP로 오인해 전체 사용자를 함께 제한하지 않는다.
+        return False
+    try:
+        address = ipaddress.ip_address(str(remote_addr or "").strip())
+    except ValueError:
+        return False
+    return not (
+        address.is_loopback
+        or address.is_unspecified
+        or address.is_multicast
+    )
+
+
+def _prune_timestamp_store(store, now, window_seconds, max_clients):
+    """만료된 IP별 요청 기록을 정리하고 저장 항목 수도 제한한다."""
+    for client_key, timestamps in list(store.items()):
+        active = [
+            stamp for stamp in timestamps
+            if now - stamp < window_seconds
+        ]
+        if active:
+            store[client_key] = active
+        else:
+            store.pop(client_key, None)
+
+    while len(store) > max_clients:
+        oldest_key = next(iter(store), None)
+        if oldest_key is None:
+            break
+        store.pop(oldest_key, None)
+
+
+def consume_api_request(remote_addr, force_refresh=False):
+    """캐시 미스 요청과 강제 새로고침에 IP별 완화된 한도를 적용한다.
+
+    캐시 hit 경로에서는 호출하지 않는다. 강제 새로고침은 일반 요청 한도와
+    별도의 더 엄격한 한도도 함께 통과해야 한다.
+    """
+    if not _api_rate_limit_identity_ready(remote_addr):
+        return True, 0, ""
+
+    state = get_runtime_state()
+    key = _client_key(remote_addr)
+    now = time.monotonic()
+    window_seconds = max(
+        1, int(_setting("API_REQUEST_LIMIT_WINDOW_SECONDS", 60))
+    )
+    request_limit = max(
+        1, int(_setting("API_REQUESTS_PER_MINUTE_PER_IP", 60))
+    )
+    refresh_limit = max(
+        1, int(_setting("API_REFRESHES_PER_MINUTE_PER_IP", 12))
+    )
+    max_clients = max(
+        100, int(_setting("API_RATE_LIMIT_MAX_CLIENTS", 10000))
+    )
+
+    with state.request_limit_lock:
+        state.api_limit_cleanup_counter += 1
+        if state.api_limit_cleanup_counter % 64 == 0:
+            _prune_timestamp_store(
+                state.api_request_timestamps,
+                now,
+                window_seconds,
+                max_clients,
+            )
+            _prune_timestamp_store(
+                state.api_refresh_timestamps,
+                now,
+                window_seconds,
+                max_clients,
+            )
+
+        requests = state.api_request_timestamps.setdefault(key, [])
+        requests[:] = [
+            stamp for stamp in requests
+            if now - stamp < window_seconds
+        ]
+
+        refreshes = state.api_refresh_timestamps.get(key, [])
+        if force_refresh:
+            refreshes = [
+                stamp for stamp in refreshes
+                if now - stamp < window_seconds
+            ]
+
+        if len(requests) >= request_limit:
+            retry_after = max(
+                1, math.ceil(window_seconds - (now - requests[0]))
+            )
+            return False, retry_after, "requests_per_minute"
+
+        if force_refresh and len(refreshes) >= refresh_limit:
+            retry_after = max(
+                1, math.ceil(window_seconds - (now - refreshes[0]))
+            )
+            return False, retry_after, "refreshes_per_minute"
+
+        requests.append(now)
+        if force_refresh:
+            state.api_refresh_timestamps[key] = refreshes
+            state.api_refresh_timestamps[key].append(now)
+
+    return True, 0, ""

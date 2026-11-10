@@ -10,6 +10,7 @@ from tracker.services.nexon_service import (
     resolve_character,
 )
 from tracker.services.character_detail_service import get_current_combat_power
+from tracker.controller.request_limit_helpers import api_request_limit_response
 from tracker.runtime import (
     CHARACTER_CACHE_TTL,
     KOREA_TIMEZONE,
@@ -43,6 +44,10 @@ def get_character():
         return jsonify(with_data_status(
             cached_character, "cached", get_cache_timestamp(cache_key)
         ))
+
+    limit_response = api_request_limit_response(force_refresh=force_refresh)
+    if limit_response:
+        return limit_response
 
     try:
         ocid, basic, response = resolve_character(character_name)

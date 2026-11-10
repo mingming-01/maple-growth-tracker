@@ -16,6 +16,7 @@ from tracker.services.nexon_service import (
     is_temporary_nexon_failure,
     resolve_character,
 )
+from tracker.controller.request_limit_helpers import api_request_limit_response
 from tracker.runtime import (
     HISTORY_BACKFILL_BATCH_SIZE,
     HISTORY_CACHE_TTL,
@@ -55,6 +56,10 @@ def get_history():
         return jsonify(with_data_status(
             cached_history, "cached", get_cache_timestamp(cache_key)
         ))
+
+    limit_response = api_request_limit_response(force_refresh=force_refresh)
+    if limit_response:
+        return limit_response
 
     try:
         if requested_ocid:
@@ -461,6 +466,11 @@ def get_history_archive():
             return jsonify({"error": "캐릭터명을 확인해주세요."}), 400
         if offset < 0 or offset >= days or limit < 1 or limit > HISTORY_BACKFILL_BATCH_SIZE:
             return jsonify({"error": "수집 범위는 날짜 1~10개 안에서 선택해주세요."}), 400
+
+        # 보충 수집은 여러 날짜의 Nexon API를 호출하므로 일반 조회와 별도 갱신 한도를 적용한다.
+        limit_response = api_request_limit_response(force_refresh=True)
+        if limit_response:
+            return limit_response
 
         # 브라우저에서 전달한 캐릭터명과 OCID를 확인해 다른 캐릭터 기록의 혼합 저장을 막는다.
         try:

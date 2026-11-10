@@ -2,6 +2,7 @@
 from flask import Blueprint, jsonify, request
 
 from tracker.runtime import get_cache, record_best_combat_power, set_cache
+from tracker.controller.request_limit_helpers import api_request_limit_response
 from tracker.services.character_detail_service import (
     VALID_SECTIONS,
     get_character_detail_section,
@@ -31,6 +32,10 @@ def get_character_details():
         result = dict(cached)
         result["dataStatus"] = "cached"
         return jsonify(result)
+
+    limit_response = api_request_limit_response(force_refresh=force_refresh)
+    if limit_response:
+        return limit_response
 
     result = get_character_detail_section(ocid, section, force_refresh=force_refresh)
     result["dataStatus"] = "current"

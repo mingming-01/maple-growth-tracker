@@ -4,6 +4,7 @@ import warnings
 from pathlib import Path
 
 from flask import Flask
+from werkzeug.middleware.proxy_fix import ProxyFix
 
 from tracker.config import Config
 from tracker import runtime
@@ -40,6 +41,18 @@ def create_app(test_config=None):
             RuntimeWarning,
         )
     app.secret_key = configured_secret or os.urandom(32)
+    try:
+        trusted_proxy_hops = max(0, int(app.config.get("TRUSTED_PROXY_HOPS", 0)))
+    except (TypeError, ValueError):
+        trusted_proxy_hops = 0
+    if trusted_proxy_hops:
+        app.wsgi_app = ProxyFix(app.wsgi_app, x_for=trusted_proxy_hops)
+    elif is_production and app.config.get("API_REQUEST_LIMITS_ENABLED", True):
+        warnings.warn(
+            "TRUSTED_PROXY_HOPS가 0이므로 프록시 뒤의 IP별 일반 API 제한은 안전하게 비활성화됩니다. "
+            "실제 프록시 hop 수를 확인한 뒤 설정하세요.",
+            RuntimeWarning,
+        )
     app.config.update(
         SESSION_COOKIE_HTTPONLY=True,
         SESSION_COOKIE_SAMESITE="Lax",
