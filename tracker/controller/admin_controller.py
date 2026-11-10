@@ -25,6 +25,17 @@ from tracker.services.request_limits import (
 admin_bp = Blueprint("admin", __name__, url_prefix="/admin")
 
 
+def _measure_admin_log_query(query_name, operation, backend):
+    """관리자 로그 쿼리별 실행 및 결과 fetch 시간을 기록한다."""
+    started_at = time.perf_counter()
+    try:
+        return operation()
+    finally:
+        labels = {"backend": backend, "store": "admin_logs", "query": query_name}
+        increment_metric("db.query_executions", **labels)
+        observe_metric("db.query_ms", (time.perf_counter() - started_at) * 1000, **labels)
+
+
 @admin_bp.route("/login", methods=["GET", "POST"])
 def admin_login():
     """해시 비밀번호와 CSRF를 검증하고 반복 실패는 IP 단위로 잠근다."""
@@ -156,27 +167,37 @@ def admin_logs():
         connection = connect_log_db()
         try:
             with connection:
-                count_row = connection.execute(
-                    f"SELECT COUNT(*) AS total FROM action_logs{where_clause}",
-                    parameters,
-                ).fetchone()
+                count_row = _measure_admin_log_query(
+                    "count",
+                    lambda: connection.execute(
+                        f"SELECT COUNT(*) AS total FROM action_logs{where_clause}",
+                        parameters,
+                    ).fetchone(),
+                    log_db_backend,
+                )
                 query_count += 1
                 total_count = count_row["total"]
 
-                rows = connection.execute(
-                    "SELECT created_at, action, character_name, world_name, comparison_name, "
-                    "result, path, status_code, duration_ms, error_type "
-                    f"FROM action_logs{where_clause} "
-                    "ORDER BY created_at DESC, id DESC LIMIT 500",
-                    parameters,
-                ).fetchall()
+                rows = _measure_admin_log_query(
+                    "page",
+                    lambda: connection.execute(
+                        "SELECT created_at, action, character_name, world_name, comparison_name, "
+                        "result, path, status_code, duration_ms, error_type "
+                        f"FROM action_logs{where_clause} "
+                        "ORDER BY created_at DESC, id DESC LIMIT 500",
+                        parameters,
+                    ).fetchall(),
+                    log_db_backend,
+                )
                 query_count += 1
-                action_options = [
-                    row["action"]
-                    for row in connection.execute(
+                action_rows = _measure_admin_log_query(
+                    "actions",
+                    lambda: connection.execute(
                         "SELECT DISTINCT action FROM action_logs ORDER BY action"
-                    ).fetchall()
-                ]
+                    ).fetchall(),
+                    log_db_backend,
+                )
+                action_options = [row["action"] for row in action_rows]
                 query_count += 1
         finally:
             connection.close()
