@@ -20,7 +20,6 @@ from tracker.runtime import (
     delete_cache,
     get_cache,
     get_cache_timestamp,
-    load_api_snapshot,
     save_api_snapshot,
     set_cache,
     record_best_combat_power,
@@ -157,12 +156,14 @@ def get_character():
     data_status = "partial" if character_rankings["rankingDataStatus"] in ("partial", "unavailable", "empty", "not_ready") else "current"
     saved_at = datetime.now().astimezone().isoformat(timespec="seconds")
 
-    # 일시적으로 빈 응답이 와도 기존의 정상 랭킹 스냅샷은 덮어쓰지 않는다.
-    previous_snapshot, _ = load_api_snapshot(cache_key)
-    if character_rankings["rankingDataStatus"] == "available" or previous_snapshot is None:
-        snapshot_saved_at = save_api_snapshot(cache_key, result)
-        if snapshot_saved_at:
-            saved_at = snapshot_saved_at
+    # 부분 응답은 기존 정상 스냅샷을 보호하고, 저장된 값이 없을 때만 최초 기록한다.
+    snapshot_saved_at = save_api_snapshot(
+        cache_key,
+        result,
+        only_if_missing=character_rankings["rankingDataStatus"] != "available",
+    )
+    if snapshot_saved_at:
+        saved_at = snapshot_saved_at
 
     set_cache(cache_key, result, CHARACTER_CACHE_TTL)
     return jsonify(with_data_status(result, data_status, saved_at))
