@@ -157,15 +157,15 @@ def get_character_rankings(target_date, world_name, character_class, ocid):
             api_class = _class_filter_from_entry(overall_data, fallback_class)
 
             def fetch_job_world():
-            if not api_class:
-                return None, None
-            return get_ranking_snapshot(
-                target_date=date_text,
-                world_name=world_name,
-                ocid=ocid,
-                character_class=api_class,
-                world_type=world_type,
-            )
+                if not api_class:
+                    return None, None
+                return get_ranking_snapshot(
+                    target_date=date_text,
+                    world_name=world_name,
+                    ocid=ocid,
+                    character_class=api_class,
+                    world_type=world_type,
+                )
 
             def fetch_job():
                 if not api_class:
