@@ -1,21 +1,13 @@
 """관리자 인증과 운영 로그 HTTP 라우트."""
-from datetime import date, datetime, timedelta
+from datetime import date
 import hmac
-import time
 import secrets
-import sqlite3
-
-import psycopg
 from flask import Blueprint, current_app, jsonify, redirect, render_template, request, session, url_for
 from werkzeug.security import check_password_hash
 
-from tracker.runtime import KOREA_TIMEZONE, connect_log_db, get_runtime_state
+from tracker.runtime import get_runtime_state
 from tracker.services.admin_log_service import admin_required, format_admin_log_time
-from tracker.services.performance_metrics import (
-    increment_metric,
-    observe_metric,
-    performance_metrics_snapshot,
-)
+from tracker.services.performance_metrics import performance_metrics_snapshot
 from tracker.services.request_limits import (
     admin_login_lockout_remaining,
     clear_admin_login_failures,
@@ -23,17 +15,6 @@ from tracker.services.request_limits import (
 )
 
 admin_bp = Blueprint("admin", __name__, url_prefix="/admin")
-
-
-def _measure_admin_log_query(query_name, operation, backend):
-    """관리자 로그 쿼리별 실행 및 결과 fetch 시간을 기록한다."""
-    started_at = time.perf_counter()
-    try:
-        return operation()
-    finally:
-        labels = {"backend": backend, "store": "admin_logs", "query": query_name}
-        increment_metric("db.query_executions", **labels)
-        observe_metric("db.query_ms", (time.perf_counter() - started_at) * 1000, **labels)
 
 
 @admin_bp.route("/login", methods=["GET", "POST"])
@@ -93,12 +74,9 @@ def admin_login():
         configured=configured,
     )
 
-@admin_bp.route("/logs")
-@admin_required
-def admin_logs():
-    """검색 조건을 적용해 관리자 운영 로그를 시간 역순으로 표시한다."""
+def _load_admin_log_view_data():
+    """요청 필터를 정규화하고 서비스에서 조회한 로그를 화면 데이터로 변환한다."""
     state = get_runtime_state()
-    log_db_backend = state.log_db_backend
     search_text = request.args.get("q", "").strip()[:100]
     selected_action = request.args.get("action", "").strip()[:80]
     selected_result = request.args.get("result", "").strip()
@@ -116,133 +94,59 @@ def admin_logs():
         date_to = None
         date_to_text = ""
 
-    placeholder = "%s" if log_db_backend == "postgres" else "?"
-    conditions = []
-    parameters = []
-
-    if search_text:
-        pattern = f"%{search_text}%"
-        conditions.append(
-            "("
-            "COALESCE(action, '') LIKE " + placeholder
-            + " OR COALESCE(path, '') LIKE " + placeholder
-            + " OR COALESCE(character_name, '') LIKE " + placeholder
-            + " OR COALESCE(world_name, '') LIKE " + placeholder
-            + " OR COALESCE(comparison_name, '') LIKE " + placeholder
-            + " OR COALESCE(error_type, '') LIKE " + placeholder
-            + " OR COALESCE(CAST(status_code AS TEXT), '') LIKE " + placeholder
-            + ")"
-        )
-        parameters.extend([pattern] * 7)
-
-    if selected_action:
-        conditions.append(f"action = {placeholder}")
-        parameters.append(selected_action)
-    if selected_result in ("성공", "실패"):
-        conditions.append(f"result = {placeholder}")
-        parameters.append(selected_result)
-    else:
+    if selected_result not in ("성공", "실패"):
         selected_result = ""
 
-    def date_bound(day):
-        value = datetime.combine(day, datetime.min.time()).replace(tzinfo=KOREA_TIMEZONE)
-        return value if log_db_backend == "postgres" else value.isoformat(timespec="seconds")
-
-    if date_from:
-        conditions.append(f"created_at >= {placeholder}")
-        parameters.append(date_bound(date_from))
-    if date_to:
-        conditions.append(f"created_at < {placeholder}")
-        parameters.append(date_bound(date_to + timedelta(days=1)))
-
-    where_clause = " WHERE " + " AND ".join(conditions) if conditions else ""
-    rows = []
-    total_count = 0
-    action_options = []
-    storage_warning = state.log_storage_warning
-
-    query_started = time.perf_counter()
-    query_count = 0
-    try:
-        connection = connect_log_db()
-        try:
-            with connection:
-                count_row = _measure_admin_log_query(
-                    "count",
-                    lambda: connection.execute(
-                        f"SELECT COUNT(*) AS total FROM action_logs{where_clause}",
-                        parameters,
-                    ).fetchone(),
-                    log_db_backend,
-                )
-                query_count += 1
-                total_count = count_row["total"]
-
-                rows = _measure_admin_log_query(
-                    "page",
-                    lambda: connection.execute(
-                        "SELECT created_at, action, character_name, world_name, comparison_name, "
-                        "result, path, status_code, duration_ms, error_type "
-                        f"FROM action_logs{where_clause} "
-                        "ORDER BY created_at DESC, id DESC LIMIT 500",
-                        parameters,
-                    ).fetchall(),
-                    log_db_backend,
-                )
-                query_count += 1
-                action_rows = _measure_admin_log_query(
-                    "actions",
-                    lambda: connection.execute(
-                        "SELECT DISTINCT action FROM action_logs ORDER BY action"
-                    ).fetchall(),
-                    log_db_backend,
-                )
-                action_options = [row["action"] for row in action_rows]
-                query_count += 1
-        finally:
-            connection.close()
-    except (sqlite3.Error, psycopg.Error):
-        storage_warning = (
-            "관리자 로그 저장소에 연결할 수 없습니다. 환경 설정과 데이터베이스 연결을 확인해주세요."
-        )
-        print("관리자 로그 조회에 실패했습니다.")
-    finally:
-        increment_metric("db.operations", operation="admin_logs.select")
-        increment_metric("db.sql_statements", query_count, operation="admin_logs.select")
-        observe_metric(
-            "db.operation_ms",
-            (time.perf_counter() - query_started) * 1000,
-            operation="admin_logs.select",
-        )
-
-    if log_db_backend == "sqlite" and not storage_warning:
-        storage_warning = (
-            "현재 로그는 SQLite에 저장됩니다. 개발 환경에는 적합하지만 "
-            "Render 재배포 후 보존하려면 PostgreSQL 연결이 필요합니다."
-        )
-
+    result = state.admin_log_service.list_logs(
+        search_text=search_text,
+        selected_action=selected_action,
+        selected_result=selected_result,
+        date_from=date_from,
+        date_to=date_to,
+    )
     logs = []
-    for row in rows:
+    for row in result["rows"]:
         item = dict(row)
         item["created_at_display"] = format_admin_log_time(item.get("created_at"))
         logs.append(item)
 
+    return {
+        "state": state,
+        "logs": logs,
+        "total_count": result["total_count"],
+        "action_options": result["action_options"],
+        "storage_backend": result["storage_backend"],
+        "storage_warning": result["storage_warning"],
+        "search_text": search_text,
+        "selected_action": selected_action,
+        "selected_result": selected_result,
+        "date_from_text": date_from_text,
+        "date_to_text": date_to_text,
+    }
+
+
+@admin_bp.route("/logs")
+@admin_required
+def admin_logs():
+    """검색 조건을 적용해 관리자 운영 로그를 시간 역순으로 표시한다."""
+    data = _load_admin_log_view_data()
+    state = data["state"]
     return render_template(
         "admin_logs.html",
-        logs=logs,
-        total_count=total_count,
-        displayed_count=min(total_count, 500),
-        search_text=search_text,
-        selected_action=selected_action,
-        selected_result=selected_result,
-        date_from_text=date_from_text,
-        date_to_text=date_to_text,
-        action_options=action_options,
-        storage_backend=log_db_backend,
-        storage_warning=storage_warning,
+        logs=data["logs"],
+        total_count=data["total_count"],
+        displayed_count=min(data["total_count"], 500),
+        search_text=data["search_text"],
+        selected_action=data["selected_action"],
+        selected_result=data["selected_result"],
+        date_from_text=data["date_from_text"],
+        date_to_text=data["date_to_text"],
+        action_options=data["action_options"],
+        storage_backend=data["storage_backend"],
+        storage_warning=data["storage_warning"],
         snapshot_storage_backend=state.snapshot_db_backend,
         snapshot_storage_warning=state.snapshot_storage_warning,
-        csrf_token=session.setdefault("csrf_token", secrets.token_urlsafe(32))
+        csrf_token=session.setdefault("csrf_token", secrets.token_urlsafe(32)),
     )
 
 
@@ -250,142 +154,15 @@ def admin_logs():
 @admin_required
 def admin_logs_api():
     """React 관리자 화면용 JSON 로그 API. 기존 세션 인증과 필터 조건을 그대로 사용한다."""
-    state = get_runtime_state()
-    log_db_backend = state.log_db_backend
-    search_text = request.args.get("q", "").strip()[:100]
-    selected_action = request.args.get("action", "").strip()[:80]
-    selected_result = request.args.get("result", "").strip()
-    date_from_text = request.args.get("date_from", "").strip()
-    date_to_text = request.args.get("date_to", "").strip()
-
-    try:
-        date_from = date.fromisoformat(date_from_text) if date_from_text else None
-    except ValueError:
-        date_from = None
-        date_from_text = ""
-    try:
-        date_to = date.fromisoformat(date_to_text) if date_to_text else None
-    except ValueError:
-        date_to = None
-        date_to_text = ""
-
-    placeholder = "%s" if log_db_backend == "postgres" else "?"
-    conditions = []
-    parameters = []
-
-    if search_text:
-        pattern = f"%{search_text}%"
-        conditions.append(
-            "("
-            "COALESCE(action, '') LIKE " + placeholder
-            + " OR COALESCE(path, '') LIKE " + placeholder
-            + " OR COALESCE(character_name, '') LIKE " + placeholder
-            + " OR COALESCE(world_name, '') LIKE " + placeholder
-            + " OR COALESCE(comparison_name, '') LIKE " + placeholder
-            + " OR COALESCE(error_type, '') LIKE " + placeholder
-            + " OR COALESCE(CAST(status_code AS TEXT), '') LIKE " + placeholder
-            + ")"
-        )
-        parameters.extend([pattern] * 7)
-
-    if selected_action:
-        conditions.append(f"action = {placeholder}")
-        parameters.append(selected_action)
-    if selected_result in ("성공", "실패"):
-        conditions.append(f"result = {placeholder}")
-        parameters.append(selected_result)
-    else:
-        selected_result = ""
-
-    def date_bound(day):
-        value = datetime.combine(day, datetime.min.time()).replace(tzinfo=KOREA_TIMEZONE)
-        return value if log_db_backend == "postgres" else value.isoformat(timespec="seconds")
-
-    if date_from:
-        conditions.append(f"created_at >= {placeholder}")
-        parameters.append(date_bound(date_from))
-    if date_to:
-        conditions.append(f"created_at < {placeholder}")
-        parameters.append(date_bound(date_to + timedelta(days=1)))
-
-    where_clause = " WHERE " + " AND ".join(conditions) if conditions else ""
-    rows = []
-    total_count = 0
-    action_options = []
-    storage_warning = state.log_storage_warning
-
-    query_started = time.perf_counter()
-    query_count = 0
-    try:
-        connection = connect_log_db()
-        try:
-            with connection:
-                count_row = _measure_admin_log_query(
-                    "count",
-                    lambda: connection.execute(
-                        f"SELECT COUNT(*) AS total FROM action_logs{where_clause}",
-                        parameters,
-                    ).fetchone(),
-                    log_db_backend,
-                )
-                query_count += 1
-                total_count = count_row["total"]
-
-                rows = _measure_admin_log_query(
-                    "page",
-                    lambda: connection.execute(
-                        "SELECT created_at, action, character_name, world_name, comparison_name, "
-                        "result, path, status_code, duration_ms, error_type "
-                        f"FROM action_logs{where_clause} "
-                        "ORDER BY created_at DESC, id DESC LIMIT 500",
-                        parameters,
-                    ).fetchall(),
-                    log_db_backend,
-                )
-                query_count += 1
-                action_rows = _measure_admin_log_query(
-                    "actions",
-                    lambda: connection.execute(
-                        "SELECT DISTINCT action FROM action_logs ORDER BY action"
-                    ).fetchall(),
-                    log_db_backend,
-                )
-                action_options = [row["action"] for row in action_rows]
-                query_count += 1
-        finally:
-            connection.close()
-    except (sqlite3.Error, psycopg.Error):
-        storage_warning = (
-            "관리자 로그 저장소에 연결할 수 없습니다. 환경 설정과 데이터베이스 연결을 확인해주세요."
-        )
-        print("관리자 로그 조회에 실패했습니다.")
-    finally:
-        increment_metric("db.operations", operation="admin_logs.select")
-        increment_metric("db.sql_statements", query_count, operation="admin_logs.select")
-        observe_metric(
-            "db.operation_ms",
-            (time.perf_counter() - query_started) * 1000,
-            operation="admin_logs.select",
-        )
-
-    if log_db_backend == "sqlite" and not storage_warning:
-        storage_warning = (
-            "현재 로그는 SQLite에 저장됩니다. Render 재배포 후 보존하려면 PostgreSQL 연결이 필요합니다."
-        )
-
-    logs = []
-    for row in rows:
-        item = dict(row)
-        item["created_at_display"] = format_admin_log_time(item.get("created_at"))
-        logs.append(item)
-
+    data = _load_admin_log_view_data()
+    state = data["state"]
     return jsonify({
-        "logs": logs,
-        "totalCount": total_count,
-        "displayedCount": min(total_count, 500),
-        "actionOptions": action_options,
-        "storageBackend": log_db_backend,
-        "storageWarning": storage_warning,
+        "logs": data["logs"],
+        "totalCount": data["total_count"],
+        "displayedCount": min(data["total_count"], 500),
+        "actionOptions": data["action_options"],
+        "storageBackend": data["storage_backend"],
+        "storageWarning": data["storage_warning"],
         "snapshotStorageBackend": state.snapshot_db_backend,
         "snapshotStorageWarning": state.snapshot_storage_warning,
         "csrfToken": session.setdefault("csrf_token", secrets.token_urlsafe(32)),

@@ -7,6 +7,7 @@ from unittest.mock import Mock, patch
 import app as tracker
 from tracker import create_app
 from tracker.controller import history_controller
+from tracker.services import history_archive_service
 from tracker.repositories.growth_history_store import GrowthHistoryStore
 from tracker.runtime import get_runtime_state
 from tracker.services.growth_history_service import GrowthHistoryService
@@ -328,8 +329,8 @@ class GrowthHistoryApiTests(unittest.TestCase):
         self.assertEqual(comparison_history[-2]["ranking"], 654)
 
     def test_archive_does_not_fetch_past_data_without_collection_request(self):
-        with patch.object(history_controller, "get_ranking_snapshot", side_effect=AssertionError("should not call Nexon")), patch.object(
-            history_controller, "get_basic_character_snapshot", side_effect=AssertionError("should not call Nexon")
+        with patch.object(history_archive_service, "get_ranking_snapshot", side_effect=AssertionError("should not call Nexon")), patch.object(
+            history_archive_service, "get_basic_character_snapshot", side_effect=AssertionError("should not call Nexon")
         ):
             response = self.client.get("/api/history/archive?ocid=test-ocid&days=30")
 
@@ -346,11 +347,14 @@ class GrowthHistoryApiTests(unittest.TestCase):
             "character_exp": 123456
         }
         with patch.object(
-            history_controller, "get_ranking_snapshot",
+            history_controller, "get_basic_character_snapshot",
+            return_value=(basic, basic_response)
+        ) as verify_basic, patch.object(
+            history_archive_service, "get_ranking_snapshot",
             side_effect=[(None, ranking_response), (None, ranking_response)]
         ) as get_ranking, patch.object(
-            history_controller, "get_basic_character_snapshot",
-            side_effect=[(basic, basic_response), (basic, basic_response), (basic, basic_response)]
+            history_archive_service, "get_basic_character_snapshot",
+            side_effect=[(basic, basic_response), (basic, basic_response)]
         ) as get_basic:
             response = self.client.get(
                 "/api/history/archive?ocid=test-ocid&days=30&collect=1"
@@ -361,7 +365,8 @@ class GrowthHistoryApiTests(unittest.TestCase):
         self.assertEqual(response.status_code, 200)
         body = response.get_json()
         self.assertEqual(get_ranking.call_count, 2)
-        self.assertEqual(get_basic.call_count, 3)
+        self.assertEqual(verify_basic.call_count, 1)
+        self.assertEqual(get_basic.call_count, 2)
         self.assertTrue(all(call.kwargs["historical"] for call in get_ranking.call_args_list))
         self.assertTrue(all(call.kwargs["historical"] for call in get_basic.call_args_list))
         self.assertEqual(body["collection"]["checkedDays"], 2)
@@ -385,11 +390,14 @@ class GrowthHistoryApiTests(unittest.TestCase):
             "character_exp": 123456,
         }
         with patch.object(
-            history_controller, "get_ranking_snapshot",
+            history_controller, "get_basic_character_snapshot",
+            return_value=(basic, basic_response)
+        ), patch.object(
+            history_archive_service, "get_ranking_snapshot",
             return_value=(None, ranking_response),
         ), patch.object(
-            history_controller, "get_basic_character_snapshot",
-            side_effect=[(basic, basic_response), (basic, basic_response)],
+            history_archive_service, "get_basic_character_snapshot",
+            return_value=(basic, basic_response),
         ):
             response = self.client.get(
                 "/api/history/archive?ocid=test-ocid&days=30&collect=1&summary_only=1"
@@ -420,9 +428,13 @@ class GrowthHistoryApiTests(unittest.TestCase):
             "character_exp": 123456
         }
         with patch.object(
-            history_controller, "get_ranking_snapshot", return_value=(ranking, ranking_response)
+            history_controller, "get_basic_character_snapshot",
+            return_value=(current_basic, Mock(status_code=200))
+        ) as verify_basic, patch.object(
+            history_archive_service, "get_ranking_snapshot", return_value=(ranking, ranking_response)
         ) as get_ranking, patch.object(
-            history_controller, "get_basic_character_snapshot", return_value=(current_basic, Mock(status_code=200))
+            history_archive_service, "get_basic_character_snapshot",
+            return_value=(current_basic, Mock(status_code=200))
         ) as get_basic:
             response = self.client.get(
                 "/api/history/archive?ocid=test-ocid&days=30&collect=1"
@@ -433,11 +445,11 @@ class GrowthHistoryApiTests(unittest.TestCase):
         self.assertEqual(response.status_code, 200)
         get_ranking.assert_called_once()
         self.assertTrue(get_ranking.call_args.kwargs["historical"])
-        self.assertEqual(get_basic.call_count, 2)
+        self.assertEqual(verify_basic.call_count, 1)
+        self.assertEqual(get_basic.call_count, 1)
         self.assertTrue(all(call.kwargs["historical"] for call in get_basic.call_args_list))
-        self.assertNotIn("target_date", get_basic.call_args_list[0].kwargs)
         self.assertEqual(
-            get_basic.call_args_list[1].kwargs["target_date"],
+            get_basic.call_args.kwargs["target_date"],
             target_date.isoformat(),
         )
         saved = self.store.get_records("test-ocid", target_date, target_date)
@@ -454,10 +466,13 @@ class GrowthHistoryApiTests(unittest.TestCase):
             "character_exp": 123456
         }
         with patch.object(
-            history_controller, "get_ranking_snapshot", return_value=(None, invalid_response)
-        ), patch.object(
             history_controller, "get_basic_character_snapshot",
-            side_effect=[(current_basic, Mock(status_code=200)), (None, invalid_response)]
+            return_value=(current_basic, Mock(status_code=200))
+        ), patch.object(
+            history_archive_service, "get_ranking_snapshot", return_value=(None, invalid_response)
+        ), patch.object(
+            history_archive_service, "get_basic_character_snapshot",
+            return_value=(None, invalid_response)
         ):
             response = self.client.get(
                 "/api/history/archive?ocid=test-ocid&days=30&collect=1"

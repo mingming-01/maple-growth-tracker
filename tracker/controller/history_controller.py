@@ -9,6 +9,11 @@ from tracker.domain.growth_calculations import (
     calculate_archive_history_changes,
     calculate_recent_history_changes,
 )
+from tracker.services.history_archive_service import fetch_historical_record
+from tracker.services.recent_history_service import (
+    _get_cached_current_ranking,
+    fetch_recent_history,
+)
 from tracker.services.nexon_service import (
     get_basic_character_snapshot,
     get_ranking_snapshot,
@@ -81,23 +86,6 @@ def _load_recent_character_basic_snapshot(character_name, ocid, now=None):
     }
 
 
-def _get_cached_current_ranking(basic, target_date, today):
-    """캐릭터 조회 스냅샷의 오늘 종합 랭킹을 안전하게 추출한다."""
-    if target_date != today or not isinstance(basic, dict):
-        return None
-    if basic.get("ranking_data_status") != "available":
-        return None
-    ranking = basic.get("ranking")
-    if ranking is None:
-        return None
-    return {
-        "ranking": ranking,
-        "character_level": basic.get("character_level"),
-        "character_exp": basic.get("character_exp"),
-        "character_exp_rate": basic.get("character_exp_rate"),
-    }
-
-
 # 최근 7일 성장 기록 조회 및 변화량 계산
 @history_bp.route("/history")
 def get_history():
@@ -167,179 +155,22 @@ def get_history():
             # DB 연결 문제는 실시간 API 조회를 막지 않는다.
             print("저장된 성장 기록을 불러오지 못했습니다.")
 
-        def fetch_history(target_date):
-            date_string = target_date.strftime("%Y-%m-%d")
-            saved = stored_recent.get(date_string)
-            # 정상 스냅샷이 아닌 저장 기록은 다음 새로고침에서 재확인한다.
-            # not_ready를 오래 고정해 성장 기록이 영구적으로 비는 현상을 방지한다.
-            should_check_api = (
-                target_date == today
-                or (
-                    saved is not None
-                    and saved.get("recordStatus") == "unavailable"
-                )
-                or (
-                    saved is not None
-                    and saved.get("recordStatus") == "available"
-                    and (
-                        not saved.get("experienceRateChecked", False)
-                        or saved.get("experienceRate") is None
-                    )
-                )
-            )
-
-            if saved and not should_check_api:
-                return {
-                    "date": date_string,
-                    "ranking": saved.get("ranking"),
-                    "level": saved.get("level"),
-                    "experience": saved.get("experience"),
-                    "experienceRate": saved.get("experienceRate"),
-                    "experienceRateChecked": saved.get("experienceRateChecked", False),
-                    "recordStatus": saved.get("recordStatus"),
-                    "_fromStore": True
-                }
-
-            ranking_data = _get_cached_current_ranking(basic, target_date, today)
-            if ranking_data is not None:
-                # /api/character already queried today's overall rank. Reuse it only
-                # when the persisted profile marks ranking data as available.
-                response = requests.Response()
-                response.status_code = 200
-                increment_metric("history.current_ranking_reused")
-            else:
-                ranking_data, response = get_ranking_snapshot(
-                    target_date=date_string,
-                    world_name=world_name,
-                    ocid=ocid,
-                    world_type=get_world_type(world_name),
-                )
-            if ranking_data:
-                experience_rate = ranking_data.get("character_exp_rate")
-                rate_checked = experience_rate is not None
-                if experience_rate is None:
-                    if target_date == today:
-                        rate_data, rate_response = basic, response
-                    else:
-                        try:
-                            rate_data, rate_response = get_basic_character_snapshot(
-                                ocid, target_date=date_string, historical=True
-                            )
-                        except requests.RequestException:
-                            rate_data, rate_response = None, None
-                    if rate_data:
-                        experience_rate = rate_data.get("character_exp_rate")
-                    rate_checked = bool(
-                        rate_response is not None and rate_response.status_code == 200
-                    )
-                return {
-                    "date": date_string,
-                    "ranking": ranking_data.get("ranking"),
-                    "level": ranking_data.get("character_level"),
-                    "experience": ranking_data.get("character_exp"),
-                    "experienceRate": experience_rate,
-                    "experienceRateChecked": rate_checked,
-                    "recordStatus": "available"
-                }
-
-            # 랭킹 API가 429/5xx 등 일시적 오류를 반환했다면 기본 정보 API를
-            # 연쇄 호출하지 않는다. 제한 상황에서 요청량이 더 커지는 것을 방지한다.
-            if is_temporary_nexon_failure(response):
-                if saved and saved.get("recordStatus") == "available":
-                    return {
-                        "date": date_string,
-                        "ranking": saved.get("ranking"),
-                        "level": saved.get("level"),
-                        "experience": saved.get("experience"),
-                        "experienceRate": saved.get("experienceRate"),
-                        "experienceRateChecked": saved.get("experienceRateChecked", False),
-                        "recordStatus": "available",
-                        "_fromStore": True
-                    }
-                return {
-                    "date": date_string,
-                    "ranking": None,
-                    "level": None,
-                    "experience": None,
-                    "experienceRate": None,
-                    "experienceRateChecked": False,
-                    "recordStatus": "unavailable",
-                    "retryable": True
-                }
-
-            # 정상 응답으로 랭킹 항목이 없을 때만 기본 정보 API를 보조 조회한다.
-            try:
-                basic_data, basic_response = get_basic_character_snapshot(
-                    ocid,
-                    target_date=date_string if target_date < today else None,
-                    historical=True
-                )
-            except requests.RequestException:
-                basic_data, basic_response = None, None
-            if basic_data:
-                level = basic_data.get("character_level")
-                experience = basic_data.get("character_exp")
-                if level is not None and experience is not None:
-                    return {
-                        "date": date_string,
-                        "ranking": None,
-                        "level": level,
-                        "experience": experience,
-                        "experienceRate": basic_data.get("character_exp_rate"),
-                        "experienceRateChecked": bool(
-                            basic_response is not None and basic_response.status_code == 200
-                        ),
-                        "recordStatus": "available"
-                    }
-
-            # 빈 응답으로 같은 날 앞서 저장한 정상 스냅샷을 덮어쓰지 않는다.
-            if saved and saved.get("recordStatus") == "available":
-                return {
-                    "date": date_string,
-                    "ranking": saved.get("ranking"),
-                    "level": saved.get("level"),
-                    "experience": saved.get("experience"),
-                    "experienceRate": saved.get("experienceRate"),
-                    "experienceRateChecked": saved.get("experienceRateChecked", False),
-                    "recordStatus": "available",
-                    "_fromStore": True
-                }
-
-            if (
-                response is not None and response.status_code == 200
-                and basic_response is not None and basic_response.status_code == 200
-            ):
-                return {
-                    "date": date_string,
-                    "ranking": None,
-                    "level": None,
-                    "experience": None,
-                    "experienceRate": None,
-                    "experienceRateChecked": bool(basic_response is not None and basic_response.status_code == 200),
-                    "recordStatus": "not_ready"
-                }
-
-            retryable = (
-                is_temporary_nexon_failure(response)
-                or is_temporary_nexon_failure(basic_response)
-            )
-            return {
-                "date": date_string,
-                "ranking": None,
-                "level": None,
-                "experience": None,
-                "experienceRate": None,
-                "experienceRateChecked": False,
-                "recordStatus": "unavailable",
-                "retryable": retryable
-            }
-
         dates = [today - timedelta(days=i) for i in range(7)]
-        # Historical snapshots are rate-limited upstream; keep a small bounded
-        # worker pool instead of launching seven simultaneous date lookups.
-        with ThreadPoolExecutor(max_workers=3) as executor:
-            history = list(executor.map(fetch_history, dates))
-        history.reverse()
+        # Nexon API 수집 규칙과 제한된 병렬 실행은 서비스 계층에서 담당한다.
+        history = fetch_recent_history(
+            dates,
+            basic=basic,
+            ocid=ocid,
+            world_name=world_name,
+            stored_recent=stored_recent,
+            today=today,
+            get_ranking_snapshot=get_ranking_snapshot,
+            get_basic_character_snapshot=get_basic_character_snapshot,
+            get_world_type=get_world_type,
+            is_temporary_nexon_failure=is_temporary_nexon_failure,
+            increment_metric=increment_metric,
+            max_workers=3,
+        )
     except requests.RequestException:
         return stale_snapshot_response(
             cache_key, "성장 기록 조회 중 넥슨 API 연결에 실패했습니다. 잠시 후 다시 시도해주세요."
@@ -409,89 +240,6 @@ def get_history():
     cache_ttl = HISTORY_CACHE_TTL if history_status == "complete" else 300
     set_cache(cache_key, result, cache_ttl)
     return jsonify(with_data_status(result, "current", saved_at))
-
-
-def is_historical_data_missing(response):
-    """정상 응답에서 해당 날짜의 기록이 비어 있는지 확인한다."""
-    return response is not None and response.status_code == 200
-
-
-def fetch_historical_record(ocid, world_name, target_date, today):
-    """랭킹 또는 날짜별 캐릭터 정보에서 과거 일일 스냅샷을 만든다."""
-    date_text = target_date.isoformat()
-    try:
-        ranking_data, ranking_response = get_ranking_snapshot(
-            date_text, world_name=world_name, ocid=ocid,
-            world_type=get_world_type(world_name), historical=True
-        )
-    except requests.RequestException:
-        ranking_data, ranking_response = None, None
-
-    if ranking_data:
-        level = ranking_data.get("character_level")
-        experience = ranking_data.get("character_exp")
-        if level is not None and experience is not None:
-            experience_rate = ranking_data.get("character_exp_rate")
-            rate_checked = experience_rate is not None
-            if experience_rate is None:
-                try:
-                    rate_data, rate_response = get_basic_character_snapshot(
-                        ocid,
-                        target_date=date_text if target_date < today else None,
-                        historical=True
-                    )
-                except requests.RequestException:
-                    rate_data, rate_response = None, None
-                if rate_data:
-                    experience_rate = rate_data.get("character_exp_rate")
-                rate_checked = bool(
-                    rate_response is not None and rate_response.status_code == 200
-                )
-            return {
-                "date": date_text,
-                "ranking": ranking_data.get("ranking"),
-                "level": level,
-                "experience": experience,
-                "experienceRate": experience_rate,
-                "experienceRateChecked": rate_checked,
-                "recordStatus": "available"
-            }
-
-    try:
-        # 기본 정보 API는 오늘 날짜를 date로 받지 않으므로 오늘은 최신 응답을 사용한다.
-        basic_data, basic_response = get_basic_character_snapshot(
-            ocid,
-            target_date=date_text if target_date < today else None,
-            historical=True
-        )
-    except requests.RequestException:
-        basic_data, basic_response = None, None
-
-    if basic_data:
-        level = basic_data.get("character_level")
-        experience = basic_data.get("character_exp")
-        if level is not None and experience is not None:
-            return {
-                "date": date_text,
-                "ranking": ranking_data.get("ranking") if ranking_data else None,
-                "level": level,
-                "experience": experience,
-                "experienceRate": basic_data.get("character_exp_rate"),
-                "experienceRateChecked": bool(
-                    basic_response is not None and basic_response.status_code == 200
-                ),
-                "recordStatus": "available"
-            }
-
-    # 명확한 데이터 없음 응답만 저장해 다음 조회 때 같은 날짜를 반복 요청하지 않는다.
-    if (
-        is_historical_data_missing(ranking_response)
-        and is_historical_data_missing(basic_response)
-    ):
-        return {"date": date_text, "recordStatus": "not_ready"}
-
-    # API 오류는 미수집 상태로 남겨 다음 사용자의 요청 때 다시 확인할 수 있게 한다.
-    return None
 
 
 @history_bp.route("/history/archive")
