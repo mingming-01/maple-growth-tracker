@@ -343,6 +343,13 @@ def get_cache(key):
         return item["data"]
 
 
+def delete_cache(key):
+    """지정한 캐시 항목을 잠금 상태에서 안전하게 제거한다."""
+    state = get_runtime_state()
+    with state.cache_lock:
+        return state.cache.pop(key, None) is not None
+
+
 def set_cache(key, data, ttl):
     state = get_runtime_state()
     now = time.time()

@@ -45,6 +45,7 @@ function App() {
   const restored = useMemo(() => readTrackerState(), []);
   const [name,setName] = useState(restored?.character?.characterName || "");
   const [character,setCharacter] = useState(restored?.character || null);
+  const [profileRevision,setProfileRevision] = useState(0);
   const [history,setHistory] = useState(Array.isArray(restored?.history) ? restored.history : []);
   const [analysisPeriod,setAnalysisPeriod] = useState(() => ({ days:[7,30,90].includes(Number(restored?.historyRange)) ? Number(restored.historyRange) : 7, history:Array.isArray(restored?.displayHistory) ? restored.displayHistory : (Array.isArray(restored?.history) ? restored.history : []), summary:restored?.periodSummary || null }));
   const [openNavMenu,setOpenNavMenu] = useState(null);
@@ -170,6 +171,7 @@ function App() {
     setLastSearched("");
     try {
       const nextCharacter = await getCharacter(target,{refresh});
+      setProfileRevision(revision => revision + 1);
       let historyResult;
       try {
         historyResult = await getHistory(target,{refresh,ocid:nextCharacter.ocid});
@@ -427,6 +429,7 @@ function App() {
             <div ref={resultRef} className="mgt-result-content">
               <GrowthHome
                 character={character}
+                profileRevision={profileRevision}
                 history={history}
                 onStatsLoaded={onStatsLoaded}
                 onHistoryChange={setHistory}

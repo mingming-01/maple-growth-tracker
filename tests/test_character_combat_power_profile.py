@@ -4,7 +4,13 @@ from pathlib import Path
 from unittest.mock import Mock, patch
 
 from tracker import create_app
-from tracker.runtime import get_runtime_state, initialize_snapshot_db, load_api_snapshot
+from tracker.runtime import (
+    get_cache,
+    get_runtime_state,
+    initialize_snapshot_db,
+    load_api_snapshot,
+    set_cache,
+)
 
 
 class CharacterCombatPowerProfileTests(unittest.TestCase):
@@ -62,9 +68,20 @@ class CharacterCombatPowerProfileTests(unittest.TestCase):
         self.assertEqual(first["bestCombatPower"], 887338916)
         self.assertTrue(first["bestCombatPowerObservedAt"])
 
+        # 상세 API가 이전 전투력을 담은 통합 응답 캐시를 가진 상황을 재현한다.
+        with self.app.app_context():
+            set_cache(
+                "character-details:sample-ocid:stats",
+                {"sources": [{"id": "stat", "combatPower": "887338916"}]},
+                300,
+            )
+            self.assertIsNotNone(get_cache("character-details:sample-ocid:stats"))
+
         refreshed = self.client.get(
             "/api/character?name=밍득&refresh=1"
         ).get_json()
+        with self.app.app_context():
+            self.assertIsNone(get_cache("character-details:sample-ocid:stats"))
         self.assertEqual(refreshed["currentCombatPower"], "800000000")
         self.assertEqual(refreshed["bestCombatPower"], 887338916)
         self.assertEqual(
