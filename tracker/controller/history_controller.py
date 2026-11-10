@@ -30,6 +30,7 @@ from tracker.runtime import (
     with_data_status,
     get_cache,
     get_cache_timestamp,
+    increment_metric,
 )
 
 history_bp = Blueprint("history", __name__, url_prefix="/api")
@@ -75,6 +76,8 @@ def _load_recent_character_basic_snapshot(character_name, ocid, now=None):
         "character_level": snapshot.get("level"),
         "character_exp": snapshot.get("experience"),
         "character_exp_rate": snapshot.get("experienceRate"),
+        "ranking": snapshot.get("ranking"),
+        "ranking_data_status": snapshot.get("rankingDataStatus"),
     }
 
 
@@ -180,12 +183,31 @@ def get_history():
                     "_fromStore": True
                 }
 
-            ranking_data, response = get_ranking_snapshot(
-                target_date=date_string,
-                world_name=world_name,
-                ocid=ocid,
-                world_type=get_world_type(world_name),
-            )
+            ranking_data = None
+            response = None
+            # /api/character already queried today's overall rank. Reuse it only
+            # when the persisted profile marks ranking data as available.
+            if (
+                target_date == today
+                and basic.get("ranking_data_status") == "available"
+                and basic.get("ranking") is not None
+            ):
+                ranking_data = {
+                    "ranking": basic.get("ranking"),
+                    "character_level": basic.get("character_level"),
+                    "character_exp": basic.get("character_exp"),
+                    "character_exp_rate": basic.get("character_exp_rate"),
+                }
+                response = requests.Response()
+                response.status_code = 200
+                increment_metric("history.current_ranking_reused")
+            else:
+                ranking_data, response = get_ranking_snapshot(
+                    target_date=date_string,
+                    world_name=world_name,
+                    ocid=ocid,
+                    world_type=get_world_type(world_name),
+                )
             if ranking_data:
                 experience_rate = ranking_data.get("character_exp_rate")
                 rate_checked = experience_rate is not None
