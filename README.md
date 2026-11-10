@@ -1,13 +1,16 @@
 # Maple Growth Tracker
 
-메이플스토리 캐릭터의 현재 스펙이 아니라 **성장 과정**을 기록하고, 계산된 성장 데이터를 이해하기 쉽게 보여주는 웹 서비스입니다.
+메이플스토리 캐릭터의 현재 스펙이 아니라 **성장 과정**을 기록하고, 계산된 성장 데이터를 이해하기 쉽게 보여주는 웹 서비스입니다. React/Vite 기반 화면과 Flask 백엔드를 사용하며, 기존 Vanilla JS 화면도 `/legacy/`에서 유지합니다.
 
 <p align="center">
 
 ![Python](https://img.shields.io/badge/Python-3776AB?style=flat-square&logo=python&logoColor=white)
 ![Flask](https://img.shields.io/badge/Flask-000000?style=flat-square&logo=flask&logoColor=white)
+![React](https://img.shields.io/badge/React-149ECA?style=flat-square&logo=react&logoColor=white)
+![Vite](https://img.shields.io/badge/Vite-646CFF?style=flat-square&logo=vite&logoColor=white)
 ![JavaScript](https://img.shields.io/badge/JavaScript-F7DF1E?style=flat-square&logo=javascript&logoColor=black)
 ![Chart.js](https://img.shields.io/badge/Chart.js-FF6384?style=flat-square&logo=chart.js&logoColor=white)
+![PostgreSQL](https://img.shields.io/badge/PostgreSQL-4169E1?style=flat-square&logo=postgresql&logoColor=white)
 ![SQLite](https://img.shields.io/badge/SQLite-003B57?style=flat-square&logo=sqlite&logoColor=white)
 ![Gemini](https://img.shields.io/badge/Gemini%20API-4285F4?style=flat-square&logo=google&logoColor=white)
 ![OpenRouter](https://img.shields.io/badge/OpenRouter-6467F2?style=flat-square)
@@ -41,7 +44,7 @@ Flask / Python
       ↓
 데이터 가공 및 계산
       ↓
-JavaScript / Chart.js
+React / JavaScript / Chart.js
       ↓
 성장 데이터 시각화
       ↓
@@ -151,7 +154,7 @@ fallback은 코드에서 다음 조건으로 동작합니다.
 - OpenRouter까지 실패하면 "AI 분석을 불러오지 못했습니다."라는 안내만 표시하고, 내부 오류 내용은 화면에 노출하지 않습니다.
 - 사용할 OpenRouter 모델은 `OPENROUTER_MODEL` 환경변수로 바꿀 수 있고, 기본값은 `openrouter/free`입니다.
 - 성장 리포트와 캐릭터 비교 분석에 같은 방식이 적용됩니다.
-- 동일한 입력 데이터의 분석 결과는 브라우저에 최대 30일간 보관하고(최대 40건), 재조회 시 AI API를 다시 호출하지 않고 재사용합니다. 서버도 동일한 프롬프트의 성공한 결과를 최대 6시간 메모리 캐시에 보관합니다. 데이터가 달라지면 새로운 분석을 생성합니다.
+- 동일한 입력 데이터의 분석 결과는 브라우저 `localStorage`에 최대 40건 보관하며, 리포트 유형별 만료 시간은 7일 분석 6시간, 30일 분석 7일, 90일 분석 30일입니다. 서버도 동일한 프롬프트의 성공한 결과를 프로세스 메모리에 최대 6시간 보관합니다. 서버 재시작 시 서버 캐시는 초기화되며, 데이터가 달라지면 새로운 분석을 생성합니다.
 - 비교 분석 프롬프트에는 캐릭터 식별자·조회 시각 같은 부가 메타데이터를 보내지 않고, 비교에 필요한 캐릭터 정보와 성장 지표·기록만 전달합니다.
 
 AI 응답은 그대로 쓰지 않고 서버에서 후처리합니다(`sanitize_ai_text`).
@@ -191,77 +194,75 @@ LLM은 숫자 계산이 틀리거나 없는 내용을 그럴듯하게 채워 넣
 
 | 구분 | 기술 |
 | --- | --- |
-| Backend | Python, Flask, requests, python-dotenv |
-| Frontend | HTML, CSS, JavaScript |
-| 시각화 | Chart.js |
+| Backend | Python, Flask, Requests, Gunicorn |
+| Frontend | React 19, React DOM, Vite 6 |
+| Legacy frontend | HTML, CSS, Vanilla JavaScript (`/legacy/`) |
+| 시각화 | Chart.js 4 |
 | 이미지 / PDF 저장 | html2canvas, jsPDF |
 | AI | Google Gemini API, OpenRouter |
 | 게임 데이터 | NEXON Open API |
-| 관리자 로그 저장 | Supabase PostgreSQL (배포) / SQLite (로컬 또는 연결 실패 시 임시 저장) |
+| 데이터 저장 | PostgreSQL (`GROWTH_DATABASE_URL`) / SQLite 로컬 개발 저장소 |
+| 테스트 | Python unittest, Node.js test runner, Playwright |
 | 배포 | Render |
-| 개발 환경 | Kali Linux, VS Code, Git, GitHub |
+| 개발 도구 | Python 3.12 및 Node.js 20 기준 CI, npm, Git, GitHub |
 
-Chart.js, html2canvas, jsPDF는 CDN으로 불러옵니다.
-
----
+React 화면의 Chart.js, html2canvas, jsPDF는 npm 의존성으로 빌드에 포함합니다. 기존 `/legacy/` 화면은 CDN 스크립트를 사용합니다.
 
 ## 프로젝트 구조
 
 ```text
 maple-growth-tracker/
-│
-├── app.py                         # WSGI 진입점 및 로컬 개발 서버 실행
-├── requirements.txt
-├── .gitignore
-├── README.md
-│
+├── app.py                         # Flask WSGI 진입점 및 개발 서버
+├── package.json                   # 루트 개발·테스트 명령
+├── requirements.txt               # Python 의존성
+├── frontend/
+│   ├── package.json               # React/Vite 의존성 및 스크립트
+│   ├── vite.config.js
+│   └── src/
+│       ├── App.jsx
+│       ├── components/            # 관리자·캐릭터 상세 UI
+│       ├── features/              # 홈·성장·분석 기능
+│       ├── lib/                   # 성장 계산·브라우저 저장소
+│       ├── services/              # Flask API 클라이언트
+│       └── styles/                # React 전용 스타일
 ├── tracker/
-│   ├── __init__.py                # create_app 공개
-│   ├── application.py             # Flask Application Factory 및 Blueprint 등록
-│   ├── config.py                  # 환경변수 기반 설정
-│   ├── runtime.py                 # 앱별 런타임 상태와 공통 캐시·로그 처리
-│   │
-│   ├── controller/                # 기능별 Flask Blueprint와 HTTP 요청 처리
-│   │   ├── page_controller.py
-│   │   ├── admin_controller.py
-│   │   ├── character_controller.py
-│   │   ├── history_controller.py
-│   │   └── ai_controller.py
-│   │
-│   ├── domain/                    # Flask 및 외부 API에 독립적인 성장 계산 규칙
-│   │   └── growth_calculations.py
-│   ├── services/                  # 캐릭터 조회·성장 기록·AI 기능의 애플리케이션 서비스
-│   │   ├── nexon_service.py
-│   │   ├── growth_history_service.py
-│   │   └── ai_analysis_service.py
-│   ├── repositories/              # PostgreSQL·SQLite 저장소 접근
-│   │   ├── growth_history_store.py
-│   │   └── api_snapshot_repository.py
-│   └── integrations/              # 외부 API 연동과 공통 HTTP 재시도 정책
-│       ├── nexon_api.py
-│       ├── ai_provider.py
-│       └── http_client.py
-│
-├── templates/                     # 메인·관리자 화면
-├── static/                        # JavaScript·CSS·이미지·직업 매핑
-├── migrations/                    # PostgreSQL 테이블 및 권한 설정
-├── tests/                         # API·도메인·저장소·앱 팩토리 테스트
-└── docs/                           # 프로젝트 운영·개선 문서
+│   ├── application.py             # Flask Application Factory
+│   ├── config.py                  # 환경변수 및 기본 설정
+│   ├── runtime.py                 # 앱별 런타임 상태와 호환 진입점
+│   ├── controller/                # HTTP 라우트와 요청 처리
+│   ├── domain/                    # 프레임워크 독립 계산 규칙
+│   ├── integrations/              # Nexon·AI 외부 API 연동
+│   ├── repositories/              # 성장 기록·스냅샷·관리자 로그 저장
+│   └── services/                  # 수집·분석·캐시·요청 제한 서비스
+├── static/                        # 레거시 자산 및 React 빌드 산출물 경로
+├── templates/                     # 레거시·관리자 템플릿
+├── migrations/                    # PostgreSQL 스키마 SQL
+├── tests/                         # Python 단위·통합 테스트
+├── tests-js/                      # Node.js JavaScript 단위 테스트
+├── e2e/                           # Playwright 브라우저 E2E 테스트
+├── scripts/                       # 테스트용 서버 실행 스크립트
+└── docs/                           # 운영·설계·검증 문서
 ```
 
 ### API
 
 | 경로 | 설명 |
 | --- | --- |
-| `GET /` | 메인 화면 |
-| `GET /api/character?name=` | 캐릭터 정보와 랭킹 4종 |
-| `GET /api/history?name=` | 최근 7일 기록과 경험치 증가량 / 레벨업 / 랭킹 변화 |
-| `GET /api/history/archive?ocid=&days=30|90` | 선택 기간의 저장 기록 조회. 화면에서 30일·90일을 선택한 경우 누락 날짜를 10일씩 나눠 보충 |
-| `POST /api/ai-analysis?name=` | 계산된 지표(metrics)를 받아 AI 성장 리포트 생성 (GET은 지표 없이 호출하던 방식과의 호환용) |
-| `POST /api/ai-comparison` | 두 캐릭터의 지표를 받아 AI 비교 분석 생성 |
-| `/admin/login`, `/admin/logs`, `POST /admin/logout` | 관리자 로그인 / 로그 조회 / 로그아웃 |
+| `GET /` | React 빌드가 있으면 기본 화면, 없으면 레거시 화면 |
+| `GET /legacy/` | 기존 Vanilla JS 화면 |
+| `GET /preview/` | React 화면 검증용 경로 |
+| `GET /api/character?name=` | 캐릭터 기본 정보, 랭킹 4종, 현재 전투력 |
+| `GET /api/history?name=` | 최근 7일 성장 기록과 경험치·레벨업·랭킹 변화 |
+| `GET /api/history/archive?ocid=&days=30|90` | 저장된 30일·90일 기록 및 사용자가 요청한 누락 날짜 보충 |
+| `GET /api/character-details?ocid=&section=` | 선택한 상세 탭 조회. `stats`, `equipment`, `symbols`, `skills`, `link`, `union` |
+| `POST /api/ai-analysis?name=` | 계산된 지표와 기록을 전달해 AI 성장 리포트 생성 |
+| `POST /api/ai-comparison` | 두 캐릭터의 계산된 지표를 AI로 비교 |
+| `GET /admin/login`, `POST /admin/login` | 관리자 로그인 |
+| `GET /admin/logs`, `GET /admin/api/logs` | 관리자 로그 화면 및 React용 JSON API |
+| `GET /admin/api/performance` | 현재 서버 프로세스의 성능 계측 조회 |
+| `POST /admin/logout` | 관리자 로그아웃 |
 
----
+AI 분석의 `GET /api/ai-analysis`는 이전 호출 방식과의 호환용으로 남아 있으며, 현재 프런트엔드는 계산된 지표를 전달하는 `POST` 방식을 사용합니다.
 
 ## 주요 문제 해결
 
@@ -342,8 +343,12 @@ Windows:
 
 ### 3. 패키지 설치
 
+Python 의존성과 루트·프런트엔드 npm 의존성을 설치합니다. Node.js 20 이상 환경을 권장합니다.
+
 ```bash
 pip install -r requirements.txt
+npm ci
+npm --prefix frontend ci
 ```
 
 ### 4. 환경변수 설정
@@ -380,7 +385,7 @@ AI_API_RETRY_BACKOFF=0.5
 | `NEXON_API_KEY` | NEXON Open API 키 |
 | `GEMINI_API_KEY` | Gemini API 키 |
 | `OPENROUTER_API_KEY` / `OPENROUTER_MODEL` | fallback용 OpenRouter 키 / 모델 (모델 기본값 `openrouter/free`) |
-| `ADMIN_USERNAME` / `ADMIN_PASSWORD_HASH` | 관리자 계정. 해시 대신 `ADMIN_PASSWORD`(평문)도 코드상 지원하지만 해시를 권장 |
+| `ADMIN_USERNAME` / `ADMIN_PASSWORD_HASH` | 관리자 계정. 운영 환경에서는 `ADMIN_PASSWORD_HASH`가 필요하며, `ADMIN_PASSWORD` 평문 대체는 로컬 개발 환경에서만 사용 가능 |
 | `FLASK_SECRET_KEY` | 세션 서명 키. 없으면 실행할 때마다 임의로 생성되어 재시작 시 로그인 세션이 풀림 |
 | `FLASK_COOKIE_SECURE` | `true`면 세션 쿠키에 Secure 속성 적용 (HTTPS 환경) |
 | `NEXON_API_CONNECT_TIMEOUT` / `NEXON_API_READ_TIMEOUT` | Nexon API 연결·응답 제한 시간 (초, 기본값 3.05 / 10) |
@@ -396,17 +401,41 @@ AI_API_RETRY_BACKOFF=0.5
 
 ### 5. 서버 실행
 
+루트 디렉터리에서 다음 명령을 실행하면 Flask 백엔드와 Vite 개발 서버가 함께 시작됩니다.
+
 ```bash
-python app.py
+npm run dev
 ```
 
-```text
-http://127.0.0.1:5000
-```
+- React 개발 화면: http://127.0.0.1:5173/
+- Flask 백엔드: http://127.0.0.1:5000/
 
-`python app.py`는 `debug=True`, `0.0.0.0:5000`으로 실행되는 로컬 개발용 설정입니다.
+Vite는 `/api`, `/static`, `/admin` 요청을 Flask 백엔드로 프록시합니다. 기본 백엔드 주소를 바꾸려면 `FLASK_API_PROXY_TARGET` 환경변수를 설정합니다.
+
+백엔드와 프런트엔드를 별도로 실행해야 할 때는 두 터미널에서 각각 `npm run dev:backend`, `npm run dev:frontend`를 사용할 수 있습니다. `python app.py`만 실행하면 Flask 서버만 시작되며, React 빌드 산출물이 없는 경우 기본 경로는 레거시 화면으로 폴백합니다.
 
 ---
+
+## 테스트 및 검증
+
+Python, JavaScript, React 빌드, 브라우저 테스트는 다음 명령으로 실행합니다.
+
+```bash
+# Python 테스트
+python -m unittest discover -s tests -v
+
+# JavaScript 성장·저장소·경계 테스트
+npm run test:growth
+
+# React 프로덕션 빌드
+npm --prefix frontend run build
+
+# Playwright 브라우저 E2E (최초 1회 브라우저 설치)
+npx playwright install chromium
+npm run test:e2e
+```
+
+테스트 실행 전 Python 의존성과 루트·프런트엔드 npm 의존성이 설치되어 있어야 합니다. 루트 GitHub Actions의 Tests 워크플로는 Python 테스트, React 빌드, 레거시 JavaScript 구문 검사, JavaScript 성장 테스트를 실행합니다. 브라우저 E2E는 별도 Browser E2E 워크플로에서 실행합니다.
 
 ## 배포
 
@@ -456,7 +485,7 @@ Render Build Command 변경 후 재배포하고 `/`, `/preview/`, `/legacy/`를 
 
 ## Phase 1 운영 안정성 설정
 
-`GROWTH_DATABASE_URL`은 장기 성장 기록과 API 스냅샷에 공통으로 사용됩니다. PostgreSQL 연결에 성공하면 두 저장소가 PostgreSQL을 사용하고, 스냅샷 저장소 연결이 시작 시 실패하면 SQLite로 폴백하며 관리자 화면에 상태를 표시합니다. SQLite는 Render 인스턴스의 영속 디스크가 보장되지 않는 한 재배포 후 보존되지 않을 수 있습니다.
+`GROWTH_DATABASE_URL`은 장기 성장 기록, API 스냅샷, 관리자 로그 및 PostgreSQL 기반 공유 요청 제한 저장소에 사용됩니다. URL이 설정되지 않은 로컬 환경에서는 성장 기록·스냅샷·관리자 로그가 SQLite를 사용하고 요청 제한은 프로세스 메모리를 사용합니다. 운영 중 PostgreSQL 초기 연결에 실패하면 API 스냅샷과 관리자 로그 저장소는 SQLite로 전환해 경고를 표시할 수 있으며, 공개 API 요청 제한은 일시적으로 프로세스 메모리로 폴백합니다. SQLite는 Render 인스턴스의 영속 디스크가 보장되지 않는 한 재배포 후 보존되지 않을 수 있습니다.
 
 추가 선택 환경변수:
 
@@ -472,12 +501,12 @@ Render Build Command 변경 후 재배포하고 `/`, `/preview/`, `/legacy/`를 
 
 AI 요청 카운터와 로그인 잠금은 현재 앱 인스턴스의 메모리에서 관리합니다. 프로세스 재시작 또는 다중 인스턴스에서 누적되지 않으므로, 실제 과금 상한은 Gemini/OpenRouter 공급자 계정의 예산 제한과 함께 설정해야 합니다. 운영 환경(`RENDER=true` 또는 `FLASK_ENV=production`)에서는 `ADMIN_PASSWORD_HASH` 사용이 필요하며 `ADMIN_PASSWORD` 평문 대체는 비활성화됩니다. `FLASK_SECRET_KEY`에는 고정된 32자 이상의 값을 설정하세요.
 
-브라우저 스모크 테스트는 `npm install`, `npx playwright install --with-deps chromium`, `npx playwright test`로 실행할 수 있습니다. 상세 제한과 미지원 범위는 `docs/PHASE1_HARDENING.md`를 참고하세요.
+Playwright 브라우저 E2E는 의존성 설치 후 `npx playwright install chromium`, `npm run test:e2e`로 실행합니다. 상세 제한과 미지원 범위는 `docs/PHASE1_HARDENING.md`를 참고하세요.
 
 
 ## Phase 3 캐릭터 상세 정보
 
-캐릭터 검색 결과에서 상세 정보 탭을 선택하면 스탯, 장비, 링크 스킬, 유니온 정보를 별도로 불러옵니다. 상세 조회는 지연 로딩 방식이며, 일부 Nexon API가 실패해도 기본 캐릭터 검색과 성장 분석은 계속 사용할 수 있습니다.
+캐릭터 검색 결과에서 상세 정보 탭을 선택하면 스탯, 장비, 심볼, 스킬, 링크, 유니온 정보를 별도로 불러옵니다. 상세 조회는 지연 로딩 방식이며, 일부 Nexon API가 실패해도 기본 캐릭터 검색과 성장 분석은 계속 사용할 수 있습니다.
 
 각 영역은 API가 반환하는 현재 적용 프리셋을 기본으로 선택하고, 응답에 포함된 다른 프리셋도 개별 선택해 볼 수 있습니다. 전투력은 Nexon API가 반환하는 현재 적용 상태의 값을 표시하며, 비활성 프리셋의 전투력이나 환산 점수는 근거 없이 추정하지 않습니다.
 
