@@ -188,9 +188,8 @@ function App() {
       setAnalysisPeriod({days:7,history:records,summary:null});
       setComparisonState(null);
       setLastSearched(new Date().toLocaleTimeString("ko-KR",{hour:"2-digit",minute:"2-digit"}));
+      // Character and history are persisted by the state-change effect above.
       persistPatch({
-        character:nextCharacter,
-        history:records,
         aiAnalysis:null,
         aiInsights:null,
         comparison:null,
