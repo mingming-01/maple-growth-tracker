@@ -81,6 +81,23 @@ def _load_recent_character_basic_snapshot(character_name, ocid, now=None):
     }
 
 
+def _get_cached_current_ranking(basic, target_date, today):
+    """캐릭터 조회 스냅샷의 오늘 종합 랭킹을 안전하게 추출한다."""
+    if target_date != today or not isinstance(basic, dict):
+        return None
+    if basic.get("ranking_data_status") != "available":
+        return None
+    ranking = basic.get("ranking")
+    if ranking is None:
+        return None
+    return {
+        "ranking": ranking,
+        "character_level": basic.get("character_level"),
+        "character_exp": basic.get("character_exp"),
+        "character_exp_rate": basic.get("character_exp_rate"),
+    }
+
+
 # 최근 7일 성장 기록 조회 및 변화량 계산
 @history_bp.route("/history")
 def get_history():
@@ -183,21 +200,10 @@ def get_history():
                     "_fromStore": True
                 }
 
-            ranking_data = None
-            response = None
-            # /api/character already queried today's overall rank. Reuse it only
-            # when the persisted profile marks ranking data as available.
-            if (
-                target_date == today
-                and basic.get("ranking_data_status") == "available"
-                and basic.get("ranking") is not None
-            ):
-                ranking_data = {
-                    "ranking": basic.get("ranking"),
-                    "character_level": basic.get("character_level"),
-                    "character_exp": basic.get("character_exp"),
-                    "character_exp_rate": basic.get("character_exp_rate"),
-                }
+            ranking_data = _get_cached_current_ranking(basic, target_date, today)
+            if ranking_data is not None:
+                # /api/character already queried today's overall rank. Reuse it only
+                # when the persisted profile marks ranking data as available.
                 response = requests.Response()
                 response.status_code = 200
                 increment_metric("history.current_ranking_reused")
