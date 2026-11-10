@@ -4,6 +4,7 @@ from unittest import TestCase
 from unittest.mock import patch
 
 from tracker.controller.history_controller import (
+    _get_cached_current_ranking,
     _load_recent_character_basic_snapshot,
 )
 
@@ -83,6 +84,50 @@ class RecentCharacterBasicSnapshotTests(TestCase):
 
         result = _load_recent_character_basic_snapshot(
             "오작크로아", "ocid-123", now=self.now
+        )
+
+        self.assertIsNone(result)
+
+
+    def test_reuses_only_available_current_ranking(self):
+        basic = {
+            "ranking": 1234,
+            "ranking_data_status": "available",
+            "character_level": 290,
+            "character_exp": 123456,
+            "character_exp_rate": 45.6,
+        }
+
+        result = _get_cached_current_ranking(
+            basic, self.now.date(), self.now.date()
+        )
+
+        self.assertEqual(
+            result,
+            {
+                "ranking": 1234,
+                "character_level": 290,
+                "character_exp": 123456,
+                "character_exp_rate": 45.6,
+            },
+        )
+
+    def test_does_not_reuse_partial_or_missing_ranking(self):
+        partial = {"ranking": 1234, "ranking_data_status": "partial"}
+        missing = {"ranking_data_status": "available", "ranking": None}
+
+        self.assertIsNone(
+            _get_cached_current_ranking(partial, self.now.date(), self.now.date())
+        )
+        self.assertIsNone(
+            _get_cached_current_ranking(missing, self.now.date(), self.now.date())
+        )
+
+    def test_does_not_reuse_ranking_for_historical_date(self):
+        basic = {"ranking": 1234, "ranking_data_status": "available"}
+
+        result = _get_cached_current_ranking(
+            basic, self.now.date() - timedelta(days=1), self.now.date()
         )
 
         self.assertIsNone(result)
