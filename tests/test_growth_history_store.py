@@ -7,6 +7,7 @@ from unittest.mock import Mock, patch
 import app as tracker
 from tracker import create_app
 from tracker.controller import history_controller
+from tracker.services import history_archive_service
 from tracker.repositories.growth_history_store import GrowthHistoryStore
 from tracker.runtime import get_runtime_state
 from tracker.services.growth_history_service import GrowthHistoryService
@@ -328,8 +329,8 @@ class GrowthHistoryApiTests(unittest.TestCase):
         self.assertEqual(comparison_history[-2]["ranking"], 654)
 
     def test_archive_does_not_fetch_past_data_without_collection_request(self):
-        with patch.object(history_controller, "get_ranking_snapshot", side_effect=AssertionError("should not call Nexon")), patch.object(
-            history_controller, "get_basic_character_snapshot", side_effect=AssertionError("should not call Nexon")
+        with patch.object(history_archive_service, "get_ranking_snapshot", side_effect=AssertionError("should not call Nexon")), patch.object(
+            history_archive_service, "get_basic_character_snapshot", side_effect=AssertionError("should not call Nexon")
         ):
             response = self.client.get("/api/history/archive?ocid=test-ocid&days=30")
 
