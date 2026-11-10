@@ -2,7 +2,7 @@ from flask import jsonify, request, current_app, has_app_context
 from werkzeug.exceptions import HTTPException
 import os
 import time
-from datetime import datetime
+from datetime import date, datetime
 from threading import Lock
 from zoneinfo import ZoneInfo
 from tracker.repositories.growth_history_store import GrowthHistoryStore
