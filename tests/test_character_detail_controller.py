@@ -59,7 +59,7 @@ class CharacterDetailControllerTests(unittest.TestCase):
         self.assertEqual(body["currentCombatPower"], "123")
         self.assertEqual(body["bestCombatPower"], 123)
         self.assertTrue(body["bestCombatPowerObservedAt"])
-        self.assertNotIn("bestPresetCombination", body)
+        self.assertIsNone(body["bestPresetCombination"])
         self.assertNotIn("actualPresetNumbers", body)
         self.assertNotIn("profileRecommendations", body)
         self.assertNotIn("defaultProfile", body)
