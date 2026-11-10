@@ -44,6 +44,7 @@ const PAGE_LINKS = [
 
 export default function GrowthHome({
   character,
+  profileRevision = 0,
   history,
   onStatsLoaded,
   onHistoryChange,
@@ -122,7 +123,7 @@ export default function GrowthHome({
 
       {view === "details" && (
         <div id="details" className="mgt-growth-page-content" data-testid="details-page">
-          <CharacterDetails ocid={character.ocid} onStatsLoaded={onStatsLoaded} initialTab={detailTab} />
+          <CharacterDetails key={profileRevision} ocid={character.ocid} onStatsLoaded={onStatsLoaded} initialTab={detailTab} />
         </div>
       )}
 
