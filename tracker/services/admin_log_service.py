@@ -90,3 +90,45 @@ class AdminLogService:
                 operation="admin_log.insert",
             )
 
+    def list_logs(
+        self,
+        search_text="",
+        selected_action="",
+        selected_result="",
+        date_from=None,
+        date_to=None,
+    ):
+        """저장소 조회 오류를 화면에서 사용할 안전한 상태로 변환한다."""
+        import sqlite3
+
+        import psycopg
+
+        warning = self.repository.state.log_storage_warning
+        try:
+            result = self.repository.search(
+                search_text=search_text,
+                selected_action=selected_action,
+                selected_result=selected_result,
+                date_from=date_from,
+                date_to=date_to,
+            )
+        except (sqlite3.Error, psycopg.Error):
+            result = {"rows": [], "total_count": 0, "action_options": []}
+            warning = (
+                "관리자 로그 저장소에 연결할 수 없습니다. "
+                "환경 설정과 데이터베이스 연결을 확인해주세요."
+            )
+            print("관리자 로그 조회에 실패했습니다.")
+
+        if self.repository.state.log_db_backend == "sqlite" and not warning:
+            warning = (
+                "현재 로그는 SQLite에 저장됩니다. 개발 환경에는 적합하지만 "
+                "Render 재배포 후 보존하려면 PostgreSQL 연결이 필요합니다."
+            )
+
+        return {
+            **result,
+            "storage_warning": warning,
+            "storage_backend": self.repository.state.log_db_backend,
+        }
+
