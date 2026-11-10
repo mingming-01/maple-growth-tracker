@@ -170,3 +170,125 @@ class AdminLogRepository:
                 )
         finally:
             connection.close()
+
+    @staticmethod
+    def _measure_query(query_name, operation, backend):
+        started_at = time.perf_counter()
+        try:
+            return operation()
+        finally:
+            labels = {"backend": backend, "store": "admin_logs", "query": query_name}
+            increment_metric("db.query_executions", **labels)
+            observe_metric(
+                "db.query_ms", (time.perf_counter() - started_at) * 1000, **labels
+            )
+
+    def search(self, search_text="", selected_action="", selected_result="",
+               date_from=None, date_to=None):
+        """검색 조건에 맞는 로그와 필터 선택지를 조회한다."""
+        from datetime import datetime, timedelta
+
+        placeholder = "%s" if self.state.log_db_backend == "postgres" else "?"
+        conditions = []
+        parameters = []
+
+        if search_text:
+            pattern = f"%{search_text}%"
+            conditions.append(
+                "("
+                "COALESCE(action, '') LIKE " + placeholder
+                + " OR COALESCE(path, '') LIKE " + placeholder
+                + " OR COALESCE(character_name, '') LIKE " + placeholder
+                + " OR COALESCE(world_name, '') LIKE " + placeholder
+                + " OR COALESCE(comparison_name, '') LIKE " + placeholder
+                + " OR COALESCE(error_type, '') LIKE " + placeholder
+                + " OR COALESCE(CAST(status_code AS TEXT), '') LIKE " + placeholder
+                + ")"
+            )
+            parameters.extend([pattern] * 7)
+
+        if selected_action:
+            conditions.append(f"action = {placeholder}")
+            parameters.append(selected_action)
+        if selected_result in ("성공", "실패"):
+            conditions.append(f"result = {placeholder}")
+            parameters.append(selected_result)
+
+        def date_bound(day):
+            value = datetime.combine(day, datetime.min.time()).replace(
+                tzinfo=KOREA_TIMEZONE
+            )
+            return (
+                value
+                if self.state.log_db_backend == "postgres"
+                else value.isoformat(timespec="seconds")
+            )
+
+        if date_from:
+            conditions.append(f"created_at >= {placeholder}")
+            parameters.append(date_bound(date_from))
+        if date_to:
+            conditions.append(f"created_at < {placeholder}")
+            parameters.append(date_bound(date_to + timedelta(days=1)))
+
+        where_clause = " WHERE " + " AND ".join(conditions) if conditions else ""
+        rows = []
+        total_count = 0
+        action_options = []
+        query_started = time.perf_counter()
+        query_count = 0
+        try:
+            connection = self.connect()
+            try:
+                with connection:
+                    count_row = self._measure_query(
+                        "count",
+                        lambda: connection.execute(
+                            f"SELECT COUNT(*) AS total FROM action_logs{where_clause}",
+                            parameters,
+                        ).fetchone(),
+                        self.state.log_db_backend,
+                    )
+                    query_count += 1
+                    total_count = count_row["total"]
+
+                    rows = self._measure_query(
+                        "page",
+                        lambda: connection.execute(
+                            "SELECT created_at, action, character_name, world_name, comparison_name, "
+                            "result, path, status_code, duration_ms, error_type "
+                            f"FROM action_logs{where_clause} "
+                            "ORDER BY created_at DESC, id DESC LIMIT 500",
+                            parameters,
+                        ).fetchall(),
+                        self.state.log_db_backend,
+                    )
+                    query_count += 1
+                    action_rows = self._measure_query(
+                        "actions",
+                        lambda: connection.execute(
+                            "SELECT DISTINCT action FROM action_logs ORDER BY action"
+                        ).fetchall(),
+                        self.state.log_db_backend,
+                    )
+                    action_options = [row["action"] for row in action_rows]
+                    query_count += 1
+            finally:
+                connection.close()
+        finally:
+            increment_metric("db.operations", operation="admin_logs.select")
+            increment_metric(
+                "db.sql_statements", query_count, operation="admin_logs.select"
+            )
+            observe_metric(
+                "db.operation_ms",
+                (time.perf_counter() - query_started) * 1000,
+                operation="admin_logs.select",
+            )
+
+        return {
+            "rows": rows,
+            "total_count": total_count,
+            "action_options": action_options,
+        }
+
