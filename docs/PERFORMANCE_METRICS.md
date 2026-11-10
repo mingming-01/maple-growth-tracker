@@ -29,7 +29,9 @@ React 관리자 세션 인증을 그대로 사용한다. 별도 API 키나 브�
 | character.search_parallel_ms | rankings와 combat_power 작업을 함께 기다린 전체 병렬 구간 시간 |
 | db.connection_attempts / db.connection_ms | 저장소별 DB 연결 시도 횟수(실패 포함)와 연결 소요 시간 |
 | db.operations / db.operation_ms | 성장 기록·스냅샷·관리자 로그 작업 횟수와 처리 시간 |
-| db.sql_statements | 계측을 연결한 저장소 작업에서 실행한 SQL 문장 수(일괄 upsert는 행 수 기준) |
+| db.query_executions / db.query_ms | 관리자 로그의 count / page / actions 쿼리별 실행 횟수와 결과 fetch를 포함한 시간 |
+| db.upsert_rows_attempted / db.upsert_rows_affected | 성장 이력 UPSERT에 전달한 행 수와 실제 INSERT/UPDATE된 행 수 |
+| db.sql_statements | 기존 호환 지표. 일괄 UPSERT에서는 SQL 문장 수가 아니라 전달한 행 수를 나타냄 |
 
 각 timing 항목은 표본 수, 최소·최대, 평균, p50, p95를 제공한다. timing 표본은 항목별 최근 2,000개로 제한한다.
 
