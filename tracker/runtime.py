@@ -415,11 +415,12 @@ def get_cache_timestamp(key):
         return item.get("saved_at")
 
 
-def save_api_snapshot(cache_key, data):
+def save_api_snapshot(cache_key, data, only_if_missing=False):
     state = get_runtime_state()
     return save_api_snapshot_for_path(
         state.snapshot_db_path, cache_key, data,
-        state.growth_database_url, state.snapshot_db_backend
+        state.growth_database_url, state.snapshot_db_backend,
+        only_if_missing=only_if_missing,
     )
 
 
