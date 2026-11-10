@@ -5,7 +5,7 @@ from unittest.mock import Mock, patch
 from werkzeug.security import generate_password_hash
 
 from tracker import create_app
-from tracker.controller import ai_controller
+from tracker.controller import ai_controller, character_controller
 from tracker.integrations import nexon_api
 from tracker.runtime import get_runtime_state
 from tracker.services.request_limits import (
