@@ -4,16 +4,13 @@ The React/Vite dashboard is the primary frontend when the production build exist
 
 ## Local development
 
-Run Flask in one terminal:
+From the repository root, the recommended one-command setup starts Flask and Vite together:
 
-    python app.py
-
-Install frontend dependencies and start Vite in another terminal:
-
-    npm --prefix frontend install
-    npm --prefix frontend run dev
+    npm run dev
 
 Open http://127.0.0.1:5173. Vite proxies `/api`, `/static`, and `/admin` requests to Flask at http://127.0.0.1:5000. Set `FLASK_API_PROXY_TARGET` to override the backend address.
+
+For a split-terminal workflow, run `python app.py` in one terminal and `npm --prefix frontend run dev` in another after installing the root and frontend dependencies. See the [root README](../README.md) for full environment setup and test commands.
 
 ## Production build and routes
 
