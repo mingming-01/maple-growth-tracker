@@ -1,6 +1,7 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
+
+const AdminDashboard = lazy(() => import("./components/admin/AdminDashboard.jsx"));
 import { getCharacter, getHistory } from "./services/api.js";
-import AdminDashboard from "./components/admin/AdminDashboard.jsx";
 import FavoriteCharacters from "./features/home/FavoriteCharacters.jsx";
 import GrowthHome from "./features/home/GrowthHome.jsx";
 import {
@@ -346,7 +347,7 @@ function App() {
       </header>
 
       <main className="mgt-page-content mgt-layout-container">
-        {view === "admin" ? <AdminDashboard onBack={closeAdmin} /> : <>
+        {view === "admin" ? <Suspense fallback={<div className="mgt-loading" role="status"><span /> 관리자 화면을 불러오고 있습니다.</div>}><AdminDashboard onBack={closeAdmin} /></Suspense> : <>
         <section className="mgt-hero">
           <div>
             <div className="mgt-hero-label"><span /> 나의 메이플 성장 기록</div>
