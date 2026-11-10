@@ -473,8 +473,12 @@ export default function GrowthDashboard({ character, history, onHistoryChange, o
           dailyGrowth:{type:"linear",position:"right",beginAtZero:true,title:{display:true,text:"일일 경험치 증가량"},grid:{drawOnChartArea:false},ticks:{callback:value=>Number(value).toFixed(0)+"조"}}
         }
       }
+      });
+    }).catch(() => {
+      if (!cancelled) setError("성장 그래프를 불러오지 못했습니다. 페이지를 새로고침해 주세요.");
     });
     return () => {
+      cancelled = true;
       if (chartRef.current) chartRef.current.destroy();
       chartRef.current = null;
     };
