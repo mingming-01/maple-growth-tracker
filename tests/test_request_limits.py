@@ -331,5 +331,47 @@ class RequestLimitTests(unittest.TestCase):
         self.assertEqual(resolve.call_count, 2)
 
 
+    def test_postgres_repository_is_used_for_shared_request_limits(self):
+        app = self.make_app(API_REQUESTS_PER_MINUTE_PER_IP=1)
+
+        class SharedRepository:
+            uses_postgres = True
+            def __init__(self):
+                self.calls = []
+            def consume_api_rate_limit(self, **kwargs):
+                self.calls.append(kwargs)
+                return False, 17, "requests_per_minute"
+
+        repository = SharedRepository()
+        with app.app_context():
+            state = get_runtime_state()
+            state.growth_history_repository = repository
+            result = consume_api_request("198.51.100.30")
+        self.assertEqual(result, (False, 17, "requests_per_minute"))
+        self.assertEqual(len(repository.calls), 1)
+        self.assertEqual(repository.calls[0]["request_limit"], 1)
+
+    def test_shared_repository_failure_falls_back_to_memory_without_breaking_request(self):
+        app = self.make_app(API_REQUESTS_PER_MINUTE_PER_IP=1)
+
+        class FailingRepository:
+            uses_postgres = True
+            def __init__(self):
+                self.calls = 0
+            def consume_api_rate_limit(self, **kwargs):
+                self.calls += 1
+                raise RuntimeError("database unavailable")
+
+        repository = FailingRepository()
+        with app.app_context():
+            state = get_runtime_state()
+            state.growth_history_repository = repository
+            first = consume_api_request("198.51.100.31")
+            second = consume_api_request("198.51.100.31")
+        self.assertTrue(first[0])
+        self.assertFalse(second[0])
+        self.assertEqual(repository.calls, 1)
+
+
 if __name__ == "__main__":
     unittest.main()

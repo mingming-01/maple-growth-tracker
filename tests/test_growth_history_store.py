@@ -109,6 +109,68 @@ class GrowthHistoryStoreTests(unittest.TestCase):
         ])
 
 
+    def test_api_rate_limit_is_shared_between_store_instances(self):
+        store_path = str(Path(self.temp_dir.name) / "shared_limits.sqlite3")
+        first_store = GrowthHistoryStore(sqlite_path=store_path)
+        second_store = GrowthHistoryStore(sqlite_path=store_path)
+        first = first_store.consume_api_rate_limit(
+            client_key="same-client", now=1000.0, window_seconds=60,
+            request_limit=1, refresh_limit=1,
+        )
+        second = second_store.consume_api_rate_limit(
+            client_key="same-client", now=1001.0, window_seconds=60,
+            request_limit=1, refresh_limit=1,
+        )
+        self.assertEqual(first, (True, 0, ""))
+        self.assertEqual(second, (False, 59, "requests_per_minute"))
+
+    def test_api_rate_limit_store_caps_client_entries(self):
+        store_path = str(Path(self.temp_dir.name) / "cleanup_limits.sqlite3")
+        store = GrowthHistoryStore(sqlite_path=store_path)
+        for index in range(5):
+            store.consume_api_rate_limit(
+                client_key=f"client-{index}", now=1000.0 + index,
+                window_seconds=60, request_limit=10, refresh_limit=10,
+                max_clients=3,
+            )
+        store.consume_api_rate_limit(
+            client_key="current-client", now=1005.0,
+            window_seconds=60, request_limit=10, refresh_limit=10,
+            max_clients=3, cleanup=True,
+        )
+        connection = store._connect()
+        try:
+            count = connection.execute(
+                "SELECT COUNT(*) FROM api_request_limit_state"
+            ).fetchone()[0]
+        finally:
+            connection.close()
+        self.assertLessEqual(count, 3)
+
+    def test_api_rate_limit_store_expires_inactive_clients(self):
+        store_path = str(Path(self.temp_dir.name) / "expired_limits.sqlite3")
+        store = GrowthHistoryStore(sqlite_path=store_path)
+        store.consume_api_rate_limit(
+            client_key="expired-client", now=1000.0,
+            window_seconds=60, request_limit=10, refresh_limit=10,
+        )
+        store.consume_api_rate_limit(
+            client_key="current-client", now=1300.0,
+            window_seconds=60, request_limit=10, refresh_limit=10,
+            cleanup=True,
+        )
+        connection = store._connect()
+        try:
+            keys = [
+                row[0] for row in connection.execute(
+                    "SELECT client_key FROM api_request_limit_state"
+                ).fetchall()
+            ]
+        finally:
+            connection.close()
+        self.assertEqual(keys, ["current-client"])
+
+
 class GrowthHistoryApiTests(unittest.TestCase):
     def setUp(self):
         self.app = create_app({

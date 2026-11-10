@@ -141,34 +141,19 @@ def _prune_timestamp_store(store, now, window_seconds, max_clients):
         store.pop(oldest_key, None)
 
 
-def consume_api_request(remote_addr, force_refresh=False):
-    """캐시 미스 요청과 강제 새로고침에 IP별 완화된 한도를 적용한다.
-
-    캐시 hit 경로에서는 호출하지 않는다. 강제 새로고침은 일반 요청 한도와
-    별도의 더 엄격한 한도도 함께 통과해야 한다.
-    """
-    if not _api_rate_limit_identity_ready(remote_addr):
-        return True, 0, ""
-
-    state = get_runtime_state()
-    key = _client_key(remote_addr)
-    now = time.monotonic()
-    window_seconds = max(
-        1, int(_setting("API_REQUEST_LIMIT_WINDOW_SECONDS", 60))
-    )
-    request_limit = max(
-        1, int(_setting("API_REQUESTS_PER_MINUTE_PER_IP", 60))
-    )
-    refresh_limit = max(
-        1, int(_setting("API_REFRESHES_PER_MINUTE_PER_IP", 12))
-    )
-    max_clients = max(
-        100, int(_setting("API_RATE_LIMIT_MAX_CLIENTS", 10000))
-    )
-
+def _consume_api_request_memory(
+    state,
+    key,
+    now,
+    window_seconds,
+    request_limit,
+    refresh_limit,
+    force_refresh,
+    max_clients,
+    cleanup,
+):
     with state.request_limit_lock:
-        state.api_limit_cleanup_counter += 1
-        if state.api_limit_cleanup_counter % 64 == 0:
+        if cleanup:
             _prune_timestamp_store(
                 state.api_request_timestamps,
                 now,
@@ -213,3 +198,76 @@ def consume_api_request(remote_addr, force_refresh=False):
             state.api_refresh_timestamps[key].append(now)
 
     return True, 0, ""
+
+
+def consume_api_request(remote_addr, force_refresh=False):
+    """캐시 미스 요청과 강제 새로고침에 IP별 완화된 한도를 적용한다.
+
+    PostgreSQL이 설정된 운영 환경에서는 앱 인스턴스가 공유하는 행 잠금으로
+    워커 간 한도를 일관되게 적용한다. 로컬 SQLite는 프로세스 메모리를 사용한다.
+    캐시 hit 경로에서는 이 함수를 호출하지 않는다.
+    """
+    if not _api_rate_limit_identity_ready(remote_addr):
+        return True, 0, ""
+
+    state = get_runtime_state()
+    key = _client_key(remote_addr)
+    now = time.monotonic()
+    window_seconds = max(
+        1, int(_setting("API_REQUEST_LIMIT_WINDOW_SECONDS", 60))
+    )
+    request_limit = max(
+        1, int(_setting("API_REQUESTS_PER_MINUTE_PER_IP", 60))
+    )
+    refresh_limit = max(
+        1, int(_setting("API_REFRESHES_PER_MINUTE_PER_IP", 12))
+    )
+    max_clients = max(
+        100, int(_setting("API_RATE_LIMIT_MAX_CLIENTS", 10000))
+    )
+
+    with state.request_limit_lock:
+        state.api_limit_cleanup_counter += 1
+        cleanup = state.api_limit_cleanup_counter % 64 == 0
+        shared_store_available = (
+            now >= state.api_rate_limit_storage_unavailable_until
+        )
+
+    repository = getattr(state, "growth_history_repository", None)
+    if (
+        shared_store_available
+        and getattr(repository, "uses_postgres", False)
+        and callable(getattr(repository, "consume_api_rate_limit", None))
+    ):
+        try:
+            return repository.consume_api_rate_limit(
+                client_key=key,
+                now=time.time(),
+                window_seconds=window_seconds,
+                request_limit=request_limit,
+                refresh_limit=refresh_limit,
+                force_refresh=force_refresh,
+                max_clients=max_clients,
+                cleanup=cleanup,
+            )
+        except Exception:
+            with state.request_limit_lock:
+                state.api_rate_limit_storage_unavailable_until = time.monotonic() + 30
+                should_log = not state.api_rate_limit_storage_warning_logged
+                state.api_rate_limit_storage_warning_logged = True
+            if should_log and has_app_context():
+                current_app.logger.warning(
+                    "공유 API 요청 제한 저장소를 사용할 수 없어 프로세스 메모리 제한기로 전환했습니다."
+                )
+
+    return _consume_api_request_memory(
+        state=state,
+        key=key,
+        now=now,
+        window_seconds=window_seconds,
+        request_limit=request_limit,
+        refresh_limit=refresh_limit,
+        force_refresh=force_refresh,
+        max_clients=max_clients,
+        cleanup=cleanup,
+    )
