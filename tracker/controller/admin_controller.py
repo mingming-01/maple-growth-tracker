@@ -320,27 +320,37 @@ def admin_logs_api():
         connection = connect_log_db()
         try:
             with connection:
-                count_row = connection.execute(
-                    f"SELECT COUNT(*) AS total FROM action_logs{where_clause}",
-                    parameters,
-                ).fetchone()
+                count_row = _measure_admin_log_query(
+                    "count",
+                    lambda: connection.execute(
+                        f"SELECT COUNT(*) AS total FROM action_logs{where_clause}",
+                        parameters,
+                    ).fetchone(),
+                    log_db_backend,
+                )
                 query_count += 1
                 total_count = count_row["total"]
 
-                rows = connection.execute(
-                    "SELECT created_at, action, character_name, world_name, comparison_name, "
-                    "result, path, status_code, duration_ms, error_type "
-                    f"FROM action_logs{where_clause} "
-                    "ORDER BY created_at DESC, id DESC LIMIT 500",
-                    parameters,
-                ).fetchall()
+                rows = _measure_admin_log_query(
+                    "page",
+                    lambda: connection.execute(
+                        "SELECT created_at, action, character_name, world_name, comparison_name, "
+                        "result, path, status_code, duration_ms, error_type "
+                        f"FROM action_logs{where_clause} "
+                        "ORDER BY created_at DESC, id DESC LIMIT 500",
+                        parameters,
+                    ).fetchall(),
+                    log_db_backend,
+                )
                 query_count += 1
-                action_options = [
-                    row["action"]
-                    for row in connection.execute(
+                action_rows = _measure_admin_log_query(
+                    "actions",
+                    lambda: connection.execute(
                         "SELECT DISTINCT action FROM action_logs ORDER BY action"
-                    ).fetchall()
-                ]
+                    ).fetchall(),
+                    log_db_backend,
+                )
+                action_options = [row["action"] for row in action_rows]
                 query_count += 1
         finally:
             connection.close()
