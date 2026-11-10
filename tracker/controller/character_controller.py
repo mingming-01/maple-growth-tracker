@@ -1,8 +1,10 @@
 """캐릭터 정보 조회 HTTP 라우트."""
+from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime
+import time
 
 import requests
-from flask import Blueprint, jsonify, request
+from flask import Blueprint, current_app, jsonify, request
 
 from tracker.services.nexon_service import (
     get_character_rankings,
@@ -10,6 +12,7 @@ from tracker.services.nexon_service import (
     resolve_character,
 )
 from tracker.services.character_detail_service import get_current_combat_power
+from tracker.services.performance_metrics import observe_metric
 from tracker.controller.request_limit_helpers import api_request_limit_response
 from tracker.runtime import (
     CHARACTER_CACHE_TTL,
@@ -17,7 +20,6 @@ from tracker.runtime import (
     delete_cache,
     get_cache,
     get_cache_timestamp,
-    load_api_snapshot,
     save_api_snapshot,
     set_cache,
     record_best_combat_power,
@@ -26,6 +28,19 @@ from tracker.runtime import (
 )
 
 character_bp = Blueprint("character", __name__, url_prefix="/api")
+
+
+def _observe_character_search_component(component, operation):
+    """캐릭터 검색에서 병렬 실행되는 독립 작업의 개별 소요 시간을 기록한다."""
+    started_at = time.perf_counter()
+    try:
+        return operation()
+    finally:
+        observe_metric(
+            "character.search_component_ms",
+            (time.perf_counter() - started_at) * 1000,
+            component=component,
+        )
 
 
 @character_bp.route("/character")
@@ -66,17 +81,43 @@ def get_character():
             return jsonify({"error": "캐릭터 정보를 확인할 수 없습니다."}), response.status_code
 
         character_class = basic["character_class"]
-        character_rankings = get_character_rankings(
-            target_date=datetime.now(KOREA_TIMEZONE).strftime("%Y-%m-%d"),
-            world_name=basic["world_name"],
-            character_class=character_class,
-            ocid=ocid,
-        )
-        # 메인 프로필도 현재 스탯 API를 조회해 상세 탭 진입 여부와 무관하게 전투력을 표시한다.
-        # 상세 탭과 같은 소스 캐시를 사용하므로 동일 조회 흐름에서 중복 호출하지 않는다.
-        current_combat_power = get_current_combat_power(
-            ocid, force_refresh=force_refresh
-        )
+
+        # OCID가 확보된 뒤 랭킹과 메인 프로필 전투력은 서로 독립적으로 조회할 수 있다.
+        # Nexon API 전역 호출 간격과 재시도 정책은 그대로 유지한다.
+        app = current_app._get_current_object()
+
+        def fetch_rankings():
+            return _observe_character_search_component(
+                "rankings",
+                lambda: get_character_rankings(
+                    target_date=datetime.now(KOREA_TIMEZONE).strftime("%Y-%m-%d"),
+                    world_name=basic["world_name"],
+                    character_class=character_class,
+                    ocid=ocid,
+                ),
+            )
+
+        def fetch_current_combat_power():
+            def fetch():
+                with app.app_context():
+                    return get_current_combat_power(
+                        ocid, force_refresh=force_refresh
+                    )
+            return _observe_character_search_component("combat_power", fetch)
+
+        parallel_started_at = time.perf_counter()
+        try:
+            with ThreadPoolExecutor(max_workers=2) as executor:
+                rankings_future = executor.submit(fetch_rankings)
+                combat_power_future = executor.submit(fetch_current_combat_power)
+                character_rankings = rankings_future.result()
+                current_combat_power = combat_power_future.result()
+        finally:
+            observe_metric(
+                "character.search_parallel_ms",
+                (time.perf_counter() - parallel_started_at) * 1000,
+            )
+
         best_power = record_best_combat_power(ocid, current_combat_power) or {}
         if current_combat_power is not None:
             # 새 전투력과 이전 상세 응답 캐시가 함께 남지 않도록 스탯 응답만 무효화한다.
@@ -112,16 +153,17 @@ def get_character():
         "bestPresetCombination": best_power.get("presetNumbers"),
     }
 
-
     data_status = "partial" if character_rankings["rankingDataStatus"] in ("partial", "unavailable", "empty", "not_ready") else "current"
     saved_at = datetime.now().astimezone().isoformat(timespec="seconds")
 
-    # 일시적으로 빈 응답이 와도 기존의 정상 랭킹 스냅샷은 덮어쓰지 않는다.
-    previous_snapshot, _ = load_api_snapshot(cache_key)
-    if character_rankings["rankingDataStatus"] == "available" or previous_snapshot is None:
-        snapshot_saved_at = save_api_snapshot(cache_key, result)
-        if snapshot_saved_at:
-            saved_at = snapshot_saved_at
+    # 부분 응답은 기존 정상 스냅샷을 보호하고, 저장된 값이 없을 때만 최초 기록한다.
+    snapshot_saved_at = save_api_snapshot(
+        cache_key,
+        result,
+        only_if_missing=character_rankings["rankingDataStatus"] != "available",
+    )
+    if snapshot_saved_at:
+        saved_at = snapshot_saved_at
 
     set_cache(cache_key, result, CHARACTER_CACHE_TTL)
     return jsonify(with_data_status(result, data_status, saved_at))

@@ -137,42 +137,46 @@ def get_character_rankings(target_date, world_name, character_class, ocid):
     def fetch_for_date(date_value):
         date_text = date_value.isoformat()
         world_type = get_world_type(world_name)
-        # 직업 필터는 응답의 class_name/sub_class_name으로 만들어야 하므로
-        # OCID 단건 종합 랭킹을 먼저 가져와 필터 값을 확정한다.
-        overall_data, overall_response = get_ranking_snapshot(
-            target_date=date_text, ocid=ocid, world_type=world_type
-        )
-        api_class = _class_filter_from_entry(overall_data, fallback_class)
-
         def fetch_world():
             return get_ranking_snapshot(
                 target_date=date_text, world_name=world_name, ocid=ocid,
                 world_type=world_type,
             )
 
-        def fetch_job_world():
-            if not api_class:
-                return None, None
-            return get_ranking_snapshot(
-                target_date=date_text,
-                world_name=world_name,
-                ocid=ocid,
-                character_class=api_class,
-                world_type=world_type,
-            )
-
-        def fetch_job():
-            if not api_class:
-                return None, None
-            return get_ranking_snapshot(
-                target_date=date_text,
-                ocid=ocid,
-                character_class=api_class,
-                world_type=world_type,
-            )
-
+        # 종합 랭킹 응답으로 직업 필터를 확정해야 하지만 월드 랭킹은
+        # 독립적이므로 두 요청을 함께 시작해 직렬 대기 시간을 줄인다.
         with ThreadPoolExecutor(max_workers=3) as executor:
+            overall_future = executor.submit(
+                get_ranking_snapshot,
+                target_date=date_text,
+                ocid=ocid,
+                world_type=world_type,
+            )
             world_future = executor.submit(fetch_world)
+            overall_data, overall_response = overall_future.result()
+            api_class = _class_filter_from_entry(overall_data, fallback_class)
+
+            def fetch_job_world():
+                if not api_class:
+                    return None, None
+                return get_ranking_snapshot(
+                    target_date=date_text,
+                    world_name=world_name,
+                    ocid=ocid,
+                    character_class=api_class,
+                    world_type=world_type,
+                )
+
+            def fetch_job():
+                if not api_class:
+                    return None, None
+                return get_ranking_snapshot(
+                    target_date=date_text,
+                    ocid=ocid,
+                    character_class=api_class,
+                    world_type=world_type,
+                )
+
             job_world_future = executor.submit(fetch_job_world)
             job_future = executor.submit(fetch_job)
             world_data, world_response = world_future.result()

@@ -76,6 +76,60 @@ class GrowthHistoryStoreTests(unittest.TestCase):
         self.assertEqual(result[0]["experience"], 200)
         self.assertEqual(result[0]["ranking"], 18)
 
+    def test_identical_growth_snapshot_is_not_updated(self):
+        from tracker.services.performance_metrics import get_performance_metrics
+
+        metrics = get_performance_metrics()
+        metrics.reset()
+        record = {
+            "date": self.today.isoformat(),
+            "recordStatus": "available",
+            "level": 280,
+            "experience": 12345,
+            "ranking": 100,
+            "experienceRate": 12.3456,
+            "experienceRateChecked": True,
+        }
+
+        first_saved = self.store.save_records(
+            "test-ocid", "테스트캐릭터", "테스트월드", [record]
+        )
+        self.assertEqual(first_saved, 1)
+
+        connection = self.store._connect()
+        try:
+            with connection:
+                connection.execute(
+                    """
+                    UPDATE growth_daily_snapshots
+                    SET recorded_at = ?
+                    WHERE ocid = ? AND snapshot_date = ?
+                    """,
+                    ("2000-01-01T00:00:00+00:00", "test-ocid", self.today.isoformat()),
+                )
+        finally:
+            connection.close()
+
+        before = self.store.get_records("test-ocid", self.today, self.today)[0]["recordedAt"]
+        second_saved = self.store.save_records(
+            "test-ocid", "테스트캐릭터", "테스트월드", [record]
+        )
+        after = self.store.get_records("test-ocid", self.today, self.today)[0]["recordedAt"]
+
+        self.assertEqual(second_saved, 0)
+        self.assertEqual(after, before)
+
+        counters = metrics.snapshot()["counters"]
+        self.assertEqual(
+            counters["db.upsert_rows_attempted{backend=sqlite,store=growth_history}"],
+            2,
+        )
+        self.assertEqual(
+            counters["db.upsert_rows_affected{backend=sqlite,store=growth_history}"],
+            1,
+        )
+        metrics.reset()
+
     def test_not_ready_does_not_overwrite_a_valid_record(self):
         record_date = self.today.isoformat()
         self.store.save_records(

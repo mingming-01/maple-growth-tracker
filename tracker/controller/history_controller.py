@@ -20,6 +20,7 @@ from tracker.controller.request_limit_helpers import api_request_limit_response
 from tracker.runtime import (
     HISTORY_BACKFILL_BATCH_SIZE,
     HISTORY_CACHE_TTL,
+    CHARACTER_CACHE_TTL,
     KOREA_TIMEZONE,
     get_growth_history_service,
     load_api_snapshot,
@@ -29,9 +30,72 @@ from tracker.runtime import (
     with_data_status,
     get_cache,
     get_cache_timestamp,
+    increment_metric,
 )
 
 history_bp = Blueprint("history", __name__, url_prefix="/api")
+
+
+def _load_recent_character_basic_snapshot(character_name, ocid, now=None):
+    """직전 캐릭터 조회가 저장한 최신 프로필을 성장 기록 조회에서 재사용한다.
+
+    OCID와 캐릭터명을 모두 확인하고, 캐릭터 캐시 TTL 안에 저장된 스냅샷만
+    사용한다. 조건을 만족하지 않으면 호출부가 Nexon 기본 정보 API로 폴백한다.
+    """
+    snapshot, saved_at = load_api_snapshot(f"character:{character_name}")
+    if not isinstance(snapshot, dict) or not saved_at:
+        return None
+
+    if str(snapshot.get("ocid") or "") != str(ocid):
+        return None
+
+    snapshot_name = str(snapshot.get("characterName") or "").strip()
+    world_name = str(snapshot.get("worldName") or "").strip()
+    if (
+        not snapshot_name
+        or snapshot_name.casefold() != str(character_name).strip().casefold()
+        or not world_name
+    ):
+        return None
+
+    try:
+        saved_time = datetime.fromisoformat(str(saved_at))
+        current_time = now or datetime.now().astimezone()
+        if saved_time.tzinfo is None:
+            saved_time = saved_time.astimezone()
+        age_seconds = (current_time - saved_time).total_seconds()
+    except (TypeError, ValueError, OverflowError):
+        return None
+
+    if age_seconds < 0 or age_seconds > CHARACTER_CACHE_TTL:
+        return None
+
+    return {
+        "character_name": snapshot_name,
+        "world_name": world_name,
+        "character_level": snapshot.get("level"),
+        "character_exp": snapshot.get("experience"),
+        "character_exp_rate": snapshot.get("experienceRate"),
+        "ranking": snapshot.get("ranking"),
+        "ranking_data_status": snapshot.get("rankingDataStatus"),
+    }
+
+
+def _get_cached_current_ranking(basic, target_date, today):
+    """캐릭터 조회 스냅샷의 오늘 종합 랭킹을 안전하게 추출한다."""
+    if target_date != today or not isinstance(basic, dict):
+        return None
+    if basic.get("ranking_data_status") != "available":
+        return None
+    ranking = basic.get("ranking")
+    if ranking is None:
+        return None
+    return {
+        "ranking": ranking,
+        "character_level": basic.get("character_level"),
+        "character_exp": basic.get("character_exp"),
+        "character_exp_rate": basic.get("character_exp_rate"),
+    }
 
 
 # 최근 7일 성장 기록 조회 및 변화량 계산
@@ -64,7 +128,14 @@ def get_history():
     try:
         if requested_ocid:
             ocid = requested_ocid
-            basic, response = get_basic_character_snapshot(ocid)
+            basic = _load_recent_character_basic_snapshot(character_name, ocid)
+            if basic is not None:
+                # 최근 /api/character 응답의 OCID·이름·월드를 검증해 재사용했으므로
+                # 이 요청에서 기본 정보 API를 다시 호출할 필요가 없다.
+                response = requests.Response()
+                response.status_code = 200
+            else:
+                basic, response = get_basic_character_snapshot(ocid)
             resolved_name = str((basic or {}).get("character_name") or "").strip()
             if resolved_name and resolved_name.casefold() != character_name.casefold():
                 return jsonify({"error": "조회한 캐릭터 이름과 OCID가 일치하지 않습니다."}), 404
@@ -129,12 +200,20 @@ def get_history():
                     "_fromStore": True
                 }
 
-            ranking_data, response = get_ranking_snapshot(
-                target_date=date_string,
-                world_name=world_name,
-                ocid=ocid,
-                world_type=get_world_type(world_name),
-            )
+            ranking_data = _get_cached_current_ranking(basic, target_date, today)
+            if ranking_data is not None:
+                # /api/character already queried today's overall rank. Reuse it only
+                # when the persisted profile marks ranking data as available.
+                response = requests.Response()
+                response.status_code = 200
+                increment_metric("history.current_ranking_reused")
+            else:
+                ranking_data, response = get_ranking_snapshot(
+                    target_date=date_string,
+                    world_name=world_name,
+                    ocid=ocid,
+                    world_type=get_world_type(world_name),
+                )
             if ranking_data:
                 experience_rate = ranking_data.get("character_exp_rate")
                 rate_checked = experience_rate is not None
@@ -317,11 +396,14 @@ def get_history():
     }
 
     saved_at = datetime.now().astimezone().isoformat(timespec="seconds")
-    previous_snapshot, _ = load_api_snapshot(cache_key)
-    if history_status == "complete" or previous_snapshot is None:
-        snapshot_saved_at = save_api_snapshot(cache_key, result)
-        if snapshot_saved_at:
-            saved_at = snapshot_saved_at
+    # 완전한 기록은 갱신하고, 부분 기록은 기존 스냅샷이 없을 때만 저장한다.
+    snapshot_saved_at = save_api_snapshot(
+        cache_key,
+        result,
+        only_if_missing=history_status != "complete",
+    )
+    if snapshot_saved_at:
+        saved_at = snapshot_saved_at
 
     # 오늘 랭킹이 준비되지 않았다면 30분 대신 5분 후 다시 확인한다.
     cache_ttl = HISTORY_CACHE_TTL if history_status == "complete" else 300

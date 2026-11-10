@@ -9,8 +9,10 @@ import math
 from pathlib import Path
 import sqlite3
 from threading import Lock
+import time
 
 import psycopg
+from tracker.services.performance_metrics import increment_metric, observe_metric
 
 
 class GrowthHistoryStore:
@@ -31,18 +33,28 @@ class GrowthHistoryStore:
         return self.backend == "postgres"
 
     def _connect(self):
-        if self.backend == "postgres":
-            return psycopg.connect(
-                self.database_url,
-                connect_timeout=3,
-                sslmode="require",
-                prepare_threshold=None,
-            )
-        if self.backend != "sqlite":
-            raise ValueError("GROWTH_DATABASE_URL must be a PostgreSQL connection string.")
+        started_at = time.perf_counter()
+        try:
+            if self.backend == "postgres":
+                return psycopg.connect(
+                    self.database_url,
+                    connect_timeout=3,
+                    sslmode="require",
+                    prepare_threshold=None,
+                )
+            if self.backend != "sqlite":
+                raise ValueError("GROWTH_DATABASE_URL must be a PostgreSQL connection string.")
 
-        Path(self.sqlite_path).parent.mkdir(parents=True, exist_ok=True)
-        return sqlite3.connect(self.sqlite_path, timeout=5)
+            Path(self.sqlite_path).parent.mkdir(parents=True, exist_ok=True)
+            return sqlite3.connect(self.sqlite_path, timeout=5)
+        finally:
+            increment_metric("db.connection_attempts", backend=self.backend, store="growth_history")
+            observe_metric(
+                "db.connection_ms",
+                (time.perf_counter() - started_at) * 1000,
+                backend=self.backend,
+                store="growth_history",
+            )
 
     def initialize(self):
         with self._initialize_lock:
@@ -280,8 +292,20 @@ class GrowthHistoryStore:
                     experience_rate_checked = EXCLUDED.experience_rate_checked,
                     record_status = EXCLUDED.record_status,
                     recorded_at = CURRENT_TIMESTAMP
-                WHERE growth_daily_snapshots.record_status <> 'available'
-                   OR EXCLUDED.record_status = 'available'
+                WHERE (
+                    growth_daily_snapshots.record_status <> 'available'
+                    OR EXCLUDED.record_status = 'available'
+                )
+                  AND (
+                    growth_daily_snapshots.character_name IS DISTINCT FROM EXCLUDED.character_name
+                    OR growth_daily_snapshots.world_name IS DISTINCT FROM EXCLUDED.world_name
+                    OR growth_daily_snapshots.level IS DISTINCT FROM EXCLUDED.level
+                    OR growth_daily_snapshots.experience IS DISTINCT FROM EXCLUDED.experience
+                    OR growth_daily_snapshots.ranking IS DISTINCT FROM EXCLUDED.ranking
+                    OR growth_daily_snapshots.experience_rate IS DISTINCT FROM EXCLUDED.experience_rate
+                    OR growth_daily_snapshots.experience_rate_checked IS DISTINCT FROM EXCLUDED.experience_rate_checked
+                    OR growth_daily_snapshots.record_status IS DISTINCT FROM EXCLUDED.record_status
+                )
             """
         else:
             query = """
@@ -299,21 +323,64 @@ class GrowthHistoryStore:
                     experience_rate_checked = excluded.experience_rate_checked,
                     record_status = excluded.record_status,
                     recorded_at = CURRENT_TIMESTAMP
-                WHERE growth_daily_snapshots.record_status <> 'available'
-                   OR excluded.record_status = 'available'
+                WHERE (
+                    growth_daily_snapshots.record_status <> 'available'
+                    OR excluded.record_status = 'available'
+                )
+                  AND (
+                    growth_daily_snapshots.character_name IS NOT excluded.character_name
+                    OR growth_daily_snapshots.world_name IS NOT excluded.world_name
+                    OR growth_daily_snapshots.level IS NOT excluded.level
+                    OR growth_daily_snapshots.experience IS NOT excluded.experience
+                    OR growth_daily_snapshots.ranking IS NOT excluded.ranking
+                    OR growth_daily_snapshots.experience_rate IS NOT excluded.experience_rate
+                    OR growth_daily_snapshots.experience_rate_checked IS NOT excluded.experience_rate_checked
+                    OR growth_daily_snapshots.record_status IS NOT excluded.record_status
+                )
             """
 
+        operation_started = time.perf_counter()
         connection = self._connect()
+        affected_rows = 0
         try:
             with connection:
                 if self.uses_postgres:
                     with connection.cursor() as cursor:
                         cursor.executemany(query, rows)
+                        rowcount = cursor.rowcount
                 else:
-                    connection.executemany(query, rows)
+                    cursor = connection.executemany(query, rows)
+                    rowcount = cursor.rowcount
+                # Both psycopg and sqlite3 expose affected-row counts for executemany.
+                # A negative/unknown rowcount falls back to the submitted batch size.
+                affected_rows = (
+                    int(rowcount)
+                    if rowcount is not None and int(rowcount) >= 0
+                    else len(rows)
+                )
         finally:
             connection.close()
-        return len(rows)
+            increment_metric("db.operations", operation="growth_history.upsert")
+            # Keep the legacy counter for compatibility; it represents submitted rows.
+            increment_metric("db.sql_statements", len(rows), operation="growth_history.upsert")
+            increment_metric(
+                "db.upsert_rows_attempted",
+                len(rows),
+                backend=self.backend,
+                store="growth_history",
+            )
+            increment_metric(
+                "db.upsert_rows_affected",
+                affected_rows,
+                backend=self.backend,
+                store="growth_history",
+            )
+            observe_metric(
+                "db.operation_ms",
+                (time.perf_counter() - operation_started) * 1000,
+                operation="growth_history.upsert",
+            )
+        return affected_rows
 
     def get_records(self, ocid, start_date, end_date):
         self.initialize()
@@ -329,11 +396,19 @@ class GrowthHistoryStore:
               AND snapshot_date <= {placeholder}
             ORDER BY snapshot_date ASC
         """
+        operation_started = time.perf_counter()
         connection = self._connect()
         try:
             rows = connection.execute(query, (str(ocid), start, end)).fetchall()
         finally:
             connection.close()
+            increment_metric("db.operations", operation="growth_history.select")
+            increment_metric("db.sql_statements", operation="growth_history.select")
+            observe_metric(
+                "db.operation_ms",
+                (time.perf_counter() - operation_started) * 1000,
+                operation="growth_history.select",
+            )
 
         result = []
         for row in rows:
@@ -369,11 +444,14 @@ class GrowthHistoryStore:
         PostgreSQL은 client_key 행을 FOR UPDATE로 잠가 여러 Gunicorn 워커의
         동시 요청을 직렬화한다. SQLite는 로컬 테스트와 개발 환경용이다.
         """
+        operation_started = time.perf_counter()
         self.initialize()
         connection = self._connect()
+        query_count = 0
         try:
             with connection:
                 if self.uses_postgres:
+                    query_count += 1
                     connection.execute(
                         """
                         INSERT INTO api_request_limit_state (client_key)
@@ -382,6 +460,7 @@ class GrowthHistoryStore:
                         """,
                         (client_key,),
                     )
+                    query_count += 1
                     row = connection.execute(
                         """
                         SELECT request_timestamps, refresh_timestamps
@@ -394,6 +473,7 @@ class GrowthHistoryStore:
                     request_timestamps = list(row[0] or [])
                     refresh_timestamps = list(row[1] or [])
                 else:
+                    query_count += 1
                     connection.execute(
                         """
                         INSERT INTO api_request_limit_state
@@ -403,6 +483,7 @@ class GrowthHistoryStore:
                         """,
                         (client_key, now),
                     )
+                    query_count += 1
                     row = connection.execute(
                         """
                         SELECT request_timestamps, refresh_timestamps
@@ -446,6 +527,7 @@ class GrowthHistoryStore:
                         refresh_timestamps.append(now)
 
                 if self.uses_postgres:
+                    query_count += 1
                     connection.execute(
                         """
                         UPDATE api_request_limit_state
@@ -462,12 +544,14 @@ class GrowthHistoryStore:
                     )
                     if cleanup:
                         # 다른 워커의 정리 작업과 충돌하지 않도록 정리 트랜잭션은 하나만 수행한다.
+                        query_count += 1
                         cleanup_lock = connection.execute(
                             "SELECT pg_try_advisory_xact_lock(%s, %s)",
                             (20261110, 75),
                         ).fetchone()
                         if cleanup_lock and cleanup_lock[0]:
                             stale_seconds = max(window_seconds * 2, 120)
+                            query_count += 1
                             connection.execute(
                                 """
                                 DELETE FROM api_request_limit_state
@@ -475,6 +559,7 @@ class GrowthHistoryStore:
                                 """,
                                 (stale_seconds,),
                             )
+                            query_count += 1
                             connection.execute(
                                 """
                                 DELETE FROM api_request_limit_state
@@ -489,6 +574,7 @@ class GrowthHistoryStore:
                                 (client_key, max(0, max_clients - 1)),
                             )
                 else:
+                    query_count += 1
                     connection.execute(
                         """
                         UPDATE api_request_limit_state
@@ -506,6 +592,7 @@ class GrowthHistoryStore:
                     )
                     if cleanup:
                         stale_seconds = max(window_seconds * 2, 120)
+                        query_count += 1
                         connection.execute(
                             """
                             DELETE FROM api_request_limit_state
@@ -513,6 +600,7 @@ class GrowthHistoryStore:
                             """,
                             (now - stale_seconds,),
                         )
+                        query_count += 1
                         connection.execute(
                             """
                             DELETE FROM api_request_limit_state
@@ -530,3 +618,10 @@ class GrowthHistoryStore:
             return allowed, retry_after, reason
         finally:
             connection.close()
+            increment_metric("db.operations", operation="api_rate_limit.consume")
+            increment_metric("db.sql_statements", query_count, operation="api_rate_limit.consume")
+            observe_metric(
+                "db.operation_ms",
+                (time.perf_counter() - operation_started) * 1000,
+                operation="api_rate_limit.consume",
+            )

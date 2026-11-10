@@ -1,6 +1,7 @@
 """관리자 인증과 운영 로그 HTTP 라우트."""
 from datetime import date, datetime, timedelta
 import hmac
+import time
 import secrets
 import sqlite3
 
@@ -10,6 +11,11 @@ from werkzeug.security import check_password_hash
 
 from tracker.runtime import KOREA_TIMEZONE, connect_log_db, get_runtime_state
 from tracker.services.admin_log_service import admin_required, format_admin_log_time
+from tracker.services.performance_metrics import (
+    increment_metric,
+    observe_metric,
+    performance_metrics_snapshot,
+)
 from tracker.services.request_limits import (
     admin_login_lockout_remaining,
     clear_admin_login_failures,
@@ -17,6 +23,17 @@ from tracker.services.request_limits import (
 )
 
 admin_bp = Blueprint("admin", __name__, url_prefix="/admin")
+
+
+def _measure_admin_log_query(query_name, operation, backend):
+    """관리자 로그 쿼리별 실행 및 결과 fetch 시간을 기록한다."""
+    started_at = time.perf_counter()
+    try:
+        return operation()
+    finally:
+        labels = {"backend": backend, "store": "admin_logs", "query": query_name}
+        increment_metric("db.query_executions", **labels)
+        observe_metric("db.query_ms", (time.perf_counter() - started_at) * 1000, **labels)
 
 
 @admin_bp.route("/login", methods=["GET", "POST"])
@@ -144,29 +161,44 @@ def admin_logs():
     action_options = []
     storage_warning = state.log_storage_warning
 
+    query_started = time.perf_counter()
+    query_count = 0
     try:
         connection = connect_log_db()
         try:
             with connection:
-                count_row = connection.execute(
-                    f"SELECT COUNT(*) AS total FROM action_logs{where_clause}",
-                    parameters,
-                ).fetchone()
+                count_row = _measure_admin_log_query(
+                    "count",
+                    lambda: connection.execute(
+                        f"SELECT COUNT(*) AS total FROM action_logs{where_clause}",
+                        parameters,
+                    ).fetchone(),
+                    log_db_backend,
+                )
+                query_count += 1
                 total_count = count_row["total"]
 
-                rows = connection.execute(
-                    "SELECT created_at, action, character_name, world_name, comparison_name, "
-                    "result, path, status_code, duration_ms, error_type "
-                    f"FROM action_logs{where_clause} "
-                    "ORDER BY created_at DESC, id DESC LIMIT 500",
-                    parameters,
-                ).fetchall()
-                action_options = [
-                    row["action"]
-                    for row in connection.execute(
+                rows = _measure_admin_log_query(
+                    "page",
+                    lambda: connection.execute(
+                        "SELECT created_at, action, character_name, world_name, comparison_name, "
+                        "result, path, status_code, duration_ms, error_type "
+                        f"FROM action_logs{where_clause} "
+                        "ORDER BY created_at DESC, id DESC LIMIT 500",
+                        parameters,
+                    ).fetchall(),
+                    log_db_backend,
+                )
+                query_count += 1
+                action_rows = _measure_admin_log_query(
+                    "actions",
+                    lambda: connection.execute(
                         "SELECT DISTINCT action FROM action_logs ORDER BY action"
-                    ).fetchall()
-                ]
+                    ).fetchall(),
+                    log_db_backend,
+                )
+                action_options = [row["action"] for row in action_rows]
+                query_count += 1
         finally:
             connection.close()
     except (sqlite3.Error, psycopg.Error):
@@ -174,6 +206,14 @@ def admin_logs():
             "관리자 로그 저장소에 연결할 수 없습니다. 환경 설정과 데이터베이스 연결을 확인해주세요."
         )
         print("관리자 로그 조회에 실패했습니다.")
+    finally:
+        increment_metric("db.operations", operation="admin_logs.select")
+        increment_metric("db.sql_statements", query_count, operation="admin_logs.select")
+        observe_metric(
+            "db.operation_ms",
+            (time.perf_counter() - query_started) * 1000,
+            operation="admin_logs.select",
+        )
 
     if log_db_backend == "sqlite" and not storage_warning:
         storage_warning = (
@@ -274,29 +314,44 @@ def admin_logs_api():
     action_options = []
     storage_warning = state.log_storage_warning
 
+    query_started = time.perf_counter()
+    query_count = 0
     try:
         connection = connect_log_db()
         try:
             with connection:
-                count_row = connection.execute(
-                    f"SELECT COUNT(*) AS total FROM action_logs{where_clause}",
-                    parameters,
-                ).fetchone()
+                count_row = _measure_admin_log_query(
+                    "count",
+                    lambda: connection.execute(
+                        f"SELECT COUNT(*) AS total FROM action_logs{where_clause}",
+                        parameters,
+                    ).fetchone(),
+                    log_db_backend,
+                )
+                query_count += 1
                 total_count = count_row["total"]
 
-                rows = connection.execute(
-                    "SELECT created_at, action, character_name, world_name, comparison_name, "
-                    "result, path, status_code, duration_ms, error_type "
-                    f"FROM action_logs{where_clause} "
-                    "ORDER BY created_at DESC, id DESC LIMIT 500",
-                    parameters,
-                ).fetchall()
-                action_options = [
-                    row["action"]
-                    for row in connection.execute(
+                rows = _measure_admin_log_query(
+                    "page",
+                    lambda: connection.execute(
+                        "SELECT created_at, action, character_name, world_name, comparison_name, "
+                        "result, path, status_code, duration_ms, error_type "
+                        f"FROM action_logs{where_clause} "
+                        "ORDER BY created_at DESC, id DESC LIMIT 500",
+                        parameters,
+                    ).fetchall(),
+                    log_db_backend,
+                )
+                query_count += 1
+                action_rows = _measure_admin_log_query(
+                    "actions",
+                    lambda: connection.execute(
                         "SELECT DISTINCT action FROM action_logs ORDER BY action"
-                    ).fetchall()
-                ]
+                    ).fetchall(),
+                    log_db_backend,
+                )
+                action_options = [row["action"] for row in action_rows]
+                query_count += 1
         finally:
             connection.close()
     except (sqlite3.Error, psycopg.Error):
@@ -304,6 +359,14 @@ def admin_logs_api():
             "관리자 로그 저장소에 연결할 수 없습니다. 환경 설정과 데이터베이스 연결을 확인해주세요."
         )
         print("관리자 로그 조회에 실패했습니다.")
+    finally:
+        increment_metric("db.operations", operation="admin_logs.select")
+        increment_metric("db.sql_statements", query_count, operation="admin_logs.select")
+        observe_metric(
+            "db.operation_ms",
+            (time.perf_counter() - query_started) * 1000,
+            operation="admin_logs.select",
+        )
 
     if log_db_backend == "sqlite" and not storage_warning:
         storage_warning = (
@@ -327,6 +390,13 @@ def admin_logs_api():
         "snapshotStorageWarning": state.snapshot_storage_warning,
         "csrfToken": session.setdefault("csrf_token", secrets.token_urlsafe(32)),
     })
+
+
+@admin_bp.route("/api/performance")
+@admin_required
+def admin_performance_api():
+    """현재 Gunicorn worker 프로세스의 성능 계측 요약을 반환한다."""
+    return jsonify(performance_metrics_snapshot())
 
 
 @admin_bp.route("/logout", methods=["POST"])
