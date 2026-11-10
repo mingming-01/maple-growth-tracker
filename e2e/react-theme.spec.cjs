@@ -11,6 +11,9 @@ async function installFixtures(page) {
     level: 280,
     experience: 123456789,
     experienceRate: "35.600",
+    currentCombatPower: "887338916",
+    bestCombatPower: 887338916,
+    bestCombatPowerObservedAt: "2026-11-10T09:30:00+09:00",
     ranking: 12345,
     worldRanking: 6789,
     jobWorldRanking: 123,
@@ -128,6 +131,13 @@ test("React routes use the purple-dark theme while the legacy page keeps its sty
   await page.getByLabel("캐릭터명").fill("테마검증");
   await page.getByRole("button", { name: /캐릭터 조회/ }).click();
   await expect(page.getByRole("heading", { name: "테마검증" })).toBeVisible();
+
+  const currentPowerCard = page.locator('[data-testid="profile-combat-power"]');
+  const bestPowerCard = page.locator('[data-testid="profile-best-combat-power"]');
+  await expect(currentPowerCard).toContainText("887,338,916");
+  await expect(bestPowerCard).toContainText("최고 갱신 전투력");
+  await expect(bestPowerCard).toContainText("887,338,916");
+  await expect(bestPowerCard).toContainText("최고 갱신일");
 
   await page.locator('.mgt-nav a[href="#/growth"]').click();
   await expect(page.locator("#growth-summary .summary-card").first()).toBeVisible();

@@ -3,6 +3,7 @@ from unittest.mock import patch
 
 from tracker.services.character_detail_service import (
     get_character_detail_section,
+    get_current_combat_power,
     _normalize_source,
     _fetch_source,
     SECTION_SOURCES,
@@ -99,6 +100,34 @@ class CharacterDetailServiceTests(unittest.TestCase):
         self.assertEqual(result["status"], "available")
         self.assertEqual(result["combatPower"], "123456789")
         self.assertEqual(result["data"]["final_stat"][0]["stat_name"], "STR")
+
+    @patch("tracker.services.character_detail_service._fetch_source")
+    def test_profile_combat_power_uses_the_same_cached_stat_source(self, fetch_source):
+        fetch_source.return_value = {
+            "status": "available",
+            "combatPower": "887338916",
+        }
+
+        value = get_current_combat_power("sample-ocid")
+
+        self.assertEqual(value, "887338916")
+        fetch_source.assert_called_once_with(
+            "sample-ocid", SECTION_SOURCES["stats"][0], force_refresh=False
+        )
+
+    @patch("tracker.services.character_detail_service._fetch_source")
+    def test_profile_combat_power_can_force_refresh_the_shared_stat_source(self, fetch_source):
+        fetch_source.return_value = {
+            "status": "available",
+            "combatPower": "887338917",
+        }
+
+        value = get_current_combat_power("sample-ocid", force_refresh=True)
+
+        self.assertEqual(value, "887338917")
+        fetch_source.assert_called_once_with(
+            "sample-ocid", SECTION_SOURCES["stats"][0], force_refresh=True
+        )
 
     def test_hyper_stat_presets_keep_active_number_and_each_configuration(self):
         spec = SECTION_SOURCES["stats"][1]

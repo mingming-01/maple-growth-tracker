@@ -9,6 +9,7 @@ from tracker.services.nexon_service import (
     is_temporary_nexon_failure,
     resolve_character,
 )
+from tracker.services.character_detail_service import get_current_combat_power
 from tracker.runtime import (
     CHARACTER_CACHE_TTL,
     KOREA_TIMEZONE,
@@ -17,6 +18,7 @@ from tracker.runtime import (
     load_api_snapshot,
     save_api_snapshot,
     set_cache,
+    record_best_combat_power,
     stale_snapshot_response,
     with_data_status,
 )
@@ -64,6 +66,12 @@ def get_character():
             character_class=character_class,
             ocid=ocid,
         )
+        # 메인 프로필도 현재 스탯 API를 조회해 상세 탭 진입 여부와 무관하게 전투력을 표시한다.
+        # 상세 탭과 같은 소스 캐시를 사용하므로 동일 조회 흐름에서 중복 호출하지 않는다.
+        current_combat_power = get_current_combat_power(
+            ocid, force_refresh=force_refresh
+        )
+        best_power = record_best_combat_power(ocid, current_combat_power) or {}
     except requests.RequestException:
         return stale_snapshot_response(
             cache_key, "넥슨 API 연결에 실패했습니다. 잠시 후 다시 시도해주세요."
@@ -89,12 +97,11 @@ def get_character():
         "rankingApiStatuses": character_rankings.get("rankingApiStatuses", {}),
         "rankingApiDiagnostics": character_rankings.get("rankingApiDiagnostics", {}),
         "rankingWarnings": character_rankings.get("rankingWarnings", []),
+        "currentCombatPower": current_combat_power,
+        "bestCombatPower": best_power.get("value"),
+        "bestCombatPowerObservedAt": best_power.get("observedAt"),
+        "bestPresetCombination": best_power.get("presetNumbers"),
     }
-    best_power, _ = load_api_snapshot(f"combat-power-best:{ocid}")
-    best_power = best_power if isinstance(best_power, dict) else {}
-    result["bestCombatPower"] = best_power.get("value")
-    result["bestCombatPowerObservedAt"] = best_power.get("observedAt")
-    result["bestPresetCombination"] = None
 
 
     data_status = "partial" if character_rankings["rankingDataStatus"] in ("partial", "unavailable", "empty", "not_ready") else "current"
