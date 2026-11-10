@@ -1,7 +1,7 @@
 """캐릭터 검색의 독립적인 Nexon 조회 작업 병렬 실행 테스트."""
 from threading import Barrier
 from unittest import TestCase
-from unittest.mock import Mock, patch
+from unittest.mock import ANY, Mock, patch
 
 from flask import Flask, current_app, has_app_context
 
@@ -101,7 +101,7 @@ class CharacterSearchParallelismTests(TestCase):
         self.assertEqual(component_calls, {"rankings", "combat_power"})
         observe_metric.assert_any_call(
             "character.search_parallel_ms",
-            unittest.mock.ANY,
+            ANY,
         )
 
 
