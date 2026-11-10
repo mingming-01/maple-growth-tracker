@@ -221,6 +221,7 @@ export function DetailTooltip({
   const [position, setPosition] = useState(null);
   const triggerRef = useRef(null);
   const tooltipRef = useRef(null);
+  const touchStartRef = useRef(null);
   const Wrapper = as;
 
   function updatePosition() {
@@ -289,10 +290,23 @@ export function DetailTooltip({
       }}
       onPointerDown={event => {
         if (hasTooltip && event.pointerType === "touch") {
-          setOpen(value => !value);
+          touchStartRef.current = {
+            pointerId: event.pointerId,
+            x: event.clientX,
+            y: event.clientY
+          };
         }
       }}
-      onBlur={() => setOpen(false)}
+      onPointerUp={event => {
+        if (event.pointerType !== "touch") return;
+        const start = touchStartRef.current;
+        touchStartRef.current = null;
+        if (!hasTooltip || !start || start.pointerId !== event.pointerId) return;
+        const moved = Math.hypot(event.clientX - start.x, event.clientY - start.y);
+        if (moved < 8) setOpen(value => !value);
+      }}
+      onPointerCancel={() => { touchStartRef.current = null; }}
+      onBlur={() => setOpen(false)
       onKeyDown={event => {
         if (hasTooltip && (event.key === "Enter" || event.key === " ")) {
           event.preventDefault();
