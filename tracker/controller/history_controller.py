@@ -20,6 +20,7 @@ from tracker.controller.request_limit_helpers import api_request_limit_response
 from tracker.runtime import (
     HISTORY_BACKFILL_BATCH_SIZE,
     HISTORY_CACHE_TTL,
+    CHARACTER_CACHE_TTL,
     KOREA_TIMEZONE,
     get_growth_history_service,
     load_api_snapshot,
@@ -32,6 +33,49 @@ from tracker.runtime import (
 )
 
 history_bp = Blueprint("history", __name__, url_prefix="/api")
+
+
+def _load_recent_character_basic_snapshot(character_name, ocid, now=None):
+    """직전 캐릭터 조회가 저장한 최신 프로필을 성장 기록 조회에서 재사용한다.
+
+    OCID와 캐릭터명을 모두 확인하고, 캐릭터 캐시 TTL 안에 저장된 스냅샷만
+    사용한다. 조건을 만족하지 않으면 호출부가 Nexon 기본 정보 API로 폴백한다.
+    """
+    snapshot, saved_at = load_api_snapshot(f"character:{character_name}")
+    if not isinstance(snapshot, dict) or not saved_at:
+        return None
+
+    if str(snapshot.get("ocid") or "") != str(ocid):
+        return None
+
+    snapshot_name = str(snapshot.get("characterName") or "").strip()
+    world_name = str(snapshot.get("worldName") or "").strip()
+    if (
+        not snapshot_name
+        or snapshot_name.casefold() != str(character_name).strip().casefold()
+        or not world_name
+    ):
+        return None
+
+    try:
+        saved_time = datetime.fromisoformat(str(saved_at))
+        current_time = now or datetime.now().astimezone()
+        if saved_time.tzinfo is None:
+            saved_time = saved_time.astimezone()
+        age_seconds = (current_time - saved_time).total_seconds()
+    except (TypeError, ValueError, OverflowError):
+        return None
+
+    if age_seconds < 0 or age_seconds > CHARACTER_CACHE_TTL:
+        return None
+
+    return {
+        "character_name": snapshot_name,
+        "world_name": world_name,
+        "character_level": snapshot.get("level"),
+        "character_exp": snapshot.get("experience"),
+        "character_exp_rate": snapshot.get("experienceRate"),
+    }
 
 
 # 최근 7일 성장 기록 조회 및 변화량 계산
@@ -64,7 +108,14 @@ def get_history():
     try:
         if requested_ocid:
             ocid = requested_ocid
-            basic, response = get_basic_character_snapshot(ocid)
+            basic = _load_recent_character_basic_snapshot(character_name, ocid)
+            if basic is not None:
+                # 최근 /api/character 응답의 OCID·이름·월드를 검증해 재사용했으므로
+                # 이 요청에서 기본 정보 API를 다시 호출할 필요가 없다.
+                response = requests.Response()
+                response.status_code = 200
+            else:
+                basic, response = get_basic_character_snapshot(ocid)
             resolved_name = str((basic or {}).get("character_name") or "").strip()
             if resolved_name and resolved_name.casefold() != character_name.casefold():
                 return jsonify({"error": "조회한 캐릭터 이름과 OCID가 일치하지 않습니다."}), 404
