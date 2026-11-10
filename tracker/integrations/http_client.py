@@ -42,6 +42,9 @@ def request_with_retries(
     before_attempt=None,
     retry_status_codes=None,
     max_retry_after_wait=DEFAULT_MAX_RETRY_AFTER_WAIT_SECONDS,
+    on_attempt=None,
+    on_response=None,
+    on_error=None,
     **kwargs,
 ):
     """요청 실패를 제한적으로 재시도하고, 마지막 응답/예외는 호출자에게 전달한다."""
@@ -54,12 +57,17 @@ def request_with_retries(
     retry_codes = retry_status_codes or RETRYABLE_STATUS_CODES
 
     for attempt in range(1, attempts + 1):
+        if on_attempt:
+            on_attempt(attempt)
         if before_attempt:
             before_attempt()
 
+        attempt_started = time.perf_counter()
         try:
             response = request_func(url, timeout=timeout, **kwargs)
-        except (requests.Timeout, requests.ConnectionError):
+        except (requests.Timeout, requests.ConnectionError) as error:
+            if on_error:
+                on_error(attempt, error, (time.perf_counter() - attempt_started) * 1000)
             if attempt >= attempts:
                 raise
             delay = min(max_backoff, backoff_factor * (2 ** (attempt - 1)))
@@ -67,6 +75,12 @@ def request_with_retries(
                 time.sleep(delay)
             continue
 
+        if on_response:
+            on_response(
+                attempt,
+                response,
+                (time.perf_counter() - attempt_started) * 1000,
+            )
         if response.status_code not in retry_codes or attempt >= attempts:
             return response
 

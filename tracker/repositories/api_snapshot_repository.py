@@ -2,15 +2,42 @@
 import json
 import sqlite3
 from datetime import datetime
+import time
 import psycopg
+
+from tracker.services.performance_metrics import increment_metric, observe_metric
 
 
 def _connect_postgres(database_url):
-    return psycopg.connect(database_url, connect_timeout=3, sslmode="require", prepare_threshold=None)
+    started_at = time.perf_counter()
+    try:
+        return psycopg.connect(database_url, connect_timeout=3, sslmode="require", prepare_threshold=None)
+    finally:
+        increment_metric("db.connections", backend="postgres", store="snapshots")
+        observe_metric(
+            "db.connection_ms",
+            (time.perf_counter() - started_at) * 1000,
+            backend="postgres",
+            store="snapshots",
+        )
+
+
+def _connect_sqlite(db_path):
+    started_at = time.perf_counter()
+    try:
+        return sqlite3.connect(db_path, timeout=5)
+    finally:
+        increment_metric("db.connections", backend="sqlite", store="snapshots")
+        observe_metric(
+            "db.connection_ms",
+            (time.perf_counter() - started_at) * 1000,
+            backend="sqlite",
+            store="snapshots",
+        )
 
 
 def _initialize_sqlite(db_path):
-    connection = sqlite3.connect(db_path, timeout=5)
+    connection = _connect_sqlite(db_path)
     try:
         with connection:
             connection.execute("""
@@ -63,6 +90,7 @@ def initialize_snapshot_db(db_path, database_url=""):
 def save_api_snapshot(db_path, cache_key, data, database_url="", backend="sqlite"):
     saved_at = datetime.now().astimezone().isoformat(timespec="seconds")
     payload = json.dumps(data, ensure_ascii=False)
+    operation_started = time.perf_counter()
     try:
         if backend == "postgres":
             connection = _connect_postgres(database_url)
@@ -81,7 +109,7 @@ def save_api_snapshot(db_path, cache_key, data, database_url="", backend="sqlite
             finally:
                 connection.close()
         else:
-            connection = sqlite3.connect(db_path, timeout=5)
+            connection = _connect_sqlite(db_path)
             try:
                 with connection:
                     connection.execute(
@@ -100,9 +128,18 @@ def save_api_snapshot(db_path, cache_key, data, database_url="", backend="sqlite
     except (sqlite3.Error, psycopg.Error):
         print("성장 데이터 스냅샷 저장에 실패했습니다.")
         return None
+    finally:
+        increment_metric("db.operations", operation="snapshot.upsert")
+        increment_metric("db.sql_statements", operation="snapshot.upsert")
+        observe_metric(
+            "db.operation_ms",
+            (time.perf_counter() - operation_started) * 1000,
+            operation="snapshot.upsert",
+        )
 
 
 def load_api_snapshot(db_path, cache_key, database_url="", backend="sqlite"):
+    operation_started = time.perf_counter()
     try:
         if backend == "postgres":
             connection = _connect_postgres(database_url)
@@ -115,7 +152,7 @@ def load_api_snapshot(db_path, cache_key, database_url="", backend="sqlite"):
             finally:
                 connection.close()
         else:
-            connection = sqlite3.connect(db_path, timeout=5)
+            connection = _connect_sqlite(db_path)
             try:
                 with connection:
                     row = connection.execute(
@@ -131,3 +168,11 @@ def load_api_snapshot(db_path, cache_key, database_url="", backend="sqlite"):
     except (sqlite3.Error, psycopg.Error, ValueError, TypeError):
         print("성장 데이터 스냅샷을 불러오지 못했습니다.")
         return None, None
+    finally:
+        increment_metric("db.operations", operation="snapshot.select")
+        increment_metric("db.sql_statements", operation="snapshot.select")
+        observe_metric(
+            "db.operation_ms",
+            (time.perf_counter() - operation_started) * 1000,
+            operation="snapshot.select",
+        )

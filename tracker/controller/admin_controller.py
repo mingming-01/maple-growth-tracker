@@ -1,6 +1,7 @@
 """관리자 인증과 운영 로그 HTTP 라우트."""
 from datetime import date, datetime, timedelta
 import hmac
+import time
 import secrets
 import sqlite3
 
@@ -10,6 +11,11 @@ from werkzeug.security import check_password_hash
 
 from tracker.runtime import KOREA_TIMEZONE, connect_log_db, get_runtime_state
 from tracker.services.admin_log_service import admin_required, format_admin_log_time
+from tracker.services.performance_metrics import (
+    increment_metric,
+    observe_metric,
+    performance_metrics_snapshot,
+)
 from tracker.services.request_limits import (
     admin_login_lockout_remaining,
     clear_admin_login_failures,
@@ -144,6 +150,7 @@ def admin_logs():
     action_options = []
     storage_warning = state.log_storage_warning
 
+    query_started = time.perf_counter()
     try:
         connection = connect_log_db()
         try:
@@ -174,6 +181,14 @@ def admin_logs():
             "관리자 로그 저장소에 연결할 수 없습니다. 환경 설정과 데이터베이스 연결을 확인해주세요."
         )
         print("관리자 로그 조회에 실패했습니다.")
+    finally:
+        increment_metric("db.operations", operation="admin_logs.select")
+        increment_metric("db.sql_statements", 3, operation="admin_logs.select")
+        observe_metric(
+            "db.operation_ms",
+            (time.perf_counter() - query_started) * 1000,
+            operation="admin_logs.select",
+        )
 
     if log_db_backend == "sqlite" and not storage_warning:
         storage_warning = (
@@ -274,6 +289,7 @@ def admin_logs_api():
     action_options = []
     storage_warning = state.log_storage_warning
 
+    query_started = time.perf_counter()
     try:
         connection = connect_log_db()
         try:
@@ -304,6 +320,14 @@ def admin_logs_api():
             "관리자 로그 저장소에 연결할 수 없습니다. 환경 설정과 데이터베이스 연결을 확인해주세요."
         )
         print("관리자 로그 조회에 실패했습니다.")
+    finally:
+        increment_metric("db.operations", operation="admin_logs.select")
+        increment_metric("db.sql_statements", 3, operation="admin_logs.select")
+        observe_metric(
+            "db.operation_ms",
+            (time.perf_counter() - query_started) * 1000,
+            operation="admin_logs.select",
+        )
 
     if log_db_backend == "sqlite" and not storage_warning:
         storage_warning = (
@@ -327,6 +351,13 @@ def admin_logs_api():
         "snapshotStorageWarning": state.snapshot_storage_warning,
         "csrfToken": session.setdefault("csrf_token", secrets.token_urlsafe(32)),
     })
+
+
+@admin_bp.route("/api/performance")
+@admin_required
+def admin_performance_api():
+    """현재 Gunicorn worker 프로세스의 성능 계측 요약을 반환한다."""
+    return jsonify(performance_metrics_snapshot())
 
 
 @admin_bp.route("/logout", methods=["POST"])

@@ -22,6 +22,7 @@ from tracker.repositories.api_snapshot_repository import (
 )
 from google import genai
 from google.genai import types
+from tracker.services.performance_metrics import increment_metric, observe_metric
 
 
 # 변경되지 않는 도메인 상수만 모듈 상수로 유지한다.
@@ -137,18 +138,29 @@ def configure_runtime(flask_app):
 
 def connect_log_db():
     state = get_runtime_state()
-    if state.log_db_backend == "postgres":
-        return psycopg.connect(
-            state.growth_database_url,
-            connect_timeout=3,
-            sslmode="require",
-            prepare_threshold=None,
-            row_factory=dict_row,
-        )
+    backend = state.log_db_backend
+    started_at = time.perf_counter()
+    try:
+        if backend == "postgres":
+            return psycopg.connect(
+                state.growth_database_url,
+                connect_timeout=3,
+                sslmode="require",
+                prepare_threshold=None,
+                row_factory=dict_row,
+            )
 
-    connection = sqlite3.connect(state.log_db_path, timeout=5)
-    connection.row_factory = sqlite3.Row
-    return connection
+        connection = sqlite3.connect(state.log_db_path, timeout=5)
+        connection.row_factory = sqlite3.Row
+        return connection
+    finally:
+        increment_metric("db.connections", backend=backend, store="admin_logs")
+        observe_metric(
+            "db.connection_ms",
+            (time.perf_counter() - started_at) * 1000,
+            backend=backend,
+            store="admin_logs",
+        )
 
 
 def initialize_log_db():
@@ -261,6 +273,7 @@ def log_action(
              path, status_code, duration_ms, error_type)
         VALUES ({placeholders})
     """
+    operation_started = time.perf_counter()
     try:
         connection = connect_log_db()
         try:
@@ -285,6 +298,14 @@ def log_action(
     except (sqlite3.Error, psycopg.Error):
         # DB 비밀번호, API 키, 요청 본문과 같은 상세 정보는 로그에 출력하지 않는다.
         print("관리자 로그 저장에 실패했습니다.")
+    finally:
+        increment_metric("db.operations", operation="admin_log.insert")
+        increment_metric("db.sql_statements", operation="admin_log.insert")
+        observe_metric(
+            "db.operation_ms",
+            (time.perf_counter() - operation_started) * 1000,
+            operation="admin_log.insert",
+        )
 
 
 def initialize_snapshot_db():
@@ -336,16 +357,20 @@ def set_ai_response_cache(prompt, analysis):
 
 def get_cache(key):
     state = get_runtime_state()
+    namespace = str(key).split(":", 1)[0]
     with state.cache_lock:
         cache = state.cache
         item = cache.get(key)
         if not item:
+            increment_metric("cache.lookups", cache=namespace, result="miss")
             return None
         now = time.time()
         if now - item["time"] > item["ttl"]:
             del cache[key]
+            increment_metric("cache.lookups", cache=namespace, result="miss")
             return None
         item["used_at"] = now
+        increment_metric("cache.lookups", cache=namespace, result="hit")
         return item["data"]
 
 
@@ -375,6 +400,7 @@ def set_cache(key, data, ttl):
         while len(cache) > RUNTIME_CACHE_MAX_ENTRIES:
             oldest_key = min(cache, key=lambda cache_key: cache[cache_key]["used_at"])
             cache.pop(oldest_key, None)
+    increment_metric("cache.writes", cache=str(key).split(":", 1)[0])
 
 
 def get_cache_timestamp(key):
@@ -464,6 +490,10 @@ def record_user_action(response):
         error_type = "http_5xx"
     elif status_code >= 400:
         error_type = f"http_{status_code}"
+
+    route_label = endpoint or request.path
+    increment_metric("http.requests", route=route_label, status=status_code)
+    observe_metric("http.request_ms", duration_ms, route=route_label)
 
     details = {
         "path": request.path,

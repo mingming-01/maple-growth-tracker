@@ -2,10 +2,12 @@
 import time
 from threading import Lock
 
+import requests
 from flask import current_app, has_app_context
 
 from tracker.config import Config
 from tracker.integrations.http_client import request_with_retries
+from tracker.services.performance_metrics import increment_metric, observe_metric
 
 BASE_URL = "https://open.api.nexon.com/maplestory/v1"
 DEFAULT_NEXON_API_MIN_INTERVAL = 0.22
@@ -72,17 +74,51 @@ def request_nexon_api(endpoint, params, historical=False):
     except (TypeError, ValueError):
         backoff = 0.35
 
-    return request_with_retries(
-        "get",
-        f"{BASE_URL}/{endpoint}",
-        headers=headers,
-        params=params,
-        timeout=timeout,
-        max_attempts=retries + 1,
-        backoff_factor=max(0.0, backoff),
-        max_retry_after_wait=max(0.0, float(_setting("EXTERNAL_API_MAX_RETRY_AFTER_WAIT_SECONDS", 5.0))),
-        before_attempt=_throttle_nexon_request,
+    started_at = time.perf_counter()
+
+    def on_attempt(attempt):
+        increment_metric("nexon.attempts", endpoint=endpoint)
+        if attempt > 1:
+            increment_metric("nexon.retries", endpoint=endpoint)
+
+    def on_response(attempt, response, elapsed_ms):
+        status_code = getattr(response, "status_code", "unknown")
+        increment_metric("nexon.responses", endpoint=endpoint, status=status_code)
+        observe_metric("nexon.attempt_ms", elapsed_ms, endpoint=endpoint)
+
+    def on_error(attempt, error, elapsed_ms):
+        increment_metric("nexon.errors", endpoint=endpoint, error=type(error).__name__)
+        observe_metric("nexon.attempt_ms", elapsed_ms, endpoint=endpoint)
+
+    increment_metric("nexon.logical_requests", endpoint=endpoint)
+    try:
+        response = request_with_retries(
+            "get",
+            f"{BASE_URL}/{endpoint}",
+            headers=headers,
+            params=params,
+            timeout=timeout,
+            max_attempts=retries + 1,
+            backoff_factor=max(0.0, backoff),
+            max_retry_after_wait=max(0.0, float(_setting("EXTERNAL_API_MAX_RETRY_AFTER_WAIT_SECONDS", 5.0))),
+            before_attempt=_throttle_nexon_request,
+            on_attempt=on_attempt,
+            on_response=on_response,
+            on_error=on_error,
+        )
+    except requests.RequestException:
+        observe_metric(
+            "nexon.logical_request_ms",
+            (time.perf_counter() - started_at) * 1000,
+            endpoint=endpoint,
+        )
+        raise
+    observe_metric(
+        "nexon.logical_request_ms",
+        (time.perf_counter() - started_at) * 1000,
+        endpoint=endpoint,
     )
+    return response
 
 
 def get_ocid(character_name):

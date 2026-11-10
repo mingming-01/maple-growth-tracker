@@ -7,6 +7,7 @@ import time
 import requests
 
 from tracker.integrations.nexon_api import request_nexon_api
+from tracker.services.performance_metrics import increment_metric
 
 
 SECTION_SOURCES = {
@@ -343,9 +344,11 @@ def _fetch_source(ocid, spec, force_refresh=False):
             cached_item = _SOURCE_CACHE.get(cache_key)
             if cached_item and cached_item["expires_at"] > now:
                 cached_item["used_at"] = now
+                increment_metric("cache.lookups", cache="nexon_source:" + spec["endpoint"], result="hit")
                 return cached_item["source"]
             if cached_item:
                 _SOURCE_CACHE.pop(cache_key, None)
+            increment_metric("cache.lookups", cache="nexon_source:" + spec["endpoint"], result="miss")
     try:
         response = request_nexon_api(spec["endpoint"], params)
     except requests.RequestException:
@@ -403,6 +406,7 @@ def _fetch_source(ocid, spec, force_refresh=False):
                 key=lambda item_key: _SOURCE_CACHE[item_key].get("used_at", 0),
             )
             _SOURCE_CACHE.pop(oldest_key, None)
+    increment_metric("cache.writes", cache="nexon_source:" + spec["endpoint"])
     return source
 
 

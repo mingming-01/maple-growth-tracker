@@ -9,8 +9,10 @@ import math
 from pathlib import Path
 import sqlite3
 from threading import Lock
+import time
 
 import psycopg
+from tracker.services.performance_metrics import increment_metric, observe_metric
 
 
 class GrowthHistoryStore:
@@ -31,18 +33,28 @@ class GrowthHistoryStore:
         return self.backend == "postgres"
 
     def _connect(self):
-        if self.backend == "postgres":
-            return psycopg.connect(
-                self.database_url,
-                connect_timeout=3,
-                sslmode="require",
-                prepare_threshold=None,
-            )
-        if self.backend != "sqlite":
-            raise ValueError("GROWTH_DATABASE_URL must be a PostgreSQL connection string.")
+        started_at = time.perf_counter()
+        try:
+            if self.backend == "postgres":
+                return psycopg.connect(
+                    self.database_url,
+                    connect_timeout=3,
+                    sslmode="require",
+                    prepare_threshold=None,
+                )
+            if self.backend != "sqlite":
+                raise ValueError("GROWTH_DATABASE_URL must be a PostgreSQL connection string.")
 
-        Path(self.sqlite_path).parent.mkdir(parents=True, exist_ok=True)
-        return sqlite3.connect(self.sqlite_path, timeout=5)
+            Path(self.sqlite_path).parent.mkdir(parents=True, exist_ok=True)
+            return sqlite3.connect(self.sqlite_path, timeout=5)
+        finally:
+            increment_metric("db.connections", backend=self.backend, store="growth_history")
+            observe_metric(
+                "db.connection_ms",
+                (time.perf_counter() - started_at) * 1000,
+                backend=self.backend,
+                store="growth_history",
+            )
 
     def initialize(self):
         with self._initialize_lock:
@@ -303,6 +315,7 @@ class GrowthHistoryStore:
                    OR excluded.record_status = 'available'
             """
 
+        operation_started = time.perf_counter()
         connection = self._connect()
         try:
             with connection:
@@ -313,6 +326,13 @@ class GrowthHistoryStore:
                     connection.executemany(query, rows)
         finally:
             connection.close()
+            increment_metric("db.operations", operation="growth_history.upsert")
+            increment_metric("db.sql_statements", len(rows), operation="growth_history.upsert")
+            observe_metric(
+                "db.operation_ms",
+                (time.perf_counter() - operation_started) * 1000,
+                operation="growth_history.upsert",
+            )
         return len(rows)
 
     def get_records(self, ocid, start_date, end_date):
@@ -329,11 +349,19 @@ class GrowthHistoryStore:
               AND snapshot_date <= {placeholder}
             ORDER BY snapshot_date ASC
         """
+        operation_started = time.perf_counter()
         connection = self._connect()
         try:
             rows = connection.execute(query, (str(ocid), start, end)).fetchall()
         finally:
             connection.close()
+            increment_metric("db.operations", operation="growth_history.select")
+            increment_metric("db.sql_statements", operation="growth_history.select")
+            observe_metric(
+                "db.operation_ms",
+                (time.perf_counter() - operation_started) * 1000,
+                operation="growth_history.select",
+            )
 
         result = []
         for row in rows:
