@@ -78,7 +78,6 @@ class CharacterSearchParallelismTests(TestCase):
                     }
                 ),
                 delete_cache=Mock(),
-                load_api_snapshot=Mock(return_value=(None, None)),
                 save_api_snapshot=Mock(return_value="2026-11-10T16:00:00+09:00"),
                 set_cache=Mock(),
             ):
