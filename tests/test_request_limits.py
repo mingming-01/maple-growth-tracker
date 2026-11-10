@@ -289,5 +289,47 @@ class RequestLimitTests(unittest.TestCase):
 
         self.assertEqual(lock_was_available_during_sleep, [True])
 
+    def test_trusted_proxy_header_identifies_separate_clients(self):
+        app = self.make_app(
+            IS_PRODUCTION=True,
+            TRUSTED_PROXY_HOPS=1,
+            API_REQUESTS_PER_MINUTE_PER_IP=1,
+        )
+        client = app.test_client()
+        not_found = Mock(status_code=404)
+
+        with patch.object(
+            character_controller,
+            "resolve_character",
+            return_value=(None, None, not_found),
+        ) as resolve:
+            first_client = client.get(
+                "/api/character?name=첫번째",
+                environ_overrides={
+                    "REMOTE_ADDR": "203.0.113.1",
+                    "HTTP_X_FORWARDED_FOR": "198.51.100.20",
+                },
+            )
+            same_client = client.get(
+                "/api/character?name=두번째",
+                environ_overrides={
+                    "REMOTE_ADDR": "203.0.113.1",
+                    "HTTP_X_FORWARDED_FOR": "198.51.100.20",
+                },
+            )
+            other_client = client.get(
+                "/api/character?name=세번째",
+                environ_overrides={
+                    "REMOTE_ADDR": "203.0.113.1",
+                    "HTTP_X_FORWARDED_FOR": "198.51.100.21",
+                },
+            )
+
+        self.assertEqual(first_client.status_code, 404)
+        self.assertEqual(same_client.status_code, 429)
+        self.assertEqual(other_client.status_code, 404)
+        self.assertEqual(resolve.call_count, 2)
+
+
 if __name__ == "__main__":
     unittest.main()
