@@ -1,6 +1,7 @@
 """캐릭터 정보 조회 HTTP 라우트."""
 from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime
+import time
 
 import requests
 from flask import Blueprint, current_app, jsonify, request
@@ -11,6 +12,7 @@ from tracker.services.nexon_service import (
     resolve_character,
 )
 from tracker.services.character_detail_service import get_current_combat_power
+from tracker.services.performance_metrics import observe_metric
 from tracker.controller.request_limit_helpers import api_request_limit_response
 from tracker.runtime import (
     CHARACTER_CACHE_TTL,
@@ -27,6 +29,19 @@ from tracker.runtime import (
 )
 
 character_bp = Blueprint("character", __name__, url_prefix="/api")
+
+
+def _observe_character_search_component(component, operation):
+    """캐릭터 검색에서 병렬 실행되는 독립 작업의 개별 소요 시간을 기록한다."""
+    started_at = time.perf_counter()
+    try:
+        return operation()
+    finally:
+        observe_metric(
+            "character.search_component_ms",
+            (time.perf_counter() - started_at) * 1000,
+            component=component,
+        )
 
 
 @character_bp.route("/character")
@@ -68,28 +83,41 @@ def get_character():
 
         character_class = basic["character_class"]
 
-        # OCID가 확보된 뒤에는 랭킹 조회와 메인 프로필 전투력 조회가 서로 독립적이다.
-        # 넥슨 API 전역 요청 간격 제한은 그대로 두고 두 작업의 네트워크 대기 시간을 겹친다.
-        # 별도 앱 컨텍스트를 전달해 작업 스레드에서도 Flask 설정값을 동일하게 사용한다.
+        # OCID가 확보된 뒤 랭킹과 메인 프로필 전투력은 서로 독립적으로 조회할 수 있다.
+        # Nexon API 전역 호출 간격과 재시도 정책은 그대로 유지한다.
         app = current_app._get_current_object()
 
-        def fetch_current_combat_power():
-            with app.app_context():
-                return get_current_combat_power(
-                    ocid, force_refresh=force_refresh
-                )
-
-        with ThreadPoolExecutor(max_workers=2) as executor:
-            rankings_future = executor.submit(
-                get_character_rankings,
-                target_date=datetime.now(KOREA_TIMEZONE).strftime("%Y-%m-%d"),
-                world_name=basic["world_name"],
-                character_class=character_class,
-                ocid=ocid,
+        def fetch_rankings():
+            return _observe_character_search_component(
+                "rankings",
+                lambda: get_character_rankings(
+                    target_date=datetime.now(KOREA_TIMEZONE).strftime("%Y-%m-%d"),
+                    world_name=basic["world_name"],
+                    character_class=character_class,
+                    ocid=ocid,
+                ),
             )
-            combat_power_future = executor.submit(fetch_current_combat_power)
-            character_rankings = rankings_future.result()
-            current_combat_power = combat_power_future.result()
+
+        def fetch_current_combat_power():
+            def fetch():
+                with app.app_context():
+                    return get_current_combat_power(
+                        ocid, force_refresh=force_refresh
+                    )
+            return _observe_character_search_component("combat_power", fetch)
+
+        parallel_started_at = time.perf_counter()
+        try:
+            with ThreadPoolExecutor(max_workers=2) as executor:
+                rankings_future = executor.submit(fetch_rankings)
+                combat_power_future = executor.submit(fetch_current_combat_power)
+                character_rankings = rankings_future.result()
+                current_combat_power = combat_power_future.result()
+        finally:
+            observe_metric(
+                "character.search_parallel_ms",
+                (time.perf_counter() - parallel_started_at) * 1000,
+            )
 
         best_power = record_best_combat_power(ocid, current_combat_power) or {}
         if current_combat_power is not None:
