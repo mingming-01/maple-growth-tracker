@@ -1,7 +1,6 @@
 from flask import jsonify, request, render_template, redirect, url_for, session, current_app, has_app_context
 from functools import wraps
 from werkzeug.exceptions import HTTPException
-import hashlib
 import os
 import re
 import sqlite3
@@ -28,6 +27,12 @@ from tracker.repositories.api_snapshot_repository import (
 from google import genai
 from google.genai import types
 from tracker.services.performance_metrics import increment_metric, observe_metric
+from tracker.services.runtime_cache import (
+    AI_RESPONSE_CACHE_MAX_ENTRIES,
+    AI_RESPONSE_CACHE_TTL,
+    RUNTIME_CACHE_MAX_ENTRIES,
+    RuntimeCache,
+)
 
 
 # 변경되지 않는 도메인 상수만 모듈 상수로 유지한다.
@@ -35,9 +40,6 @@ KOREA_TIMEZONE = ZoneInfo("Asia/Seoul")
 HISTORY_BACKFILL_BATCH_SIZE = 10
 CHARACTER_CACHE_TTL = 300
 HISTORY_CACHE_TTL = 1800
-AI_RESPONSE_CACHE_TTL = 6 * 60 * 60
-AI_RESPONSE_CACHE_MAX_ENTRIES = 100
-RUNTIME_CACHE_MAX_ENTRIES = 1000
 
 
 class RuntimeState:
@@ -89,9 +91,11 @@ class RuntimeState:
         )
         self.admin_log_repository = AdminLogRepository(self)
         self.admin_log_service = AdminLogService(self.admin_log_repository)
-        self.cache = {}
-        self.ai_response_cache = {}
-        self.cache_lock = Lock()
+        self.cache_service = RuntimeCache()
+        # 기존 테스트와 운영 코드에서 접근하는 상태 속성은 호환 별칭으로 유지한다.
+        self.cache = self.cache_service.cache
+        self.ai_response_cache = self.cache_service.ai_response_cache
+        self.cache_lock = self.cache_service.lock
         self.nexon_request_lock = Lock()
         self.last_nexon_request_at = 0.0
         self.nexon_request_count = 0
@@ -187,102 +191,30 @@ def initialize_snapshot_db():
 
 
 def get_ai_response_cache(prompt):
-    """같은 프롬프트의 성공한 AI 결과를 일정 시간 재사용한다."""
-    cache_key = hashlib.sha256(prompt.encode("utf-8")).hexdigest()
-    state = get_runtime_state()
-    with state.cache_lock:
-        cache = state.ai_response_cache
-        item = cache.get(cache_key)
-        if not item:
-            return None
-
-        now = time.time()
-        if now - item["cached_at"] > AI_RESPONSE_CACHE_TTL:
-            cache.pop(cache_key, None)
-            return None
-
-        item["used_at"] = now
-        return item["analysis"]
+    """기존 호출부 호환성을 위한 AI 응답 캐시 위임 함수."""
+    return get_runtime_state().cache_service.get_ai_response(prompt)
 
 
 def set_ai_response_cache(prompt, analysis):
-    if not analysis:
-        return
-
-    now = time.time()
-    cache_key = hashlib.sha256(prompt.encode("utf-8")).hexdigest()
-    state = get_runtime_state()
-    with state.cache_lock:
-        cache = state.ai_response_cache
-        cache[cache_key] = {
-            "analysis": analysis,
-            "cached_at": now,
-            "used_at": now,
-        }
-
-        while len(cache) > AI_RESPONSE_CACHE_MAX_ENTRIES:
-            oldest_key = min(cache, key=lambda key: cache[key]["used_at"])
-            cache.pop(oldest_key, None)
+    """기존 호출부 호환성을 위한 AI 응답 캐시 위임 함수."""
+    return get_runtime_state().cache_service.set_ai_response(prompt, analysis)
 
 
 def get_cache(key):
-    state = get_runtime_state()
-    namespace = str(key).split(":", 1)[0]
-    with state.cache_lock:
-        cache = state.cache
-        item = cache.get(key)
-        if not item:
-            increment_metric("cache.lookups", cache=namespace, result="miss")
-            return None
-        now = time.time()
-        if now - item["time"] > item["ttl"]:
-            del cache[key]
-            increment_metric("cache.lookups", cache=namespace, result="miss")
-            return None
-        item["used_at"] = now
-        increment_metric("cache.lookups", cache=namespace, result="hit")
-        return item["data"]
+    return get_runtime_state().cache_service.get(key)
 
 
 def delete_cache(key):
-    """지정한 캐시 항목을 잠금 상태에서 안전하게 제거한다."""
-    state = get_runtime_state()
-    with state.cache_lock:
-        return state.cache.pop(key, None) is not None
+    """기존 호출부 호환성을 위한 캐시 삭제 위임 함수."""
+    return get_runtime_state().cache_service.delete(key)
 
 
 def set_cache(key, data, ttl):
-    state = get_runtime_state()
-    now = time.time()
-    with state.cache_lock:
-        cache = state.cache
-        if len(cache) >= RUNTIME_CACHE_MAX_ENTRIES:
-            for existing_key, item in list(cache.items()):
-                if now - item["time"] > item["ttl"]:
-                    cache.pop(existing_key, None)
-        cache[key] = {
-            "time": now,
-            "used_at": now,
-            "data": data,
-            "ttl": ttl,
-            "saved_at": datetime.now().astimezone().isoformat(timespec="seconds")
-        }
-        while len(cache) > RUNTIME_CACHE_MAX_ENTRIES:
-            oldest_key = min(cache, key=lambda cache_key: cache[cache_key]["used_at"])
-            cache.pop(oldest_key, None)
-    increment_metric("cache.writes", cache=str(key).split(":", 1)[0])
+    return get_runtime_state().cache_service.set(key, data, ttl)
 
 
 def get_cache_timestamp(key):
-    state = get_runtime_state()
-    with state.cache_lock:
-        item = state.cache.get(key)
-        if not item:
-            return None
-        if time.time() - item["time"] > item["ttl"]:
-            state.cache.pop(key, None)
-            return None
-        return item.get("saved_at")
+    return get_runtime_state().cache_service.get_timestamp(key)
 
 
 def save_api_snapshot(cache_key, data, only_if_missing=False):
