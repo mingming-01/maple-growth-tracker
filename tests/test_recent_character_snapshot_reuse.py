@@ -18,6 +18,8 @@ class RecentCharacterBasicSnapshotTests(TestCase):
             "level": 290,
             "experience": 123456,
             "experienceRate": 45.6,
+            "ranking": 1234,
+            "rankingDataStatus": "available",
         }
 
     @patch("tracker.controller.history_controller.load_api_snapshot")
@@ -39,6 +41,8 @@ class RecentCharacterBasicSnapshotTests(TestCase):
                 "character_level": 290,
                 "character_exp": 123456,
                 "character_exp_rate": 45.6,
+                "ranking": 1234,
+                "ranking_data_status": "available",
             },
         )
         load_snapshot.assert_called_once_with("character:오작크로아")
