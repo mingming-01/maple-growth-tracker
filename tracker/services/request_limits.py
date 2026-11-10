@@ -22,6 +22,37 @@ def _seconds_until_kst_midnight():
     return max(1, math.ceil((midnight - now).total_seconds()))
 
 
+def _cleanup_request_limit_state(state, now, today, admin_window, max_clients=10000):
+    """요청 제한 기록의 만료 항목과 과도한 IP 키를 주기적으로 정리한다.
+
+    호출자는 state.request_limit_lock을 보유해야 한다.
+    """
+    state.request_limit_cleanup_counter += 1
+    if state.request_limit_cleanup_counter % 64 != 0:
+        return
+
+    _prune_timestamp_store(state.ai_request_timestamps, now, 60, max_clients)
+
+    for daily_key in list(state.ai_daily_usage):
+        if not daily_key.startswith(f"{today}:"):
+            state.ai_daily_usage.pop(daily_key, None)
+    for stale_day in list(state.ai_global_daily_usage):
+        if stale_day != today:
+            state.ai_global_daily_usage.pop(stale_day, None)
+
+    for client_key, entry in list(state.admin_login_failures.items()):
+        locked_until = entry.get("locked_until", 0)
+        window_started = entry.get("window_started", now)
+        if locked_until <= now and now - window_started >= admin_window:
+            state.admin_login_failures.pop(client_key, None)
+
+    while len(state.admin_login_failures) > max_clients:
+        oldest_key = next(iter(state.admin_login_failures), None)
+        if oldest_key is None:
+            break
+        state.admin_login_failures.pop(oldest_key, None)
+
+
 def consume_ai_request(remote_addr):
     """분당·IP별 일일·인스턴스 전체 일일 요청 한도를 원자적으로 적용한다."""
     state = get_runtime_state()
@@ -33,6 +64,10 @@ def consume_ai_request(remote_addr):
     global_daily_limit = max(1, int(_setting("AI_MAX_REQUESTS_PER_DAY_GLOBAL", 100)))
 
     with state.request_limit_lock:
+        _cleanup_request_limit_state(
+            state, now, today,
+            max(60, int(_setting("ADMIN_LOGIN_WINDOW_SECONDS", 900))),
+        )
         timestamps = state.ai_request_timestamps.setdefault(key, [])
         timestamps[:] = [stamp for stamp in timestamps if now - stamp < 60]
         if len(timestamps) >= per_minute_limit:
@@ -62,6 +97,9 @@ def admin_login_lockout_remaining(remote_addr):
     now = time.monotonic()
     window = max(60, int(_setting("ADMIN_LOGIN_WINDOW_SECONDS", 900)))
     with state.request_limit_lock:
+        _cleanup_request_limit_state(
+            state, now, datetime.now(KOREA_TIMEZONE).date().isoformat(), window
+        )
         entry = state.admin_login_failures.get(key)
         if not entry:
             return 0
@@ -81,6 +119,9 @@ def record_admin_login_failure(remote_addr):
     window = max(60, int(_setting("ADMIN_LOGIN_WINDOW_SECONDS", 900)))
     lockout = max(60, int(_setting("ADMIN_LOGIN_LOCKOUT_SECONDS", 900)))
     with state.request_limit_lock:
+        _cleanup_request_limit_state(
+            state, now, datetime.now(KOREA_TIMEZONE).date().isoformat(), window
+        )
         entry = state.admin_login_failures.get(key)
         if not entry or now - entry.get("window_started", now) >= window:
             entry = {"window_started": now, "attempts": 0, "locked_until": 0}

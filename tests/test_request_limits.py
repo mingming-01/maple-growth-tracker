@@ -373,5 +373,49 @@ class RequestLimitTests(unittest.TestCase):
         self.assertEqual(repository.calls, 1)
 
 
+    def test_periodic_cleanup_removes_expired_ai_and_admin_ip_records(self):
+        app = self.make_app()
+        with app.app_context():
+            state = get_runtime_state()
+            state.request_limit_cleanup_counter = 63
+            state.ai_request_timestamps["expired-ai-ip"] = [1.0, 2.0]
+            state.ai_request_timestamps["active-ai-ip"] = [999.0]
+            state.ai_daily_usage["2000-01-01:expired"] = 3
+            state.ai_global_daily_usage["2000-01-01"] = 4
+            state.admin_login_failures["expired-admin-ip"] = {
+                "window_started": 1.0,
+                "attempts": 1,
+                "locked_until": 0.0,
+            }
+
+            with patch("tracker.services.request_limits.time.monotonic", return_value=1000.0):
+                consume_ai_request("192.0.2.99")
+
+            self.assertNotIn("expired-ai-ip", state.ai_request_timestamps)
+            self.assertIn("active-ai-ip", state.ai_request_timestamps)
+            self.assertFalse(any(key.startswith("2000-01-01:") for key in state.ai_daily_usage))
+            self.assertNotIn("2000-01-01", state.ai_global_daily_usage)
+            self.assertNotIn("expired-admin-ip", state.admin_login_failures)
+
+    def test_admin_failure_records_are_capped_after_periodic_cleanup(self):
+        app = self.make_app()
+        with app.app_context():
+            state = get_runtime_state()
+            state.request_limit_cleanup_counter = 63
+            state.admin_login_failures = {
+                f"expired-{index}": {
+                    "window_started": 1.0,
+                    "attempts": 1,
+                    "locked_until": 0.0,
+                }
+                for index in range(10002)
+            }
+
+            with patch("tracker.services.request_limits.time.monotonic", return_value=1000.0):
+                record_admin_login_failure("192.0.2.100")
+
+            self.assertLessEqual(len(state.admin_login_failures), 10000)
+
+
 if __name__ == "__main__":
     unittest.main()

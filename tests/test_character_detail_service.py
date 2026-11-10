@@ -433,5 +433,35 @@ class CharacterDetailServiceTests(unittest.TestCase):
         self.assertEqual(SECTION_SOURCES["skills"][0]["id"], "skill6")
 
 
+    def test_source_cache_remains_bounded_after_many_distinct_characters(self):
+        from tracker.services import character_detail_service
+
+        original_cache = character_detail_service._SOURCE_CACHE
+        original_counter = character_detail_service._SOURCE_CACHE_WRITE_COUNT
+        response = FakeResponse(payload={"final_stat": []})
+        try:
+            character_detail_service._SOURCE_CACHE = {}
+            character_detail_service._SOURCE_CACHE_WRITE_COUNT = 0
+            with patch.object(
+                character_detail_service,
+                "request_nexon_api",
+                return_value=response,
+            ):
+                total = character_detail_service._SOURCE_CACHE_MAX_ENTRIES + 25
+                for index in range(total):
+                    character_detail_service._fetch_source(
+                        f"cache-bound-ocid-{index}",
+                        character_detail_service.SECTION_SOURCES["stats"][0],
+                    )
+
+            self.assertLessEqual(
+                len(character_detail_service._SOURCE_CACHE),
+                character_detail_service._SOURCE_CACHE_MAX_ENTRIES,
+            )
+        finally:
+            character_detail_service._SOURCE_CACHE = original_cache
+            character_detail_service._SOURCE_CACHE_WRITE_COUNT = original_counter
+
+
 if __name__ == "__main__":
     unittest.main()

@@ -8,6 +8,7 @@ import json
 import math
 from pathlib import Path
 import sqlite3
+from threading import Lock
 
 import psycopg
 
@@ -23,6 +24,7 @@ class GrowthHistoryStore:
         else:
             self.backend = "invalid"
         self._initialized = False
+        self._initialize_lock = Lock()
 
     @property
     def uses_postgres(self):
@@ -43,6 +45,10 @@ class GrowthHistoryStore:
         return sqlite3.connect(self.sqlite_path, timeout=5)
 
     def initialize(self):
+        with self._initialize_lock:
+            return self._initialize_once()
+
+    def _initialize_once(self):
         if self._initialized:
             return
 
@@ -452,27 +458,33 @@ class GrowthHistoryStore:
                         (request_timestamps, refresh_timestamps, client_key),
                     )
                     if cleanup:
-                        stale_seconds = max(window_seconds * 2, 120)
-                        connection.execute(
-                            """
-                            DELETE FROM api_request_limit_state
-                            WHERE updated_at < CURRENT_TIMESTAMP - (%s * INTERVAL '1 second')
-                            """,
-                            (stale_seconds,),
-                        )
-                        connection.execute(
-                            """
-                            DELETE FROM api_request_limit_state
-                            WHERE client_key IN (
-                                SELECT client_key
-                                FROM api_request_limit_state
-                                WHERE client_key <> %s
-                                ORDER BY updated_at ASC
-                                OFFSET %s
+                        # 다른 워커의 정리 작업과 충돌하지 않도록 정리 트랜잭션은 하나만 수행한다.
+                        cleanup_lock = connection.execute(
+                            "SELECT pg_try_advisory_xact_lock(%s, %s)",
+                            (20261110, 75),
+                        ).fetchone()
+                        if cleanup_lock and cleanup_lock[0]:
+                            stale_seconds = max(window_seconds * 2, 120)
+                            connection.execute(
+                                """
+                                DELETE FROM api_request_limit_state
+                                WHERE updated_at < CURRENT_TIMESTAMP - (%s * INTERVAL '1 second')
+                                """,
+                                (stale_seconds,),
                             )
-                            """,
-                            (client_key, max(0, max_clients - 1)),
-                        )
+                            connection.execute(
+                                """
+                                DELETE FROM api_request_limit_state
+                                WHERE client_key IN (
+                                    SELECT client_key
+                                    FROM api_request_limit_state
+                                    WHERE client_key <> %s
+                                    ORDER BY updated_at ASC
+                                    OFFSET %s
+                                )
+                                """,
+                                (client_key, max(0, max_clients - 1)),
+                            )
                 else:
                     connection.execute(
                         """

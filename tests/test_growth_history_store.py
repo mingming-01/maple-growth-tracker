@@ -171,6 +171,28 @@ class GrowthHistoryStoreTests(unittest.TestCase):
         self.assertEqual(keys, ["current-client"])
 
 
+    def test_concurrent_initialization_is_serialized_per_store(self):
+        import threading
+
+        errors = []
+
+        def initialize():
+            try:
+                self.store.initialize()
+            except Exception as error:
+                errors.append(error)
+
+        threads = [threading.Thread(target=initialize) for _ in range(8)]
+        for thread in threads:
+            thread.start()
+        for thread in threads:
+            thread.join(timeout=5)
+
+        self.assertTrue(all(not thread.is_alive() for thread in threads))
+        self.assertEqual(errors, [])
+        self.assertTrue(self.store._initialized)
+
+
 class GrowthHistoryApiTests(unittest.TestCase):
     def setUp(self):
         self.app = create_app({
