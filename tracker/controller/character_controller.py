@@ -13,6 +13,7 @@ from tracker.services.character_detail_service import get_current_combat_power
 from tracker.runtime import (
     CHARACTER_CACHE_TTL,
     KOREA_TIMEZONE,
+    delete_cache,
     get_cache,
     get_cache_timestamp,
     load_api_snapshot,
@@ -72,6 +73,9 @@ def get_character():
             ocid, force_refresh=force_refresh
         )
         best_power = record_best_combat_power(ocid, current_combat_power) or {}
+        if current_combat_power is not None:
+            # 새 전투력과 이전 상세 응답 캐시가 함께 남지 않도록 스탯 응답만 무효화한다.
+            delete_cache(f"character-details:{ocid}:stats")
     except requests.RequestException:
         return stale_snapshot_response(
             cache_key, "넥슨 API 연결에 실패했습니다. 잠시 후 다시 시도해주세요."
