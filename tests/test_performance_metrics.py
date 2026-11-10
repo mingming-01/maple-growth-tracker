@@ -6,6 +6,7 @@ from tracker.services.performance_metrics import (
     PerformanceMetrics,
     get_performance_metrics,
 )
+from tracker import create_app
 
 
 class PerformanceMetricsTests(unittest.TestCase):
@@ -73,6 +74,25 @@ class PerformanceMetricsTests(unittest.TestCase):
         self.assertEqual(
             counters["nexon.responses{endpoint=character/basic,status=200}"], 1
         )
+
+
+class PerformanceMetricsEndpointTests(unittest.TestCase):
+    def test_performance_endpoint_requires_admin_session(self):
+        app = create_app({
+            "TESTING": True,
+            "GROWTH_DATABASE_URL": "",
+            "NEXON_API_KEY": "",
+        })
+        client = app.test_client()
+
+        self.assertEqual(client.get("/admin/api/performance").status_code, 302)
+
+        with client.session_transaction() as session:
+            session["admin_authenticated"] = True
+
+        response = client.get("/admin/api/performance")
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.get_json()["scope"], "process-local")
 
 
 if __name__ == "__main__":
