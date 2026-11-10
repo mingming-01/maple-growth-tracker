@@ -87,7 +87,15 @@ def initialize_snapshot_db(db_path, database_url=""):
     return "sqlite", ""
 
 
-def save_api_snapshot(db_path, cache_key, data, database_url="", backend="sqlite"):
+def save_api_snapshot(
+    db_path,
+    cache_key,
+    data,
+    database_url="",
+    backend="sqlite",
+    only_if_missing=False,
+):
+    """스냅샷을 저장한다. only_if_missing이면 기존 정상 스냅샷을 덮어쓰지 않는다."""
     saved_at = datetime.now().astimezone().isoformat(timespec="seconds")
     payload = json.dumps(data, ensure_ascii=False)
     operation_started = time.perf_counter()
@@ -96,35 +104,51 @@ def save_api_snapshot(db_path, cache_key, data, database_url="", backend="sqlite
             connection = _connect_postgres(database_url)
             try:
                 with connection:
-                    connection.execute(
+                    query = (
+                        """
+                        INSERT INTO api_snapshots (cache_key, payload, saved_at)
+                        VALUES (%s, %s, CURRENT_TIMESTAMP)
+                        ON CONFLICT (cache_key) DO NOTHING
+                        """
+                        if only_if_missing
+                        else
                         """
                         INSERT INTO api_snapshots (cache_key, payload, saved_at)
                         VALUES (%s, %s, CURRENT_TIMESTAMP)
                         ON CONFLICT (cache_key) DO UPDATE SET
                             payload = EXCLUDED.payload,
                             saved_at = CURRENT_TIMESTAMP
-                        """,
-                        (cache_key, payload),
+                        """
                     )
+                    cursor = connection.execute(query, (cache_key, payload))
+                    affected_rows = cursor.rowcount
             finally:
                 connection.close()
         else:
             connection = _connect_sqlite(db_path)
             try:
                 with connection:
-                    connection.execute(
+                    query = (
+                        """
+                        INSERT INTO api_snapshots (cache_key, payload, saved_at)
+                        VALUES (?, ?, ?)
+                        ON CONFLICT(cache_key) DO NOTHING
+                        """
+                        if only_if_missing
+                        else
                         """
                         INSERT INTO api_snapshots (cache_key, payload, saved_at)
                         VALUES (?, ?, ?)
                         ON CONFLICT(cache_key) DO UPDATE SET
                             payload = excluded.payload,
                             saved_at = excluded.saved_at
-                        """,
-                        (cache_key, payload, saved_at),
+                        """
                     )
+                    cursor = connection.execute(query, (cache_key, payload, saved_at))
+                    affected_rows = cursor.rowcount
             finally:
                 connection.close()
-        return saved_at
+        return saved_at if affected_rows > 0 else None
     except (sqlite3.Error, psycopg.Error):
         print("성장 데이터 스냅샷 저장에 실패했습니다.")
         return None
