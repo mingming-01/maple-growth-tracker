@@ -314,8 +314,8 @@ export function GrowthComparison({ character, history, initialState, onSave }) {
     setNotice(`최근 ${selectedDays}일 비교 기록을 확인하고 있습니다...`);
     try {
       const [first,second] = await Promise.all([
-        fetchHistoryArchive(selectedDays,character,setNotice),
-        fetchHistoryArchive(selectedDays,secondary,setNotice)
+        fetchHistoryArchive(selectedDays,character,{collect:true,onProgress:setNotice,progressPrefix:character.characterName}),
+        fetchHistoryArchive(selectedDays,secondary,{collect:true,onProgress:setNotice,progressPrefix:secondary.characterName})
       ]);
       const firstSummary = comparisonSummary(first.history,selectedDays);
       const secondSummary = comparisonSummary(second.history,selectedDays);
