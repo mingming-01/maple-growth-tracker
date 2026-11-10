@@ -1,9 +1,9 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
+
+const AdminDashboard = lazy(() => import("./components/admin/AdminDashboard.jsx"));
 import { getCharacter, getHistory } from "./services/api.js";
-import AdminDashboard from "./components/admin/AdminDashboard.jsx";
 import FavoriteCharacters from "./features/home/FavoriteCharacters.jsx";
 import GrowthHome from "./features/home/GrowthHome.jsx";
-import { loadGrowthPeriod } from "./features/growth/GrowthDashboard.jsx";
 import {
   readTrackerState,
   saveTrackerState,
@@ -94,17 +94,17 @@ function App() {
     return favorites.some(item => favoriteKey(item) === favoriteKey(current));
   },[favorites,character]);
 
-  useEffect(() => {
-    if (!character) return;
-    saveTrackerState({character,history});
-  },[character,history]);
-
   const persistPatch = useCallback(patch => {
     saveTrackerState(patch);
     if (Object.prototype.hasOwnProperty.call(patch || {}, "comparison")) {
       setComparisonState(patch.comparison || null);
     }
   },[]);
+
+  useEffect(() => {
+    if (!character) return;
+    persistPatch({character,history});
+  },[character,history,persistPatch]);
 
   function openAdmin(event) {
     event?.preventDefault?.();
@@ -131,7 +131,6 @@ function App() {
         bestCombatPowerObservedAt: data?.bestCombatPowerObservedAt ?? previous.bestCombatPowerObservedAt ?? null,
         bestPresetCombination: data?.bestPresetCombination ?? previous.bestPresetCombination ?? null
       };
-      saveTrackerState({character:next});
       return next;
     });
   },[]);
@@ -141,7 +140,7 @@ function App() {
     if (days === 7) {
       const next = { days: 7, history: history || [], summary: null };
       setAnalysisPeriod(next);
-      saveTrackerState({
+      persistPatch({
         historyRange: 7,
         displayHistory: history || [],
         historyRangeStatus: null,
@@ -149,10 +148,11 @@ function App() {
       });
       return next;
     }
+    const { loadGrowthPeriod } = await import("./features/growth/GrowthDashboard.jsx");
     const loaded = await loadGrowthPeriod(character, days);
     const next = { days, history: loaded.history, summary: loaded.summary };
     setAnalysisPeriod(next);
-    saveTrackerState({
+    persistPatch({
       historyRange: days,
       displayHistory: loaded.history,
       historyRangeStatus: loaded.rangeStatus,
@@ -189,9 +189,8 @@ function App() {
       setAnalysisPeriod({days:7,history:records,summary:null});
       setComparisonState(null);
       setLastSearched(new Date().toLocaleTimeString("ko-KR",{hour:"2-digit",minute:"2-digit"}));
-      saveTrackerState({
-        character:nextCharacter,
-        history:records,
+      // Character and history are persisted by the state-change effect above.
+      persistPatch({
         aiAnalysis:null,
         aiInsights:null,
         comparison:null,
@@ -348,7 +347,7 @@ function App() {
       </header>
 
       <main className="mgt-page-content mgt-layout-container">
-        {view === "admin" ? <AdminDashboard onBack={closeAdmin} /> : <>
+        {view === "admin" ? <Suspense fallback={<div className="mgt-loading" role="status"><span /> 관리자 화면을 불러오고 있습니다.</div>}><AdminDashboard onBack={closeAdmin} /></Suspense> : <>
         <section className="mgt-hero">
           <div>
             <div className="mgt-hero-label"><span /> 나의 메이플 성장 기록</div>

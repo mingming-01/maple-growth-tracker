@@ -94,3 +94,40 @@ test("Growth route layout selectors match the current React component wrappers",
     assert.ok(css.includes(`.${className}`), `Missing CSS selector .${className}`);
   }
 });
+
+
+test("React tracker state persistence is centralized outside state updater callbacks", () => {
+  const app = readFileSync(join(frontendSource, "App.jsx"), "utf8");
+  const updater = app.match(/const onStatsLoaded = useCallback\(data => \{([\s\S]*?)\n  \},\[\]\);/);
+
+  assert.ok(updater, "The stats-loaded state updater must remain present");
+  assert.doesNotMatch(updater[1], /saveTrackerState\s*\(/);
+  assert.equal((app.match(/saveTrackerState\s*\(/g) || []).length, 1);
+});
+
+
+test("Chart.js is loaded only when the growth dashboard chart effect runs", () => {
+  const growthDashboard = readFileSync(join(frontendSource, "features", "growth", "GrowthDashboard.jsx"), "utf8");
+
+  assert.doesNotMatch(growthDashboard, /^import\s+Chart\s+from\s+["']chart\.js\/auto["']/m);
+  assert.match(growthDashboard, /import\(["']chart\.js\/auto["']\)/);
+  assert.match(growthDashboard, /if\s*\(cancelled\s*\|\|\s*!canvasRef\.current\)/);
+});
+
+
+test("Non-overview React routes are split into lazy-loaded feature chunks", () => {
+  const app = readFileSync(join(frontendSource, "App.jsx"), "utf8");
+  const growthHome = readFileSync(join(frontendSource, "features", "home", "GrowthHome.jsx"), "utf8");
+
+  assert.doesNotMatch(app, /from\s+["']\.\/features\/growth\/GrowthDashboard\.jsx["']/);
+  assert.match(app, /await import\(["']\.\/features\/growth\/GrowthDashboard\.jsx["']\)/);
+  for (const featurePath of [
+    "../../components/character/CharacterDetails.jsx",
+    "../growth/GrowthDashboard.jsx",
+    "../analytics/AnalyticsAndComparison.jsx"
+  ]) {
+    assert.ok(growthHome.includes(`lazy(() => import("${featurePath}")`), `Expected lazy route import for ${featurePath}`);
+  }
+  assert.match(growthHome, /<Suspense fallback=\{<RouteLoadingFallback \/>\}>/);
+  assert.match(app, /const AdminDashboard = lazy\(/);
+});

@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { getCharacter, getHistory, getHistoryArchive, postAiAnalysis, postAiComparison } from "../../services/api.js";
+import { getCharacter, getHistory, postAiAnalysis, postAiComparison } from "../../services/api.js";
+import { fetchHistoryArchive } from "../../lib/historyCollection.js";
 import {
   calculatePrediction,
   calculateGrowthMetrics,
@@ -235,31 +236,6 @@ export function AIReport({ character, history, analysisHistory = history, period
   );
 }
 
-async function fetchArchive(days,character,onProgress) {
-  let result = null;
-  const summary = {checkedDays:0,savedRecords:0,availableRecords:0,noDataRecords:0,remainingDays:0};
-  for (let offset=0;offset<days;offset+=10) {
-    const limit = Math.min(10,days-offset);
-    onProgress?.(`${character.characterName} · ${Math.min(offset+limit,days)}/${days}일 확인`);
-    result = await getHistoryArchive(character.ocid,days,{
-      collect:true,
-      characterName:character.characterName,
-      worldName:character.worldName,
-      offset,
-      limit
-    });
-    const batch = result.collection || {};
-    summary.checkedDays += Number(batch.checkedDays || 0);
-    summary.savedRecords += Number(batch.savedRecords || 0);
-    summary.availableRecords += Number(batch.availableRecords || 0);
-    summary.noDataRecords += Number(batch.noDataRecords || 0);
-    summary.remainingDays = Number(batch.remainingDays || 0);
-    if (summary.remainingDays === 0) break;
-  }
-  if (result) result.collectionSummary = summary;
-  return result;
-}
-
 function comparisonSummary(history,days) {
   const records = sortHistoryAscending(history || []);
   const changes = records.filter(item =>
@@ -338,8 +314,8 @@ export function GrowthComparison({ character, history, initialState, onSave }) {
     setNotice(`최근 ${selectedDays}일 비교 기록을 확인하고 있습니다...`);
     try {
       const [first,second] = await Promise.all([
-        fetchArchive(selectedDays,character,setNotice),
-        fetchArchive(selectedDays,secondary,setNotice)
+        fetchHistoryArchive(selectedDays,character,{collect:true,onProgress:setNotice,progressPrefix:character.characterName}),
+        fetchHistoryArchive(selectedDays,secondary,{collect:true,onProgress:setNotice,progressPrefix:secondary.characterName})
       ]);
       const firstSummary = comparisonSummary(first.history,selectedDays);
       const secondSummary = comparisonSummary(second.history,selectedDays);

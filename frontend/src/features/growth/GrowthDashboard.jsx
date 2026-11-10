@@ -1,9 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import Chart from "chart.js/auto";
 import { detectLevelUpEvents, buildLevelUpMarkers, buildExperienceChartSeries, dailyGrowthSegmentDash } from "./growthChartData.js";
-import {
-  getHistoryArchive
-} from "../../services/api.js";
+import { fetchHistoryArchive } from "../../lib/historyCollection.js";
 import {
   sortHistoryAscending,
   sortHistoryDescending,
@@ -71,40 +68,6 @@ function daysBetween(start, end) {
   return first === null || last === null ? null : Math.round((last - first) / 86400000);
 }
 
-async function fetchArchive(days, character, { end = null, collect = false, onProgress = null } = {}) {
-  let result = null;
-  const totals = { checkedDays: 0, savedRecords: 0, availableRecords: 0, noDataRecords: 0, remainingDays: 0 };
-  const batches = collect ? Math.ceil(days / 10) : 1;
-  for (let batch = 0; batch < batches; batch += 1) {
-    const offset = batch * 10;
-    const limit = collect ? Math.min(10, days - offset) : undefined;
-    onProgress?.(collect ? `과거 기록 확인 중 · ${Math.min(offset + limit, days)}/${days}일` : "저장된 기간 기록 조회 중...");
-    result = await getHistoryArchive(character.ocid, days, {
-      end,
-      collect,
-      characterName: character.characterName,
-      worldName: character.worldName,
-      offset,
-      limit,
-      summaryOnly: collect
-    });
-    const item = result.collection || {};
-    totals.checkedDays += Number(item.checkedDays || 0);
-    totals.savedRecords += Number(item.savedRecords || 0);
-    totals.availableRecords += Number(item.availableRecords || 0);
-    totals.noDataRecords += Number(item.noDataRecords || 0);
-    totals.remainingDays = Number(item.remainingDays || 0);
-    if (!collect || totals.remainingDays === 0) break;
-  }
-  if (result && collect) {
-    onProgress?.("수집된 기간 기록 정리 중...");
-    // 중간 배치의 전체 기간 응답을 누적하지 않고, 최종 기록은 한 번만 조회한다.
-    result = await getHistoryArchive(character.ocid, days, { end });
-    result.collectionSummary = totals;
-  }
-  return result;
-}
-
 function summarizePeriod(history, days) {
   const today = formatLocalISODate(new Date());
   const records = sortHistoryAscending(Array.isArray(history) ? history : [])
@@ -155,7 +118,7 @@ export async function loadGrowthPeriod(character, days, onProgress = null) {
   if (!character?.ocid || normalizedDays === 7) {
     throw new Error("기간별 성장 기록을 불러올 수 없습니다.");
   }
-  const current = await fetchArchive(normalizedDays, character, {
+  const current = await fetchHistoryArchive(normalizedDays, character, {
     collect: true,
     onProgress
   });
@@ -163,7 +126,7 @@ export async function loadGrowthPeriod(character, days, onProgress = null) {
   const previousEnd = shiftDate(current.startDate, -1);
   if (previousEnd) {
     try {
-      previous = await fetchArchive(normalizedDays, character, { end: previousEnd, collect: false });
+      previous = await fetchHistoryArchive(normalizedDays, character, { end: previousEnd, collect: false });
     } catch {
       previous = null;
     }
@@ -455,6 +418,7 @@ export default function GrowthDashboard({ character, history, onHistoryChange, o
   );
 
   useEffect(() => {
+    let cancelled = false;
     if (!canvasRef.current) return undefined;
     if (chartRef.current) {
       chartRef.current.destroy();
@@ -469,7 +433,9 @@ export default function GrowthDashboard({ character, history, onHistoryChange, o
     // Detect level changes locally so the yellow star is drawn on actual events.
     const levelUpEvents = detectLevelUpEvents(sorted);
     const levelUps = buildLevelUpMarkers(sorted, cumulative);
-    chartRef.current = new Chart(canvasRef.current.getContext("2d"), {
+    import("chart.js/auto").then(({ default: Chart }) => {
+      if (cancelled || !canvasRef.current) return;
+      chartRef.current = new Chart(canvasRef.current.getContext("2d"), {
       type: "line",
       data: {
         labels: sorted.map(item => String(item.date || "").slice(5)),
@@ -507,8 +473,12 @@ export default function GrowthDashboard({ character, history, onHistoryChange, o
           dailyGrowth:{type:"linear",position:"right",beginAtZero:true,title:{display:true,text:"일일 경험치 증가량"},grid:{drawOnChartArea:false},ticks:{callback:value=>Number(value).toFixed(0)+"조"}}
         }
       }
+      });
+    }).catch(() => {
+      if (!cancelled) setError("성장 그래프를 불러오지 못했습니다. 페이지를 새로고침해 주세요.");
     });
     return () => {
+      cancelled = true;
       if (chartRef.current) chartRef.current.destroy();
       chartRef.current = null;
     };
@@ -527,14 +497,14 @@ export default function GrowthDashboard({ character, history, onHistoryChange, o
         onAnalysisPeriodChange?.({ days:7, history:history || [], summary:null });
         onPersist?.({historyRange:7,displayHistory:history || [],historyRangeStatus:null,periodSummary:null});
       } else {
-        const current = await fetchArchive(days,character,{
+        const current = await fetchHistoryArchive(days,character,{
           collect:true,
           onProgress:setProgressText
         });
         let previous = null;
         const previousEnd = shiftDate(current.startDate,-1);
         if (previousEnd) {
-          try { previous = await fetchArchive(days,character,{end:previousEnd,collect:false}); } catch { previous = null; }
+          try { previous = await fetchHistoryArchive(days,character,{end:previousEnd,collect:false}); } catch { previous = null; }
         }
         const summary = summarizePeriod(current.history || [],days);
         summary.startDate = current.startDate || summary.startDate;
