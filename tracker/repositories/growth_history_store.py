@@ -397,11 +397,14 @@ class GrowthHistoryStore:
         PostgreSQL은 client_key 행을 FOR UPDATE로 잠가 여러 Gunicorn 워커의
         동시 요청을 직렬화한다. SQLite는 로컬 테스트와 개발 환경용이다.
         """
+        operation_started = time.perf_counter()
         self.initialize()
         connection = self._connect()
+        query_count = 0
         try:
             with connection:
                 if self.uses_postgres:
+                    query_count += 1
                     connection.execute(
                         """
                         INSERT INTO api_request_limit_state (client_key)
@@ -410,6 +413,7 @@ class GrowthHistoryStore:
                         """,
                         (client_key,),
                     )
+                    query_count += 1
                     row = connection.execute(
                         """
                         SELECT request_timestamps, refresh_timestamps
@@ -422,6 +426,7 @@ class GrowthHistoryStore:
                     request_timestamps = list(row[0] or [])
                     refresh_timestamps = list(row[1] or [])
                 else:
+                    query_count += 1
                     connection.execute(
                         """
                         INSERT INTO api_request_limit_state
@@ -431,6 +436,7 @@ class GrowthHistoryStore:
                         """,
                         (client_key, now),
                     )
+                    query_count += 1
                     row = connection.execute(
                         """
                         SELECT request_timestamps, refresh_timestamps
@@ -474,6 +480,7 @@ class GrowthHistoryStore:
                         refresh_timestamps.append(now)
 
                 if self.uses_postgres:
+                    query_count += 1
                     connection.execute(
                         """
                         UPDATE api_request_limit_state
@@ -490,12 +497,14 @@ class GrowthHistoryStore:
                     )
                     if cleanup:
                         # 다른 워커의 정리 작업과 충돌하지 않도록 정리 트랜잭션은 하나만 수행한다.
+                        query_count += 1
                         cleanup_lock = connection.execute(
                             "SELECT pg_try_advisory_xact_lock(%s, %s)",
                             (20261110, 75),
                         ).fetchone()
                         if cleanup_lock and cleanup_lock[0]:
                             stale_seconds = max(window_seconds * 2, 120)
+                            query_count += 1
                             connection.execute(
                                 """
                                 DELETE FROM api_request_limit_state
@@ -503,6 +512,7 @@ class GrowthHistoryStore:
                                 """,
                                 (stale_seconds,),
                             )
+                            query_count += 1
                             connection.execute(
                                 """
                                 DELETE FROM api_request_limit_state
@@ -517,6 +527,7 @@ class GrowthHistoryStore:
                                 (client_key, max(0, max_clients - 1)),
                             )
                 else:
+                    query_count += 1
                     connection.execute(
                         """
                         UPDATE api_request_limit_state
@@ -534,6 +545,7 @@ class GrowthHistoryStore:
                     )
                     if cleanup:
                         stale_seconds = max(window_seconds * 2, 120)
+                        query_count += 1
                         connection.execute(
                             """
                             DELETE FROM api_request_limit_state
@@ -541,6 +553,7 @@ class GrowthHistoryStore:
                             """,
                             (now - stale_seconds,),
                         )
+                        query_count += 1
                         connection.execute(
                             """
                             DELETE FROM api_request_limit_state
@@ -558,3 +571,10 @@ class GrowthHistoryStore:
             return allowed, retry_after, reason
         finally:
             connection.close()
+            increment_metric("db.operations", operation="api_rate_limit.consume")
+            increment_metric("db.sql_statements", query_count, operation="api_rate_limit.consume")
+            observe_metric(
+                "db.operation_ms",
+                (time.perf_counter() - operation_started) * 1000,
+                operation="api_rate_limit.consume",
+            )
