@@ -16,8 +16,8 @@ React 관리자 세션 인증을 그대로 사용한다. 별도 API 키나 브�
 
 | 지표 | 설명 |
 |---|---|
-| http.requests | Flask endpoint별 요청 수와 HTTP 상태 |
-| http.request_ms | Flask endpoint별 처리 시간 |
+| http.requests | Flask endpoint·HTTP 상태·캐릭터/성장 응답 dataStatus별 요청 수 |
+| http.request_ms | Flask endpoint·dataStatus별 처리 시간(p50/p95) |
 | cache.lookups | 일반 응답 캐시 및 Nexon 원본 데이터 캐시의 hit/miss |
 | cache.writes | 해당 캐시에 새 값을 저장한 횟수 |
 | nexon.logical_requests | Nexon API 논리 요청 수 |

@@ -492,8 +492,27 @@ def record_user_action(response):
         error_type = f"http_{status_code}"
 
     route_label = endpoint or request.path
-    increment_metric("http.requests", route=route_label, status=status_code)
-    observe_metric("http.request_ms", duration_ms, route=route_label)
+    data_status = "not_applicable"
+    if endpoint in ("character.get_character", "history.get_history"):
+        response_payload = response.get_json(silent=True)
+        if isinstance(response_payload, dict):
+            data_status = response_payload.get("dataStatus") or (
+                "error" if status_code >= 400 else "current"
+            )
+        else:
+            data_status = "error" if status_code >= 400 else "unknown"
+    increment_metric(
+        "http.requests",
+        route=route_label,
+        status=status_code,
+        data_status=data_status,
+    )
+    observe_metric(
+        "http.request_ms",
+        duration_ms,
+        route=route_label,
+        data_status=data_status,
+    )
 
     details = {
         "path": request.path,
