@@ -306,7 +306,7 @@ export function DetailTooltip({
         if (moved < 8) setOpen(value => !value);
       }}
       onPointerCancel={() => { touchStartRef.current = null; }}
-      onBlur={() => setOpen(false)
+      onBlur={() => setOpen(false)}
       onKeyDown={event => {
         if (hasTooltip && (event.key === "Enter" || event.key === " ")) {
           event.preventDefault();
