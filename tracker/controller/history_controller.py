@@ -41,6 +41,16 @@ from tracker.runtime import (
 history_bp = Blueprint("history", __name__, url_prefix="/api")
 
 
+def _needs_historical_record_collection(record):
+    """저장된 날짜 기록이 없거나 재확인이 필요한지 판정한다."""
+    if not isinstance(record, dict) or record.get("recordStatus") != "available":
+        return True
+    return (
+        not record.get("experienceRateChecked", False)
+        or record.get("experienceRate") is None
+    )
+
+
 def _load_recent_character_basic_snapshot(character_name, ocid, now=None):
     """직전 캐릭터 조회가 저장한 최신 프로필을 성장 기록 조회에서 재사용한다.
 
@@ -324,14 +334,8 @@ def get_history_archive():
         ]
         missing_dates = [
             target_date for target_date in batch_dates
-            if target_date.isoformat() not in stored_by_date
-            or stored_by_date[target_date.isoformat()].get("recordStatus") == "not_ready"
-            or (
-                stored_by_date[target_date.isoformat()].get("recordStatus") == "available"
-                and (
-                    not stored_by_date[target_date.isoformat()].get("experienceRateChecked", False)
-                    or stored_by_date[target_date.isoformat()].get("experienceRate") is None
-                )
+            if _needs_historical_record_collection(
+                stored_by_date.get(target_date.isoformat())
             )
         ]
         fetched_records = []
@@ -366,13 +370,9 @@ def get_history_archive():
             "availableRecords": sum(item.get("recordStatus") == "available" for item in fetched_records),
             "noDataRecords": sum(item.get("recordStatus") == "not_ready" for item in fetched_records),
             "remainingDays": sum(
-                (start_date + timedelta(days=index)).isoformat() not in stored_by_date
-                or stored_by_date[(start_date + timedelta(days=index)).isoformat()].get("recordStatus") != "available"
-                or (
-                    stored_by_date[(start_date + timedelta(days=index)).isoformat()].get("recordStatus") == "available"
-                    and (
-                        not stored_by_date[(start_date + timedelta(days=index)).isoformat()].get("experienceRateChecked", False)
-                        or stored_by_date[(start_date + timedelta(days=index)).isoformat()].get("experienceRate") is None
+                _needs_historical_record_collection(
+                    stored_by_date.get(
+                        (start_date + timedelta(days=index)).isoformat()
                     )
                 )
                 for index in range(days)
