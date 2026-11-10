@@ -460,7 +460,7 @@ button:focus-visible,input:focus-visible,select:focus-visible,a:focus-visible { 
   .mgt-result-content .comparison-form { grid-template-columns:minmax(0,1fr); }
   .comparison-period-grid { grid-template-columns:1fr; }
   .react-equipment-board { grid-template-columns:repeat(4,minmax(0,1fr)); grid-template-rows:none; }
-  .react-equipment-board .equipment-game-slot { grid-area:auto !important; min-height:90px; }
+  .react-equipment-board .equipment-game-slot { min-height:90px; }
   .mgt-footer { flex-direction:column; }
 }
 @media (max-width:480px) {
@@ -505,7 +505,7 @@ button:focus-visible,input:focus-visible,select:focus-visible,a:focus-visible { 
   .mgt-result-content .character-details-header .export-button { width:100%; }
   .mgt-result-content .detail-tabs { gap:5px; overflow-x:auto; }
   .mgt-result-content .detail-tab { min-width:82px; padding:0 9px; font-size:10px; }
-  .react-equipment-board { grid-template-columns:repeat(3,minmax(0,1fr)); gap:5px; padding:6px; }
+  .react-equipment-board { grid-template-columns:repeat(4,minmax(0,1fr)); gap:5px; padding:6px; }
   .react-equipment-board .equipment-game-slot { min-height:82px; padding:5px 2px; }
   .react-equipment-board .equipment-game-icon-frame { width:43px; height:43px; }
   .react-equipment-board .equipment-game-icon-frame img { width:37px; height:37px; }
@@ -1858,3 +1858,45 @@ button:focus-visible,input:focus-visible,select:focus-visible,a:focus-visible { 
   .growth-dashboard [id^="growth-"] { scroll-margin-top:118px; }
 }
 
+
+
+/* P4 regression fixes: keep insight labels readable and clip the history table to its card. */
+.mgt-growth-insight-heading {
+  display:grid;
+  grid-template-columns:minmax(0,1fr);
+  align-items:start;
+  justify-content:initial;
+  gap:6px;
+}
+.mgt-growth-insight-overline {
+  font-size:clamp(15px,1.6vw,18px);
+  line-height:1.35;
+  white-space:nowrap;
+  overflow-wrap:normal;
+}
+.mgt-growth-insight-heading .mgt-insight-record-count { white-space:nowrap; }
+.mgt-growth-insight-facts > div:first-child strong {
+  white-space:nowrap;
+  overflow-wrap:normal;
+  font-size:clamp(12px,1.2vw,15px);
+  letter-spacing:-.35px;
+}
+.mgt-growth-page-content[data-testid="history-page"] .history-card {
+  min-width:0;
+  max-width:100%;
+  overflow:hidden;
+  border-radius:18px;
+}
+.mgt-growth-page-content[data-testid="history-page"] .history-table-wrapper {
+  min-width:0;
+  max-width:100%;
+  overflow-x:auto;
+  overflow-y:hidden;
+  border-radius:inherit;
+  -webkit-overflow-scrolling:touch;
+}
+.mgt-growth-page-content[data-testid="history-page"] .history-table {
+  border-collapse:separate;
+  border-spacing:0;
+  overflow:hidden;
+}
