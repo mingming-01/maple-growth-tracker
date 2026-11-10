@@ -292,8 +292,20 @@ class GrowthHistoryStore:
                     experience_rate_checked = EXCLUDED.experience_rate_checked,
                     record_status = EXCLUDED.record_status,
                     recorded_at = CURRENT_TIMESTAMP
-                WHERE growth_daily_snapshots.record_status <> 'available'
-                   OR EXCLUDED.record_status = 'available'
+                WHERE (
+                    growth_daily_snapshots.record_status <> 'available'
+                    OR EXCLUDED.record_status = 'available'
+                )
+                  AND (
+                    growth_daily_snapshots.character_name IS DISTINCT FROM EXCLUDED.character_name
+                    OR growth_daily_snapshots.world_name IS DISTINCT FROM EXCLUDED.world_name
+                    OR growth_daily_snapshots.level IS DISTINCT FROM EXCLUDED.level
+                    OR growth_daily_snapshots.experience IS DISTINCT FROM EXCLUDED.experience
+                    OR growth_daily_snapshots.ranking IS DISTINCT FROM EXCLUDED.ranking
+                    OR growth_daily_snapshots.experience_rate IS DISTINCT FROM EXCLUDED.experience_rate
+                    OR growth_daily_snapshots.experience_rate_checked IS DISTINCT FROM EXCLUDED.experience_rate_checked
+                    OR growth_daily_snapshots.record_status IS DISTINCT FROM EXCLUDED.record_status
+                )
             """
         else:
             query = """
@@ -311,29 +323,64 @@ class GrowthHistoryStore:
                     experience_rate_checked = excluded.experience_rate_checked,
                     record_status = excluded.record_status,
                     recorded_at = CURRENT_TIMESTAMP
-                WHERE growth_daily_snapshots.record_status <> 'available'
-                   OR excluded.record_status = 'available'
+                WHERE (
+                    growth_daily_snapshots.record_status <> 'available'
+                    OR excluded.record_status = 'available'
+                )
+                  AND (
+                    growth_daily_snapshots.character_name IS NOT excluded.character_name
+                    OR growth_daily_snapshots.world_name IS NOT excluded.world_name
+                    OR growth_daily_snapshots.level IS NOT excluded.level
+                    OR growth_daily_snapshots.experience IS NOT excluded.experience
+                    OR growth_daily_snapshots.ranking IS NOT excluded.ranking
+                    OR growth_daily_snapshots.experience_rate IS NOT excluded.experience_rate
+                    OR growth_daily_snapshots.experience_rate_checked IS NOT excluded.experience_rate_checked
+                    OR growth_daily_snapshots.record_status IS NOT excluded.record_status
+                )
             """
 
         operation_started = time.perf_counter()
         connection = self._connect()
+        affected_rows = 0
         try:
             with connection:
                 if self.uses_postgres:
                     with connection.cursor() as cursor:
                         cursor.executemany(query, rows)
+                        rowcount = cursor.rowcount
                 else:
-                    connection.executemany(query, rows)
+                    cursor = connection.executemany(query, rows)
+                    rowcount = cursor.rowcount
+                # Both psycopg and sqlite3 expose affected-row counts for executemany.
+                # A negative/unknown rowcount falls back to the submitted batch size.
+                affected_rows = (
+                    int(rowcount)
+                    if rowcount is not None and int(rowcount) >= 0
+                    else len(rows)
+                )
         finally:
             connection.close()
             increment_metric("db.operations", operation="growth_history.upsert")
+            # Keep the legacy counter for compatibility; it represents submitted rows.
             increment_metric("db.sql_statements", len(rows), operation="growth_history.upsert")
+            increment_metric(
+                "db.upsert_rows_attempted",
+                len(rows),
+                backend=self.backend,
+                store="growth_history",
+            )
+            increment_metric(
+                "db.upsert_rows_affected",
+                affected_rows,
+                backend=self.backend,
+                store="growth_history",
+            )
             observe_metric(
                 "db.operation_ms",
                 (time.perf_counter() - operation_started) * 1000,
                 operation="growth_history.upsert",
             )
-        return len(rows)
+        return affected_rows
 
     def get_records(self, ocid, start_date, end_date):
         self.initialize()
