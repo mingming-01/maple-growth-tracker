@@ -11,6 +11,7 @@ from tracker.controller import character_controller, history_controller
 from tracker.integrations import nexon_api
 from tracker.runtime import get_runtime_state
 from tracker.services import nexon_service
+from tracker.services import history_archive_service
 
 
 class ApiResilienceTests(unittest.TestCase):
@@ -187,7 +188,7 @@ class ApiResilienceTests(unittest.TestCase):
         }
         response = Mock(status_code=200)
         with patch.object(
-            history_controller, "get_ranking_snapshot", return_value=(ranking, response)
+            history_archive_service, "get_ranking_snapshot", return_value=(ranking, response)
         ) as get_ranking:
             record = history_controller.fetch_historical_record(
                 "test-ocid", "에오스", target_date,
