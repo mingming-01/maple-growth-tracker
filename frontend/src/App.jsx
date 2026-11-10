@@ -3,7 +3,6 @@ import { getCharacter, getHistory } from "./services/api.js";
 import AdminDashboard from "./components/admin/AdminDashboard.jsx";
 import FavoriteCharacters from "./features/home/FavoriteCharacters.jsx";
 import GrowthHome from "./features/home/GrowthHome.jsx";
-import { loadGrowthPeriod } from "./features/growth/GrowthDashboard.jsx";
 import {
   readTrackerState,
   saveTrackerState,
@@ -148,6 +147,7 @@ function App() {
       });
       return next;
     }
+    const { loadGrowthPeriod } = await import("./features/growth/GrowthDashboard.jsx");
     const loaded = await loadGrowthPeriod(character, days);
     const next = { days, history: loaded.history, summary: loaded.summary };
     setAnalysisPeriod(next);
