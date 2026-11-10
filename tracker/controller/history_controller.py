@@ -396,11 +396,14 @@ def get_history():
     }
 
     saved_at = datetime.now().astimezone().isoformat(timespec="seconds")
-    previous_snapshot, _ = load_api_snapshot(cache_key)
-    if history_status == "complete" or previous_snapshot is None:
-        snapshot_saved_at = save_api_snapshot(cache_key, result)
-        if snapshot_saved_at:
-            saved_at = snapshot_saved_at
+    # 완전한 기록은 갱신하고, 부분 기록은 기존 스냅샷이 없을 때만 저장한다.
+    snapshot_saved_at = save_api_snapshot(
+        cache_key,
+        result,
+        only_if_missing=history_status != "complete",
+    )
+    if snapshot_saved_at:
+        saved_at = snapshot_saved_at
 
     # 오늘 랭킹이 준비되지 않았다면 30분 대신 5분 후 다시 확인한다.
     cache_ttl = HISTORY_CACHE_TTL if history_status == "complete" else 300
