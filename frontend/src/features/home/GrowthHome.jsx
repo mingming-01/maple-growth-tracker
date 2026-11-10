@@ -1,10 +1,17 @@
-import { useEffect } from "react";
+import { lazy, Suspense, useEffect } from "react";
 import "./GrowthHome.css";
 import CharacterOverview from "./CharacterOverview.jsx";
 import GrowthInsight from "./GrowthInsight.jsx";
-import CharacterDetails from "../../components/character/CharacterDetails.jsx";
-import GrowthDashboard, { GrowthHistoryTable } from "../growth/GrowthDashboard.jsx";
-import { AIReport, GrowthComparison } from "../analytics/AnalyticsAndComparison.jsx";
+
+const CharacterDetails = lazy(() => import("../../components/character/CharacterDetails.jsx"));
+const GrowthDashboard = lazy(() => import("../growth/GrowthDashboard.jsx"));
+const GrowthHistoryTable = lazy(() => import("../growth/GrowthDashboard.jsx").then(module => ({ default: module.GrowthHistoryTable })));
+const AIReport = lazy(() => import("../analytics/AnalyticsAndComparison.jsx").then(module => ({ default: module.AIReport })));
+const GrowthComparison = lazy(() => import("../analytics/AnalyticsAndComparison.jsx").then(module => ({ default: module.GrowthComparison })));
+
+function RouteLoadingFallback() {
+  return <div className="mgt-loading" role="status"><span /> 화면을 불러오고 있습니다.</div>;
+}
 
 const PAGE_META = {
   growth: {
@@ -110,6 +117,7 @@ export default function GrowthHome({
       )}
 
       {view === "growth" && (
+        <Suspense fallback={<RouteLoadingFallback />}>
         <div id="growth" className="mgt-growth-page-content" data-testid="growth-page">
           <GrowthDashboard
             character={character}
@@ -119,15 +127,19 @@ export default function GrowthHome({
             onPersist={onPersist}
           />
         </div>
+        </Suspense>
       )}
 
       {view === "details" && (
+        <Suspense fallback={<RouteLoadingFallback />}>
         <div id="details" className="mgt-growth-page-content" data-testid="details-page">
           <CharacterDetails key={profileRevision} ocid={character.ocid} onStatsLoaded={onStatsLoaded} initialTab={detailTab} />
         </div>
+        </Suspense>
       )}
 
       {view === "analytics" && (
+        <Suspense fallback={<RouteLoadingFallback />}>
         <div id="analytics" className="mgt-growth-page-content" data-testid="analytics-page">
           <AIReport
             character={character}
@@ -138,15 +150,19 @@ export default function GrowthHome({
             onPeriodSelect={onAnalysisPeriodSelect}
           />
         </div>
+        </Suspense>
       )}
 
       {view === "history" && (
+        <Suspense fallback={<RouteLoadingFallback />}>
         <div id="history" className="mgt-growth-page-content" data-testid="history-page">
           <GrowthHistoryTable history={analysisPeriod.history || history} />
         </div>
+        </Suspense>
       )}
 
       {view === "comparison" && (
+        <Suspense fallback={<RouteLoadingFallback />}>
         <div id="comparison" className="mgt-growth-page-content" data-testid="comparison-page">
           <GrowthComparison
             character={character}
@@ -155,6 +171,7 @@ export default function GrowthHome({
             onSave={onPersist}
           />
         </div>
+        </Suspense>
       )}
     </div>
   );
