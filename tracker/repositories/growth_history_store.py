@@ -48,7 +48,7 @@ class GrowthHistoryStore:
             Path(self.sqlite_path).parent.mkdir(parents=True, exist_ok=True)
             return sqlite3.connect(self.sqlite_path, timeout=5)
         finally:
-            increment_metric("db.connections", backend=self.backend, store="growth_history")
+            increment_metric("db.connection_attempts", backend=self.backend, store="growth_history")
             observe_metric(
                 "db.connection_ms",
                 (time.perf_counter() - started_at) * 1000,

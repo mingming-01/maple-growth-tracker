@@ -13,7 +13,7 @@ def _connect_postgres(database_url):
     try:
         return psycopg.connect(database_url, connect_timeout=3, sslmode="require", prepare_threshold=None)
     finally:
-        increment_metric("db.connections", backend="postgres", store="snapshots")
+        increment_metric("db.connection_attempts", backend="postgres", store="snapshots")
         observe_metric(
             "db.connection_ms",
             (time.perf_counter() - started_at) * 1000,
@@ -27,7 +27,7 @@ def _connect_sqlite(db_path):
     try:
         return sqlite3.connect(db_path, timeout=5)
     finally:
-        increment_metric("db.connections", backend="sqlite", store="snapshots")
+        increment_metric("db.connection_attempts", backend="sqlite", store="snapshots")
         observe_metric(
             "db.connection_ms",
             (time.perf_counter() - started_at) * 1000,

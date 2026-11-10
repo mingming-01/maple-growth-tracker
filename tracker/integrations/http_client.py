@@ -74,6 +74,10 @@ def request_with_retries(
             if delay > 0:
                 time.sleep(delay)
             continue
+        except requests.RequestException as error:
+            if on_error:
+                on_error(attempt, error, (time.perf_counter() - attempt_started) * 1000)
+            raise
 
         if on_response:
             on_response(

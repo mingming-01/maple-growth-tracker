@@ -151,6 +151,7 @@ def admin_logs():
     storage_warning = state.log_storage_warning
 
     query_started = time.perf_counter()
+    query_count = 0
     try:
         connection = connect_log_db()
         try:
@@ -159,6 +160,7 @@ def admin_logs():
                     f"SELECT COUNT(*) AS total FROM action_logs{where_clause}",
                     parameters,
                 ).fetchone()
+                query_count += 1
                 total_count = count_row["total"]
 
                 rows = connection.execute(
@@ -168,12 +170,14 @@ def admin_logs():
                     "ORDER BY created_at DESC, id DESC LIMIT 500",
                     parameters,
                 ).fetchall()
+                query_count += 1
                 action_options = [
                     row["action"]
                     for row in connection.execute(
                         "SELECT DISTINCT action FROM action_logs ORDER BY action"
                     ).fetchall()
                 ]
+                query_count += 1
         finally:
             connection.close()
     except (sqlite3.Error, psycopg.Error):
@@ -183,7 +187,7 @@ def admin_logs():
         print("관리자 로그 조회에 실패했습니다.")
     finally:
         increment_metric("db.operations", operation="admin_logs.select")
-        increment_metric("db.sql_statements", 3, operation="admin_logs.select")
+        increment_metric("db.sql_statements", query_count, operation="admin_logs.select")
         observe_metric(
             "db.operation_ms",
             (time.perf_counter() - query_started) * 1000,
@@ -290,6 +294,7 @@ def admin_logs_api():
     storage_warning = state.log_storage_warning
 
     query_started = time.perf_counter()
+    query_count = 0
     try:
         connection = connect_log_db()
         try:
@@ -298,6 +303,7 @@ def admin_logs_api():
                     f"SELECT COUNT(*) AS total FROM action_logs{where_clause}",
                     parameters,
                 ).fetchone()
+                query_count += 1
                 total_count = count_row["total"]
 
                 rows = connection.execute(
@@ -307,12 +313,14 @@ def admin_logs_api():
                     "ORDER BY created_at DESC, id DESC LIMIT 500",
                     parameters,
                 ).fetchall()
+                query_count += 1
                 action_options = [
                     row["action"]
                     for row in connection.execute(
                         "SELECT DISTINCT action FROM action_logs ORDER BY action"
                     ).fetchall()
                 ]
+                query_count += 1
         finally:
             connection.close()
     except (sqlite3.Error, psycopg.Error):
@@ -322,7 +330,7 @@ def admin_logs_api():
         print("관리자 로그 조회에 실패했습니다.")
     finally:
         increment_metric("db.operations", operation="admin_logs.select")
-        increment_metric("db.sql_statements", 3, operation="admin_logs.select")
+        increment_metric("db.sql_statements", query_count, operation="admin_logs.select")
         observe_metric(
             "db.operation_ms",
             (time.perf_counter() - query_started) * 1000,

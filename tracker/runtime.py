@@ -154,7 +154,7 @@ def connect_log_db():
         connection.row_factory = sqlite3.Row
         return connection
     finally:
-        increment_metric("db.connections", backend=backend, store="admin_logs")
+        increment_metric("db.connection_attempts", backend=backend, store="admin_logs")
         observe_metric(
             "db.connection_ms",
             (time.perf_counter() - started_at) * 1000,

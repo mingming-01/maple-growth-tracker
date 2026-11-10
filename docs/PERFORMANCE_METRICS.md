@@ -25,7 +25,7 @@ React 관리자 세션 인증을 그대로 사용한다. 별도 API 키나 브�
 | nexon.retries | 첫 시도 이후 재시도 수 |
 | nexon.responses / nexon.errors | 엔드포인트·상태 코드별 응답과 네트워크 오류 |
 | nexon.logical_request_ms | 스로틀 대기와 재시도를 포함한 논리 요청 시간 |
-| db.connections / db.connection_ms | 저장소별 DB 연결 생성 횟수와 연결 생성 소요 시간 |
+| db.connection_attempts / db.connection_ms | 저장소별 DB 연결 시도 횟수(실패 포함)와 연결 소요 시간 |
 | db.operations / db.operation_ms | 성장 기록·스냅샷·관리자 로그 작업 횟수와 처리 시간 |
 | db.sql_statements | 계측을 연결한 저장소 작업에서 실행한 SQL 문장 수(일괄 upsert는 행 수 기준) |
 
@@ -37,7 +37,7 @@ React 관리자 세션 인증을 그대로 사용한다. 별도 API 키나 브�
 - 데이터는 프로세스 단위다. Gunicorn worker가 여러 개면 각 worker마다 별도 계측값이 쌓이고, 요청을 처리한 worker의 값만 조회된다. 이 API 응답을 여러 worker의 전역 합계로 해석하면 안 된다.
 - Nexon 호출 수는 API endpoint별 논리 요청, 재시도 및 응답을 나눠 계산한다. nexon.attempts를 외부 HTTP 호출 시도 수로 본다.
 - Flask endpoint 처리 시간은 백엔드 요청 처리 시간이며, 브라우저 렌더링이나 React의 캐시·상태 복원 시간을 포함하지 않는다. 화면에서 체감하는 검색 전체 시간은 Playwright 또는 브라우저 Performance API 측정을 함께 사용한다.
-- DB 연결 시간은 연결 객체 생성 구간을 측정한다. 아직 연결 풀 대기 시간과 연결 생성 시간을 분리한 값은 아니다.
+- DB 연결 시간은 연결 시도부터 연결 함수 반환/예외까지를 측정한다. 실패한 시도도 횟수에 포함하며, 아직 연결 풀 대기 시간과 연결 생성 시간을 분리한 값은 아니다.
 - 본 지표는 성능 비교용 운영 계측의 시작점이며 APM이나 분산 메트릭 저장소가 아니다. 실제 Render/Supabase 수치가 확보되기 전까지 성능 개선 효과를 단정하지 않는다.
 
 ## 권장 비교 절차
