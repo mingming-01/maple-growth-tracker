@@ -484,7 +484,8 @@ def record_user_action(response):
     status_code = response.status_code
     status = "성공" if 200 <= status_code < 400 else "실패"
     started_at = request.environ.get("maple_request_started_at", time.perf_counter())
-    duration_ms = max(0, round((time.perf_counter() - started_at) * 1000))
+    duration_ms_exact = max(0.0, (time.perf_counter() - started_at) * 1000)
+    duration_ms = max(0, round(duration_ms_exact))
     error_type = None
     if status_code >= 500:
         error_type = "http_5xx"
@@ -509,7 +510,7 @@ def record_user_action(response):
     )
     observe_metric(
         "http.request_ms",
-        duration_ms,
+        duration_ms_exact,
         route=route_label,
         data_status=data_status,
     )
