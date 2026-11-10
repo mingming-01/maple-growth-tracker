@@ -1,4 +1,5 @@
 """최근·과거 성장 기록 HTTP 라우트."""
+from concurrent.futures import ThreadPoolExecutor
 from datetime import date, datetime, timedelta
 
 import requests
