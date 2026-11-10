@@ -13,6 +13,48 @@ from tracker.runtime import get_runtime_state
 from tracker.services.growth_history_service import GrowthHistoryService
 
 
+class HistoricalRecordCollectionPredicateTests(unittest.TestCase):
+    def test_missing_and_not_ready_records_need_collection(self):
+        self.assertTrue(history_controller._needs_historical_record_collection(None))
+        self.assertTrue(
+            history_controller._needs_historical_record_collection(
+                {"recordStatus": "not_ready"}
+            )
+        )
+
+    def test_available_record_needs_collection_until_rate_is_checked(self):
+        self.assertTrue(
+            history_controller._needs_historical_record_collection({
+                "recordStatus": "available",
+                "experienceRateChecked": False,
+                "experienceRate": 12.5,
+            })
+        )
+        self.assertTrue(
+            history_controller._needs_historical_record_collection({
+                "recordStatus": "available",
+                "experienceRateChecked": True,
+                "experienceRate": None,
+            })
+        )
+
+    def test_fully_checked_available_record_does_not_need_collection(self):
+        self.assertFalse(
+            history_controller._needs_historical_record_collection({
+                "recordStatus": "available",
+                "experienceRateChecked": True,
+                "experienceRate": 0,
+            })
+        )
+
+    def test_non_available_status_is_retried(self):
+        self.assertTrue(
+            history_controller._needs_historical_record_collection({
+                "recordStatus": "unavailable",
+            })
+        )
+
+
 class GrowthHistoryStoreTests(unittest.TestCase):
     def setUp(self):
         self.temp_dir = tempfile.TemporaryDirectory()
