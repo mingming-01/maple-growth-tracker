@@ -20,10 +20,10 @@ class PostgreSQLIntegrationTests(unittest.TestCase):
     def setUpClass(cls):
         with psycopg.connect(POSTGRES_URL, autocommit=True) as connection:
             for role in ("anon", "authenticated"):
-                connection.execute(
-                    f"DO $ BEGIN CREATE ROLE {role} NOLOGIN; "
-                    "EXCEPTION WHEN duplicate_object THEN NULL; END $;"
-                )
+                try:
+                    connection.execute(f"CREATE ROLE {role} NOLOGIN")
+                except psycopg.errors.DuplicateObject:
+                    pass
             migration = Path("migrations/20261116_shared_rate_limit_state.sql").read_text(
                 encoding="utf-8"
             )
