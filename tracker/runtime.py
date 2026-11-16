@@ -137,7 +137,48 @@ def configure_runtime(flask_app):
     with flask_app.app_context():
         initialize_log_db()
         initialize_snapshot_db()
+        storage_status = get_storage_status()
+        flask_app.logger.info(
+            "저장소 초기화 상태: %s",
+            ", ".join(
+                "{}={}({})".format(name, details["backend"], details["status"])
+                for name, details in storage_status.items()
+            ),
+        )
+        for name, details in storage_status.items():
+            if details["warning"]:
+                flask_app.logger.warning(
+                    "저장소 폴백 또는 점검 필요 [%s]: %s",
+                    name,
+                    details["warning"],
+                )
     return state
+
+
+def get_storage_status():
+    """저장소별 선택 백엔드와 저하 상태를 비밀정보 없이 반환한다."""
+    state = get_runtime_state()
+    growth_backend = state.growth_history_repository.backend
+    return {
+        "growth_history": {
+            "backend": growth_backend,
+            "status": "정상" if growth_backend in ("postgres", "sqlite") else "오류",
+            "warning": (
+                "GROWTH_DATABASE_URL 형식이 PostgreSQL 연결 문자열이 아닙니다."
+                if growth_backend == "invalid" else ""
+            ),
+        },
+        "api_snapshots": {
+            "backend": state.snapshot_db_backend,
+            "status": "정상" if not state.snapshot_storage_warning else "폴백",
+            "warning": state.snapshot_storage_warning,
+        },
+        "admin_logs": {
+            "backend": state.log_db_backend,
+            "status": "정상" if not state.log_storage_warning else "폴백",
+            "warning": state.log_storage_warning,
+        },
+    }
 
 
 
