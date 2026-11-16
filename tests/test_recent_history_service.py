@@ -51,6 +51,7 @@ class RecentHistoryServiceTests(unittest.TestCase):
                 "experience": 9876,
                 "experienceRate": 11.2,
                 "experienceRateChecked": True,
+                "rankingScope": "overall",
                 "recordStatus": "available",
             }
         }

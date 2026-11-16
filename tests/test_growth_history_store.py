@@ -607,7 +607,8 @@ class GrowthHistoryApiTests(unittest.TestCase):
                 "ranking": 500 + offset,
                 "experienceRate": 12.345,
                 # This test covers reuse of fully checked historical records.
-                "experienceRateChecked": True
+                "experienceRateChecked": True,
+                "rankingScope": "overall",
             }
             for offset in range(1, 7)
         ]
