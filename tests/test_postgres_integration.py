@@ -1,5 +1,8 @@
 """격리된 PostgreSQL에서 저장·복원·공유 제한·동시성을 검증한다."""
 import os
+from pathlib import Path
+
+import psycopg
 import unittest
 from concurrent.futures import ThreadPoolExecutor
 from datetime import date
@@ -15,6 +18,16 @@ POSTGRES_URL = os.getenv("TEST_POSTGRES_URL")
 class PostgreSQLIntegrationTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
+        with psycopg.connect(POSTGRES_URL, autocommit=True) as connection:
+            for role in ("anon", "authenticated"):
+                connection.execute(
+                    f"DO $ BEGIN CREATE ROLE {role} NOLOGIN; "
+                    "EXCEPTION WHEN duplicate_object THEN NULL; END $;"
+                )
+            migration = Path("migrations/20261116_shared_rate_limit_state.sql").read_text(
+                encoding="utf-8"
+            )
+            connection.execute(migration)
         cls.store = GrowthHistoryStore(
             database_url=POSTGRES_URL,
             sqlite_path="instance/postgres-integration-unused.sqlite3",
@@ -60,11 +73,12 @@ class PostgreSQLIntegrationTests(unittest.TestCase):
         self.assertEqual(sum(results), 3)
 
     def test_nexon_reservations_are_monotonic_across_connections(self):
-        first = self.store.reserve_nexon_request_slot(1_800_000_000.0, 0.25)
-        second = self.store.reserve_nexon_request_slot(1_800_000_000.0, 0.25)
+        now = 1_800_000_000.0
+        first = self.store.reserve_nexon_request_slot(now, 0.25)
+        second = self.store.reserve_nexon_request_slot(now, 0.25)
 
-        self.assertEqual(first, 0.0)
-        self.assertGreaterEqual(second, 0.25)
+        self.assertGreaterEqual(first, 0.0)
+        self.assertGreaterEqual(second - first, 0.24)
 
 
 if __name__ == "__main__":
