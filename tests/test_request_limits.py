@@ -417,5 +417,46 @@ class RequestLimitTests(unittest.TestCase):
             self.assertLessEqual(len(state.admin_login_failures), 10000)
 
 
+    def test_ai_limit_uses_postgres_shared_repository_when_available(self):
+        app = self.make_app()
+
+        class SharedRepository:
+            uses_postgres = True
+            def __init__(self):
+                self.calls = []
+            def consume_ai_rate_limit(self, **kwargs):
+                self.calls.append(kwargs)
+                return False, 23, "global_daily"
+
+        repository = SharedRepository()
+        with app.app_context():
+            get_runtime_state().growth_history_repository = repository
+            result = consume_ai_request("198.51.100.32")
+
+        self.assertEqual(result, (False, 23, "global_daily"))
+        self.assertEqual(len(repository.calls), 1)
+        self.assertEqual(repository.calls[0]["global_daily_limit"], 100)
+
+    def test_nexon_throttle_uses_shared_postgres_slot_when_available(self):
+        app = self.make_app(NEXON_API_MIN_INTERVAL=0.25)
+
+        class SharedRepository:
+            uses_postgres = True
+            def __init__(self):
+                self.calls = []
+            def reserve_nexon_request_slot(self, **kwargs):
+                self.calls.append(kwargs)
+                return 0
+
+        repository = SharedRepository()
+        with app.app_context():
+            get_runtime_state().growth_history_repository = repository
+            with patch("tracker.integrations.nexon_api._fallback_last_request_at", 0.0):
+                nexon_api._throttle_nexon_request()
+
+        self.assertEqual(len(repository.calls), 1)
+        self.assertEqual(repository.calls[0]["min_interval"], 0.25)
+
+
 if __name__ == "__main__":
     unittest.main()
