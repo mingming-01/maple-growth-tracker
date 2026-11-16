@@ -10,6 +10,7 @@ import math
 from pathlib import Path
 import sqlite3
 from threading import Lock
+from urllib.parse import urlparse
 import time
 
 import psycopg
@@ -38,10 +39,12 @@ class GrowthHistoryStore:
         try:
             if self.backend == "postgres":
                 try:
+                    host = urlparse(self.database_url).hostname
+                    sslmode = "disable" if host in ("localhost", "127.0.0.1", "::1") else "require"
                     return psycopg.connect(
                         self.database_url,
                         connect_timeout=3,
-                        sslmode="require",
+                        sslmode=sslmode,
                         prepare_threshold=None,
                     )
                 except psycopg.Error as error:
@@ -742,7 +745,7 @@ class GrowthHistoryStore:
                             daily_count = %s, daily_date = %s, updated_at = CURRENT_TIMESTAMP
                         WHERE bucket_key = %s
                         """,
-                        (timestamps, client_count, today, client_bucket),
+                        (timestamps, client_count, date.fromisoformat(today), client_bucket),
                     )
                     connection.execute(
                         """
@@ -750,7 +753,7 @@ class GrowthHistoryStore:
                         SET daily_count = %s, daily_date = %s, updated_at = CURRENT_TIMESTAMP
                         WHERE bucket_key = %s
                         """,
-                        (global_count, today, global_bucket),
+                        (global_count, date.fromisoformat(today), global_bucket),
                     )
                 else:
                     connection.execute(
