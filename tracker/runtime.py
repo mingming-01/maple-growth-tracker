@@ -162,7 +162,9 @@ def get_storage_status():
     return {
         "growth_history": {
             "backend": growth_backend,
-            "status": "정상" if growth_backend in ("postgres", "sqlite") else "오류",
+            # 성장 기록 저장소는 앱 시작 시 연결하지 않으므로 선택된 백엔드만 표시한다.
+            "status": "미검증" if growth_backend in ("postgres", "sqlite") else "오류",
+            "connection_checked": False,
             "warning": (
                 "GROWTH_DATABASE_URL 형식이 PostgreSQL 연결 문자열이 아닙니다."
                 if growth_backend == "invalid" else ""
@@ -170,12 +172,16 @@ def get_storage_status():
         },
         "api_snapshots": {
             "backend": state.snapshot_db_backend,
-            "status": "정상" if not state.snapshot_storage_warning else "폴백",
+            # initialize_snapshot_db()가 시작 과정에서 연결과 테이블 접근을 확인한다.
+            "status": "폴백" if state.snapshot_storage_warning else "연결 확인",
+            "connection_checked": not bool(state.snapshot_storage_warning),
             "warning": state.snapshot_storage_warning,
         },
         "admin_logs": {
             "backend": state.log_db_backend,
-            "status": "정상" if not state.log_storage_warning else "폴백",
+            # AdminLogRepository.initialize()가 시작 과정에서 연결과 테이블 접근을 확인한다.
+            "status": "폴백" if state.log_storage_warning else "연결 확인",
+            "connection_checked": not bool(state.log_storage_warning),
             "warning": state.log_storage_warning,
         },
     }

@@ -48,9 +48,14 @@ class ApplicationFactoryTests(unittest.TestCase):
             status = get_storage_status()
 
         self.assertEqual(status["growth_history"]["backend"], "sqlite")
+        self.assertEqual(status["growth_history"]["status"], "미검증")
+        self.assertFalse(status["growth_history"]["connection_checked"])
         self.assertEqual(status["api_snapshots"]["backend"], "sqlite")
+        self.assertEqual(status["api_snapshots"]["status"], "연결 확인")
+        self.assertTrue(status["api_snapshots"]["connection_checked"])
         self.assertEqual(status["admin_logs"]["backend"], "sqlite")
-        self.assertTrue(all(item["status"] == "정상" for item in status.values()))
+        self.assertEqual(status["admin_logs"]["status"], "연결 확인")
+        self.assertTrue(status["admin_logs"]["connection_checked"])
         self.assertNotIn("database_url", repr(status))
         if state.growth_database_url:
             self.assertNotIn(state.growth_database_url, repr(status))
