@@ -48,8 +48,6 @@ def build_server_growth_metrics(character, records, reference_date=None, period_
         previous = history[index - 1]
         previous_date = date.fromisoformat(previous["date"])
         current_date = date.fromisoformat(current["date"])
-        if (current_date - previous_date).days != 1:
-            continue
         if current["level"] > previous["level"]:
             current["levelUp"] = True
             level_ups.append({
@@ -57,6 +55,8 @@ def build_server_growth_metrics(character, records, reference_date=None, period_
                 "previousLevel": previous["level"],
                 "currentLevel": current["level"],
             })
+            continue
+        if (current_date - previous_date).days != 1:
             continue
         if current["level"] != previous["level"] or current["experience"] < previous["experience"]:
             continue
