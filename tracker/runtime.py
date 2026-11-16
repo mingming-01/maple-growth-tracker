@@ -137,7 +137,54 @@ def configure_runtime(flask_app):
     with flask_app.app_context():
         initialize_log_db()
         initialize_snapshot_db()
+        storage_status = get_storage_status()
+        flask_app.logger.info(
+            "저장소 초기화 상태: %s",
+            ", ".join(
+                "{}={}({})".format(name, details["backend"], details["status"])
+                for name, details in storage_status.items()
+            ),
+        )
+        for name, details in storage_status.items():
+            if details["warning"]:
+                flask_app.logger.warning(
+                    "저장소 폴백 또는 점검 필요 [%s]: %s",
+                    name,
+                    details["warning"],
+                )
     return state
+
+
+def get_storage_status():
+    """저장소별 선택 백엔드와 저하 상태를 비밀정보 없이 반환한다."""
+    state = get_runtime_state()
+    growth_backend = state.growth_history_repository.backend
+    return {
+        "growth_history": {
+            "backend": growth_backend,
+            # 성장 기록 저장소는 앱 시작 시 연결하지 않으므로 선택된 백엔드만 표시한다.
+            "status": "미검증" if growth_backend in ("postgres", "sqlite") else "오류",
+            "connection_checked": False,
+            "warning": (
+                "GROWTH_DATABASE_URL 형식이 PostgreSQL 연결 문자열이 아닙니다."
+                if growth_backend == "invalid" else ""
+            ),
+        },
+        "api_snapshots": {
+            "backend": state.snapshot_db_backend,
+            # initialize_snapshot_db()가 시작 과정에서 연결과 테이블 접근을 확인한다.
+            "status": "폴백" if state.snapshot_storage_warning else "연결 확인",
+            "connection_checked": not bool(state.snapshot_storage_warning),
+            "warning": state.snapshot_storage_warning,
+        },
+        "admin_logs": {
+            "backend": state.log_db_backend,
+            # AdminLogRepository.initialize()가 시작 과정에서 연결과 테이블 접근을 확인한다.
+            "status": "폴백" if state.log_storage_warning else "연결 확인",
+            "connection_checked": not bool(state.log_storage_warning),
+            "warning": state.log_storage_warning,
+        },
+    }
 
 
 

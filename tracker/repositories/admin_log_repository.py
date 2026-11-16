@@ -1,4 +1,5 @@
 """관리자 운영 로그의 DB 연결과 영속화를 담당한다."""
+import logging
 import os
 import sqlite3
 import time
@@ -91,7 +92,9 @@ class AdminLogRepository:
                 return
             except psycopg.Error:
                 # 로그 저장소 장애가 앱 전체의 시작을 막지 않도록 로컬 저장소로 전환한다.
-                print("영구 관리자 로그 저장소 초기화에 실패했습니다.")
+                logging.getLogger(__name__).warning(
+                    "영구 관리자 로그 저장소 초기화에 실패해 SQLite로 전환합니다."
+                )
                 self.state.log_db_backend = "sqlite"
                 self.state.log_storage_warning = (
                     "Supabase 로그 저장소에 연결하지 못해 임시 SQLite를 사용 중입니다. "

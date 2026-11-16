@@ -5,6 +5,7 @@ string). Without it, the application uses a local SQLite file for development.
 """
 from datetime import date
 import json
+import logging
 import math
 from pathlib import Path
 import sqlite3
@@ -36,12 +37,20 @@ class GrowthHistoryStore:
         started_at = time.perf_counter()
         try:
             if self.backend == "postgres":
-                return psycopg.connect(
-                    self.database_url,
-                    connect_timeout=3,
-                    sslmode="require",
-                    prepare_threshold=None,
-                )
+                try:
+                    return psycopg.connect(
+                        self.database_url,
+                        connect_timeout=3,
+                        sslmode="require",
+                        prepare_threshold=None,
+                    )
+                except psycopg.Error as error:
+                    logging.getLogger(__name__).error(
+                        "성장 기록 PostgreSQL 연결에 실패했습니다. "
+                        "데이터 저장 작업을 중단합니다. 오류 유형: %s",
+                        type(error).__name__,
+                    )
+                    raise
             if self.backend != "sqlite":
                 raise ValueError("GROWTH_DATABASE_URL must be a PostgreSQL connection string.")
 

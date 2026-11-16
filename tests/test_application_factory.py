@@ -36,6 +36,30 @@ class ApplicationFactoryTests(unittest.TestCase):
         self.assertEqual(first_state.nexon_api_key, "first-app-key")
         self.assertEqual(second_state.nexon_api_key, "second-app-key")
 
+    def test_storage_status_reports_each_selected_backend_without_secrets(self):
+        from tracker.runtime import get_runtime_state, get_storage_status
+
+        app = create_app({
+            "TESTING": True,
+            "GROWTH_DATABASE_URL": "",
+        })
+        with app.app_context():
+            state = get_runtime_state()
+            status = get_storage_status()
+
+        self.assertEqual(status["growth_history"]["backend"], "sqlite")
+        self.assertEqual(status["growth_history"]["status"], "미검증")
+        self.assertFalse(status["growth_history"]["connection_checked"])
+        self.assertEqual(status["api_snapshots"]["backend"], "sqlite")
+        self.assertEqual(status["api_snapshots"]["status"], "연결 확인")
+        self.assertTrue(status["api_snapshots"]["connection_checked"])
+        self.assertEqual(status["admin_logs"]["backend"], "sqlite")
+        self.assertEqual(status["admin_logs"]["status"], "연결 확인")
+        self.assertTrue(status["admin_logs"]["connection_checked"])
+        self.assertNotIn("database_url", repr(status))
+        if state.growth_database_url:
+            self.assertNotIn(state.growth_database_url, repr(status))
+
     def test_factory_applies_configuration_and_registers_routes(self):
         app = create_app({
             "TESTING": True,
