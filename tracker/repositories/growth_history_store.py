@@ -204,23 +204,6 @@ class GrowthHistoryStore:
                         ON api_request_limit_state (updated_at)
                         """
                     )
-            if self.uses_postgres:
-                connection.execute(
-                    """
-                    CREATE TABLE IF NOT EXISTS shared_rate_limit_state (
-                        bucket_key TEXT PRIMARY KEY,
-                        timestamps DOUBLE PRECISION[] NOT NULL DEFAULT '{}'::DOUBLE PRECISION[],
-                        daily_count INTEGER NOT NULL DEFAULT 0,
-                        daily_date DATE,
-                        next_allowed_at DOUBLE PRECISION,
-                        updated_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
-                    )
-                    """
-                )
-                connection.execute(
-                    "CREATE INDEX IF NOT EXISTS idx_shared_rate_limit_updated_at "
-                    "ON shared_rate_limit_state (updated_at)"
-                )
                 connection.execute(
                     "ALTER TABLE shared_rate_limit_state ENABLE ROW LEVEL SECURITY"
                 )
