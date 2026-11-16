@@ -6,6 +6,7 @@ import requests
 from flask import current_app, has_app_context
 
 from tracker.config import Config
+from tracker.repositories.growth_history_store import GrowthHistoryStore
 from tracker.integrations.http_client import request_with_retries
 from tracker.services.performance_metrics import increment_metric, observe_metric
 
@@ -13,6 +14,8 @@ BASE_URL = "https://open.api.nexon.com/maplestory/v1"
 DEFAULT_NEXON_API_MIN_INTERVAL = 0.22
 _fallback_rate_limit_lock = Lock()
 _fallback_last_request_at = 0.0
+_shared_repository = None
+_shared_repository_lock = Lock()
 
 
 def _setting(name, default=None):
@@ -36,6 +39,39 @@ def _throttle_nexon_request():
         min_interval = max(0.0, float(_setting("NEXON_API_MIN_INTERVAL", DEFAULT_NEXON_API_MIN_INTERVAL)))
     except (TypeError, ValueError):
         min_interval = DEFAULT_NEXON_API_MIN_INTERVAL
+
+    repository = None
+    if state:
+        repository = getattr(state, "growth_history_repository", None)
+    elif str(_setting("GROWTH_DATABASE_URL", "")).startswith(("postgres://", "postgresql://")):
+        global _shared_repository
+        with _shared_repository_lock:
+            if _shared_repository is None:
+                _shared_repository = GrowthHistoryStore(
+                    database_url=_setting("GROWTH_DATABASE_URL", "")
+                )
+            repository = _shared_repository
+
+    if (
+        getattr(repository, "uses_postgres", False)
+        and callable(getattr(repository, "reserve_nexon_request_slot", None))
+    ):
+        try:
+            wait_seconds = repository.reserve_nexon_request_slot(
+                now=time.time(),
+                min_interval=min_interval,
+            )
+            if wait_seconds > 0:
+                time.sleep(wait_seconds)
+            if state:
+                state.last_nexon_request_at = time.monotonic()
+                state.nexon_request_count += 1
+            return
+        except Exception:
+            if has_app_context():
+                current_app.logger.warning(
+                    "공유 Nexon 요청 간격 저장소를 사용할 수 없어 프로세스 제한기로 전환했습니다."
+                )
 
     while True:
         with lock:
