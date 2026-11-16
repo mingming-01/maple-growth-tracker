@@ -63,6 +63,30 @@ def consume_ai_request(remote_addr):
     per_ip_daily_limit = max(1, int(_setting("AI_MAX_REQUESTS_PER_DAY_PER_IP", 20)))
     global_daily_limit = max(1, int(_setting("AI_MAX_REQUESTS_PER_DAY_GLOBAL", 100)))
 
+    repository = getattr(state, "growth_history_repository", None)
+    if (
+        getattr(repository, "uses_postgres", False)
+        and callable(getattr(repository, "consume_ai_rate_limit", None))
+    ):
+        try:
+            return repository.consume_ai_rate_limit(
+                client_key=key,
+                now=time.time(),
+                today=today,
+                per_minute_limit=per_minute_limit,
+                per_ip_daily_limit=per_ip_daily_limit,
+                global_daily_limit=global_daily_limit,
+                retry_after_midnight=_seconds_until_kst_midnight(),
+                window_seconds=60,
+            )
+        except Exception:
+            if not getattr(state, "ai_rate_limit_storage_warning_logged", False):
+                state.ai_rate_limit_storage_warning_logged = True
+                if has_app_context():
+                    current_app.logger.warning(
+                        "공유 AI 요청 제한 저장소를 사용할 수 없어 프로세스 메모리 제한기로 전환했습니다."
+                    )
+
     with state.request_limit_lock:
         _cleanup_request_limit_state(
             state, now, today,
