@@ -549,6 +549,7 @@ class GrowthHistoryApiTests(unittest.TestCase):
                 "ranking": 500 + offset,
                 "experienceRate": None if offset in (1, 2) else 12.345,
                 "experienceRateChecked": offset != 1,
+                "rankingScope": "overall",
             }
             for offset in range(1, 7)
         ]

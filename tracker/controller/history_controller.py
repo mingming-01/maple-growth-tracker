@@ -104,7 +104,16 @@ def get_history():
     cache_key = f"history:{character_name}"
     force_refresh = request.args.get("refresh") == "1"
     cached_history = None if force_refresh else get_cache(cache_key)
-    if cached_history is not None:
+    cached_records = cached_history.get("history") if isinstance(cached_history, dict) else None
+    cached_ranking_is_current = (
+        isinstance(cached_records, list)
+        and all(
+            item.get("rankingScope") == "overall"
+            for item in cached_records
+            if isinstance(item, dict) and item.get("ranking") is not None
+        )
+    )
+    if cached_history is not None and cached_ranking_is_current:
         return jsonify(with_data_status(
             cached_history, "cached", get_cache_timestamp(cache_key)
         ))
@@ -329,7 +338,8 @@ def get_history_archive():
             or (
                 stored_by_date[target_date.isoformat()].get("recordStatus") == "available"
                 and (
-                    not stored_by_date[target_date.isoformat()].get("experienceRateChecked", False)
+                    stored_by_date[target_date.isoformat()].get("rankingScope") != "overall"
+                    or not stored_by_date[target_date.isoformat()].get("experienceRateChecked", False)
                     or stored_by_date[target_date.isoformat()].get("experienceRate") is None
                 )
             )
