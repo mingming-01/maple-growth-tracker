@@ -204,29 +204,6 @@ class GrowthHistoryStore:
                         ON api_request_limit_state (updated_at)
                         """
                     )
-                connection.execute(
-                    "ALTER TABLE shared_rate_limit_state ENABLE ROW LEVEL SECURITY"
-                )
-                connection.execute(
-                    "REVOKE ALL ON TABLE shared_rate_limit_state FROM PUBLIC, anon, authenticated"
-                )
-            else:
-                connection.execute(
-                    """
-                    CREATE TABLE IF NOT EXISTS shared_rate_limit_state (
-                        bucket_key TEXT PRIMARY KEY,
-                        timestamps TEXT NOT NULL DEFAULT '[]',
-                        daily_count INTEGER NOT NULL DEFAULT 0,
-                        daily_date TEXT,
-                        next_allowed_at REAL,
-                        updated_at REAL NOT NULL
-                    )
-                    """
-                )
-                connection.execute(
-                    "CREATE INDEX IF NOT EXISTS idx_shared_rate_limit_updated_at "
-                    "ON shared_rate_limit_state (updated_at)"
-                )
             self._initialized = True
         finally:
             connection.close()
