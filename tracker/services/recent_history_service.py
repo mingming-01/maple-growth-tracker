@@ -16,6 +16,7 @@ def _get_cached_current_ranking(basic, target_date, today):
         return None
     return {
         "ranking": ranking,
+        "ranking_scope": "overall",
         "character_level": basic.get("character_level"),
         "character_exp": basic.get("character_exp"),
         "character_exp_rate": basic.get("character_exp_rate"),
@@ -49,7 +50,8 @@ def _fetch_recent_record(
             saved is not None
             and saved.get("recordStatus") == "available"
             and (
-                not saved.get("experienceRateChecked", False)
+                saved.get("rankingScope") != "overall"
+                or not saved.get("experienceRateChecked", False)
                 or saved.get("experienceRate") is None
             )
         )
@@ -59,6 +61,7 @@ def _fetch_recent_record(
         return {
             "date": date_string,
             "ranking": saved.get("ranking"),
+            "rankingScope": saved.get("rankingScope"),
             "level": saved.get("level"),
             "experience": saved.get("experience"),
             "experienceRate": saved.get("experienceRate"),
@@ -75,7 +78,7 @@ def _fetch_recent_record(
     else:
         ranking_data, response = get_ranking_snapshot(
             target_date=date_string,
-            world_name=world_name,
+            world_name=None,
             ocid=ocid,
             world_type=get_world_type(world_name),
         )
@@ -101,6 +104,7 @@ def _fetch_recent_record(
         return {
             "date": date_string,
             "ranking": ranking_data.get("ranking"),
+            "rankingScope": "overall",
             "level": ranking_data.get("character_level"),
             "experience": ranking_data.get("character_exp"),
             "experienceRate": experience_rate,
@@ -113,7 +117,8 @@ def _fetch_recent_record(
         if saved and saved.get("recordStatus") == "available":
             return {
                 "date": date_string,
-                "ranking": saved.get("ranking"),
+                "ranking": None,
+                "rankingScope": None,
                 "level": saved.get("level"),
                 "experience": saved.get("experience"),
                 "experienceRate": saved.get("experienceRate"),
@@ -162,7 +167,8 @@ def _fetch_recent_record(
     if saved and saved.get("recordStatus") == "available":
         return {
             "date": date_string,
-            "ranking": saved.get("ranking"),
+            "ranking": None,
+            "rankingScope": None,
             "level": saved.get("level"),
             "experience": saved.get("experience"),
             "experienceRate": saved.get("experienceRate"),

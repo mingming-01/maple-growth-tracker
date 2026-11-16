@@ -53,6 +53,7 @@ class GrowthHistoryStoreTests(unittest.TestCase):
                 "level": 280,
                 "experience": 12345,
                 "ranking": 100,
+                "rankingScope": "overall",
                 "experienceRate": "12.3456%",
                 "experienceRateChecked": True,
             }],
@@ -62,6 +63,7 @@ class GrowthHistoryStoreTests(unittest.TestCase):
 
         self.assertEqual(result[0]["experienceRate"], 12.3456)
         self.assertTrue(result[0]["experienceRateChecked"])
+        self.assertEqual(result[0]["rankingScope"], "overall")
 
     def test_same_character_and_date_is_upserted_instead_of_duplicated(self):
         record_date = self.today.isoformat()

@@ -19,7 +19,7 @@ def fetch_historical_record(ocid, world_name, target_date, today):
     date_text = target_date.isoformat()
     try:
         ranking_data, ranking_response = get_ranking_snapshot(
-            date_text, world_name=world_name, ocid=ocid,
+            date_text, world_name=None, ocid=ocid,
             world_type=get_world_type(world_name), historical=True
         )
     except requests.RequestException:
@@ -48,6 +48,7 @@ def fetch_historical_record(ocid, world_name, target_date, today):
             return {
                 "date": date_text,
                 "ranking": ranking_data.get("ranking"),
+                "rankingScope": "overall",
                 "level": level,
                 "experience": experience,
                 "experienceRate": experience_rate,
@@ -72,6 +73,7 @@ def fetch_historical_record(ocid, world_name, target_date, today):
             return {
                 "date": date_text,
                 "ranking": ranking_data.get("ranking") if ranking_data else None,
+                "rankingScope": "overall" if ranking_data else None,
                 "level": level,
                 "experience": experience,
                 "experienceRate": basic_data.get("character_exp_rate"),

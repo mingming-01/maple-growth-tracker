@@ -62,6 +62,13 @@ class RecentHistoryServiceTests(unittest.TestCase):
         self.ranking.assert_not_called()
         self.basic_lookup.assert_not_called()
 
+    def test_legacy_saved_rank_is_refetched_as_overall_ranking(self):
+        saved = {"2026-11-09": {"ranking": 377, "level": 290, "experience": 12345, "experienceRate": 12.5, "experienceRateChecked": True, "recordStatus": "available"}}
+        result = self.collect([self.yesterday], stored=saved)
+        self.assertEqual(result[0]["ranking"], 123)
+        self.assertEqual(result[0]["rankingScope"], "overall")
+        self.ranking.assert_called_once_with(target_date="2026-11-09", world_name=None, ocid="test-ocid", world_type=0)
+
     def test_fetches_ranking_first_and_returns_available_record(self):
         result = self.collect([self.yesterday])
 
@@ -69,7 +76,7 @@ class RecentHistoryServiceTests(unittest.TestCase):
         self.assertEqual(result[0]["experienceRate"], 12.5)
         self.ranking.assert_called_once_with(
             target_date="2026-11-09",
-            world_name="크로아",
+            world_name=None,
             ocid="test-ocid",
             world_type=0,
         )
