@@ -204,6 +204,46 @@ class GrowthHistoryStore:
                         ON api_request_limit_state (updated_at)
                         """
                     )
+            if self.uses_postgres:
+                connection.execute(
+                    """
+                    CREATE TABLE IF NOT EXISTS shared_rate_limit_state (
+                        bucket_key TEXT PRIMARY KEY,
+                        timestamps DOUBLE PRECISION[] NOT NULL DEFAULT '{}'::DOUBLE PRECISION[],
+                        daily_count INTEGER NOT NULL DEFAULT 0,
+                        daily_date DATE,
+                        next_allowed_at DOUBLE PRECISION,
+                        updated_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
+                    )
+                    """
+                )
+                connection.execute(
+                    "CREATE INDEX IF NOT EXISTS idx_shared_rate_limit_updated_at "
+                    "ON shared_rate_limit_state (updated_at)"
+                )
+                connection.execute(
+                    "ALTER TABLE shared_rate_limit_state ENABLE ROW LEVEL SECURITY"
+                )
+                connection.execute(
+                    "REVOKE ALL ON TABLE shared_rate_limit_state FROM PUBLIC, anon, authenticated"
+                )
+            else:
+                connection.execute(
+                    """
+                    CREATE TABLE IF NOT EXISTS shared_rate_limit_state (
+                        bucket_key TEXT PRIMARY KEY,
+                        timestamps TEXT NOT NULL DEFAULT '[]',
+                        daily_count INTEGER NOT NULL DEFAULT 0,
+                        daily_date TEXT,
+                        next_allowed_at REAL,
+                        updated_at REAL NOT NULL
+                    )
+                    """
+                )
+                connection.execute(
+                    "CREATE INDEX IF NOT EXISTS idx_shared_rate_limit_updated_at "
+                    "ON shared_rate_limit_state (updated_at)"
+                )
             self._initialized = True
         finally:
             connection.close()
@@ -634,3 +674,198 @@ class GrowthHistoryStore:
                 (time.perf_counter() - operation_started) * 1000,
                 operation="api_rate_limit.consume",
             )
+
+
+    def consume_ai_rate_limit(
+        self,
+        client_key,
+        now,
+        today,
+        per_minute_limit,
+        per_ip_daily_limit,
+        global_daily_limit,
+        retry_after_midnight,
+        window_seconds=60,
+    ):
+        """AI의 분당·IP별 일일·전체 일일 한도를 DB 트랜잭션으로 공유한다."""
+        self.initialize()
+        client_bucket = f"ai:client:{client_key}"
+        global_bucket = "ai:global"
+        connection = self._connect()
+        try:
+            with connection:
+                if self.uses_postgres:
+                    for bucket in (client_bucket, global_bucket):
+                        connection.execute(
+                            "INSERT INTO shared_rate_limit_state (bucket_key) VALUES (%s) "
+                            "ON CONFLICT (bucket_key) DO NOTHING",
+                            (bucket,),
+                        )
+                    rows = connection.execute(
+                        """
+                        SELECT bucket_key, timestamps, daily_count, daily_date
+                        FROM shared_rate_limit_state
+                        WHERE bucket_key IN (%s, %s)
+                        ORDER BY bucket_key
+                        FOR UPDATE
+                        """,
+                        (client_bucket, global_bucket),
+                    ).fetchall()
+                    state = {
+                        row[0]: {
+                            "timestamps": list(row[1] or []),
+                            "daily_count": int(row[2] or 0),
+                            "daily_date": row[3].isoformat() if row[3] else None,
+                        }
+                        for row in rows
+                    }
+                else:
+                    for bucket in (client_bucket, global_bucket):
+                        connection.execute(
+                            """
+                            INSERT INTO shared_rate_limit_state (bucket_key, updated_at)
+                            VALUES (?, ?)
+                            ON CONFLICT (bucket_key) DO NOTHING
+                            """,
+                            (bucket, now),
+                        )
+                    rows = connection.execute(
+                        """
+                        SELECT bucket_key, timestamps, daily_count, daily_date
+                        FROM shared_rate_limit_state
+                        WHERE bucket_key IN (?, ?)
+                        ORDER BY bucket_key
+                        """,
+                        (client_bucket, global_bucket),
+                    ).fetchall()
+                    state = {
+                        row[0]: {
+                            "timestamps": json.loads(row[1] or "[]"),
+                            "daily_count": int(row[2] or 0),
+                            "daily_date": row[3],
+                        }
+                        for row in rows
+                    }
+
+                client = state[client_bucket]
+                global_state = state[global_bucket]
+                timestamps = [
+                    float(stamp) for stamp in client["timestamps"]
+                    if now - float(stamp) < window_seconds
+                ]
+                client_count = client["daily_count"] if client["daily_date"] == today else 0
+                global_count = global_state["daily_count"] if global_state["daily_date"] == today else 0
+
+                allowed, retry_after, reason = True, 0, ""
+                if len(timestamps) >= per_minute_limit:
+                    allowed = False
+                    retry_after = max(1, math.ceil(window_seconds - (now - timestamps[0])))
+                    reason = "minute"
+                elif client_count >= per_ip_daily_limit:
+                    allowed = False
+                    retry_after = retry_after_midnight
+                    reason = "client_daily"
+                elif global_count >= global_daily_limit:
+                    allowed = False
+                    retry_after = retry_after_midnight
+                    reason = "global_daily"
+                else:
+                    timestamps.append(now)
+                    client_count += 1
+                    global_count += 1
+
+                if self.uses_postgres:
+                    connection.execute(
+                        """
+                        UPDATE shared_rate_limit_state
+                        SET timestamps = COALESCE(%s::DOUBLE PRECISION[], ARRAY[]::DOUBLE PRECISION[]),
+                            daily_count = %s, daily_date = %s, updated_at = CURRENT_TIMESTAMP
+                        WHERE bucket_key = %s
+                        """,
+                        (timestamps, client_count, today, client_bucket),
+                    )
+                    connection.execute(
+                        """
+                        UPDATE shared_rate_limit_state
+                        SET daily_count = %s, daily_date = %s, updated_at = CURRENT_TIMESTAMP
+                        WHERE bucket_key = %s
+                        """,
+                        (global_count, today, global_bucket),
+                    )
+                else:
+                    connection.execute(
+                        """
+                        UPDATE shared_rate_limit_state
+                        SET timestamps = ?, daily_count = ?, daily_date = ?, updated_at = ?
+                        WHERE bucket_key = ?
+                        """,
+                        (json.dumps(timestamps), client_count, today, now, client_bucket),
+                    )
+                    connection.execute(
+                        """
+                        UPDATE shared_rate_limit_state
+                        SET daily_count = ?, daily_date = ?, updated_at = ?
+                        WHERE bucket_key = ?
+                        """,
+                        (global_count, today, now, global_bucket),
+                    )
+                return allowed, retry_after, reason
+        finally:
+            connection.close()
+
+    def reserve_nexon_request_slot(self, now, min_interval):
+        """여러 워커가 공유하는 Nexon API 호출 시각을 원자적으로 예약한다."""
+        self.initialize()
+        bucket = "nexon:global"
+        connection = self._connect()
+        try:
+            with connection:
+                if self.uses_postgres:
+                    connection.execute(
+                        "INSERT INTO shared_rate_limit_state (bucket_key) VALUES (%s) "
+                        "ON CONFLICT (bucket_key) DO NOTHING",
+                        (bucket,),
+                    )
+                    row = connection.execute(
+                        "SELECT next_allowed_at FROM shared_rate_limit_state "
+                        "WHERE bucket_key = %s FOR UPDATE",
+                        (bucket,),
+                    ).fetchone()
+                else:
+                    connection.execute(
+                        """
+                        INSERT INTO shared_rate_limit_state (bucket_key, updated_at)
+                        VALUES (?, ?)
+                        ON CONFLICT (bucket_key) DO NOTHING
+                        """,
+                        (bucket, now),
+                    )
+                    row = connection.execute(
+                        "SELECT next_allowed_at FROM shared_rate_limit_state WHERE bucket_key = ?",
+                        (bucket,),
+                    ).fetchone()
+                next_allowed_at = float(row[0]) if row and row[0] is not None else now
+                reserved_at = max(now, next_allowed_at)
+                wait_seconds = max(0.0, reserved_at - now)
+                next_value = reserved_at + max(0.0, float(min_interval))
+                if self.uses_postgres:
+                    connection.execute(
+                        """
+                        UPDATE shared_rate_limit_state
+                        SET next_allowed_at = %s, updated_at = CURRENT_TIMESTAMP
+                        WHERE bucket_key = %s
+                        """,
+                        (next_value, bucket),
+                    )
+                else:
+                    connection.execute(
+                        """
+                        UPDATE shared_rate_limit_state
+                        SET next_allowed_at = ?, updated_at = ?
+                        WHERE bucket_key = ?
+                        """,
+                        (next_value, now, bucket),
+                    )
+                return wait_seconds
+        finally:
+            connection.close()
