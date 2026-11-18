@@ -3,6 +3,7 @@ import unittest
 from tracker.services.ai_analysis_service import (
     _apply_deterministic_growth_forecast,
     _build_growth_report_prompt,
+    _filter_growth_history_to_selected_period,
     _deterministic_growth_forecast,
     _error_result,
     _build_deterministic_growth_report,
@@ -198,6 +199,19 @@ class AIAnalysisQualityTests(unittest.TestCase):
             _build_growth_report_cache_key(prompt, first),
             _build_growth_report_cache_key(prompt, second),
         )
+
+    def test_ai_history_excludes_snapshot_before_selected_period(self):
+        history = [
+            {"date": "2026-11-12", "experienceChange": 100},
+            {"date": "2026-11-13", "experienceChange": 200},
+            {"date": "2026-11-19", "experienceChange": 300},
+        ]
+        filtered = _filter_growth_history_to_selected_period(
+            history,
+            {"periodSummary": {"startDate": "2026-11-13", "endDate": "2026-11-19"}},
+        )
+
+        self.assertEqual([item["date"] for item in filtered], ["2026-11-13", "2026-11-19"])
 
     def test_growth_report_prompt_gives_ai_all_five_sections_and_server_facts(self):
         source = self.make_source_data(7)
