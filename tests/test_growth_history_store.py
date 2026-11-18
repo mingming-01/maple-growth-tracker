@@ -281,45 +281,6 @@ class GrowthHistoryStoreTests(unittest.TestCase):
         self.assertEqual(records[0]["rankingScope"], "overall")
         self.assertIsNone(records[0]["rankingSourceDate"])
 
-    def test_archive_hides_legacy_overall_rank_without_matching_source_date(self):
-        target_date = (self.today - timedelta(days=1)).isoformat()
-        self.store.save_records(
-            "test-ocid", "테스트캐릭터", "테스트월드",
-            [{
-                "date": target_date,
-                "recordStatus": "available",
-                "level": 280,
-                "experience": 123456,
-                "ranking": 77,
-                "rankingScope": "overall",
-                "rankingSourceDate": target_date,
-                "experienceRate": 12.345,
-                "experienceRateChecked": True,
-            }],
-        )
-        connection = self.store._connect()
-        try:
-            with connection:
-                connection.execute(
-                    """
-                    UPDATE growth_daily_snapshots
-                    SET ranking_source_date = NULL
-                    WHERE ocid = ? AND snapshot_date = ?
-                    """,
-                    ("test-ocid", target_date),
-                )
-        finally:
-            connection.close()
-
-        response = self.client.get("/api/history/archive?ocid=test-ocid&days=30")
-
-        self.assertEqual(response.status_code, 200)
-        record = response.get_json()["history"][-2]
-        self.assertEqual(record["experience"], 123456)
-        self.assertIsNone(record["ranking"])
-        self.assertIsNone(record["rankingScope"])
-        self.assertIsNone(record["rankingSourceDate"])
-
     def test_api_rate_limit_is_shared_between_store_instances(self):
         store_path = str(Path(self.temp_dir.name) / "shared_limits.sqlite3")
         first_store = GrowthHistoryStore(sqlite_path=store_path)
@@ -447,6 +408,45 @@ class GrowthHistoryApiTests(unittest.TestCase):
         with self.app.app_context():
             self.state.cache.clear()
         self.temp_dir.cleanup()
+
+    def test_archive_hides_legacy_overall_rank_without_matching_source_date(self):
+        target_date = (self.today - timedelta(days=1)).isoformat()
+        self.store.save_records(
+            "test-ocid", "테스트캐릭터", "테스트월드",
+            [{
+                "date": target_date,
+                "recordStatus": "available",
+                "level": 280,
+                "experience": 123456,
+                "ranking": 77,
+                "rankingScope": "overall",
+                "rankingSourceDate": target_date,
+                "experienceRate": 12.345,
+                "experienceRateChecked": True,
+            }],
+        )
+        connection = self.store._connect()
+        try:
+            with connection:
+                connection.execute(
+                    """
+                    UPDATE growth_daily_snapshots
+                    SET ranking_source_date = NULL
+                    WHERE ocid = ? AND snapshot_date = ?
+                    """,
+                    ("test-ocid", target_date),
+                )
+        finally:
+            connection.close()
+
+        response = self.client.get("/api/history/archive?ocid=test-ocid&days=30")
+
+        self.assertEqual(response.status_code, 200)
+        record = response.get_json()["history"][-2]
+        self.assertEqual(record["experience"], 123456)
+        self.assertIsNone(record["ranking"])
+        self.assertIsNone(record["rankingScope"])
+        self.assertIsNone(record["rankingSourceDate"])
 
     def test_archive_returns_calendar_days_and_marks_missing_days(self):
         response = self.client.get("/api/history/archive?ocid=test-ocid&days=30")
@@ -587,7 +587,7 @@ class GrowthHistoryApiTests(unittest.TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertEqual(verify_basic.call_count, 1)
         get_ranking.assert_called_once()
-        self.assertEqual(get_ranking.call_args.kwargs["target_date"], target_date)
+        self.assertEqual(get_ranking.call_args.args[0], target_date)
         saved = self.store.get_records("test-ocid", target_date, target_date)[0]
         self.assertEqual(saved["ranking"], 55)
         self.assertEqual(saved["rankingScope"], "overall")
