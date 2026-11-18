@@ -521,7 +521,6 @@ def generate_ai_analysis(character, history, computed_metrics=None, growth_insig
             + json.dumps(source_data, ensure_ascii=False, sort_keys=True)
         )
     else:
-        cache_key = prompt
         required_sections = "\n".join(REQUIRED_GROWTH_SECTIONS)
         prompt = f"""
 너는 메이플스토리 캐릭터의 성장 데이터를 해석하는 도우미야.
@@ -541,6 +540,7 @@ def generate_ai_analysis(character, history, computed_metrics=None, growth_insig
 최근 성장 기록:
 {json.dumps(growth_data, ensure_ascii=False)}
 """
+        cache_key = prompt
 
     expected_date = None
     if computed_metrics is not None:
