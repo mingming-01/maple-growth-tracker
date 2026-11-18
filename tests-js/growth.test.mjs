@@ -92,6 +92,39 @@ test("level progress avoids division by zero at 0 percent", () => {
     assert.equal(progress.dailyProgressRate, null);
 });
 
+test("period summary does not invent level-ups after missing records", async () => {
+    const { summarizeGrowthPeriod } = await import("../frontend/src/lib/growth.js");
+    const summary = summarizeGrowthPeriod([
+        { date: "2026-11-01", recordStatus: "available", level: 280, experience: 100 },
+        { date: "2026-11-02", recordStatus: "not_collected", level: null, experience: null },
+        { date: "2026-11-03", recordStatus: "available", level: 281, experience: 50 }
+    ], 3, "2026-11-03");
+
+    assert.equal(summary.levelUpCount, 0);
+    assert.deepEqual(summary.levelUpDates, []);
+});
+
+test("period summary counts a level-up only across consecutive available dates", async () => {
+    const { summarizeGrowthPeriod } = await import("../frontend/src/lib/growth.js");
+    const summary = summarizeGrowthPeriod([
+        { date: "2026-11-01", recordStatus: "available", level: 280, experience: 100 },
+        { date: "2026-11-02", recordStatus: "available", level: 281, experience: 20 }
+    ], 2, "2026-11-02");
+
+    assert.equal(summary.levelUpCount, 1);
+    assert.deepEqual(summary.levelUpDates, ["2026-11-02"]);
+});
+
+test("period summary ignores unverified rank observations", async () => {
+    const { summarizeGrowthPeriod } = await import("../frontend/src/lib/growth.js");
+    const summary = summarizeGrowthPeriod([
+        { date: "2026-11-01", recordStatus: "available", level: 280, experience: 100, ranking: 500, rankingScope: "overall", rankingSourceDate: null },
+        { date: "2026-11-02", recordStatus: "available", level: 280, experience: 120, ranking: 450, rankingScope: "overall", rankingSourceDate: "2026-11-02" }
+    ], 2, "2026-11-02");
+
+    assert.equal(summary.rankingChange, null);
+});
+
 test("growth timeline contains level-up, best-growth, ranking and latest milestones", () => {
     const history = [
         {

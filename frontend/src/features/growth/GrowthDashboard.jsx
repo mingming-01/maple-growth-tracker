@@ -13,7 +13,8 @@ import {
   formatLocalISODate,
   calculateLevelProgress,
   calculateGrowthMetrics,
-  buildGrowthTimeline
+  buildGrowthTimeline,
+  summarizeGrowthPeriod
 } from "../../lib/growth.js";
 import { readGrowthGoals, saveGrowthGoals, readTrackerState } from "../../lib/storage.js";
 
@@ -68,51 +69,6 @@ function daysBetween(start, end) {
   return first === null || last === null ? null : Math.round((last - first) / 86400000);
 }
 
-function summarizePeriod(history, days) {
-  const today = formatLocalISODate(new Date());
-  const records = sortHistoryAscending(Array.isArray(history) ? history : [])
-    .filter(item => item?.date && item.date <= today);
-  const valid = records.filter(item =>
-    (!item.recordStatus || item.recordStatus === "available") &&
-    item.experience !== null && item.experience !== undefined &&
-    Number.isFinite(Number(item.experience))
-  );
-  const changes = records.filter(item =>
-    (!item.recordStatus || item.recordStatus === "available") &&
-    item.experienceChange !== null && item.experienceChange !== undefined &&
-    Number.isFinite(Number(item.experienceChange))
-  );
-  const growth = changes.length ? changes.reduce((sum,item) => sum + Number(item.experienceChange), 0) : null;
-  const average = growth === null ? null : growth / changes.length;
-  const positive = changes.filter(item => Number(item.experienceChange) > 0);
-  const best = positive.reduce((best,item) =>
-    !best || Number(item.experienceChange) > Number(best.experienceChange) ? item : best, null);
-  const ranked = valid.filter(item => item.ranking !== null && item.ranking !== undefined && Number.isFinite(Number(item.ranking)));
-  const levelUps = records.filter((item,index) =>
-    item.levelUp === true || (Number(records[index - 1]?.level) < Number(item.level) && Number.isFinite(Number(item.level)))
-  );
-  return {
-    days,
-    startDate: records[0]?.date || null,
-    endDate: records[records.length - 1]?.date || null,
-    growth,
-    averageGrowth: average,
-    confirmedChangeDays: changes.length,
-    bestDailyGrowth: best ? Number(best.experienceChange) : null,
-    bestDailyGrowthDate: best?.date || null,
-    growthDays: positive.length,
-    zeroGrowthDays: changes.filter(item => Number(item.experienceChange) === 0).length,
-    negativeGrowthDays: changes.filter(item => Number(item.experienceChange) < 0).length,
-    levelUpCount: levelUps.length,
-    levelUpDates: levelUps.map(item => item.date),
-    rankingChange: ranked.length >= 2 ? Number(ranked[0].ranking) - Number(ranked[ranked.length - 1].ranking) : null,
-    availableDays: records.filter(item => item.recordStatus === "available").length,
-    notReadyDays: records.filter(item => item.recordStatus === "not_ready").length,
-    notCollectedDays: records.filter(item => item.recordStatus === "not_collected").length,
-    coveragePercent: records.length ? valid.length / records.length * 100 : 0
-  };
-}
-
 export async function loadGrowthPeriod(character, days, onProgress = null) {
   const normalizedDays = [30, 90].includes(Number(days)) ? Number(days) : 7;
   if (!character?.ocid || normalizedDays === 7) {
@@ -131,12 +87,12 @@ export async function loadGrowthPeriod(character, days, onProgress = null) {
       previous = null;
     }
   }
-  const summary = summarizePeriod(current.history || [], normalizedDays);
+  const summary = summarizeGrowthPeriod(current.history || [], normalizedDays);
   summary.startDate = current.startDate || summary.startDate;
   summary.endDate = current.endDate || summary.endDate;
   const completeSummary = {
     ...summary,
-    previousSummary: previous ? summarizePeriod(previous.history || [], normalizedDays) : null
+    previousSummary: previous ? summarizeGrowthPeriod(previous.history || [], normalizedDays) : null
   };
   return {
     days: normalizedDays,
@@ -506,13 +462,13 @@ export default function GrowthDashboard({ character, history, onHistoryChange, o
         if (previousEnd) {
           try { previous = await fetchHistoryArchive(days,character,{end:previousEnd,collect:false}); } catch { previous = null; }
         }
-        const summary = summarizePeriod(current.history || [],days);
+        const summary = summarizeGrowthPeriod(current.history || [],days);
         summary.startDate = current.startDate || summary.startDate;
         summary.endDate = current.endDate || summary.endDate;
         setRange(days);
         setDisplayHistory(current.history || []);
         setPeriodSummary(summary);
-        onAnalysisPeriodChange?.({ days, history:current.history || [], summary:{ ...summary, previousSummary:previous ? summarizePeriod(previous.history || [],days) : null } });
+        onAnalysisPeriodChange?.({ days, history:current.history || [], summary:{ ...summary, previousSummary:previous ? summarizeGrowthPeriod(previous.history || [],days) : null } });
         setRangeStatus({
           availableDays:current.availableDays || 0,
           notReadyDays:current.notReadyDays || 0,
@@ -529,7 +485,7 @@ export default function GrowthDashboard({ character, history, onHistoryChange, o
           },
           periodSummary:summary
         });
-        const priorSummary = previous ? summarizePeriod(previous.history || [],days) : null;
+        const priorSummary = previous ? summarizeGrowthPeriod(previous.history || [],days) : null;
         const completeSummary = { ...summary, previousSummary:priorSummary };
         setPeriodSummary(completeSummary);
         onPersist?.({ periodSummary:completeSummary });
