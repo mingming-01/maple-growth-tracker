@@ -498,6 +498,7 @@ def get_history_archive():
                 "experience": None,
                 "experienceRate": None,
                 "experienceRateChecked": False,
+                "rankingSourceDate": None,
                 "recordStatus": "not_collected",
                 "recordSource": None
             })
