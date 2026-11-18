@@ -326,7 +326,7 @@ def _build_growth_report_cache_key(prompt, source_data):
     """같은 정성 신호라도 서로 다른 캐릭터/기록의 결과가 섞이지 않게 한다."""
     return (
         prompt
-        + "\n[리포트 형식 버전] 2\n"
+        + "\n[리포트 형식 버전] 3\n"
         + "[캐시 식별 데이터]\n"
         + json.dumps(source_data, ensure_ascii=False, sort_keys=True)
     )
@@ -354,6 +354,76 @@ def _validate_ai_comment(value):
         return False
     if re.search(r"[\\u3400-\\u4DBF\\u4E00-\\u9FFF\\uF900-\\uFAFF\\u3040-\\u30FF]", text):
         return False
+    return True
+
+
+def _validate_growth_report_facts(report, source_data):
+    """AI가 작성한 수치와 날짜가 서버가 제공한 데이터에 존재하는지 확인한다."""
+    serialized = json.dumps(source_data or {}, ensure_ascii=False, sort_keys=True)
+    allowed_numbers = set()
+    allowed_dates = set()
+
+    def add_number(value):
+        try:
+            number = Decimal(str(value).replace(",", "").strip())
+            if number.is_finite():
+                allowed_numbers.add(format(number.normalize(), "f"))
+                allowed_numbers.add(format(number.quantize(Decimal("0.1"), rounding=ROUND_HALF_UP), "f"))
+        except (InvalidOperation, TypeError, ValueError):
+            return
+
+    def walk(value, key=""):
+        if isinstance(value, dict):
+            for child_key, child in value.items():
+                walk(child, str(child_key))
+        elif isinstance(value, (list, tuple)):
+            for child in value:
+                walk(child, key)
+        elif isinstance(value, (int, float, Decimal)) and not isinstance(value, bool):
+            add_number(value)
+            normalized_key = key.casefold()
+            if any(term in normalized_key for term in ("experience", "growth", "sum", "average")):
+                formatted = _format_experience_korean(value)
+                if formatted:
+                    for token in re.findall(r"\d+(?:\.\d+)?", formatted.replace(",", "")):
+                        allowed_numbers.add(token)
+            if any(term in normalized_key for term in ("rate", "percent", "coverage", "change")):
+                add_number(Decimal(str(value)).quantize(Decimal("0.1"), rounding=ROUND_HALF_UP))
+        elif isinstance(value, str):
+            for match in re.finditer(r"(?<!\d)(\d{4})-(\d{1,2})-(\d{1,2})(?!\d)", value):
+                year, month, day = map(int, match.groups())
+                try:
+                    parsed = date(year, month, day)
+                except ValueError:
+                    continue
+                allowed_dates.add((parsed.month, parsed.day))
+                add_number(year)
+                add_number(month)
+                add_number(day)
+            for match in re.finditer(r"(\d{1,2})월\s*(\d{1,2})일", value):
+                allowed_dates.add((int(match.group(1)), int(match.group(2))))
+                add_number(match.group(1))
+                add_number(match.group(2))
+
+    walk(source_data or {})
+    # 기간 길이·레벨·비율처럼 모델이 단위를 붙여 표현할 수 있는 값도 허용 목록에 포함한다.
+    for key in ("periodDays", "level", "currentLevel", "previousLevel", "currentRate", "remainingRate"):
+        value = (source_data or {}).get(key)
+        if isinstance(value, (int, float)):
+            add_number(value)
+
+    for match in re.finditer(r"(?<!\d)(\d{1,2})월\s*(\d{1,2})일", report):
+        if (int(match.group(1)), int(match.group(2))) not in allowed_dates:
+            return False
+
+    for token in re.findall(r"(?<![A-Za-z])\d+(?:,\d{3})*(?:\.\d+)?", report):
+        normalized = token.replace(",", "")
+        try:
+            number = format(Decimal(normalized).normalize(), "f")
+        except InvalidOperation:
+            return False
+        if number not in allowed_numbers:
+            return False
     return True
 
 
@@ -544,7 +614,7 @@ def generate_ai_analysis(character, history, computed_metrics=None, growth_insig
             "predictionDisplayDate": prediction_date_label,
             "history": growth_data,
         }
-        prompt = _build_growth_comment_prompt(source_data)
+        prompt = _build_growth_report_prompt(source_data)
         # 모델에 전달하는 코멘트 프롬프트와 달리 캐시 키에는 해당 캐릭터의
         # 실제 계산 데이터 전체를 포함해 다른 캐릭터/기간의 리포트가 섞이지 않게 한다.
         cache_key = _build_growth_report_cache_key(prompt, source_data)
@@ -599,17 +669,18 @@ def generate_ai_analysis(character, history, computed_metrics=None, growth_insig
                 else _generate_gemini_content(prompt, api_key=gemini_api_key, deadline=deadline)
             )
             gemini_text = _require_provider_text(getattr(response, "text", None), "Gemini")
+            analysis = sanitize_ai_text(gemini_text, expected_date)
             if computed_metrics is not None:
-                ai_comment = _extract_ai_comment(gemini_text)
-                if not _validate_ai_comment(ai_comment):
-                    raise ProviderError("Gemini 코멘트에 허용되지 않은 숫자나 근거 없는 주장이 있습니다.", "provider_invalid_output")
-                analysis = _build_deterministic_growth_report(
-                    character, computed_metrics, growth_insights, analysis_context, ai_comment
+                analysis = _apply_deterministic_growth_forecast(
+                    analysis, character, computed_metrics
                 )
-            else:
-                analysis = sanitize_ai_text(gemini_text, expected_date)
-                if not validate_growth_report(analysis):
-                    raise ProviderError("Gemini 분석 결과가 리포트 검증을 통과하지 못했습니다.", "provider_invalid_output")
+                if not _validate_growth_report_facts(analysis, source_data):
+                    raise ProviderError(
+                        "Gemini 분석에 입력 데이터와 일치하지 않는 수치나 날짜가 있습니다.",
+                        "provider_invalid_output",
+                    )
+            if not validate_growth_report(analysis):
+                raise ProviderError("Gemini 분석 결과가 리포트 검증을 통과하지 못했습니다.", "provider_invalid_output")
             _clear_gemini_cooldown(runtime_state)
             set_ai_response_cache(cache_key, analysis)
             return {"analysis": analysis, "cacheHit": False, "growthInsights": growth_insights}
@@ -630,17 +701,18 @@ def generate_ai_analysis(character, history, computed_metrics=None, growth_insig
                 "OpenRouter",
             )
             print("OpenRouter로 성장 분석 코멘트를 처리했습니다.")
+            analysis = sanitize_ai_text(response_text, expected_date)
             if computed_metrics is not None:
-                ai_comment = _extract_ai_comment(response_text)
-                if not _validate_ai_comment(ai_comment):
-                    raise ProviderError("OpenRouter 코멘트에 허용되지 않은 숫자나 근거 없는 주장이 있습니다.", "provider_invalid_output")
-                analysis = _build_deterministic_growth_report(
-                    character, computed_metrics, growth_insights, analysis_context, ai_comment
+                analysis = _apply_deterministic_growth_forecast(
+                    analysis, character, computed_metrics
                 )
-            else:
-                analysis = sanitize_ai_text(response_text, expected_date)
-                if not validate_growth_report(analysis):
-                    raise ProviderError("OpenRouter 분석 결과가 리포트 검증을 통과하지 못했습니다.", "provider_invalid_output")
+                if not _validate_growth_report_facts(analysis, source_data):
+                    raise ProviderError(
+                        "OpenRouter 분석에 입력 데이터와 일치하지 않는 수치나 날짜가 있습니다.",
+                        "provider_invalid_output",
+                    )
+            if not validate_growth_report(analysis):
+                raise ProviderError("OpenRouter 분석 결과가 리포트 검증을 통과하지 못했습니다.", "provider_invalid_output")
             set_ai_response_cache(prompt, analysis)
             return {"analysis": analysis, "cacheHit": False, "growthInsights": growth_insights}
         except Exception as error:
