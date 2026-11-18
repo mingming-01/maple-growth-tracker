@@ -9,6 +9,8 @@ from tracker.integrations.ai_provider import (
     request_gemini,
     request_openrouter,
     should_use_openrouter,
+    ProviderError,
+    provider_retry_after_seconds,
 )
 
 
@@ -116,6 +118,47 @@ class AIProviderAdapterTests(unittest.TestCase):
             result = request_openrouter("prompt")
 
         self.assertEqual(result, "대체 분석 완료")
+
+
+    @patch("tracker.integrations.ai_provider.post_json_with_deadline")
+    def test_gemini_empty_http_200_is_fallback_eligible(self, post_json):
+        post_json.return_value = {"candidates": [{"content": {"parts": []}}]}
+        with self.app.app_context():
+            with self.assertRaises(ProviderError) as caught:
+                request_gemini("prompt")
+        self.assertEqual(caught.exception.error_type, "provider_empty_response")
+        self.assertTrue(should_use_openrouter(caught.exception))
+
+    @patch("tracker.integrations.ai_provider.post_json_with_deadline")
+    def test_openrouter_length_finish_reason_is_truncated_even_with_partial_text(self, post_json):
+        post_json.return_value = {
+            "model": "sample/model",
+            "choices": [{"finish_reason": "length", "message": {"content": "부분 응답"}}],
+        }
+        with self.app.app_context():
+            with self.assertRaises(ProviderError) as caught:
+                request_openrouter("prompt")
+        self.assertEqual(caught.exception.error_type, "provider_output_truncated")
+
+    def test_actual_http_429_status_triggers_fallback(self):
+        response = type("Response", (), {"status_code": 429, "headers": {}, "text": ""})()
+        error = requests.HTTPError("429 Too Many Requests", response=response)
+        self.assertTrue(should_use_openrouter(error))
+
+    def test_retry_delay_from_gemini_error_body_is_used(self):
+        response = type("Response", (), {
+            "status_code": 429, "headers": {}, "text": '{"retryDelay":"61667s"}'
+        })()
+        error = requests.HTTPError("429", response=response)
+        self.assertEqual(provider_retry_after_seconds(error, 300), 61667)
+
+    @patch("tracker.integrations.ai_provider.post_json_with_deadline")
+    def test_provider_deadline_is_forwarded_to_http_adapter(self, post_json):
+        post_json.return_value = {"candidates": [{"content": {"parts": [{"text": "분석"}]}}]}
+        deadline = 12345.0
+        with self.app.app_context():
+            request_gemini("prompt", deadline=deadline)
+        self.assertEqual(post_json.call_args.kwargs["deadline"], deadline)
 
     def test_gemini_deadline_and_http_504_trigger_fallback(self):
         self.assertTrue(should_use_openrouter(requests.Timeout("deadline exceeded")))
