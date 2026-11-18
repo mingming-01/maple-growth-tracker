@@ -2,6 +2,12 @@
 
 import requests
 
+from tracker.services.nexon_service import (
+    get_basic_character_snapshot,
+    get_ranking_snapshot,
+    get_world_type,
+)
+
 
 def _positive_rank(value):
     """양의 정수인 랭킹 값만 유효한 순위로 취급한다."""
@@ -12,13 +18,6 @@ def _positive_rank(value):
     except (TypeError, ValueError):
         return None
     return ranking if ranking > 0 else None
-
-
-from tracker.services.nexon_service import (
-    get_basic_character_snapshot,
-    get_ranking_snapshot,
-    get_world_type,
-)
 
 
 def is_historical_data_missing(response):
