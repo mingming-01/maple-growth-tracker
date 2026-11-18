@@ -11,8 +11,10 @@ from tracker.runtime import KOREA_TIMEZONE
 class FakeGrowthStorage:
     def __init__(self, records_by_ocid):
         self.records_by_ocid = records_by_ocid
+        self.calls = []
 
     def get_records(self, ocid, start_date, end_date):
+        self.calls.append((ocid, start_date, end_date))
         return [
             record for record in self.records_by_ocid.get(ocid, [])
             if start_date <= datetime.fromisoformat(record["date"]).date() <= end_date
@@ -132,6 +134,44 @@ class AIServerInputTests(unittest.TestCase):
         self.assertEqual(captured["comparison"]["metrics"]["averageDailyGrowth"], 150)
         self.assertEqual(len(captured["primary"]["history"]), 2)
         self.assertEqual(len(captured["comparison"]["history"]), 2)
+
+
+    def test_ai_route_reuses_recent_profile_and_reads_growth_records_once(self):
+        captured = {}
+        storage = FakeGrowthStorage({"ocid-one": self.make_records(1000)})
+        snapshot = {
+            "ocid": "ocid-one",
+            "characterName": "테스트캐릭터",
+            "worldName": "테스트월드",
+            "job": "테스트직업",
+            "level": 280,
+            "experience": 1500,
+            "experienceRate": 42.5,
+        }
+
+        def generate(character, history, metrics, insights, context, force_refresh):
+            captured["character"] = character
+            captured["history"] = history
+            return {"analysis": "테스트 분석"}
+
+        with (
+            patch.object(
+                ai_controller,
+                "load_api_snapshot",
+                return_value=(snapshot, datetime.now().astimezone().isoformat()),
+            ),
+            patch.object(ai_controller, "resolve_character", side_effect=AssertionError("fresh profile should be reused")),
+            patch.object(ai_controller, "get_growth_history_service", return_value=storage),
+            patch.object(ai_controller, "generate_ai_analysis", side_effect=generate),
+        ):
+            response = self.client.post("/api/ai-analysis?name=테스트캐릭터", json={})
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(captured["character"]["ocid"], "ocid-one")
+        self.assertEqual(captured["character"]["job"], "테스트직업")
+        self.assertEqual(len(storage.calls), 1)
+        self.assertEqual(storage.calls[0][1], self.today - timedelta(days=14))
+        self.assertEqual(storage.calls[0][2], self.today)
 
 
 if __name__ == "__main__":
