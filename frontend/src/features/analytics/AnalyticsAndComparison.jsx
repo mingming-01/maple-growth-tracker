@@ -201,7 +201,7 @@ export function AIReport({ character, history, analysisHistory = history, period
               <option value="90">최근 90일</option>
             </select>
           </label>
-          <button className="export-button" type="button" onClick={() => run({force:true,allowGenerate:true})} disabled={loading || periodChanging}>
+          <button className="export-button" type="button" onClick={() => run({force:Boolean(analysis),allowGenerate:true})} disabled={loading || periodChanging}>
             {loading ? "분석 중..." : analysis ? "다시 분석" : "AI 분석 시작"}
           </button>
         </div>
