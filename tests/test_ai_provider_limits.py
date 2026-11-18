@@ -6,6 +6,12 @@ from tracker.integrations import ai_provider
 
 
 class AIProviderLimitTests(unittest.TestCase):
+    def test_non_request_context_deadline_defaults_to_ninety_seconds(self):
+        from tracker.services import ai_analysis_service
+
+        with patch.object(ai_analysis_service, "has_request_context", return_value=False), patch.object(ai_analysis_service.time, "monotonic", return_value=100.0):
+            self.assertEqual(ai_analysis_service._request_deadline(), 190.0)
+
     def test_provider_timeouts_leave_a_large_openrouter_window(self):
         settings = {
             "AI_PROVIDER_CONNECT_TIMEOUT": 2.0,
