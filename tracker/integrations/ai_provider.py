@@ -1,11 +1,13 @@
-"""AI 제공자(OpenRouter)와 통신한다."""
+"""AI provider adapters with a strict end-to-end response budget."""
 import requests
 
 from flask import current_app, has_app_context
 
 from tracker.config import Config
-from tracker.integrations.http_client import request_with_retries
+from tracker.integrations.bounded_http import post_json_with_deadline
 
+
+GEMINI_URL = "https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent"
 OPENROUTER_URL = "https://openrouter.ai/api/v1/chat/completions"
 
 
@@ -15,47 +17,104 @@ def _setting(name, default=None):
     return getattr(Config, name, default)
 
 
-def request_openrouter(prompt):
-    api_key = _setting("OPENROUTER_API_KEY", "")
-    if not api_key:
+def _provider_timeouts(provider):
+    connect_timeout = min(
+        2.0, max(0.5, float(_setting("AI_PROVIDER_CONNECT_TIMEOUT", 1.5)))
+    )
+    read_timeout = min(
+        1.25, max(0.2, float(_setting("AI_PROVIDER_READ_TIMEOUT", 1.0)))
+    )
+    total_default = 8.0 if provider == "gemini" else 6.0
+    total_timeout = min(
+        9.0 if provider == "gemini" else 7.0,
+        max(1.0, float(_setting(
+            "AI_GEMINI_TOTAL_TIMEOUT" if provider == "gemini" else "AI_OPENROUTER_TOTAL_TIMEOUT",
+            total_default,
+        ))),
+    )
+    return connect_timeout, read_timeout, total_timeout
+
+
+def _extract_text_parts(parts):
+    if not isinstance(parts, list):
+        return ""
+    return "".join(
+        part.get("text", "")
+        for part in parts
+        if isinstance(part, dict) and isinstance(part.get("text"), str)
+    ).strip()
+
+
+def request_gemini(prompt, api_key=None):
+    """Gemini REST 요청을 한 번 수행하고 응답 전체 시간에 상한을 둔다."""
+    key = api_key or _setting("GEMINI_API_KEY", "")
+    if not key:
         return None
 
-    # Gunicorn 기본 30초 제한 전에 fallback이 끝나도록 연결/읽기 시간을 분리한다.
-    # Gemini가 실패한 뒤 실행되는 경로이므로 재시도하지 않고 빠르게 제어를 반환한다.
-    timeout = (
-        min(3.0, max(0.5, float(_setting("OPENROUTER_CONNECT_TIMEOUT", 2.5)))),
-        min(7.0, max(1.0, float(_setting("OPENROUTER_READ_TIMEOUT", 6.5)))),
-    )
-
-    response = request_with_retries(
-        "post",
-        OPENROUTER_URL,
+    model = _setting("GEMINI_MODEL", "gemini-3.6-flash")
+    connect_timeout, read_timeout, total_timeout = _provider_timeouts("gemini")
+    payload = post_json_with_deadline(
+        GEMINI_URL.format(model=model),
         headers={
-            "Authorization": f"Bearer {api_key}",
+            "x-goog-api-key": key,
             "Content-Type": "application/json",
         },
-        json={
+        json_body={
+            "contents": [{"role": "user", "parts": [{"text": prompt}]}],
+            "generationConfig": {
+                "temperature": 0.35,
+                "maxOutputTokens": 640,
+            },
+        },
+        connect_timeout=connect_timeout,
+        read_timeout=read_timeout,
+        total_timeout=total_timeout,
+    )
+    candidates = payload.get("candidates") or []
+    if not candidates or not isinstance(candidates[0], dict):
+        raise requests.RequestException("Gemini 응답에 생성 결과가 없습니다.")
+    content = candidates[0].get("content") or {}
+    text = _extract_text_parts(content.get("parts"))
+    if not text:
+        raise requests.RequestException("Gemini 응답에 분석 내용이 없습니다.")
+    return text
+
+
+def request_openrouter(prompt, api_key=None):
+    """OpenRouter 대체 호출도 전체 응답 시간을 제한해 worker timeout을 막는다."""
+    key = api_key or _setting("OPENROUTER_API_KEY", "")
+    if not key:
+        return None
+
+    connect_timeout, read_timeout, total_timeout = _provider_timeouts("openrouter")
+    payload = post_json_with_deadline(
+        OPENROUTER_URL,
+        headers={
+            "Authorization": f"Bearer {key}",
+            "Content-Type": "application/json",
+        },
+        json_body={
             "model": _setting("OPENROUTER_MODEL", "openrouter/free"),
             "messages": [{"role": "user", "content": prompt}],
+            "temperature": 0.35,
+            "max_tokens": 640,
+            "stream": False,
         },
-        timeout=timeout,
-        max_attempts=1,
-        backoff_factor=0,
-        max_retry_after_wait=0,
+        connect_timeout=connect_timeout,
+        read_timeout=read_timeout,
+        total_timeout=total_timeout,
     )
-    response.raise_for_status()
+    choices = payload.get("choices") or []
+    if not choices or not isinstance(choices[0], dict):
+        raise requests.RequestException("OpenRouter 응답에 choices가 없습니다.")
 
-    data = response.json()
-    choices = data.get("choices", [])
-    if not choices:
-        raise ValueError("OpenRouter 응답에 choices가 없습니다.")
-
-    message = choices[0].get("message", {})
+    message = choices[0].get("message") or {}
     content = message.get("content")
-    if not content:
-        raise ValueError("OpenRouter 응답에 분석 내용이 없습니다.")
-
-    return content
+    if isinstance(content, list):
+        content = _extract_text_parts(content)
+    if not isinstance(content, str) or not content.strip():
+        raise requests.RequestException("OpenRouter 응답에 분석 내용이 없습니다.")
+    return content.strip()
 
 
 def should_use_openrouter(error):
@@ -78,5 +137,6 @@ def should_use_openrouter(error):
             "RESOURCE_EXHAUSTED",
             "QUOTA",
             "TIMEOUT",
+            "DEADLINE_EXCEEDED",
         )
     )
