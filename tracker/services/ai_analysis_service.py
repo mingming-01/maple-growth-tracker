@@ -72,18 +72,17 @@ def _set_gemini_cooldown(runtime_state, error):
 
 
 def _clear_gemini_cooldown(runtime_state):
-    try:
-        runtime_state.ai_provider_state_store.clear_cooldown("gemini")
-    except Exception as error:
-        print(f"Gemini 쿨다운 초기화를 건너뜁니다: {type(error).__name__}")
+    # 만료된 timestamp는 읽기 시점에 자동으로 무시한다. 동시 worker가 새로
+    # 기록한 quota cooldown을 성공 요청이 지워버리지 않도록 여기서는 삭제하지 않는다.
+    return None
 
 
 def _error_result(error, fallback_message):
     """공급자 오류를 HTTP 계층에서 구분할 수 있는 안전한 형태로 변환한다."""
     error_type = provider_error_type(error)
-    status_code = 503 if error_type in {
-        "provider_quota", "provider_timeout", "provider_unavailable"
-    } else 502
+    status_code = 429 if error_type == "provider_quota" else (
+        503 if error_type in {"provider_timeout", "provider_unavailable"} else 502
+    )
     result = {
         "error": (
             "AI 분석 사용량 한도를 초과했습니다. 잠시 후 다시 시도해주세요."
@@ -107,8 +106,6 @@ def _fallback_failure_result(primary_error, fallback_error=None):
                 "errorType": "provider_unavailable",
             }
         result = _error_result(primary_error, "AI 분석을 불러오지 못했습니다.")
-        if _is_quota_error(primary_error):
-            result["statusCode"] = 503
         return result
     if primary_error is None:
         return _error_result(fallback_error, "AI 분석을 불러오지 못했습니다.")
