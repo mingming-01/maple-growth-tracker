@@ -181,8 +181,15 @@ def ai_analysis():
             if str(item.get("date") or "") >= insight_start.isoformat()
         ]
 
+        # 선택 기간 첫날의 레벨업/경험치 변화도 직전 날짜와 비교할 수 있도록
+        # 기준 스냅샷 하루를 추가하되, periodSummary 자체는 선택 기간만 집계한다.
+        calculation_start = period_start - timedelta(days=1)
+        calculation_records = [
+            item for item in combined_records
+            if str(item.get("date") or "") >= calculation_start.isoformat()
+        ]
         calculated = build_server_growth_metrics(
-            character, stored_records, reference_date=today, period_days=period_days
+            character, calculation_records, reference_date=today, period_days=period_days
         )
         recent_history = calculated["history"]
         analysis_context = {
