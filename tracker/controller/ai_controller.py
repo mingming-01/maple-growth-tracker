@@ -80,7 +80,7 @@ def _load_recent_character_profile(character_name, now=None):
             "experienceRate": snapshot.get("experienceRate"),
             "ocid": ocid,
         }
-    except (OSError, TypeError, ValueError, OverflowError):
+    except Exception:
         # 캐시 저장소가 일시적으로 unavailable이어도 원래 Nexon 조회 경로로 폴백한다.
         return None
 
