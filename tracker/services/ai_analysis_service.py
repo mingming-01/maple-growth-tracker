@@ -513,7 +513,15 @@ def generate_ai_analysis(character, history, computed_metrics=None, growth_insig
             "history": growth_data,
         }
         prompt = _build_growth_comment_prompt(source_data)
+        # 모델에 전달하는 코멘트 프롬프트와 달리 캐시 키에는 해당 캐릭터의
+        # 실제 계산 데이터 전체를 포함해 다른 캐릭터/기간의 리포트가 섞이지 않게 한다.
+        cache_key = (
+            prompt
+            + "\n[캐시 식별 데이터]\n"
+            + json.dumps(source_data, ensure_ascii=False, sort_keys=True)
+        )
     else:
+        cache_key = prompt
         required_sections = "\n".join(REQUIRED_GROWTH_SECTIONS)
         prompt = f"""
 너는 메이플스토리 캐릭터의 성장 데이터를 해석하는 도우미야.
@@ -540,7 +548,7 @@ def generate_ai_analysis(character, history, computed_metrics=None, growth_insig
         if isinstance(prediction, dict):
             expected_date = prediction.get("estimatedDate")
 
-    cached_analysis = None if force_refresh else get_ai_response_cache(prompt)
+    cached_analysis = None if force_refresh else get_ai_response_cache(cache_key)
     if cached_analysis is not None:
         print("저장된 AI 성장 리포트를 재사용했습니다.")
         if computed_metrics is not None:
@@ -575,7 +583,7 @@ def generate_ai_analysis(character, history, computed_metrics=None, growth_insig
                 if not validate_growth_report(analysis):
                     raise ProviderError("Gemini 분석 결과가 리포트 검증을 통과하지 못했습니다.", "provider_invalid_output")
             _clear_gemini_cooldown(runtime_state)
-            set_ai_response_cache(prompt, analysis)
+            set_ai_response_cache(cache_key, analysis)
             return {"analysis": analysis, "cacheHit": False, "growthInsights": growth_insights}
         except Exception as error:
             gemini_error = error
