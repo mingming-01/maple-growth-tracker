@@ -1,5 +1,6 @@
 """Tests for wall-clock bounded Gemini and OpenRouter calls."""
 import unittest
+import time
 from unittest.mock import patch
 
 import requests
@@ -155,7 +156,7 @@ class AIProviderAdapterTests(unittest.TestCase):
     @patch("tracker.integrations.ai_provider.post_json_with_deadline")
     def test_provider_deadline_is_forwarded_to_http_adapter(self, post_json):
         post_json.return_value = {"candidates": [{"content": {"parts": [{"text": "분석"}]}}]}
-        deadline = 12345.0
+        deadline = time.monotonic() + 5.0
         with self.app.app_context():
             request_gemini("prompt", deadline=deadline)
         self.assertEqual(post_json.call_args.kwargs["deadline"], deadline)
