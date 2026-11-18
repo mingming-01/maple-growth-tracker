@@ -17,7 +17,7 @@ class BoundedJSONHTTPTests(unittest.TestCase):
         return response
 
     @patch("tracker.integrations.bounded_http.requests.post")
-    @patch("tracker.integrations.bounded_http.time.monotonic", side_effect=[10.0, 10.1, 10.2])
+    @patch("tracker.integrations.bounded_http.time.monotonic", side_effect=[10.0, 10.1, 10.2, 10.3, 10.4])
     def test_reads_stream_and_parses_json(self, _clock, post):
         response = self.make_response([b'{"ok":true}'])
         post.return_value = response
@@ -28,7 +28,7 @@ class BoundedJSONHTTPTests(unittest.TestCase):
 
         self.assertEqual(result, {"ok": True})
         self.assertEqual(post.call_args.kwargs["stream"], True)
-        self.assertEqual(post.call_args.kwargs["timeout"], (1.5, 1.0))
+        self.assertEqual(post.call_args.kwargs["timeout"], (1.5, 4.0))
         self.assertEqual(response.iter_content.call_args.kwargs["chunk_size"], 1)
         response.close.assert_called_once()
 
@@ -65,7 +65,7 @@ class BoundedJSONHTTPTests(unittest.TestCase):
         response.close.assert_called_once()
 
     @patch("tracker.integrations.bounded_http.requests.post")
-    @patch("tracker.integrations.bounded_http.time.monotonic", side_effect=[10.0, 10.1, 10.2])
+    @patch("tracker.integrations.bounded_http.time.monotonic", side_effect=[10.0, 10.1, 10.2, 10.3, 10.4])
     def test_http_error_keeps_status_and_provider_error_body(self, _clock, post):
         response = self.make_response(
             [b'{"error":{"details":[{"retryDelay":"20s"}]}}'],
