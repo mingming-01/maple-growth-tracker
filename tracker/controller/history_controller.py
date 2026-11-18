@@ -82,6 +82,8 @@ def _load_recent_character_basic_snapshot(character_name, ocid, now=None):
         "character_exp": snapshot.get("experience"),
         "character_exp_rate": snapshot.get("experienceRate"),
         "ranking": snapshot.get("ranking"),
+        "ranking_scope": "overall",
+        "ranking_date": snapshot.get("rankingDate"),
         "ranking_data_status": snapshot.get("rankingDataStatus"),
     }
 
@@ -101,7 +103,9 @@ def get_history():
     if len(requested_ocid) > 128:
         return jsonify({"error": "캐릭터 식별 정보가 올바르지 않습니다."}), 400
 
-    cache_key = f"history:{character_name}"
+    # 이전 캐시에는 과거 집계일의 프로필 랭킹이 오늘 순위로 섞였을 수 있어
+    # 정합성 기준을 적용한 새 키로 분리한다.
+    cache_key = f"history:rank-overall-v2:{character_name}"
     force_refresh = request.args.get("refresh") == "1"
     cached_history = None if force_refresh else get_cache(cache_key)
     cached_records = cached_history.get("history") if isinstance(cached_history, dict) else None
@@ -410,7 +414,16 @@ def get_history_archive():
         if saved:
             history.append({
                 "date": date_string,
-                "ranking": saved.get("ranking"),
+                "ranking": (
+                    saved.get("ranking")
+                    if saved.get("rankingScope") == "overall"
+                    else None
+                ),
+                "rankingScope": (
+                    "overall"
+                    if saved.get("rankingScope") == "overall" and saved.get("ranking") is not None
+                    else None
+                ),
                 "level": saved.get("level"),
                 "experience": saved.get("experience"),
                 "experienceRate": saved.get("experienceRate"),
