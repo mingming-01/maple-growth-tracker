@@ -51,6 +51,35 @@ class AIAnalysisFallbackTests(unittest.TestCase):
             "experienceRate": 12.5,
         }
 
+    @patch("tracker.services.ai_analysis_service._request_deadline", return_value=12345.0)
+    @patch("tracker.services.ai_analysis_service.get_runtime_state")
+    @patch("tracker.services.ai_analysis_service.get_ai_response_cache", return_value=None)
+    @patch("tracker.services.ai_analysis_service.set_ai_response_cache")
+    @patch("tracker.services.ai_analysis_service._gemini_cooldown_remaining", return_value=0)
+    @patch("tracker.services.ai_analysis_service.validate_growth_report", return_value=True)
+    @patch("tracker.services.ai_analysis_service.sanitize_ai_text", side_effect=lambda value, *_: value)
+    @patch("tracker.services.ai_analysis_service.request_gemini")
+    @patch("tracker.services.ai_analysis_service.request_openrouter", return_value=VALID_REPORT)
+    def test_http_429_falls_back_successfully_with_same_prompt_and_deadline(
+        self, openrouter, gemini, _sanitize, _validate, _cooldown,
+        _set_cache, _get_cache, get_state, _deadline
+    ):
+        response = type("Response", (), {"status_code": 429, "headers": {}, "text": ""})()
+        gemini.side_effect = requests.HTTPError("429 Too Many Requests", response=response)
+        get_state.return_value = self.state
+
+        result = service.generate_ai_analysis(
+            self.character, [{"date": "2026-11-18", "experienceChange": 123}],
+            computed_metrics={"experienceGained": 123}, force_refresh=True,
+        )
+
+        self.assertTrue(result["analysis"].startswith("[성장 패턴]"))
+        gemini.assert_called_once()
+        openrouter.assert_called_once()
+        self.assertEqual(gemini.call_args.args[0], openrouter.call_args.args[0])
+        self.assertEqual(gemini.call_args.kwargs["deadline"], 12345.0)
+        self.assertEqual(openrouter.call_args.kwargs["deadline"], 12345.0)
+
     @patch("tracker.services.ai_analysis_service.get_runtime_state")
     @patch("tracker.services.ai_analysis_service.get_ai_response_cache", return_value=None)
     @patch("tracker.services.ai_analysis_service.set_ai_response_cache")
@@ -83,6 +112,30 @@ class AIAnalysisFallbackTests(unittest.TestCase):
     @patch("tracker.services.ai_analysis_service.get_ai_response_cache", return_value=None)
     @patch("tracker.services.ai_analysis_service.set_ai_response_cache")
     @patch("tracker.services.ai_analysis_service._gemini_cooldown_remaining", return_value=0)
+    @patch("tracker.services.ai_analysis_service.request_gemini")
+    @patch("tracker.services.ai_analysis_service.request_openrouter", side_effect=ProviderError(
+        "OpenRouter output was truncated", "provider_output_truncated"
+    ))
+    def test_http_429_then_truncated_openrouter_returns_error_without_retry(
+        self, openrouter, gemini, _cooldown, _set_cache, _get_cache, get_state
+    ):
+        response = type("Response", (), {"status_code": 429, "headers": {}, "text": ""})()
+        gemini.side_effect = requests.HTTPError("429 Too Many Requests", response=response)
+        get_state.return_value = self.state
+
+        result = service.generate_ai_analysis(
+            self.character, [], computed_metrics={}, force_refresh=True
+        )
+
+        self.assertEqual(result["statusCode"], 503)
+        self.assertEqual(result["errorType"], "provider_fallback_failed")
+        self.assertEqual(result["fallbackErrorType"], "provider_output_truncated")
+        openrouter.assert_called_once()
+
+    @patch("tracker.services.ai_analysis_service.get_runtime_state")
+    @patch("tracker.services.ai_analysis_service.get_ai_response_cache", return_value=None)
+    @patch("tracker.services.ai_analysis_service.set_ai_response_cache")
+    @patch("tracker.services.ai_analysis_service._gemini_cooldown_remaining", return_value=0)
     @patch("tracker.services.ai_analysis_service.validate_growth_report", return_value=True)
     @patch("tracker.services.ai_analysis_service.sanitize_ai_text", side_effect=lambda value, *_: value)
     @patch("tracker.services.ai_analysis_service.request_gemini", side_effect=ProviderError(
@@ -101,6 +154,25 @@ class AIAnalysisFallbackTests(unittest.TestCase):
 
         self.assertIn("analysis", result)
         self.assertFalse(result["cacheHit"])
+        openrouter.assert_called_once()
+
+    @patch("tracker.services.ai_analysis_service.get_runtime_state")
+    @patch("tracker.services.ai_analysis_service.get_ai_response_cache", return_value=None)
+    @patch("tracker.services.ai_analysis_service.set_ai_response_cache")
+    @patch("tracker.services.ai_analysis_service._gemini_cooldown_remaining", return_value=0)
+    @patch("tracker.services.ai_analysis_service.validate_growth_report", side_effect=[False, True])
+    @patch("tracker.services.ai_analysis_service.sanitize_ai_text", side_effect=lambda value, *_: value)
+    @patch("tracker.services.ai_analysis_service.request_gemini", return_value="불완전한 리포트")
+    @patch("tracker.services.ai_analysis_service.request_openrouter", return_value=VALID_REPORT)
+    def test_gemini_missing_required_report_sections_falls_back(
+        self, openrouter, _gemini, _sanitize, _validate, _cooldown,
+        _set_cache, _get_cache, get_state
+    ):
+        get_state.return_value = self.state
+        result = service.generate_ai_analysis(
+            self.character, [], computed_metrics={}, force_refresh=True
+        )
+        self.assertTrue(result["analysis"].startswith("[성장 패턴]"))
         openrouter.assert_called_once()
 
 

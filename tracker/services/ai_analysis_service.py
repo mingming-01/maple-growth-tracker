@@ -34,12 +34,12 @@ def _is_quota_error(error):
 
 def _request_deadline():
     """요청 시작부터 계산한 전체 AI deadline으로 사전 처리 시간도 예산에 포함한다."""
-    total = 22.0
+    total = 32.0
     started = None
     if has_request_context():
         started = request.environ.get("maple_request_started_at")
         try:
-            total = max(5.0, float(current_app.config.get("AI_REQUEST_TOTAL_TIMEOUT", total)))
+            total = min(32.0, max(5.0, float(current_app.config.get("AI_REQUEST_TOTAL_TIMEOUT", 32.0))))
         except (TypeError, ValueError):
             pass
     if started is None:
@@ -129,6 +129,12 @@ def _generate_gemini_content(client_or_prompt, prompt=None, api_key=None, deadli
             model="gemini-3.6-flash", contents=prompt
         )
     return SimpleNamespace(text=request_gemini(client_or_prompt, api_key=api_key, deadline=deadline))
+
+
+def _require_provider_text(value, provider):
+    if not isinstance(value, str) or not value.strip():
+        raise ProviderError(f"{provider} 응답에 분석 텍스트가 없습니다.", "provider_empty_response")
+    return value.strip()
 
 
 
@@ -303,7 +309,8 @@ def generate_ai_analysis(character, history, computed_metrics=None, growth_insig
                 if legacy_gemini_client is not None
                 else _generate_gemini_content(prompt, api_key=gemini_api_key, deadline=deadline)
             )
-            analysis = sanitize_ai_text(response.text or "분석 결과가 비어 있습니다.", expected_date)
+            gemini_text = _require_provider_text(getattr(response, "text", None), "Gemini")
+            analysis = sanitize_ai_text(gemini_text, expected_date)
             if computed_metrics is not None:
                 analysis = _apply_deterministic_growth_forecast(analysis, character, computed_metrics)
             if not validate_growth_report(analysis):
@@ -322,9 +329,12 @@ def generate_ai_analysis(character, history, computed_metrics=None, growth_insig
 
     if openrouter_api_key:
         try:
-            response_text = request_openrouter(prompt, api_key=openrouter_api_key, deadline=deadline)
+            response_text = _require_provider_text(
+                request_openrouter(prompt, api_key=openrouter_api_key, deadline=deadline),
+                "OpenRouter",
+            )
             print("OpenRouter로 성장 분석을 처리했습니다.")
-            analysis = sanitize_ai_text(response_text or "분석 결과가 비어 있습니다.", expected_date)
+            analysis = sanitize_ai_text(response_text, expected_date)
             if computed_metrics is not None:
                 analysis = _apply_deterministic_growth_forecast(analysis, character, computed_metrics)
             if not validate_growth_report(analysis):
@@ -400,7 +410,7 @@ def generate_ai_comparison(primary, comparison):
     elif gemini_api_key:
         try:
             response = _generate_gemini_content(prompt, api_key=gemini_api_key, deadline=deadline)
-            analysis = sanitize_ai_text(response.text or "비교 분석 결과가 비어 있습니다.")
+            analysis = sanitize_ai_text(_require_provider_text(getattr(response, "text", None), "Gemini"))
             _clear_gemini_cooldown(runtime_state)
             set_ai_response_cache(prompt, analysis)
             return {"analysis": analysis, "cacheHit": False}
@@ -414,9 +424,12 @@ def generate_ai_comparison(primary, comparison):
 
     if openrouter_api_key:
         try:
-            response_text = request_openrouter(prompt, api_key=openrouter_api_key, deadline=deadline)
+            response_text = _require_provider_text(
+                request_openrouter(prompt, api_key=openrouter_api_key, deadline=deadline),
+                "OpenRouter",
+            )
             print("OpenRouter로 성장 비교 분석을 처리했습니다.")
-            analysis = sanitize_ai_text(response_text or "비교 분석 결과가 비어 있습니다.")
+            analysis = sanitize_ai_text(response_text)
             set_ai_response_cache(prompt, analysis)
             return {"analysis": analysis, "cacheHit": False}
         except Exception as error:

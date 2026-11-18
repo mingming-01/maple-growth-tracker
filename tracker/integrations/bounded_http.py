@@ -8,6 +8,12 @@ import requests
 DEFAULT_MAX_RESPONSE_BYTES = 96 * 1024
 
 
+class InvalidProviderResponse(requests.RequestException):
+    """Provider returned a successful HTTP status with an unusable JSON body."""
+
+    error_type = "provider_invalid_response"
+
+
 
 def _set_socket_read_timeout(response, timeout):
     """각 socket read의 timeout을 남은 전체 예산으로 줄인다."""
@@ -48,8 +54,12 @@ def post_json_with_deadline(
     remaining = local_deadline - started_at
     if remaining <= 0:
         raise requests.Timeout("AI provider request deadline has expired")
-    connect_timeout = min(connect_timeout, remaining)
-    read_timeout = min(read_timeout, remaining)
+    if remaining <= 0.1:
+        raise requests.Timeout("AI provider request deadline has expired")
+    # Requests applies connect and response-header read timeouts consecutively.
+    # Keep their combined budget within the remaining wall-clock allowance.
+    connect_timeout = min(connect_timeout, max(0.05, remaining * 0.25))
+    read_timeout = min(read_timeout, max(0.05, remaining - connect_timeout))
 
     response = requests.post(
         url,
@@ -103,11 +113,11 @@ def post_json_with_deadline(
         try:
             payload = json.loads(raw_text)
         except (TypeError, ValueError) as error:
-            raise requests.RequestException(
+            raise InvalidProviderResponse(
                 "AI provider returned invalid JSON"
             ) from error
         if not isinstance(payload, dict):
-            raise requests.RequestException("AI provider returned an invalid JSON object")
+            raise InvalidProviderResponse("AI provider returned an invalid JSON object")
         return payload
     finally:
         response.close()

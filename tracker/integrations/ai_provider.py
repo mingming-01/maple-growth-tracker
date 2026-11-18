@@ -90,20 +90,26 @@ def _provider_timeouts(provider, deadline=None):
             max(1.0, float(_setting("AI_GEMINI_TOTAL_TIMEOUT", 7.0))),
         )
     else:
-        # Free routed models commonly need longer to start and complete generation.
-        # Keep this bounded below Gunicorn's 30s worker timeout after Gemini fallback.
         read_timeout = min(
-            17.0, max(3.0, float(_setting("AI_OPENROUTER_READ_TIMEOUT", 16.5)))
+            26.0, max(3.0, float(_setting("AI_OPENROUTER_READ_TIMEOUT", 25.0)))
         )
         total_timeout = min(
-            18.0,
-            max(2.0, float(_setting("AI_OPENROUTER_TOTAL_TIMEOUT", 18.0))),
+            27.0,
+            max(2.0, float(_setting("AI_OPENROUTER_TOTAL_TIMEOUT", 27.0))),
         )
     read_timeout = min(read_timeout, max(0.5, total_timeout - connect_timeout))
     if deadline is not None:
         remaining = float(deadline) - time.monotonic()
+        if provider == "gemini" and _setting("OPENROUTER_API_KEY", ""):
+            # Preserve a useful window for the fallback instead of allowing a
+            # slow primary request to consume the entire request deadline.
+            reserve = max(
+                1.0,
+                float(_setting("AI_OPENROUTER_MIN_REMAINING_SECONDS", 20.0)),
+            )
+            remaining -= reserve
         if remaining <= 0:
-            raise requests.Timeout("AI provider request deadline has expired")
+            raise requests.Timeout("AI provider deadline leaves no execution budget")
         total_timeout = min(total_timeout, remaining)
         connect_timeout = min(connect_timeout, total_timeout)
         read_timeout = min(read_timeout, total_timeout)
@@ -180,10 +186,10 @@ def request_openrouter(prompt, api_key=None, deadline=None):
             "model": _setting("OPENROUTER_MODEL", "openrouter/free"),
             "messages": [{"role": "user", "content": prompt}],
             "temperature": 0.35,
-            "max_tokens": 4096,
-            # openrouter/free may route to reasoning models; cap internal reasoning
-            # so the limited completion budget is not consumed before final content.
-            "reasoning": {"effort": "low"},
+            "max_tokens": max(512, min(
+                16384,
+                int(_setting("AI_OPENROUTER_MAX_OUTPUT_TOKENS", 8192)),
+            )),
             "stream": False,
         },
         connect_timeout=connect_timeout,
