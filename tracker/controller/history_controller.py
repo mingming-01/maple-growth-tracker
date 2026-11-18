@@ -87,35 +87,58 @@ def _load_recent_character_basic_snapshot(character_name, ocid, now=None):
     }
 
 
+def _verified_overall_rank(record, target_date):
+    """종합 랭킹의 범위·실제 집계일·양의 정수 여부를 함께 검증한다."""
+    if not isinstance(record, dict):
+        return None
+    if record.get("rankingScope") != "overall":
+        return None
+    if record.get("rankingSourceDate") != target_date:
+        return None
+    value = record.get("ranking")
+    if isinstance(value, bool) or value in (None, ""):
+        return None
+    try:
+        rank = int(str(value).replace(",", "").strip())
+    except (TypeError, ValueError):
+        return None
+    return rank if rank > 0 else None
+
+
 def _stale_history_response(cache_key, character_name, error_message):
-    """신규 스냅샷을 우선 사용하고, 레거시 스냅샷은 랭킹을 제거해 제공한다."""
+    """현재 형식 캐시를 우선 사용하고, 구형 캐시는 순위를 제거해 제공한다."""
     snapshot, saved_at = load_api_snapshot(cache_key)
     if snapshot is not None:
         return jsonify(with_data_status(snapshot, "stale", saved_at)), 200
 
-    # 이전 구현은 프로필 조회의 전일 fallback 순위를 오늘로 저장했을 수 있다.
-    # 해당 스냅샷은 성장량/레벨만 보존하고 모든 랭킹 값과 랭킹 변화량을 숨긴다.
-    legacy_snapshot, legacy_saved_at = load_api_snapshot(
-        f"history:{character_name}"
+    legacy_keys = (
+        f"history:rank-overall-v2:{character_name}",
+        f"history:{character_name}",
     )
-    if isinstance(legacy_snapshot, dict):
+    for legacy_key in legacy_keys:
+        legacy_snapshot, legacy_saved_at = load_api_snapshot(legacy_key)
+        if not isinstance(legacy_snapshot, dict):
+            continue
         legacy_history = legacy_snapshot.get("history")
-        if isinstance(legacy_history, list):
-            sanitized = dict(legacy_snapshot)
-            sanitized_history = []
-            for record in legacy_history:
-                if not isinstance(record, dict):
-                    sanitized_history.append(record)
-                    continue
-                safe_record = dict(record)
-                safe_record["ranking"] = None
-                safe_record["rankingScope"] = None
-                safe_record["rankingChange"] = None
-                sanitized_history.append(safe_record)
-            sanitized["history"] = sanitized_history
-            return jsonify(with_data_status(
-                sanitized, "stale", legacy_saved_at
-            )), 200
+        if not isinstance(legacy_history, list):
+            continue
+
+        sanitized = dict(legacy_snapshot)
+        sanitized_history = []
+        for record in legacy_history:
+            if not isinstance(record, dict):
+                sanitized_history.append(record)
+                continue
+            safe_record = dict(record)
+            safe_record["ranking"] = None
+            safe_record["rankingScope"] = None
+            safe_record["rankingSourceDate"] = None
+            safe_record["rankingChange"] = None
+            sanitized_history.append(safe_record)
+        sanitized["history"] = sanitized_history
+        return jsonify(with_data_status(
+            sanitized, "stale", legacy_saved_at
+        )), 200
 
     return jsonify({"error": error_message}), 503
 
@@ -137,16 +160,20 @@ def get_history():
 
     # 이전 캐시에는 과거 집계일의 프로필 랭킹이 오늘 순위로 섞였을 수 있어
     # 정합성 기준을 적용한 새 키로 분리한다.
-    cache_key = f"history:rank-overall-v2:{character_name}"
+    cache_key = f"history:rank-overall-v3:{character_name}"
     force_refresh = request.args.get("refresh") == "1"
     cached_history = None if force_refresh else get_cache(cache_key)
     cached_records = cached_history.get("history") if isinstance(cached_history, dict) else None
     cached_ranking_is_current = (
         isinstance(cached_records, list)
         and all(
-            item.get("rankingScope") == "overall"
+            isinstance(item, dict)
+            and item.get("rankingSourceDate") == item.get("date")
+            and (
+                item.get("ranking") is None
+                or _verified_overall_rank(item, item.get("date")) is not None
+            )
             for item in cached_records
-            if isinstance(item, dict) and item.get("ranking") is not None
         )
     )
     if cached_history is not None and cached_ranking_is_current:
@@ -365,14 +392,20 @@ def get_history_archive():
         ]
         missing_dates = [
             target_date for target_date in batch_dates
-            if target_date.isoformat() not in stored_by_date
-            or stored_by_date[target_date.isoformat()].get("recordStatus") == "not_ready"
-            or (
-                stored_by_date[target_date.isoformat()].get("recordStatus") == "available"
-                and (
-                    stored_by_date[target_date.isoformat()].get("rankingScope") != "overall"
-                    or not stored_by_date[target_date.isoformat()].get("experienceRateChecked", False)
-                    or stored_by_date[target_date.isoformat()].get("experienceRate") is None
+            if (
+                target_date.isoformat() not in stored_by_date
+                or stored_by_date[target_date.isoformat()].get("recordStatus") in ("not_ready", "unavailable")
+                or (
+                    stored_by_date[target_date.isoformat()].get("recordStatus") == "available"
+                    and (
+                        stored_by_date[target_date.isoformat()].get("rankingSourceDate") != target_date.isoformat()
+                        or (
+                            stored_by_date[target_date.isoformat()].get("ranking") is not None
+                            and stored_by_date[target_date.isoformat()].get("rankingScope") != "overall"
+                        )
+                        or not stored_by_date[target_date.isoformat()].get("experienceRateChecked", False)
+                        or stored_by_date[target_date.isoformat()].get("experienceRate") is None
+                    )
                 )
             )
         ]
@@ -380,7 +413,11 @@ def get_history_archive():
 
         def fetch_target_date(target_date):
             return fetch_historical_record(
-                ocid, world_name, target_date, today
+                ocid,
+                world_name,
+                target_date,
+                today,
+                saved_record=stored_by_date.get(target_date.isoformat()),
             )
 
         with ThreadPoolExecutor(max_workers=4) as executor:
@@ -408,14 +445,17 @@ def get_history_archive():
             "availableRecords": sum(item.get("recordStatus") == "available" for item in fetched_records),
             "noDataRecords": sum(item.get("recordStatus") == "not_ready" for item in fetched_records),
             "remainingDays": sum(
-                (start_date + timedelta(days=index)).isoformat() not in stored_by_date
-                or stored_by_date[(start_date + timedelta(days=index)).isoformat()].get("recordStatus") != "available"
-                or (
-                    stored_by_date[(start_date + timedelta(days=index)).isoformat()].get("recordStatus") == "available"
-                    and (
-                        not stored_by_date[(start_date + timedelta(days=index)).isoformat()].get("experienceRateChecked", False)
-                        or stored_by_date[(start_date + timedelta(days=index)).isoformat()].get("experienceRate") is None
+                (
+                    (start_date + timedelta(days=index)).isoformat() not in stored_by_date
+                    or stored_by_date[(start_date + timedelta(days=index)).isoformat()].get("recordStatus") != "available"
+                    or stored_by_date[(start_date + timedelta(days=index)).isoformat()].get("rankingSourceDate")
+                    != (start_date + timedelta(days=index)).isoformat()
+                    or (
+                        stored_by_date[(start_date + timedelta(days=index)).isoformat()].get("ranking") is not None
+                        and stored_by_date[(start_date + timedelta(days=index)).isoformat()].get("rankingScope") != "overall"
                     )
+                    or not stored_by_date[(start_date + timedelta(days=index)).isoformat()].get("experienceRateChecked", False)
+                    or stored_by_date[(start_date + timedelta(days=index)).isoformat()].get("experienceRate") is None
                 )
                 for index in range(days)
             )
@@ -442,16 +482,14 @@ def get_history_archive():
         if saved:
             history.append({
                 "date": date_string,
-                "ranking": (
-                    saved.get("ranking")
-                    if saved.get("rankingScope") == "overall"
-                    else None
-                ),
+                "ranking": _verified_overall_rank(saved, date_string),
                 "rankingScope": (
                     "overall"
-                    if saved.get("rankingScope") == "overall" and saved.get("ranking") is not None
+                    if _verified_overall_rank(saved, date_string) is not None
                     else None
                 ),
+                "rankingSourceDate": saved.get("rankingSourceDate"),
+
                 "level": saved.get("level"),
                 "experience": saved.get("experience"),
                 "experienceRate": saved.get("experienceRate"),
@@ -467,6 +505,7 @@ def get_history_archive():
                 "experience": None,
                 "experienceRate": None,
                 "experienceRateChecked": False,
+                "rankingSourceDate": None,
                 "recordStatus": "not_collected",
                 "recordSource": None
             })

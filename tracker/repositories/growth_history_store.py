@@ -91,6 +91,7 @@ class GrowthHistoryStore:
                             experience NUMERIC(30, 0),
                             ranking INTEGER,
                             ranking_scope TEXT,
+                            ranking_source_date DATE,
                             experience_rate NUMERIC(7, 4),
                             experience_rate_checked BOOLEAN NOT NULL DEFAULT FALSE,
                             record_status TEXT NOT NULL
@@ -104,6 +105,12 @@ class GrowthHistoryStore:
                         """
                         ALTER TABLE growth_daily_snapshots
                         ADD COLUMN IF NOT EXISTS ranking_scope TEXT
+                        """
+                    )
+                    connection.execute(
+                        """
+                        ALTER TABLE growth_daily_snapshots
+                        ADD COLUMN IF NOT EXISTS ranking_source_date DATE
                         """
                     )
                     connection.execute(
@@ -170,6 +177,7 @@ class GrowthHistoryStore:
                             experience NUMERIC,
                             ranking INTEGER,
                             ranking_scope TEXT,
+                            ranking_source_date TEXT,
                             experience_rate REAL,
                             experience_rate_checked INTEGER NOT NULL DEFAULT 0,
                             record_status TEXT NOT NULL
@@ -186,6 +194,8 @@ class GrowthHistoryStore:
                     }
                     if "ranking_scope" not in columns:
                         connection.execute("ALTER TABLE growth_daily_snapshots ADD COLUMN ranking_scope TEXT")
+                    if "ranking_source_date" not in columns:
+                        connection.execute("ALTER TABLE growth_daily_snapshots ADD COLUMN ranking_source_date TEXT")
                     if "experience_rate" not in columns:
                         connection.execute(
                             "ALTER TABLE growth_daily_snapshots ADD COLUMN experience_rate REAL"
@@ -258,12 +268,30 @@ class GrowthHistoryStore:
             experience = cls._to_integer(record.get("experience"))
             if level is None or experience is None:
                 return None
-            ranking = cls._to_integer(record.get("ranking"))
-            if (
-                ranking is not None
-                and (ranking <= 0 or record.get("rankingScope") != "overall")
+            ranking_source_date = None
+            try:
+                parsed_source_date = date.fromisoformat(
+                    str(record.get("rankingSourceDate") or "")
+                )
+                if parsed_source_date == snapshot_date:
+                    ranking_source_date = parsed_source_date
+            except (TypeError, ValueError):
+                pass
+
+            raw_ranking = record.get("ranking")
+            ranking = cls._to_integer(raw_ranking)
+            if raw_ranking not in (None, "") and (
+                ranking is None
+                or ranking <= 0
+                or record.get("rankingScope") != "overall"
+                or ranking_source_date is None
             ):
                 ranking = None
+                ranking_source_date = None
+            elif record.get("rankingScope") not in (None, "overall"):
+                # 비종합 랭킹은 해당 날짜의 종합 순위 부재를 증명하지 않는다.
+                ranking_source_date = None
+
             ranking_scope = "overall" if ranking is not None else None
             return (
                 str(ocid),
@@ -274,6 +302,7 @@ class GrowthHistoryStore:
                 experience,
                 ranking,
                 ranking_scope,
+                ranking_source_date.isoformat() if ranking_source_date else None,
                 cls._to_rate(record.get("experienceRate")),
                 bool(record.get("experienceRateChecked", False)),
                 "available",
@@ -287,6 +316,7 @@ class GrowthHistoryStore:
                 snapshot_date.isoformat(),
                 str(character_name),
                 world_name,
+                None,
                 None,
                 None,
                 None,
@@ -311,8 +341,9 @@ class GrowthHistoryStore:
             query = """
                 INSERT INTO growth_daily_snapshots
                     (ocid, snapshot_date, character_name, world_name, level,
-                     experience, ranking, ranking_scope, experience_rate, experience_rate_checked, record_status)
-                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                     experience, ranking, ranking_scope, ranking_source_date,
+                     experience_rate, experience_rate_checked, record_status)
+                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
                 ON CONFLICT (ocid, snapshot_date) DO UPDATE SET
                     character_name = EXCLUDED.character_name,
                     world_name = EXCLUDED.world_name,
@@ -320,6 +351,7 @@ class GrowthHistoryStore:
                     experience = EXCLUDED.experience,
                     ranking = EXCLUDED.ranking,
                     ranking_scope = EXCLUDED.ranking_scope,
+                    ranking_source_date = EXCLUDED.ranking_source_date,
                     experience_rate = EXCLUDED.experience_rate,
                     experience_rate_checked = EXCLUDED.experience_rate_checked,
                     record_status = EXCLUDED.record_status,
@@ -335,6 +367,7 @@ class GrowthHistoryStore:
                     OR growth_daily_snapshots.experience IS DISTINCT FROM EXCLUDED.experience
                     OR growth_daily_snapshots.ranking IS DISTINCT FROM EXCLUDED.ranking
                     OR growth_daily_snapshots.ranking_scope IS DISTINCT FROM EXCLUDED.ranking_scope
+                    OR growth_daily_snapshots.ranking_source_date IS DISTINCT FROM EXCLUDED.ranking_source_date
                     OR growth_daily_snapshots.experience_rate IS DISTINCT FROM EXCLUDED.experience_rate
                     OR growth_daily_snapshots.experience_rate_checked IS DISTINCT FROM EXCLUDED.experience_rate_checked
                     OR growth_daily_snapshots.record_status IS DISTINCT FROM EXCLUDED.record_status
@@ -344,8 +377,9 @@ class GrowthHistoryStore:
             query = """
                 INSERT INTO growth_daily_snapshots
                     (ocid, snapshot_date, character_name, world_name, level,
-                     experience, ranking, ranking_scope, experience_rate, experience_rate_checked, record_status)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                     experience, ranking, ranking_scope, ranking_source_date,
+                     experience_rate, experience_rate_checked, record_status)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 ON CONFLICT (ocid, snapshot_date) DO UPDATE SET
                     character_name = excluded.character_name,
                     world_name = excluded.world_name,
@@ -353,6 +387,7 @@ class GrowthHistoryStore:
                     experience = excluded.experience,
                     ranking = excluded.ranking,
                     ranking_scope = excluded.ranking_scope,
+                    ranking_source_date = excluded.ranking_source_date,
                     experience_rate = excluded.experience_rate,
                     experience_rate_checked = excluded.experience_rate_checked,
                     record_status = excluded.record_status,
@@ -368,6 +403,7 @@ class GrowthHistoryStore:
                     OR growth_daily_snapshots.experience IS NOT excluded.experience
                     OR growth_daily_snapshots.ranking IS NOT excluded.ranking
                     OR growth_daily_snapshots.ranking_scope IS NOT excluded.ranking_scope
+                    OR growth_daily_snapshots.ranking_source_date IS NOT excluded.ranking_source_date
                     OR growth_daily_snapshots.experience_rate IS NOT excluded.experience_rate
                     OR growth_daily_snapshots.experience_rate_checked IS NOT excluded.experience_rate_checked
                     OR growth_daily_snapshots.record_status IS NOT excluded.record_status
@@ -424,8 +460,8 @@ class GrowthHistoryStore:
         placeholder = "%s" if self.uses_postgres else "?"
         query = f"""
             SELECT snapshot_date, character_name, world_name, level,
-                   experience, ranking, ranking_scope, experience_rate, experience_rate_checked,
-                   record_status, recorded_at
+                   experience, ranking, ranking_scope, ranking_source_date,
+                   experience_rate, experience_rate_checked, record_status, recorded_at
             FROM growth_daily_snapshots
             WHERE ocid = {placeholder} AND snapshot_date >= {placeholder}
               AND snapshot_date <= {placeholder}
@@ -447,7 +483,7 @@ class GrowthHistoryStore:
 
         result = []
         for row in rows:
-            snapshot_date, saved_name, saved_world, level, experience, ranking, ranking_scope, experience_rate, experience_rate_checked, status, recorded_at = row
+            snapshot_date, saved_name, saved_world, level, experience, ranking, ranking_scope, ranking_source_date, experience_rate, experience_rate_checked, status, recorded_at = row
             result.append({
                 "date": snapshot_date.isoformat() if hasattr(snapshot_date, "isoformat") else str(snapshot_date),
                 "characterName": saved_name,
@@ -456,6 +492,7 @@ class GrowthHistoryStore:
                 "experience": self._to_integer(experience),
                 "ranking": self._to_integer(ranking),
                 "rankingScope": ranking_scope,
+                "rankingSourceDate": ranking_source_date.isoformat() if hasattr(ranking_source_date, "isoformat") else (str(ranking_source_date) if ranking_source_date else None),
                 "experienceRate": self._to_rate(experience_rate),
                 "experienceRateChecked": bool(experience_rate_checked),
                 "recordStatus": status,
