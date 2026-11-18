@@ -28,6 +28,8 @@ def provider_error_type(error):
     explicit = getattr(error, "error_type", None)
     if explicit:
         return explicit
+    if any(token in str(error).upper() for token in ("RESOURCE_EXHAUSTED", "QUOTA")):
+        return "provider_quota"
     response = getattr(error, "response", None)
     status = getattr(response, "status_code", None) or getattr(error, "status_code", None)
     if status == 429:
