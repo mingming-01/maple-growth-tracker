@@ -26,7 +26,7 @@ class GrowthHistoryStoreTests(unittest.TestCase):
 
     def test_only_valid_available_and_not_ready_records_are_saved(self):
         records = [
-            {"date": self.today.isoformat(), "recordStatus": "available", "level": 280, "experience": 12345, "ranking": 100, "rankingScope": "overall"},
+            {"date": self.today.isoformat(), "recordStatus": "available", "level": 280, "experience": 12345, "ranking": 100, "rankingScope": "overall", "rankingSourceDate": self.today.isoformat()},
             {"date": (self.today - timedelta(days=1)).isoformat(), "recordStatus": "not_ready"},
             {"date": (self.today - timedelta(days=2)).isoformat(), "recordStatus": "unavailable"},
             {"date": "not-a-date", "recordStatus": "available", "level": 280, "experience": 12345},
@@ -54,6 +54,7 @@ class GrowthHistoryStoreTests(unittest.TestCase):
                 "experience": 12345,
                 "ranking": 100,
                 "rankingScope": "overall",
+                "rankingSourceDate": record_date,
                 "experienceRate": "12.3456%",
                 "experienceRateChecked": True,
             }],
@@ -73,6 +74,7 @@ class GrowthHistoryStoreTests(unittest.TestCase):
             "experience": 12345,
             "ranking": 77,
             "rankingScope": "world",
+            "rankingSourceDate": self.today.isoformat(),
             "experienceRate": 12.5,
             "experienceRateChecked": True,
         }, {
@@ -82,6 +84,7 @@ class GrowthHistoryStoreTests(unittest.TestCase):
             "experience": 12000,
             "ranking": 0,
             "rankingScope": "overall",
+            "rankingSourceDate": (self.today - timedelta(days=1)).isoformat(),
             "experienceRate": 11.5,
             "experienceRateChecked": True,
         }]
@@ -106,8 +109,8 @@ class GrowthHistoryStoreTests(unittest.TestCase):
 
     def test_same_character_and_date_is_upserted_instead_of_duplicated(self):
         record_date = self.today.isoformat()
-        first = [{"date": record_date, "recordStatus": "available", "level": 280, "experience": 100, "ranking": 20, "rankingScope": "overall"}]
-        updated = [{"date": record_date, "recordStatus": "available", "level": 281, "experience": 200, "ranking": 18, "rankingScope": "overall"}]
+        first = [{"date": record_date, "recordStatus": "available", "level": 280, "experience": 100, "ranking": 20, "rankingScope": "overall", "rankingSourceDate": record_date}]
+        updated = [{"date": record_date, "recordStatus": "available", "level": 281, "experience": 200, "ranking": 18, "rankingScope": "overall", "rankingSourceDate": record_date}]
 
         self.store.save_records("test-ocid", "테스트캐릭터", "테스트월드", first)
         self.store.save_records("test-ocid", "테스트캐릭터", "테스트월드", updated)
@@ -130,6 +133,7 @@ class GrowthHistoryStoreTests(unittest.TestCase):
             "experience": 12345,
             "ranking": 100,
             "rankingScope": "overall",
+            "rankingSourceDate": self.today.isoformat(),
             "experienceRate": 12.3456,
             "experienceRateChecked": True,
         }
@@ -177,7 +181,7 @@ class GrowthHistoryStoreTests(unittest.TestCase):
         record_date = self.today.isoformat()
         self.store.save_records(
             "test-ocid", "테스트캐릭터", "테스트월드",
-            [{"date": record_date, "recordStatus": "available", "level": 280, "experience": 100, "ranking": 20, "rankingScope": "overall"}]
+            [{"date": record_date, "recordStatus": "available", "level": 280, "experience": 100, "ranking": 20, "rankingScope": "overall", "rankingSourceDate": record_date}]
         )
         self.store.save_records(
             "test-ocid", "테스트캐릭터", "테스트월드",
@@ -191,7 +195,7 @@ class GrowthHistoryStoreTests(unittest.TestCase):
     def test_date_range_is_inclusive_and_sorted(self):
         dates = [self.today - timedelta(days=2), self.today, self.today - timedelta(days=1)]
         records = [
-            {"date": item.isoformat(), "recordStatus": "available", "level": 280, "experience": index + 1, "ranking": 50, "rankingScope": "overall"}
+            {"date": item.isoformat(), "recordStatus": "available", "level": 280, "experience": index + 1, "ranking": 50, "rankingScope": "overall", "rankingSourceDate": item.isoformat()}
             for index, item in enumerate(dates)
         ]
         self.store.save_records("test-ocid", "테스트캐릭터", "테스트월드", records)
@@ -314,6 +318,7 @@ class GrowthHistoryApiTests(unittest.TestCase):
                 "experience": 123456,
                 "ranking": 321,
                 "rankingScope": "overall",
+                "rankingSourceDate": (self.today - timedelta(days=1)).isoformat(),
                 "experienceRate": 12.345,
                 "experienceRateChecked": True
             }]
@@ -356,7 +361,8 @@ class GrowthHistoryApiTests(unittest.TestCase):
                 "level": 279,
                 "experience": 98765,
                 "ranking": 654,
-                "rankingScope": "overall"
+                "rankingScope": "overall",
+                "rankingSourceDate": target_date
             }]
         )
 
@@ -383,6 +389,7 @@ class GrowthHistoryApiTests(unittest.TestCase):
                 "experience": 123456,
                 "ranking": 77,
                 "rankingScope": "overall",
+                "rankingSourceDate": target_date,
                 "experienceRate": 12.345,
                 "experienceRateChecked": True,
             }],
@@ -631,6 +638,7 @@ class GrowthHistoryApiTests(unittest.TestCase):
                 "experienceRate": None if offset in (1, 2) else 12.345,
                 "experienceRateChecked": offset != 1,
                 "rankingScope": "overall",
+                "rankingSourceDate": (today - timedelta(days=offset)).isoformat(),
             }
             for offset in range(1, 7)
         ]
@@ -691,6 +699,7 @@ class GrowthHistoryApiTests(unittest.TestCase):
                 # This test covers reuse of fully checked historical records.
                 "experienceRateChecked": True,
                 "rankingScope": "overall",
+                "rankingSourceDate": (today - timedelta(days=offset)).isoformat(),
             }
             for offset in range(1, 7)
         ]
