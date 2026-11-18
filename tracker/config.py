@@ -20,6 +20,16 @@ def _float_env(name, default):
 
 load_dotenv()
 
+DEFAULT_OPENROUTER_MODEL = "openrouter/free"
+
+
+def _resolve_openrouter_model(value):
+    """Use the free router unless the operator explicitly selects a model."""
+    return str(value or DEFAULT_OPENROUTER_MODEL).strip() or DEFAULT_OPENROUTER_MODEL
+
+
+_configured_openrouter_model = _resolve_openrouter_model(os.getenv("OPENROUTER_MODEL"))
+
 
 class Config:
     FLASK_SECRET_KEY = os.getenv("FLASK_SECRET_KEY")
@@ -28,7 +38,8 @@ class Config:
     NEXON_API_KEY = os.getenv("NEXON_API_KEY", "")
     GEMINI_API_KEY = os.getenv("GEMINI_API_KEY", "")
     OPENROUTER_API_KEY = os.getenv("OPENROUTER_API_KEY", "")
-    OPENROUTER_MODEL = os.getenv("OPENROUTER_MODEL", "openrouter/free")
+    # Paid or other explicit models are opt-in through OPENROUTER_MODEL.
+    OPENROUTER_MODEL = _configured_openrouter_model
 
     ADMIN_USERNAME = os.getenv("ADMIN_USERNAME", "")
     ADMIN_PASSWORD_HASH = os.getenv("ADMIN_PASSWORD_HASH", "")
@@ -48,11 +59,15 @@ class Config:
     AI_NEXON_READ_TIMEOUT = _float_env("AI_NEXON_READ_TIMEOUT", 2.5)
     AI_PROVIDER_CONNECT_TIMEOUT = _float_env("AI_PROVIDER_CONNECT_TIMEOUT", 1.5)
     AI_GEMINI_READ_TIMEOUT = _float_env("AI_GEMINI_READ_TIMEOUT", 5.0)
-    AI_OPENROUTER_READ_TIMEOUT = _float_env("AI_OPENROUTER_READ_TIMEOUT", 16.5)
+    AI_OPENROUTER_READ_TIMEOUT = _float_env("AI_OPENROUTER_READ_TIMEOUT", 25.0)
     AI_GEMINI_TOTAL_TIMEOUT = _float_env("AI_GEMINI_TOTAL_TIMEOUT", 7.0)
-    AI_OPENROUTER_TOTAL_TIMEOUT = _float_env("AI_OPENROUTER_TOTAL_TIMEOUT", 18.0)
+    AI_OPENROUTER_TOTAL_TIMEOUT = _float_env("AI_OPENROUTER_TOTAL_TIMEOUT", 27.0)
+    AI_OPENROUTER_MIN_REMAINING_SECONDS = _float_env("AI_OPENROUTER_MIN_REMAINING_SECONDS", 20.0)
+    AI_OPENROUTER_MAX_OUTPUT_TOKENS = _int_env("AI_OPENROUTER_MAX_OUTPUT_TOKENS", 2048)
+    AI_REQUEST_TOTAL_TIMEOUT = _float_env("AI_REQUEST_TOTAL_TIMEOUT", 32.0)
+    GEMINI_QUOTA_COOLDOWN_SECONDS = _int_env("GEMINI_QUOTA_COOLDOWN_SECONDS", 300)
     GEMINI_MODEL = os.getenv("GEMINI_MODEL", "gemini-3.6-flash")
-    # OpenRouter는 Gunicorn 기본 30초 제한 안에서 끝나도록 짧게 한 번만 호출한다.
+    # Provider call timeouts are capped by the 32-second request deadline.
     OPENROUTER_CONNECT_TIMEOUT = _float_env("OPENROUTER_CONNECT_TIMEOUT", 2.5)
     OPENROUTER_READ_TIMEOUT = _float_env("OPENROUTER_READ_TIMEOUT", 6.5)
     NEXON_API_MIN_INTERVAL = _float_env("NEXON_API_MIN_INTERVAL", 0.22)

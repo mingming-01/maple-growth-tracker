@@ -5,21 +5,62 @@ from concurrent.futures import ThreadPoolExecutor
 import requests
 
 
+def _positive_rank(value):
+    """양의 정수인 랭킹 값만 유효한 순위로 취급한다."""
+    if isinstance(value, bool) or value in (None, ""):
+        return None
+    try:
+        ranking = int(str(value).replace(",", "").strip())
+    except (TypeError, ValueError):
+        return None
+    return ranking if ranking > 0 else None
+
+
 def _get_cached_current_ranking(basic, target_date, today):
-    """캐릭터 조회 스냅샷에서 오늘 종합 랭킹을 안전하게 추출한다."""
+    """실제 집계일이 같은 종합 랭킹만 프로필 스냅샷에서 재사용한다."""
     if target_date != today or not isinstance(basic, dict):
         return None
     if basic.get("ranking_data_status") != "available":
         return None
-    ranking = basic.get("ranking")
+    if basic.get("ranking_scope") != "overall":
+        return None
+    ranking_date = basic.get("ranking_date")
+    if ranking_date != target_date.isoformat():
+        return None
+    ranking = _positive_rank(basic.get("ranking"))
     if ranking is None:
         return None
     return {
         "ranking": ranking,
         "ranking_scope": "overall",
+        "ranking_source_date": ranking_date,
         "character_level": basic.get("character_level"),
         "character_exp": basic.get("character_exp"),
         "character_exp_rate": basic.get("character_exp_rate"),
+    }
+
+
+def _saved_record_without_unverified_ranking(date_string, saved):
+    """기존 성장 데이터는 보존하고 실제 집계일을 확인하지 못한 순위는 숨긴다."""
+    ranking = (
+        _positive_rank(saved.get("ranking"))
+        if (
+            saved.get("rankingSourceDate") == date_string
+            and saved.get("rankingScope") == "overall"
+        )
+        else None
+    )
+    return {
+        "date": date_string,
+        "ranking": ranking,
+        "rankingScope": "overall" if ranking is not None else None,
+        "rankingSourceDate": saved.get("rankingSourceDate"),
+        "level": saved.get("level"),
+        "experience": saved.get("experience"),
+        "experienceRate": saved.get("experienceRate"),
+        "experienceRateChecked": saved.get("experienceRateChecked", False),
+        "recordStatus": saved.get("recordStatus"),
+        "_fromStore": True,
     }
 
 
@@ -44,13 +85,17 @@ def _fetch_recent_record(
         target_date == today
         or (
             saved is not None
-            and saved.get("recordStatus") == "unavailable"
+            and saved.get("recordStatus") in ("unavailable", "not_ready")
         )
         or (
             saved is not None
             and saved.get("recordStatus") == "available"
             and (
-                saved.get("rankingScope") != "overall"
+                saved.get("rankingSourceDate") != date_string
+                or (
+                    saved.get("ranking") is not None
+                    and saved.get("rankingScope") != "overall"
+                )
                 or not saved.get("experienceRateChecked", False)
                 or saved.get("experienceRate") is None
             )
@@ -62,6 +107,7 @@ def _fetch_recent_record(
             "date": date_string,
             "ranking": saved.get("ranking"),
             "rankingScope": saved.get("rankingScope"),
+            "rankingSourceDate": saved.get("rankingSourceDate"),
             "level": saved.get("level"),
             "experience": saved.get("experience"),
             "experienceRate": saved.get("experienceRate"),
@@ -83,7 +129,7 @@ def _fetch_recent_record(
             world_type=get_world_type(world_name),
         )
 
-    if ranking_data:
+    if ranking_data and response is not None and response.status_code == 200:
         experience_rate = ranking_data.get("character_exp_rate")
         rate_checked = experience_rate is not None
         if experience_rate is None:
@@ -96,15 +142,17 @@ def _fetch_recent_record(
                     )
                 except requests.RequestException:
                     rate_data, rate_response = None, None
-            if rate_data:
+            if rate_data and rate_response and rate_response.status_code == 200:
                 experience_rate = rate_data.get("character_exp_rate")
             rate_checked = bool(
                 rate_response is not None and rate_response.status_code == 200
             )
+        ranking = _positive_rank(ranking_data.get("ranking"))
         return {
             "date": date_string,
-            "ranking": ranking_data.get("ranking"),
-            "rankingScope": "overall",
+            "ranking": ranking,
+            "rankingScope": "overall" if ranking is not None else None,
+            "rankingSourceDate": date_string,
             "level": ranking_data.get("character_level"),
             "experience": ranking_data.get("character_exp"),
             "experienceRate": experience_rate,
@@ -112,32 +160,26 @@ def _fetch_recent_record(
             "recordStatus": "available",
         }
 
-    # 429/5xx 등 일시적 랭킹 API 오류에는 기본 정보 API를 연쇄 호출하지 않는다.
-    if is_temporary_nexon_failure(response):
+    # 랭킹 API 오류는 데이터 없음과 구분한다. 기존 행은 보존하되
+    # 집계일을 증명할 수 없는 순위는 이 응답에서 노출하지 않는다.
+    if response is None or response.status_code != 200:
         if saved and saved.get("recordStatus") == "available":
-            return {
-                "date": date_string,
-                "ranking": None,
-                "rankingScope": None,
-                "level": saved.get("level"),
-                "experience": saved.get("experience"),
-                "experienceRate": saved.get("experienceRate"),
-                "experienceRateChecked": saved.get("experienceRateChecked", False),
-                "recordStatus": "available",
-                "_fromStore": True,
-            }
+            return _saved_record_without_unverified_ranking(date_string, saved)
         return {
             "date": date_string,
             "ranking": None,
+            "rankingScope": None,
+            "rankingSourceDate": None,
             "level": None,
             "experience": None,
             "experienceRate": None,
             "experienceRateChecked": False,
             "recordStatus": "unavailable",
-            "retryable": True,
+            "retryable": is_temporary_nexon_failure(response),
         }
 
-    # 정상 응답으로 랭킹 항목이 없을 때만 기본 정보 API를 보조 조회한다.
+    # 해당 날짜의 종합 랭킹 API가 정상적으로 빈 응답을 보낸 경우에만
+    # 기본 정보 API로 레벨·경험치를 보충한다.
     try:
         basic_data, basic_response = get_basic_character_snapshot(
             ocid,
@@ -147,43 +189,47 @@ def _fetch_recent_record(
     except requests.RequestException:
         basic_data, basic_response = None, None
 
-    if basic_data:
+    if (
+        basic_data
+        and basic_response is not None
+        and basic_response.status_code == 200
+    ):
         level = basic_data.get("character_level")
         experience = basic_data.get("character_exp")
         if level is not None and experience is not None:
             return {
                 "date": date_string,
                 "ranking": None,
+                "rankingScope": None,
+                "rankingSourceDate": date_string,
                 "level": level,
                 "experience": experience,
                 "experienceRate": basic_data.get("character_exp_rate"),
-                "experienceRateChecked": bool(
-                    basic_response is not None and basic_response.status_code == 200
-                ),
+                "experienceRateChecked": True,
                 "recordStatus": "available",
             }
 
-    # 빈 응답으로 기존 정상 스냅샷을 덮어쓰지 않는다.
+    # 랭킹 API가 정확한 날짜에 정상 응답했지만 순위가 없으면
+    # 기존 레벨·경험치는 유지하고 미검증 순위만 제거해 저장한다.
     if saved and saved.get("recordStatus") == "available":
         return {
             "date": date_string,
             "ranking": None,
             "rankingScope": None,
+            "rankingSourceDate": date_string,
             "level": saved.get("level"),
             "experience": saved.get("experience"),
             "experienceRate": saved.get("experienceRate"),
             "experienceRateChecked": saved.get("experienceRateChecked", False),
             "recordStatus": "available",
-            "_fromStore": True,
         }
 
-    if (
-        response is not None and response.status_code == 200
-        and basic_response is not None and basic_response.status_code == 200
-    ):
+    if basic_response is not None and basic_response.status_code == 200:
         return {
             "date": date_string,
             "ranking": None,
+            "rankingScope": None,
+            "rankingSourceDate": date_string,
             "level": None,
             "experience": None,
             "experienceRate": None,
@@ -191,19 +237,17 @@ def _fetch_recent_record(
             "recordStatus": "not_ready",
         }
 
-    retryable = (
-        is_temporary_nexon_failure(response)
-        or is_temporary_nexon_failure(basic_response)
-    )
     return {
         "date": date_string,
         "ranking": None,
+        "rankingScope": None,
+        "rankingSourceDate": None,
         "level": None,
         "experience": None,
         "experienceRate": None,
         "experienceRateChecked": False,
         "recordStatus": "unavailable",
-        "retryable": retryable,
+        "retryable": is_temporary_nexon_failure(basic_response),
     }
 
 

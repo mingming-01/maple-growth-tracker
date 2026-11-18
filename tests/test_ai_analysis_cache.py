@@ -20,6 +20,8 @@ class AIResponseCacheTests(unittest.TestCase):
         with self.app.app_context():
             self.state = get_runtime_state()
             self.state.ai_response_cache.clear()
+            self.state.ai_provider_state_store.clear_cooldown("gemini")
+            self.state.ai_provider_state_store.clear_cooldown("gemini")
 
     def tearDown(self):
         with self.app.app_context():
@@ -74,6 +76,7 @@ class AIResponseCacheTests(unittest.TestCase):
                 first = tracker.generate_ai_analysis(character, history, metrics)
                 second = tracker.generate_ai_analysis(character, history, metrics)
 
+        self.assertIn("analysis", first, f"첫 번째 AI 분석 결과: {first!r}")
         self.assertEqual(first["analysis"], second["analysis"])
         self.assertFalse(first["cacheHit"])
         self.assertTrue(second["cacheHit"])

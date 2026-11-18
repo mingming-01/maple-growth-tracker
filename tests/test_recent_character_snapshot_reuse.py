@@ -20,6 +20,7 @@ class RecentCharacterBasicSnapshotTests(TestCase):
             "experience": 123456,
             "experienceRate": 45.6,
             "ranking": 1234,
+            "rankingDate": "2026-11-10",
             "rankingDataStatus": "available",
         }
 
@@ -43,6 +44,8 @@ class RecentCharacterBasicSnapshotTests(TestCase):
                 "character_exp": 123456,
                 "character_exp_rate": 45.6,
                 "ranking": 1234,
+                "ranking_scope": "overall",
+                "ranking_date": "2026-11-10",
                 "ranking_data_status": "available",
             },
         )
@@ -92,6 +95,8 @@ class RecentCharacterBasicSnapshotTests(TestCase):
     def test_reuses_only_available_current_ranking(self):
         basic = {
             "ranking": 1234,
+            "ranking_scope": "overall",
+            "ranking_date": self.now.date().isoformat(),
             "ranking_data_status": "available",
             "character_level": 290,
             "character_exp": 123456,
@@ -107,10 +112,35 @@ class RecentCharacterBasicSnapshotTests(TestCase):
             {
                 "ranking": 1234,
                 "ranking_scope": "overall",
+                "ranking_source_date": "2026-11-10",
                 "character_level": 290,
                 "character_exp": 123456,
                 "character_exp_rate": 45.6,
             },
+        )
+
+    def test_does_not_reuse_previous_day_fallback_as_todays_ranking(self):
+        basic = {
+            "ranking": 1234,
+            "ranking_scope": "overall",
+            "ranking_date": (self.now.date() - timedelta(days=1)).isoformat(),
+            "ranking_data_status": "available",
+        }
+
+        self.assertIsNone(
+            _get_cached_current_ranking(basic, self.now.date(), self.now.date())
+        )
+
+    def test_does_not_reuse_unknown_ranking_scope(self):
+        basic = {
+            "ranking": 1234,
+            "ranking_scope": "job",
+            "ranking_date": self.now.date().isoformat(),
+            "ranking_data_status": "available",
+        }
+
+        self.assertIsNone(
+            _get_cached_current_ranking(basic, self.now.date(), self.now.date())
         )
 
     def test_does_not_reuse_partial_or_missing_ranking(self):

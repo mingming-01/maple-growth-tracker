@@ -29,6 +29,108 @@ class ServerAIMetricsTests(unittest.TestCase):
         self.assertIsNone(result["metrics"]["prediction"])
         self.assertEqual(len(result["history"]), 7)
 
+    def test_unverified_legacy_rank_is_excluded_from_ai_inputs(self):
+        today = date(2026, 11, 16)
+        records = [
+            {
+                "date": "2026-11-15",
+                "level": 280,
+                "experience": 1000,
+                "ranking": 77,
+                "rankingScope": "overall",
+                "rankingSourceDate": None,
+                "recordStatus": "available",
+            },
+            {
+                "date": "2026-11-16",
+                "level": 280,
+                "experience": 1100,
+                "ranking": 66,
+                "rankingScope": "overall",
+                "rankingSourceDate": "2026-11-15",
+                "recordStatus": "available",
+            },
+        ]
+
+        result = build_server_growth_metrics(
+            {"experienceRate": 42.5}, records, reference_date=today, period_days=7
+        )
+
+        self.assertEqual(
+            [item["ranking"] for item in result["history"]],
+            [None, None],
+        )
+        self.assertIsNone(result["metrics"]["rankingChange"])
+
+    def test_ai_rank_change_requires_two_consecutive_verified_overall_ranks(self):
+        today = date(2026, 11, 16)
+        records = [
+            {
+                "date": "2026-11-13",
+                "level": 280,
+                "experience": 1000,
+                "ranking": 300,
+                "rankingScope": "overall",
+                "rankingSourceDate": "2026-11-13",
+                "recordStatus": "available",
+            },
+            {
+                "date": "2026-11-14",
+                "level": 280,
+                "experience": 1100,
+                "ranking": 280,
+                "rankingScope": "overall",
+                "rankingSourceDate": "2026-11-14",
+                "recordStatus": "available",
+            },
+            {
+                "date": "2026-11-16",
+                "level": 280,
+                "experience": 1200,
+                "ranking": 250,
+                "rankingScope": "overall",
+                "rankingSourceDate": "2026-11-16",
+                "recordStatus": "available",
+            },
+        ]
+
+        result = build_server_growth_metrics(
+            {"experienceRate": 42.5}, records, reference_date=today, period_days=7
+        )
+
+        self.assertEqual(result["history"][1]["rankingChange"], 20)
+        self.assertIsNone(result["history"][2]["rankingChange"])
+        self.assertEqual(result["metrics"]["rankingChange"], None)
+
+    def test_zero_and_fractional_rank_values_are_rejected(self):
+        today = date(2026, 11, 16)
+        records = [
+            {
+                "date": "2026-11-15",
+                "level": 280,
+                "experience": 1000,
+                "ranking": 0,
+                "rankingScope": "overall",
+                "rankingSourceDate": "2026-11-15",
+                "recordStatus": "available",
+            },
+            {
+                "date": "2026-11-16",
+                "level": 280,
+                "experience": 1100,
+                "ranking": 12.5,
+                "rankingScope": "overall",
+                "rankingSourceDate": "2026-11-16",
+                "recordStatus": "available",
+            },
+        ]
+
+        result = build_server_growth_metrics(
+            {"experienceRate": 42.5}, records, reference_date=today, period_days=7
+        )
+
+        self.assertEqual([item["ranking"] for item in result["history"]], [None, None])
+
     def test_missing_dates_and_level_up_transitions_are_not_interpolated(self):
         today = date(2026, 11, 16)
         records = [
@@ -43,7 +145,7 @@ class ServerAIMetricsTests(unittest.TestCase):
         )
 
         self.assertEqual(result["metrics"]["observedChangeDays"], 2)
-        self.assertEqual(result["metrics"]["levelUps"][0]["date"], "2026-11-15")
+        self.assertEqual(result["metrics"]["levelUps"], [])
         self.assertIsNone(result["metrics"]["levelProgress"]["currentRate"])
         self.assertEqual(len(result["history"]), 4)
 

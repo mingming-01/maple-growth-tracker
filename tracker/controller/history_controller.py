@@ -31,7 +31,6 @@ from tracker.runtime import (
     load_api_snapshot,
     save_api_snapshot,
     set_cache,
-    stale_snapshot_response,
     with_data_status,
     get_cache,
     get_cache_timestamp,
@@ -82,8 +81,66 @@ def _load_recent_character_basic_snapshot(character_name, ocid, now=None):
         "character_exp": snapshot.get("experience"),
         "character_exp_rate": snapshot.get("experienceRate"),
         "ranking": snapshot.get("ranking"),
+        "ranking_scope": "overall",
+        "ranking_date": snapshot.get("rankingDate"),
         "ranking_data_status": snapshot.get("rankingDataStatus"),
     }
+
+
+def _verified_overall_rank(record, target_date):
+    """종합 랭킹의 범위·실제 집계일·양의 정수 여부를 함께 검증한다."""
+    if not isinstance(record, dict):
+        return None
+    if record.get("rankingScope") != "overall":
+        return None
+    if record.get("rankingSourceDate") != target_date:
+        return None
+    value = record.get("ranking")
+    if isinstance(value, bool) or value in (None, ""):
+        return None
+    try:
+        rank = int(str(value).replace(",", "").strip())
+    except (TypeError, ValueError):
+        return None
+    return rank if rank > 0 else None
+
+
+def _stale_history_response(cache_key, character_name, error_message):
+    """현재 형식 캐시를 우선 사용하고, 구형 캐시는 순위를 제거해 제공한다."""
+    snapshot, saved_at = load_api_snapshot(cache_key)
+    if snapshot is not None:
+        return jsonify(with_data_status(snapshot, "stale", saved_at)), 200
+
+    legacy_keys = (
+        f"history:rank-overall-v2:{character_name}",
+        f"history:{character_name}",
+    )
+    for legacy_key in legacy_keys:
+        legacy_snapshot, legacy_saved_at = load_api_snapshot(legacy_key)
+        if not isinstance(legacy_snapshot, dict):
+            continue
+        legacy_history = legacy_snapshot.get("history")
+        if not isinstance(legacy_history, list):
+            continue
+
+        sanitized = dict(legacy_snapshot)
+        sanitized_history = []
+        for record in legacy_history:
+            if not isinstance(record, dict):
+                sanitized_history.append(record)
+                continue
+            safe_record = dict(record)
+            safe_record["ranking"] = None
+            safe_record["rankingScope"] = None
+            safe_record["rankingSourceDate"] = None
+            safe_record["rankingChange"] = None
+            sanitized_history.append(safe_record)
+        sanitized["history"] = sanitized_history
+        return jsonify(with_data_status(
+            sanitized, "stale", legacy_saved_at
+        )), 200
+
+    return jsonify({"error": error_message}), 503
 
 
 # 최근 7일 성장 기록 조회 및 변화량 계산
@@ -101,16 +158,22 @@ def get_history():
     if len(requested_ocid) > 128:
         return jsonify({"error": "캐릭터 식별 정보가 올바르지 않습니다."}), 400
 
-    cache_key = f"history:{character_name}"
+    # 이전 캐시에는 과거 집계일의 프로필 랭킹이 오늘 순위로 섞였을 수 있어
+    # 정합성 기준을 적용한 새 키로 분리한다.
+    cache_key = f"history:rank-overall-v3:{character_name}"
     force_refresh = request.args.get("refresh") == "1"
     cached_history = None if force_refresh else get_cache(cache_key)
     cached_records = cached_history.get("history") if isinstance(cached_history, dict) else None
     cached_ranking_is_current = (
         isinstance(cached_records, list)
         and all(
-            item.get("rankingScope") == "overall"
+            isinstance(item, dict)
+            and item.get("rankingSourceDate") == item.get("date")
+            and (
+                item.get("ranking") is None
+                or _verified_overall_rank(item, item.get("date")) is not None
+            )
             for item in cached_records
-            if isinstance(item, dict) and item.get("ranking") is not None
         )
     )
     if cached_history is not None and cached_ranking_is_current:
@@ -140,15 +203,13 @@ def get_history():
             ocid, basic, response = resolve_character(character_name)
         if not ocid:
             if is_temporary_nexon_failure(response):
-                return stale_snapshot_response(
-                    cache_key, "넥슨 API가 일시적으로 응답하지 않습니다. 잠시 후 다시 시도해주세요."
+                return _stale_history_response(cache_key, character_name, "넥슨 API가 일시적으로 응답하지 않습니다. 잠시 후 다시 시도해주세요."
                 )
             return jsonify({"error": "캐릭터 정보를 찾을 수 없거나 조회할 수 없습니다."}), response.status_code
 
         if not basic:
             if is_temporary_nexon_failure(response):
-                return stale_snapshot_response(
-                    cache_key, "캐릭터 정보를 일시적으로 조회할 수 없습니다. 잠시 후 다시 시도해주세요."
+                return _stale_history_response(cache_key, character_name, "캐릭터 정보를 일시적으로 조회할 수 없습니다. 잠시 후 다시 시도해주세요."
                 )
             return jsonify({"error": "캐릭터 정보를 확인할 수 없습니다."}), response.status_code
 
@@ -181,8 +242,7 @@ def get_history():
             max_workers=3,
         )
     except requests.RequestException:
-        return stale_snapshot_response(
-            cache_key, "성장 기록 조회 중 넥슨 API 연결에 실패했습니다. 잠시 후 다시 시도해주세요."
+        return _stale_history_response(cache_key, character_name, "성장 기록 조회 중 넥슨 API 연결에 실패했습니다. 잠시 후 다시 시도해주세요."
         )
 
     failed_records = [item for item in history if item.get("recordStatus") == "unavailable"]
@@ -191,8 +251,7 @@ def get_history():
         # 하나라도 429/5xx/네트워크 오류가 있으면 전체 결과를 502로 단정하지 않고
         # 저장된 정상 스냅샷을 우선 제공하거나 재시도 가능한 503으로 응답한다.
         if any(item.get("retryable") for item in failed_records):
-            return stale_snapshot_response(
-                cache_key, "성장 기록 조회가 일시적으로 지연되고 있습니다. 잠시 후 다시 시도해주세요."
+            return _stale_history_response(cache_key, character_name, "성장 기록 조회가 일시적으로 지연되고 있습니다. 잠시 후 다시 시도해주세요."
             )
         return jsonify({"error": "성장 기록을 정상적으로 가져오지 못했습니다."}), 502
 
@@ -312,10 +371,25 @@ def get_history_archive():
             return limit_response
 
         # 브라우저에서 전달한 캐릭터명과 OCID를 확인해 다른 캐릭터 기록의 혼합 저장을 막는다.
+        # /api/character에서 최근에 OCID·이름·월드를 확인한 프로필이 있으면
+        # 배치마다 같은 기본 정보 API를 다시 호출하지 않는다.
         try:
-            verified_basic, verify_response = get_basic_character_snapshot(ocid, historical=True)
-        except requests.RequestException:
-            verified_basic, verify_response = None, None
+            verified_basic = _load_recent_character_basic_snapshot(
+                character_name, ocid
+            )
+        except Exception:
+            verified_basic = None
+
+        verify_response = None
+        if verified_basic is not None:
+            increment_metric("history.archive_identity_reused")
+        else:
+            try:
+                verified_basic, verify_response = get_basic_character_snapshot(
+                    ocid, historical=True
+                )
+            except requests.RequestException:
+                verified_basic, verify_response = None, None
 
         if not verified_basic:
             if is_temporary_nexon_failure(verify_response):
@@ -333,14 +407,20 @@ def get_history_archive():
         ]
         missing_dates = [
             target_date for target_date in batch_dates
-            if target_date.isoformat() not in stored_by_date
-            or stored_by_date[target_date.isoformat()].get("recordStatus") == "not_ready"
-            or (
-                stored_by_date[target_date.isoformat()].get("recordStatus") == "available"
-                and (
-                    stored_by_date[target_date.isoformat()].get("rankingScope") != "overall"
-                    or not stored_by_date[target_date.isoformat()].get("experienceRateChecked", False)
-                    or stored_by_date[target_date.isoformat()].get("experienceRate") is None
+            if (
+                target_date.isoformat() not in stored_by_date
+                or stored_by_date[target_date.isoformat()].get("recordStatus") in ("not_ready", "unavailable")
+                or (
+                    stored_by_date[target_date.isoformat()].get("recordStatus") == "available"
+                    and (
+                        stored_by_date[target_date.isoformat()].get("rankingSourceDate") != target_date.isoformat()
+                        or (
+                            stored_by_date[target_date.isoformat()].get("ranking") is not None
+                            and stored_by_date[target_date.isoformat()].get("rankingScope") != "overall"
+                        )
+                        or not stored_by_date[target_date.isoformat()].get("experienceRateChecked", False)
+                        or stored_by_date[target_date.isoformat()].get("experienceRate") is None
+                    )
                 )
             )
         ]
@@ -348,7 +428,11 @@ def get_history_archive():
 
         def fetch_target_date(target_date):
             return fetch_historical_record(
-                ocid, world_name, target_date, today
+                ocid,
+                world_name,
+                target_date,
+                today,
+                saved_record=stored_by_date.get(target_date.isoformat()),
             )
 
         with ThreadPoolExecutor(max_workers=4) as executor:
@@ -376,14 +460,17 @@ def get_history_archive():
             "availableRecords": sum(item.get("recordStatus") == "available" for item in fetched_records),
             "noDataRecords": sum(item.get("recordStatus") == "not_ready" for item in fetched_records),
             "remainingDays": sum(
-                (start_date + timedelta(days=index)).isoformat() not in stored_by_date
-                or stored_by_date[(start_date + timedelta(days=index)).isoformat()].get("recordStatus") != "available"
-                or (
-                    stored_by_date[(start_date + timedelta(days=index)).isoformat()].get("recordStatus") == "available"
-                    and (
-                        not stored_by_date[(start_date + timedelta(days=index)).isoformat()].get("experienceRateChecked", False)
-                        or stored_by_date[(start_date + timedelta(days=index)).isoformat()].get("experienceRate") is None
+                (
+                    (start_date + timedelta(days=index)).isoformat() not in stored_by_date
+                    or stored_by_date[(start_date + timedelta(days=index)).isoformat()].get("recordStatus") != "available"
+                    or stored_by_date[(start_date + timedelta(days=index)).isoformat()].get("rankingSourceDate")
+                    != (start_date + timedelta(days=index)).isoformat()
+                    or (
+                        stored_by_date[(start_date + timedelta(days=index)).isoformat()].get("ranking") is not None
+                        and stored_by_date[(start_date + timedelta(days=index)).isoformat()].get("rankingScope") != "overall"
                     )
+                    or not stored_by_date[(start_date + timedelta(days=index)).isoformat()].get("experienceRateChecked", False)
+                    or stored_by_date[(start_date + timedelta(days=index)).isoformat()].get("experienceRate") is None
                 )
                 for index in range(days)
             )
@@ -410,7 +497,14 @@ def get_history_archive():
         if saved:
             history.append({
                 "date": date_string,
-                "ranking": saved.get("ranking"),
+                "ranking": _verified_overall_rank(saved, date_string),
+                "rankingScope": (
+                    "overall"
+                    if _verified_overall_rank(saved, date_string) is not None
+                    else None
+                ),
+                "rankingSourceDate": saved.get("rankingSourceDate"),
+
                 "level": saved.get("level"),
                 "experience": saved.get("experience"),
                 "experienceRate": saved.get("experienceRate"),
@@ -426,6 +520,7 @@ def get_history_archive():
                 "experience": None,
                 "experienceRate": None,
                 "experienceRateChecked": False,
+                "rankingSourceDate": None,
                 "recordStatus": "not_collected",
                 "recordSource": None
             })

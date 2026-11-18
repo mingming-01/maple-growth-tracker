@@ -1,3 +1,4 @@
+import sqlite3
 import tempfile
 import unittest
 from datetime import date, datetime, timedelta
@@ -26,7 +27,7 @@ class GrowthHistoryStoreTests(unittest.TestCase):
 
     def test_only_valid_available_and_not_ready_records_are_saved(self):
         records = [
-            {"date": self.today.isoformat(), "recordStatus": "available", "level": 280, "experience": 12345, "ranking": 100},
+            {"date": self.today.isoformat(), "recordStatus": "available", "level": 280, "experience": 12345, "ranking": 100, "rankingScope": "overall", "rankingSourceDate": self.today.isoformat()},
             {"date": (self.today - timedelta(days=1)).isoformat(), "recordStatus": "not_ready"},
             {"date": (self.today - timedelta(days=2)).isoformat(), "recordStatus": "unavailable"},
             {"date": "not-a-date", "recordStatus": "available", "level": 280, "experience": 12345},
@@ -54,6 +55,7 @@ class GrowthHistoryStoreTests(unittest.TestCase):
                 "experience": 12345,
                 "ranking": 100,
                 "rankingScope": "overall",
+                "rankingSourceDate": record_date,
                 "experienceRate": "12.3456%",
                 "experienceRateChecked": True,
             }],
@@ -65,10 +67,75 @@ class GrowthHistoryStoreTests(unittest.TestCase):
         self.assertTrue(result[0]["experienceRateChecked"])
         self.assertEqual(result[0]["rankingScope"], "overall")
 
+    def test_non_overall_and_invalid_rankings_are_not_persisted(self):
+        records = [{
+            "date": self.today.isoformat(),
+            "recordStatus": "available",
+            "level": 280,
+            "experience": 12345,
+            "ranking": 77,
+            "rankingScope": "world",
+            "rankingSourceDate": self.today.isoformat(),
+            "experienceRate": 12.5,
+            "experienceRateChecked": True,
+        }, {
+            "date": (self.today - timedelta(days=1)).isoformat(),
+            "recordStatus": "available",
+            "level": 279,
+            "experience": 12000,
+            "ranking": 0,
+            "rankingScope": "overall",
+            "rankingSourceDate": (self.today - timedelta(days=1)).isoformat(),
+            "experienceRate": 11.5,
+            "experienceRateChecked": True,
+        }]
+
+        saved_count = self.store.save_records(
+            "test-ocid", "테스트캐릭터", "테스트월드", records
+        )
+        saved = self.store.get_records(
+            "test-ocid", self.today - timedelta(days=1), self.today
+        )
+
+        self.assertEqual(saved_count, 2)
+        self.assertEqual(len(saved), 2)
+        self.assertEqual(saved[1]["level"], 280)
+        self.assertEqual(saved[1]["experience"], 12345)
+        self.assertIsNone(saved[1]["ranking"])
+        self.assertIsNone(saved[1]["rankingScope"])
+        self.assertEqual(saved[0]["level"], 279)
+        self.assertEqual(saved[0]["experience"], 12000)
+        self.assertIsNone(saved[0]["ranking"])
+        self.assertIsNone(saved[0]["rankingScope"])
+
+    def test_rank_from_a_different_source_date_is_not_persisted(self):
+        record_date = self.today.isoformat()
+        self.store.save_records(
+            "test-ocid", "테스트캐릭터", "테스트월드",
+            [{
+                "date": record_date,
+                "recordStatus": "available",
+                "level": 280,
+                "experience": 12345,
+                "ranking": 25,
+                "rankingScope": "overall",
+                "rankingSourceDate": (self.today - timedelta(days=1)).isoformat(),
+                "experienceRate": 12.5,
+                "experienceRateChecked": True,
+            }],
+        )
+
+        saved = self.store.get_records("test-ocid", self.today, self.today)[0]
+
+        self.assertEqual(saved["experience"], 12345)
+        self.assertIsNone(saved["ranking"])
+        self.assertIsNone(saved["rankingScope"])
+        self.assertIsNone(saved["rankingSourceDate"])
+
     def test_same_character_and_date_is_upserted_instead_of_duplicated(self):
         record_date = self.today.isoformat()
-        first = [{"date": record_date, "recordStatus": "available", "level": 280, "experience": 100, "ranking": 20}]
-        updated = [{"date": record_date, "recordStatus": "available", "level": 281, "experience": 200, "ranking": 18}]
+        first = [{"date": record_date, "recordStatus": "available", "level": 280, "experience": 100, "ranking": 20, "rankingScope": "overall", "rankingSourceDate": record_date}]
+        updated = [{"date": record_date, "recordStatus": "available", "level": 281, "experience": 200, "ranking": 18, "rankingScope": "overall", "rankingSourceDate": record_date}]
 
         self.store.save_records("test-ocid", "테스트캐릭터", "테스트월드", first)
         self.store.save_records("test-ocid", "테스트캐릭터", "테스트월드", updated)
@@ -90,6 +157,8 @@ class GrowthHistoryStoreTests(unittest.TestCase):
             "level": 280,
             "experience": 12345,
             "ranking": 100,
+            "rankingScope": "overall",
+            "rankingSourceDate": self.today.isoformat(),
             "experienceRate": 12.3456,
             "experienceRateChecked": True,
         }
@@ -137,7 +206,7 @@ class GrowthHistoryStoreTests(unittest.TestCase):
         record_date = self.today.isoformat()
         self.store.save_records(
             "test-ocid", "테스트캐릭터", "테스트월드",
-            [{"date": record_date, "recordStatus": "available", "level": 280, "experience": 100, "ranking": 20}]
+            [{"date": record_date, "recordStatus": "available", "level": 280, "experience": 100, "ranking": 20, "rankingScope": "overall", "rankingSourceDate": record_date}]
         )
         self.store.save_records(
             "test-ocid", "테스트캐릭터", "테스트월드",
@@ -151,7 +220,7 @@ class GrowthHistoryStoreTests(unittest.TestCase):
     def test_date_range_is_inclusive_and_sorted(self):
         dates = [self.today - timedelta(days=2), self.today, self.today - timedelta(days=1)]
         records = [
-            {"date": item.isoformat(), "recordStatus": "available", "level": 280, "experience": index + 1, "ranking": 50}
+            {"date": item.isoformat(), "recordStatus": "available", "level": 280, "experience": index + 1, "ranking": 50, "rankingScope": "overall", "rankingSourceDate": item.isoformat()}
             for index, item in enumerate(dates)
         ]
         self.store.save_records("test-ocid", "테스트캐릭터", "테스트월드", records)
@@ -165,6 +234,52 @@ class GrowthHistoryStoreTests(unittest.TestCase):
             self.today.isoformat()
         ])
 
+
+    def test_existing_sqlite_schema_adds_ranking_source_date_as_unverified(self):
+        legacy_path = str(Path(self.temp_dir.name) / "legacy_growth_history.sqlite3")
+        connection = sqlite3.connect(legacy_path)
+        try:
+            connection.execute(
+                """
+                CREATE TABLE growth_daily_snapshots (
+                    ocid TEXT NOT NULL,
+                    snapshot_date TEXT NOT NULL,
+                    character_name TEXT NOT NULL,
+                    world_name TEXT,
+                    level INTEGER,
+                    experience NUMERIC,
+                    ranking INTEGER,
+                    ranking_scope TEXT,
+                    experience_rate REAL,
+                    experience_rate_checked INTEGER NOT NULL DEFAULT 0,
+                    record_status TEXT NOT NULL,
+                    recorded_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                    PRIMARY KEY (ocid, snapshot_date)
+                )
+                """
+            )
+            connection.execute(
+                """
+                INSERT INTO growth_daily_snapshots
+                    (ocid, snapshot_date, character_name, world_name, level,
+                     experience, ranking, ranking_scope, experience_rate,
+                     experience_rate_checked, record_status)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                ("legacy-ocid", self.today.isoformat(), "테스트", "테스트월드",
+                 280, 12345, 77, "overall", 12.5, 1, "available"),
+            )
+            connection.commit()
+        finally:
+            connection.close()
+
+        legacy_store = GrowthHistoryStore(sqlite_path=legacy_path)
+        records = legacy_store.get_records("legacy-ocid", self.today, self.today)
+
+        self.assertEqual(len(records), 1)
+        self.assertEqual(records[0]["ranking"], 77)
+        self.assertEqual(records[0]["rankingScope"], "overall")
+        self.assertIsNone(records[0]["rankingSourceDate"])
 
     def test_api_rate_limit_is_shared_between_store_instances(self):
         store_path = str(Path(self.temp_dir.name) / "shared_limits.sqlite3")
@@ -273,6 +388,8 @@ class GrowthHistoryApiTests(unittest.TestCase):
                 "level": 280,
                 "experience": 123456,
                 "ranking": 321,
+                "rankingScope": "overall",
+                "rankingSourceDate": (self.today - timedelta(days=1)).isoformat(),
                 "experienceRate": 12.345,
                 "experienceRateChecked": True
             }]
@@ -291,6 +408,45 @@ class GrowthHistoryApiTests(unittest.TestCase):
         with self.app.app_context():
             self.state.cache.clear()
         self.temp_dir.cleanup()
+
+    def test_archive_hides_legacy_overall_rank_without_matching_source_date(self):
+        target_date = (self.today - timedelta(days=1)).isoformat()
+        self.store.save_records(
+            "test-ocid", "테스트캐릭터", "테스트월드",
+            [{
+                "date": target_date,
+                "recordStatus": "available",
+                "level": 280,
+                "experience": 123456,
+                "ranking": 77,
+                "rankingScope": "overall",
+                "rankingSourceDate": target_date,
+                "experienceRate": 12.345,
+                "experienceRateChecked": True,
+            }],
+        )
+        connection = self.store._connect()
+        try:
+            with connection:
+                connection.execute(
+                    """
+                    UPDATE growth_daily_snapshots
+                    SET ranking_source_date = NULL
+                    WHERE ocid = ? AND snapshot_date = ?
+                    """,
+                    ("test-ocid", target_date),
+                )
+        finally:
+            connection.close()
+
+        response = self.client.get("/api/history/archive?ocid=test-ocid&days=30")
+
+        self.assertEqual(response.status_code, 200)
+        record = response.get_json()["history"][-2]
+        self.assertEqual(record["experience"], 123456)
+        self.assertIsNone(record["ranking"])
+        self.assertIsNone(record["rankingScope"])
+        self.assertIsNone(record["rankingSourceDate"])
 
     def test_archive_returns_calendar_days_and_marks_missing_days(self):
         response = self.client.get("/api/history/archive?ocid=test-ocid&days=30")
@@ -314,7 +470,9 @@ class GrowthHistoryApiTests(unittest.TestCase):
                 "recordStatus": "available",
                 "level": 279,
                 "experience": 98765,
-                "ranking": 654
+                "ranking": 654,
+                "rankingScope": "overall",
+                "rankingSourceDate": target_date
             }]
         )
 
@@ -329,6 +487,151 @@ class GrowthHistoryApiTests(unittest.TestCase):
         self.assertEqual(comparison_history[-2]["experience"], 98765)
         self.assertEqual(primary_history[-2]["ranking"], 321)
         self.assertEqual(comparison_history[-2]["ranking"], 654)
+
+    def test_archive_hides_non_overall_rankings_but_keeps_growth_data(self):
+        target_date = (self.today - timedelta(days=1)).isoformat()
+        self.store.save_records(
+            "test-ocid", "테스트캐릭터", "테스트월드",
+            [{
+                "date": target_date,
+                "recordStatus": "available",
+                "level": 280,
+                "experience": 123456,
+                "ranking": 77,
+                "rankingScope": "overall",
+                "rankingSourceDate": target_date,
+                "experienceRate": 12.345,
+                "experienceRateChecked": True,
+            }],
+        )
+        # 레거시 DB에 남아 있을 수 있는 잘못된 범위 데이터를 직접 재현한다.
+        connection = self.store._connect()
+        try:
+            with connection:
+                connection.execute(
+                    """
+                    UPDATE growth_daily_snapshots
+                    SET ranking = ?, ranking_scope = ?
+                    WHERE ocid = ? AND snapshot_date = ?
+                    """,
+                    (77, "world", "test-ocid", target_date),
+                )
+        finally:
+            connection.close()
+
+        response = self.client.get("/api/history/archive?ocid=test-ocid&days=30")
+
+        self.assertEqual(response.status_code, 200)
+        saved = response.get_json()["history"][-2]
+        self.assertEqual(saved["recordStatus"], "available")
+        self.assertEqual(saved["experience"], 123456)
+        self.assertIsNone(saved["ranking"])
+        self.assertIsNone(saved["rankingScope"])
+
+    def test_archive_revalidates_existing_unverified_rank_only_for_requested_batch(self):
+        target_date = (self.today - timedelta(days=1)).isoformat()
+        self.store.save_records(
+            "test-ocid", "테스트캐릭터", "테스트월드",
+            [{
+                "date": target_date,
+                "recordStatus": "available",
+                "level": 280,
+                "experience": 123456,
+                "ranking": 77,
+                "rankingScope": "overall",
+                "rankingSourceDate": target_date,
+                "experienceRate": 12.345,
+                "experienceRateChecked": True,
+            }],
+        )
+        connection = self.store._connect()
+        try:
+            with connection:
+                connection.execute(
+                    """
+                    UPDATE growth_daily_snapshots
+                    SET ranking_source_date = NULL
+                    WHERE ocid = ? AND snapshot_date = ?
+                    """,
+                    ("test-ocid", target_date),
+                )
+        finally:
+            connection.close()
+
+        ranking_response = Mock(status_code=200)
+        ranking = {
+            "ranking": 55,
+            "character_level": 280,
+            "character_exp": 123999,
+            "character_exp_rate": 12.5,
+        }
+        verified_basic = {
+            "character_name": "테스트캐릭터",
+            "world_name": "테스트월드",
+            "character_level": 280,
+            "character_exp": 123999,
+        }
+        with patch.object(
+            history_controller, "get_basic_character_snapshot",
+            return_value=(verified_basic, Mock(status_code=200))
+        ) as verify_basic, patch.object(
+            history_archive_service, "get_ranking_snapshot",
+            return_value=(ranking, ranking_response)
+        ) as get_ranking:
+            response = self.client.get(
+                "/api/history/archive?ocid=test-ocid&days=30&collect=1"
+                "&character_name=%ED%85%8C%EC%8A%A4%ED%8A%B8%EC%BA%90%EB%A6%AD%ED%84%B0"
+                "&offset=28&limit=1"
+            )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(verify_basic.call_count, 1)
+        get_ranking.assert_called_once()
+        self.assertEqual(get_ranking.call_args.args[0], target_date)
+        saved = self.store.get_records("test-ocid", target_date, target_date)[0]
+        self.assertEqual(saved["ranking"], 55)
+        self.assertEqual(saved["rankingScope"], "overall")
+        self.assertEqual(saved["rankingSourceDate"], target_date)
+        self.assertEqual(saved["experience"], 123999)
+
+    def test_archive_reuses_recent_verified_character_identity_between_batches(self):
+        target_date = (self.today - timedelta(days=29)).isoformat()
+        cached_basic = {
+            "character_name": "테스트캐릭터",
+            "world_name": "테스트월드",
+            "character_level": 280,
+            "character_exp": 123456,
+        }
+        ranking = {
+            "ranking": 321,
+            "character_level": 280,
+            "character_exp": 123456,
+            "character_exp_rate": 12.5,
+        }
+        with patch.object(
+            history_controller, "_load_recent_character_basic_snapshot",
+            return_value=cached_basic,
+        ) as cached_identity, patch.object(
+            history_controller, "get_basic_character_snapshot",
+            side_effect=AssertionError("recent verified profile should be reused"),
+        ) as identity_api, patch.object(
+            history_archive_service, "get_ranking_snapshot",
+            return_value=(ranking, Mock(status_code=200)),
+        ) as get_ranking:
+            response = self.client.get(
+                "/api/history/archive?ocid=test-ocid&days=30&collect=1"
+                "&character_name=%ED%85%8C%EC%8A%A4%ED%8A%B8%EC%BA%90%EB%A6%AD%ED%84%B0"
+                "&offset=0&limit=1&summary_only=1"
+            )
+
+        self.assertEqual(response.status_code, 200)
+        cached_identity.assert_called_once_with("테스트캐릭터", "test-ocid")
+        identity_api.assert_not_called()
+        get_ranking.assert_called_once()
+        saved = self.store.get_records("test-ocid", target_date, target_date)[0]
+        self.assertEqual(saved["ranking"], 321)
+        self.assertEqual(saved["rankingSourceDate"], target_date)
+        self.assertEqual(response.get_json()["collection"]["checkedDays"], 1)
 
     def test_archive_does_not_fetch_past_data_without_collection_request(self):
         with patch.object(history_archive_service, "get_ranking_snapshot", side_effect=AssertionError("should not call Nexon")), patch.object(
@@ -550,6 +853,7 @@ class GrowthHistoryApiTests(unittest.TestCase):
                 "experienceRate": None if offset in (1, 2) else 12.345,
                 "experienceRateChecked": offset != 1,
                 "rankingScope": "overall",
+                "rankingSourceDate": (today - timedelta(days=offset)).isoformat(),
             }
             for offset in range(1, 7)
         ]
@@ -610,6 +914,7 @@ class GrowthHistoryApiTests(unittest.TestCase):
                 # This test covers reuse of fully checked historical records.
                 "experienceRateChecked": True,
                 "rankingScope": "overall",
+                "rankingSourceDate": (today - timedelta(days=offset)).isoformat(),
             }
             for offset in range(1, 7)
         ]

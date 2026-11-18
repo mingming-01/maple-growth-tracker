@@ -54,11 +54,22 @@ test("detects level-up days by comparing the recorded level when no flag is supp
     { date: "2026-11-06", level: 282, levelUp: true }
   ];
 
-  assert.deepEqual(detectLevelUpEvents(records), [false, false, true, false, true, true]);
+  assert.deepEqual(detectLevelUpEvents(records), [false, false, true, false, false, true]);
   assert.deepEqual(
     buildLevelUpMarkers(records, [1, 1.2, null, null, 1.25, null]),
-    [null, null, 1.2, null, 1.25, 1.25]
+    [null, null, 1.2, null, null, 1.25]
   );
+});
+
+test("does not place an exact level-up marker after a missing level interval", () => {
+  const records = [
+    { date: "2026-11-01", level: 280, recordStatus: "available" },
+    { date: "2026-11-02", level: null, recordStatus: "not_collected" },
+    { date: "2026-11-03", level: 281, recordStatus: "available" }
+  ];
+
+  assert.deepEqual(detectLevelUpEvents(records), [false, false, false]);
+  assert.deepEqual(buildLevelUpMarkers(records, [1.0, null, 1.2]), [null, null, null]);
 });
 
 test("anchors total EXP growth to the first calendar day's actual EXP", () => {
