@@ -307,6 +307,7 @@ def _validate_growth_report_facts(report, source_data):
     """AI가 작성한 수치와 날짜가 서버가 제공한 데이터에 존재하는지 확인한다."""
     allowed_numbers = set()
     allowed_dates = set()
+    allowed_number_units = set()
 
     def add_number(value):
         try:
@@ -330,10 +331,19 @@ def _validate_growth_report_facts(report, source_data):
             if any(term in normalized_key for term in ("experience", "growth", "sum", "average")):
                 formatted = _format_experience_korean(value)
                 if formatted:
-                    for token in re.findall(r"\d+(?:\.\d+)?", formatted.replace(",", "")):
+                    for token, unit in re.findall(r"(\d+(?:\.\d+)?)(경|조|억|만)", formatted.replace(",", "")):
                         allowed_numbers.add(token)
+                        allowed_number_units.add((token, unit))
             if any(term in normalized_key for term in ("rate", "percent", "coverage", "change")):
-                add_number(Decimal(str(value)).quantize(Decimal("0.1"), rounding=ROUND_HALF_UP))
+                rounded = Decimal(str(value)).quantize(Decimal("0.1"), rounding=ROUND_HALF_UP)
+                add_number(rounded)
+                allowed_number_units.add((format(rounded.normalize(), "f"), "%"))
+            if "level" in normalized_key:
+                allowed_number_units.add((format(Decimal(str(value)).normalize(), "f"), "레벨"))
+            if "interval" in normalized_key or "count" in normalized_key:
+                allowed_number_units.add((format(Decimal(str(value)).normalize(), "f"), "회"))
+            if "perioddays" in normalized_key:
+                allowed_number_units.add((format(Decimal(str(value)).normalize(), "f"), "일"))
         elif isinstance(value, str):
             for match in re.finditer(r"(?<!\d)(\d{4})-(\d{1,2})-(\d{1,2})(?!\d)", value):
                 year, month, day = map(int, match.groups())
@@ -368,6 +378,14 @@ def _validate_growth_report_facts(report, source_data):
         except InvalidOperation:
             return False
         if number not in allowed_numbers:
+            return False
+
+    for number, unit in re.findall(
+        r"(\d+(?:,\d{3})*(?:\.\d+)?)\s*(경|조|억|만|%p|%|레벨|회|일|위)",
+        report,
+    ):
+        normalized = format(Decimal(number.replace(",", "")).normalize(), "f")
+        if (normalized, unit) not in allowed_number_units:
             return False
     return True
 
@@ -593,10 +611,18 @@ def generate_ai_analysis(character, history, computed_metrics=None, growth_insig
 
     cached_analysis = None if force_refresh else get_ai_response_cache(cache_key)
     if cached_analysis is not None:
-        print("저장된 AI 성장 리포트를 재사용했습니다.")
         if computed_metrics is not None:
-            cached_analysis = _apply_deterministic_growth_forecast(cached_analysis, character, computed_metrics)
-        return {"analysis": cached_analysis, "cacheHit": True, "growthInsights": growth_insights}
+            cached_analysis = _apply_deterministic_growth_forecast(
+                cached_analysis, character, computed_metrics
+            )
+            if (
+                not _validate_growth_report_facts(cached_analysis, source_data)
+                or not validate_growth_report(cached_analysis)
+            ):
+                cached_analysis = None
+        if cached_analysis is not None:
+            print("저장된 AI 성장 리포트를 재사용했습니다.")
+            return {"analysis": cached_analysis, "cacheHit": True, "growthInsights": growth_insights}
 
     gemini_error = None
     if gemini_api_key and cooldown_remaining > 0:
@@ -645,7 +671,7 @@ def generate_ai_analysis(character, history, computed_metrics=None, growth_insig
                 request_openrouter(prompt, api_key=openrouter_api_key, deadline=deadline),
                 "OpenRouter",
             )
-            print("OpenRouter로 성장 분석 코멘트를 처리했습니다.")
+            print("OpenRouter로 성장 리포트를 처리했습니다.")
             analysis = sanitize_ai_text(response_text, expected_date)
             if computed_metrics is not None:
                 analysis = _apply_deterministic_growth_forecast(
@@ -658,7 +684,7 @@ def generate_ai_analysis(character, history, computed_metrics=None, growth_insig
                     )
             if not validate_growth_report(analysis):
                 raise ProviderError("OpenRouter 분석 결과가 리포트 검증을 통과하지 못했습니다.", "provider_invalid_output")
-            set_ai_response_cache(prompt, analysis)
+            set_ai_response_cache(cache_key, analysis)
             return {"analysis": analysis, "cacheHit": False, "growthInsights": growth_insights}
         except Exception as error:
             _log_provider_failure("openrouter", error, openrouter_started_at, deadline)
