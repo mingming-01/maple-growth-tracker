@@ -159,7 +159,7 @@ def ai_analysis():
         storage = get_growth_history_service()
         period_start = today - timedelta(days=period_days - 1)
         insight_start = today - timedelta(days=14)
-        query_start = min(period_start, insight_start)
+        query_start = min(period_start - timedelta(days=1), insight_start)
         try:
             # 선택 기간과 14일 인사이트를 하나의 DB 조회로 확보한다.
             combined_records = storage.get_records(ocid, query_start, today)
