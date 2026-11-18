@@ -28,11 +28,27 @@ def build_server_growth_metrics(character, records, reference_date=None, period_
         experience = _number(record.get("experience"))
         if record_date > today or level is None or experience is None:
             continue
+        raw_rank = _number(record.get("ranking"))
+        try:
+            ranking_source_date = date.fromisoformat(
+                str(record.get("rankingSourceDate") or "")
+            )
+        except (TypeError, ValueError):
+            ranking_source_date = None
+        rank_is_verified = (
+            record.get("rankingScope") == "overall"
+            and ranking_source_date == record_date
+            and raw_rank is not None
+            and raw_rank > 0
+            and raw_rank.is_integer()
+        )
         by_date[record_date] = {
             "date": record_date.isoformat(),
             "level": int(level),
             "experience": int(experience),
-            "ranking": int(_number(record.get("ranking"))) if _number(record.get("ranking")) is not None else None,
+            "ranking": int(raw_rank) if rank_is_verified else None,
+            "rankingScope": "overall" if rank_is_verified else None,
+            "rankingSourceDate": record_date.isoformat() if rank_is_verified else None,
             "recordStatus": "available",
             "experienceChange": None,
             "rankingChange": None,
@@ -48,6 +64,14 @@ def build_server_growth_metrics(character, records, reference_date=None, period_
         previous = history[index - 1]
         previous_date = date.fromisoformat(previous["date"])
         current_date = date.fromisoformat(current["date"])
+        # A level/ranking transition can only be assigned to an exact date
+        # when both observations are from consecutive calendar days.
+        if (current_date - previous_date).days != 1:
+            continue
+
+        if current.get("ranking") is not None and previous.get("ranking") is not None:
+            current["rankingChange"] = previous["ranking"] - current["ranking"]
+
         if current["level"] > previous["level"]:
             current["levelUp"] = True
             level_ups.append({
@@ -56,16 +80,11 @@ def build_server_growth_metrics(character, records, reference_date=None, period_
                 "currentLevel": current["level"],
             })
             continue
-        if (current_date - previous_date).days != 1:
-            continue
         if current["level"] != previous["level"] or current["experience"] < previous["experience"]:
             continue
         change = current["experience"] - previous["experience"]
         current["experienceChange"] = change
         changes.append({"date": current_date, "experience": change})
-
-        if current.get("ranking") is not None and previous.get("ranking") is not None:
-            current["rankingChange"] = previous["ranking"] - current["ranking"]
 
     values = [item["experience"] for item in changes]
     midpoint = len(values) // 2
@@ -82,8 +101,18 @@ def build_server_growth_metrics(character, records, reference_date=None, period_
     else:
         direction = "stable"
 
-    ranking_values = [item["ranking"] for item in history if item["ranking"] is not None]
-    ranking_change = ranking_values[-2] - ranking_values[-1] if len(ranking_values) >= 2 else None
+    verified_ranks = [
+        item for item in history if item["ranking"] is not None
+    ]
+    ranking_change = (
+        verified_ranks[-2]["ranking"] - verified_ranks[-1]["ranking"]
+        if len(verified_ranks) >= 2
+        and (
+            date.fromisoformat(verified_ranks[-1]["date"])
+            - date.fromisoformat(verified_ranks[-2]["date"])
+        ).days == 1
+        else None
+    )
     current_rate = _number((character or {}).get("experienceRate"))
     if current_rate is not None and not 0 <= current_rate <= 100:
         current_rate = None
