@@ -15,7 +15,7 @@ def _set_socket_read_timeout(response, timeout):
         sock = response.raw._fp.fp.raw._sock
         sock.settimeout(max(0.05, float(timeout)))
     except (AttributeError, OSError, TypeError, ValueError):
-        # Requests/urllib3 내부 구조가 다른 버전에서는 초기 read timeout을 사용한다.
+        # 소켓 제한을 적용할 수 없으면 전체 deadline을 보장할 수 없으므로 요청을 실패 처리한다.
         return False
     return True
 
