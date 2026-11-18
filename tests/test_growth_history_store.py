@@ -26,7 +26,7 @@ class GrowthHistoryStoreTests(unittest.TestCase):
 
     def test_only_valid_available_and_not_ready_records_are_saved(self):
         records = [
-            {"date": self.today.isoformat(), "recordStatus": "available", "level": 280, "experience": 12345, "ranking": 100},
+            {"date": self.today.isoformat(), "recordStatus": "available", "level": 280, "experience": 12345, "ranking": 100, "rankingScope": "overall"},
             {"date": (self.today - timedelta(days=1)).isoformat(), "recordStatus": "not_ready"},
             {"date": (self.today - timedelta(days=2)).isoformat(), "recordStatus": "unavailable"},
             {"date": "not-a-date", "recordStatus": "available", "level": 280, "experience": 12345},
@@ -65,10 +65,49 @@ class GrowthHistoryStoreTests(unittest.TestCase):
         self.assertTrue(result[0]["experienceRateChecked"])
         self.assertEqual(result[0]["rankingScope"], "overall")
 
+    def test_non_overall_and_invalid_rankings_are_not_persisted(self):
+        records = [{
+            "date": self.today.isoformat(),
+            "recordStatus": "available",
+            "level": 280,
+            "experience": 12345,
+            "ranking": 77,
+            "rankingScope": "world",
+            "experienceRate": 12.5,
+            "experienceRateChecked": True,
+        }, {
+            "date": (self.today - timedelta(days=1)).isoformat(),
+            "recordStatus": "available",
+            "level": 279,
+            "experience": 12000,
+            "ranking": 0,
+            "rankingScope": "overall",
+            "experienceRate": 11.5,
+            "experienceRateChecked": True,
+        }]
+
+        saved_count = self.store.save_records(
+            "test-ocid", "테스트캐릭터", "테스트월드", records
+        )
+        saved = self.store.get_records(
+            "test-ocid", self.today - timedelta(days=1), self.today
+        )
+
+        self.assertEqual(saved_count, 2)
+        self.assertEqual(len(saved), 2)
+        self.assertEqual(saved[1]["level"], 280)
+        self.assertEqual(saved[1]["experience"], 12345)
+        self.assertIsNone(saved[1]["ranking"])
+        self.assertIsNone(saved[1]["rankingScope"])
+        self.assertEqual(saved[0]["level"], 279)
+        self.assertEqual(saved[0]["experience"], 12000)
+        self.assertIsNone(saved[0]["ranking"])
+        self.assertIsNone(saved[0]["rankingScope"])
+
     def test_same_character_and_date_is_upserted_instead_of_duplicated(self):
         record_date = self.today.isoformat()
-        first = [{"date": record_date, "recordStatus": "available", "level": 280, "experience": 100, "ranking": 20}]
-        updated = [{"date": record_date, "recordStatus": "available", "level": 281, "experience": 200, "ranking": 18}]
+        first = [{"date": record_date, "recordStatus": "available", "level": 280, "experience": 100, "ranking": 20, "rankingScope": "overall"}]
+        updated = [{"date": record_date, "recordStatus": "available", "level": 281, "experience": 200, "ranking": 18, "rankingScope": "overall"}]
 
         self.store.save_records("test-ocid", "테스트캐릭터", "테스트월드", first)
         self.store.save_records("test-ocid", "테스트캐릭터", "테스트월드", updated)
@@ -90,6 +129,7 @@ class GrowthHistoryStoreTests(unittest.TestCase):
             "level": 280,
             "experience": 12345,
             "ranking": 100,
+            "rankingScope": "overall",
             "experienceRate": 12.3456,
             "experienceRateChecked": True,
         }
@@ -137,7 +177,7 @@ class GrowthHistoryStoreTests(unittest.TestCase):
         record_date = self.today.isoformat()
         self.store.save_records(
             "test-ocid", "테스트캐릭터", "테스트월드",
-            [{"date": record_date, "recordStatus": "available", "level": 280, "experience": 100, "ranking": 20}]
+            [{"date": record_date, "recordStatus": "available", "level": 280, "experience": 100, "ranking": 20, "rankingScope": "overall"}]
         )
         self.store.save_records(
             "test-ocid", "테스트캐릭터", "테스트월드",
@@ -151,7 +191,7 @@ class GrowthHistoryStoreTests(unittest.TestCase):
     def test_date_range_is_inclusive_and_sorted(self):
         dates = [self.today - timedelta(days=2), self.today, self.today - timedelta(days=1)]
         records = [
-            {"date": item.isoformat(), "recordStatus": "available", "level": 280, "experience": index + 1, "ranking": 50}
+            {"date": item.isoformat(), "recordStatus": "available", "level": 280, "experience": index + 1, "ranking": 50, "rankingScope": "overall"}
             for index, item in enumerate(dates)
         ]
         self.store.save_records("test-ocid", "테스트캐릭터", "테스트월드", records)
@@ -342,11 +382,25 @@ class GrowthHistoryApiTests(unittest.TestCase):
                 "level": 280,
                 "experience": 123456,
                 "ranking": 77,
-                "rankingScope": "world",
+                "rankingScope": "overall",
                 "experienceRate": 12.345,
                 "experienceRateChecked": True,
             }],
         )
+        # 레거시 DB에 남아 있을 수 있는 잘못된 범위 데이터를 직접 재현한다.
+        connection = self.store._connect()
+        try:
+            with connection:
+                connection.execute(
+                    """
+                    UPDATE growth_daily_snapshots
+                    SET ranking = ?, ranking_scope = ?
+                    WHERE ocid = ? AND snapshot_date = ?
+                    """,
+                    (77, "world", "test-ocid", target_date),
+                )
+        finally:
+            connection.close()
 
         response = self.client.get("/api/history/archive?ocid=test-ocid&days=30")
 
