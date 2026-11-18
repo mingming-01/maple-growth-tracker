@@ -355,10 +355,14 @@ def _validate_growth_report_facts(report, source_data):
                 add_number(year)
                 add_number(month)
                 add_number(day)
+                allowed_number_units.add((str(month), "월"))
+                allowed_number_units.add((str(day), "일"))
             for match in re.finditer(r"(\d{1,2})월\s*(\d{1,2})일", value):
                 allowed_dates.add((int(match.group(1)), int(match.group(2))))
                 add_number(match.group(1))
                 add_number(match.group(2))
+                allowed_number_units.add((str(int(match.group(1))), "월"))
+                allowed_number_units.add((str(int(match.group(2))), "일"))
 
     walk(source_data or {})
     # 기간 길이·레벨·비율처럼 모델이 단위를 붙여 표현할 수 있는 값도 허용 목록에 포함한다.
