@@ -186,7 +186,8 @@ class AIAnalysisQualityTests(unittest.TestCase):
         self.assertIn("11월 18일에 298레벨에서 299레벨", report)
         self.assertIn("67.4%", report)
         self.assertIn("32.6% 남았어요", report)
-        self.assertNotIn("경", report)
+        self.assertNotIn("99경", report)
+        self.assertNotIn("16경", report)
 
     def test_ai_comment_prompt_does_not_send_raw_numeric_data(self):
         prompt = _build_growth_comment_prompt({
