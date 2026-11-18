@@ -450,11 +450,11 @@ def _build_deterministic_growth_report(character, metrics, growth_insights, anal
     forecast = _deterministic_growth_forecast(character, metrics)
 
     report = (
-        f"[성장 패턴]\\n{growth_pattern}\\n"
-        f"[성장 변화]\\n{growth_change}\\n"
-        f"[레벨업 분석]\\n{level_analysis}\\n"
-        f"[성장 전망]\\n{forecast}\\n"
-        f"[AI 코멘트]\\n{ai_comment.strip()}"
+        f"[성장 패턴]\n{growth_pattern}\n"
+        f"[성장 변화]\n{growth_change}\n"
+        f"[레벨업 분석]\n{level_analysis}\n"
+        f"[성장 전망]\n{forecast}\n"
+        f"[AI 코멘트]\n{ai_comment.strip()}"
     )
     if not validate_growth_report(report):
         raise ProviderError(
