@@ -18,8 +18,6 @@ from tracker.repositories.api_snapshot_repository import (
     save_api_snapshot as save_api_snapshot_for_path,
     load_api_snapshot as load_api_snapshot_for_path,
 )
-from google import genai
-from google.genai import types
 from tracker.services.performance_metrics import increment_metric, observe_metric
 from tracker.services.runtime_cache import (
     AI_RESPONSE_CACHE_MAX_ENTRIES,
@@ -47,24 +45,9 @@ class RuntimeState:
         )
         self.nexon_api_key = config.get("NEXON_API_KEY", "")
         self.gemini_api_key = config.get("GEMINI_API_KEY", "")
-        try:
-            # 외부 AI 호출이 Gunicorn 기본 30초 제한을 넘지 않도록 SDK 타임아웃을 상한 제한한다.
-            ai_timeout_ms = min(
-                15000,
-                max(1000, int(float(config.get("AI_API_TIMEOUT", 12)) * 1000)),
-            )
-        except (TypeError, ValueError):
-            ai_timeout_ms = 12000
-        self.gemini_client = (
-            genai.Client(
-                api_key=self.gemini_api_key,
-                http_options=types.HttpOptions(
-                    timeout=ai_timeout_ms,
-                    retry_options=types.HttpRetryOptions(attempts=1),
-                ),
-            )
-            if self.gemini_api_key else None
-        )
+        # 공급자 호출은 wall-clock deadline이 적용된 REST adapter에서 처리한다.
+        # 호환 속성은 유지하되 더 이상 SDK client를 초기화하지 않는다.
+        self.gemini_client = None
         self.openrouter_api_key = config.get("OPENROUTER_API_KEY", "")
         self.openrouter_model = config.get("OPENROUTER_MODEL", "openrouter/free")
         self.admin_username = config.get("ADMIN_USERNAME", "")
