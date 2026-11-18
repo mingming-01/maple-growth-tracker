@@ -17,7 +17,10 @@ async function requestJson(path, options = {}) {
   }
 
   if (!response.ok) {
-    const error = new Error(payload.error || "요청을 처리하지 못했습니다. 잠시 후 다시 시도해주세요.");
+    const fallbackMessage = response.status
+      ? `서버가 요청을 처리하지 못했습니다. (HTTP ${response.status}) 잠시 후 다시 시도해주세요.`
+      : "요청을 처리하지 못했습니다. 잠시 후 다시 시도해주세요.";
+    const error = new Error(payload.error || fallbackMessage);
     error.status = response.status;
     const retryAfter = Number(
       payload.retryAfterSeconds ?? payload.retryAfter ?? response.headers.get("Retry-After")
