@@ -49,7 +49,7 @@ class BoundedJSONHTTPTests(unittest.TestCase):
         response.close.assert_called_once()
 
     @patch("tracker.integrations.bounded_http.requests.post")
-    @patch("tracker.integrations.bounded_http.time.monotonic", side_effect=[10.0, 10.1])
+    @patch("tracker.integrations.bounded_http.time.monotonic", side_effect=[10.0, 10.1, 10.2])
     def test_rejects_an_oversized_provider_response(self, _clock, post):
         response = self.make_response([b"x" * 1025])
         post.return_value = response
