@@ -9,6 +9,7 @@ from tracker.services.ai_analysis_service import (
     _build_growth_comment_prompt,
     _validate_ai_comment,
     _format_experience_korean,
+    _build_growth_report_cache_key,
 )
 from tracker.services.ai_text_service import sanitize_ai_text, validate_growth_report
 
@@ -188,6 +189,16 @@ class AIAnalysisQualityTests(unittest.TestCase):
         self.assertIn("32.6% 남았어요", report)
         self.assertNotIn("99경", report)
         self.assertNotIn("16경", report)
+
+    def test_growth_report_cache_key_includes_character_specific_data(self):
+        prompt = "comment-only prompt"
+        first = {"character": {"name": "밍득"}, "metrics": {"average": 100}}
+        second = {"character": {"name": "다른 캐릭터"}, "metrics": {"average": 100}}
+
+        self.assertNotEqual(
+            _build_growth_report_cache_key(prompt, first),
+            _build_growth_report_cache_key(prompt, second),
+        )
 
     def test_ai_comment_prompt_does_not_send_raw_numeric_data(self):
         prompt = _build_growth_comment_prompt({
