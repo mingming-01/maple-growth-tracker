@@ -106,7 +106,7 @@ class AIServerInputTests(unittest.TestCase):
             "ocid-two": self.make_records(2000),
         })
 
-        def resolve(name):
+        def resolve(name, **_kwargs):
             return f"ocid-{name}", self.make_basic(name), Mock(status_code=200)
 
         def generate(primary, comparison):
