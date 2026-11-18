@@ -187,9 +187,17 @@ def _deterministic_growth_forecast(character, metrics):
 
 
 def _apply_deterministic_growth_forecast(analysis, character, metrics):
+    """AI의 전망 해석은 보존하고 서버가 계산한 정확한 전망 문장을 덧붙인다."""
     forecast = _deterministic_growth_forecast(character, metrics)
     pattern = r"(\[성장 전망\])([\s\S]*?)(?=\n\[AI 코멘트\])"
-    return re.sub(pattern, lambda match: f"{match.group(1)}\n{forecast}", analysis, count=1)
+
+    def append_server_forecast(match):
+        ai_text = match.group(2).strip()
+        if forecast and forecast not in ai_text:
+            ai_text = f"{ai_text}\n{forecast}" if ai_text else forecast
+        return f"{match.group(1)}\n{ai_text}"
+
+    return re.sub(pattern, append_server_forecast, analysis, count=1)
 
 
 def _build_growth_report_prompt(source_data):
@@ -220,7 +228,7 @@ def _build_growth_report_prompt(source_data):
 - 경험치 증가량과 현재 레벨 진행률을 구분해. experienceRate는 현재 레벨 진행률이야. 남은 비율은 currentLevelProgress.remainingRate가 있을 때만 말해.
 - 7일 리포트는 growthInsights의 최근/직전 7일 비교를 참고해. 비교할 기록이 부족하면 증가·감소를 단정하지 마.
 - 30일·90일 리포트는 selectedPeriod.periodSummary가 선택 기간의 핵심 근거야. metrics의 전망과 진행률은 최근 7일 기준이므로 장기 기간 통계처럼 설명하지 마.
-- 예상 레벨업은 metrics.prediction 또는 metrics.recentSevenDayPrediction에 날짜가 있을 때만, 참고값임을 밝혀 말해. 실제 전망 문장은 서버가 계산한 값으로 교체돼.
+- 예상 레벨업은 metrics.prediction 또는 metrics.recentSevenDayPrediction에 날짜가 있을 때만, 참고값임을 밝혀 말해. 서버가 계산한 정확한 전망 문장도 함께 제공되므로, 그 의미와 전제 조건을 자연스럽게 설명해.
 - 기록이 적으면 흐름이 꾸준하다거나 안정적이라고 말하지 마. 근거 없는 칭찬, 사냥 방식, 플레이 시간, 접속 습관을 만들지 마.
 - 하루 평균 경험치는 확인된 경험치 변화의 평균으로 설명하고, 큰 경험치는 '17.8조'처럼 한국어 단위로 써. 과학적 표기, 개발 용어, 데이터 필드명, 모델명, API, null, undefined, 영어 상태값은 본문에 쓰지 마.
 - '관측 구간', '표본', '결측', '기록 충실도', '유효 구간', '메트릭' 같은 말 대신 '확인된 날짜', '하루 평균 경험치', '지난 기간과 비교'처럼 자연스럽게 표현해.
@@ -285,43 +293,6 @@ def _format_period_date_range(start_value, end_value):
     return f"{start.month}월 {start.day}일~{end.month}월 {end.day}일"
 
 
-def _build_growth_comment_prompt(source_data):
-    """모델에는 숫자·날짜 없는 정성 코멘트만 맡긴다."""
-    metrics = source_data.get("metrics") or {}
-    insights = source_data.get("growthInsights") or {}
-    period_days = (source_data.get("selectedPeriod") or {}).get("periodDays", 7)
-    comparison = (insights.get("weekOverWeek") or {}) if period_days == 7 else {}
-    direction = comparison.get("direction")
-    direction_label = {
-        "increase": "직전 기간보다 증가",
-        "decrease": "직전 기간보다 감소",
-        "stable": "직전 기간과 비슷",
-    }.get(direction, "비교할 근거 부족")
-    quality = (insights.get("basis") or {}).get("dataQualityLabel", "확인되지 않음")
-    level_ups = metrics.get("levelUps") or []
-    period_summary = metrics.get("periodSummary") or {}
-    has_level_up = bool(period_summary.get("levelUpIntervals"))
-    signals = {
-        "recent_growth_trend": direction_label,
-        "record_quality": quality,
-        "level_up_observed": has_level_up,
-    }
-    return f"""
-너는 메이플스토리 성장 기록을 해석하는 도우미야.
-아래에 주어진 정성적 신호만 바탕으로 [AI 코멘트]에 들어갈 보충 의견을 한국어 해요체로 1~2문장 작성해.
-
-[작성 규칙]
-- 수치, 숫자, 날짜, 요일, 백분율, 경험치 단위, 레벨을 절대 쓰지 마.
-- 합계·평균을 계산하거나 새로운 통계 사실을 만들지 마.
-- 주말/평일, 사냥 효율, 플레이 시간, 접속 습관처럼 제공되지 않은 원인을 추측하지 마.
-- 확인된 흐름에 대한 조심스러운 해석과 다음 기록을 볼 때 유의할 점만 말해.
-- 제목, 목록, 마크다운 없이 코멘트 본문만 출력해.
-
-[정성적 신호]
-{json.dumps(signals, ensure_ascii=False)}
-"""
-
-
 def _build_growth_report_cache_key(prompt, source_data):
     """같은 정성 신호라도 서로 다른 캐릭터/기록의 결과가 섞이지 않게 한다."""
     return (
@@ -332,34 +303,8 @@ def _build_growth_report_cache_key(prompt, source_data):
     )
 
 
-def _extract_ai_comment(value):
-    """모델 응답에서 AI 코멘트 본문만 추출한다."""
-    text = sanitize_ai_text(value)
-    marker = "[AI 코멘트]"
-    if marker in text:
-        text = text.split(marker, 1)[1]
-    elif any(section in text for section in REQUIRED_GROWTH_SECTIONS):
-        return ""
-    return text.strip()
-
-
-def _validate_ai_comment(value):
-    """숫자·날짜·근거 없는 요일/플레이 행동 주장을 차단한다."""
-    text = str(value or "").strip()
-    if len(text) < 4 or len(text) > 400:
-        return False
-    if re.search(r"[0-9０-９%％]", text):
-        return False
-    if re.search(r"(?:주말|평일|사냥|접속|플레이 시간|효율)", text):
-        return False
-    if re.search(r"[\\u3400-\\u4DBF\\u4E00-\\u9FFF\\uF900-\\uFAFF\\u3040-\\u30FF]", text):
-        return False
-    return True
-
-
 def _validate_growth_report_facts(report, source_data):
     """AI가 작성한 수치와 날짜가 서버가 제공한 데이터에 존재하는지 확인한다."""
-    serialized = json.dumps(source_data or {}, ensure_ascii=False, sort_keys=True)
     allowed_numbers = set()
     allowed_dates = set()
 
