@@ -67,7 +67,7 @@ class AIProviderAdapterTests(unittest.TestCase):
         self.assertEqual(post_json.call_args.kwargs["json_body"]["generationConfig"]["maxOutputTokens"], 640)
 
     @patch("tracker.integrations.ai_provider.post_json_with_deadline")
-    def test_openrouter_fallback_uses_configured_model_and_extended_deadline(self, post_json):
+    def test_openrouter_fallback_clamps_output_tokens_and_uses_extended_deadline(self, post_json):
         post_json.return_value = {
             "choices": [{"message": {"content": "대체 분석 결과"}}]
         }
@@ -82,7 +82,8 @@ class AIProviderAdapterTests(unittest.TestCase):
         self.assertEqual(post_json.call_args.kwargs["total_timeout"], 27.0)
         self.assertEqual(post_json.call_args.kwargs["read_timeout"], 25.0)
         self.assertEqual(post_json.call_args.kwargs["json_body"]["stream"], False)
-        self.assertEqual(post_json.call_args.kwargs["json_body"]["max_tokens"], 8192)
+        # Even when configured above the supported cap, the adapter must send at most 4096 tokens.
+        self.assertEqual(post_json.call_args.kwargs["json_body"]["max_tokens"], 4096)
         self.assertEqual(post_json.call_args.kwargs["json_body"]["model"], "google/gemini-3.6-flash")
 
     @patch("tracker.integrations.ai_provider._log_openrouter_empty_response")
