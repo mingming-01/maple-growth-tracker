@@ -119,7 +119,14 @@ def ai_analysis():
         if cached_profile:
             ocid, character = cached_profile
         else:
-            ocid, basic, basic_response = resolve_character(character_name)
+            ocid, basic, basic_response = resolve_character(
+                character_name,
+                timeout_override=(
+                    float(current_app.config.get("AI_NEXON_CONNECT_TIMEOUT", 1.5)),
+                    float(current_app.config.get("AI_NEXON_READ_TIMEOUT", 2.5)),
+                ),
+                max_attempts_override=1,
+            )
             if not ocid or not basic:
                 status = 503 if is_temporary_nexon_failure(basic_response) else 404
                 return jsonify({"error": "캐릭터 기본 정보를 확인하지 못했습니다."}), status
