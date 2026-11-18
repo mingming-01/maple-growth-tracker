@@ -216,6 +216,18 @@ class AIAnalysisQualityTests(unittest.TestCase):
         self.assertNotIn("2026-11-18", prompt)
         self.assertIn("숫자, 날짜", prompt)
 
+    def test_long_period_comment_does_not_use_seven_day_comparison_signal(self):
+        prompt = _build_growth_comment_prompt({
+            "selectedPeriod": {"periodDays": 30},
+            "growthInsights": {
+                "weekOverWeek": {"direction": "decrease"},
+                "basis": {"dataQualityLabel": "높음"},
+            },
+        })
+
+        self.assertIn("비교할 근거 부족", prompt)
+        self.assertNotIn("직전 기간보다 감소", prompt)
+
     def test_ai_comment_rejects_numeric_and_unsupported_weekend_claims(self):
         self.assertFalse(_validate_ai_comment("하루 평균 19경 경험치를 기록했어요."))
         self.assertFalse(_validate_ai_comment("주말 사냥이 평일보다 효율적이에요."))
