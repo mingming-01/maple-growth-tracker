@@ -1,7 +1,6 @@
 """AI 성장 분석과 캐릭터 비교의 프롬프트·모델 호출을 담당한다."""
 import json
 import re
-import time
 from datetime import date
 
 from tracker.integrations.ai_provider import request_openrouter, should_use_openrouter
@@ -47,29 +46,8 @@ def _error_result(error, fallback_message):
 
 
 def _generate_gemini_content(client, prompt):
-    """일시적인 오류만 제한적으로 재시도한다. 일일 할당량 초과는 재시도하지 않는다."""
-    state = get_runtime_state()
-    try:
-        retry_count = int(state.ai_api_retries)
-    except (TypeError, ValueError):
-        retry_count = 1
-    try:
-        backoff = max(0.0, float(state.ai_api_retry_backoff))
-    except (TypeError, ValueError):
-        backoff = 0.5
-
-    max_attempts = min(max(0, retry_count), 3) + 1
-    for attempt in range(max_attempts):
-        try:
-            return client.models.generate_content(model="gemini-3.6-flash", contents=prompt)
-        except Exception as error:
-            if _is_quota_error(error):
-                raise
-            if not should_use_openrouter(error) or attempt + 1 >= max_attempts:
-                raise
-            delay = min(3.0, backoff * (2 ** attempt))
-            if delay:
-                time.sleep(delay)
+    """Gemini 요청은 한 번만 수행하고, 일시 오류는 대체 제공자로 넘긴다."""
+    return client.models.generate_content(model="gemini-3.6-flash", contents=prompt)
 
 
 
