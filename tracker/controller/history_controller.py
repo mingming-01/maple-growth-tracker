@@ -371,10 +371,25 @@ def get_history_archive():
             return limit_response
 
         # 브라우저에서 전달한 캐릭터명과 OCID를 확인해 다른 캐릭터 기록의 혼합 저장을 막는다.
+        # /api/character에서 최근에 OCID·이름·월드를 확인한 프로필이 있으면
+        # 배치마다 같은 기본 정보 API를 다시 호출하지 않는다.
         try:
-            verified_basic, verify_response = get_basic_character_snapshot(ocid, historical=True)
-        except requests.RequestException:
-            verified_basic, verify_response = None, None
+            verified_basic = _load_recent_character_basic_snapshot(
+                character_name, ocid
+            )
+        except Exception:
+            verified_basic = None
+
+        verify_response = None
+        if verified_basic is not None:
+            increment_metric("history.archive_identity_reused")
+        else:
+            try:
+                verified_basic, verify_response = get_basic_character_snapshot(
+                    ocid, historical=True
+                )
+            except requests.RequestException:
+                verified_basic, verify_response = None, None
 
         if not verified_basic:
             if is_temporary_nexon_failure(verify_response):
