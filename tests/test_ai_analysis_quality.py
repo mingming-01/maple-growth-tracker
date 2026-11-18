@@ -7,6 +7,7 @@ from tracker.services.ai_analysis_service import (
     _error_result,
     _build_deterministic_growth_report,
     _build_growth_comment_prompt,
+    _validate_growth_report_facts,
     _validate_ai_comment,
     _format_experience_korean,
     _build_growth_report_cache_key,
