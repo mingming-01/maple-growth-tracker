@@ -92,15 +92,24 @@ export function dailyGrowthSegmentDash(context) {
  * Detect level-up days from explicit flags or an increase in the observed level.
  */
 export function detectLevelUpEvents(records) {
-  let lastKnownLevel = null;
+  let previousAvailableLevel = null;
   return records.map(item => {
     const parsedLevel = item?.level === null || item?.level === undefined || item?.level === ""
       ? null
       : Number(item.level);
     const currentLevel = Number.isFinite(parsedLevel) ? parsedLevel : null;
-    const detected = item?.levelUp === true ||
-      (lastKnownLevel !== null && currentLevel !== null && currentLevel > lastKnownLevel);
-    if (currentLevel !== null) lastKnownLevel = currentLevel;
+    const available = !!item &&
+      (!item.recordStatus || item.recordStatus === "available") &&
+      currentLevel !== null;
+    if (!available) {
+      // A missing/unavailable date breaks the exact level-up date chain.
+      previousAvailableLevel = null;
+      return false;
+    }
+
+    const detected = item.levelUp === true ||
+      (previousAvailableLevel !== null && currentLevel > previousAvailableLevel);
+    previousAvailableLevel = currentLevel;
     return detected;
   });
 }
