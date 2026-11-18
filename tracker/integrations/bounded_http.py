@@ -86,7 +86,7 @@ def post_json_with_deadline(
                     f"AI provider response exceeded {byte_limit} byte limit"
                 )
 
-        if time.monotonic() >= deadline:
+        if time.monotonic() >= local_deadline:
             raise requests.Timeout(
                 f"AI provider response exceeded {total_timeout:.1f}s deadline"
             )
