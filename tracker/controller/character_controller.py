@@ -67,17 +67,22 @@ def get_character():
     try:
         ocid, basic, response = resolve_character(character_name)
         if not ocid:
-            if is_temporary_nexon_failure(response):
-                return stale_snapshot_response(
-                    cache_key, "넥슨 API가 일시적으로 응답하지 않습니다. 잠시 후 다시 시도해주세요."
-                )
+            # Nexon maintenance and upstream errors may also arrive as HTTP 400.
+            # Prefer an existing persisted snapshot for this exact character name;
+            # if none exists, preserve the original upstream failure status.
+            stale_response = stale_snapshot_response(
+                cache_key, "넥슨 API가 일시적으로 응답하지 않습니다. 잠시 후 다시 시도해주세요."
+            )
+            if stale_response[1] == 200:
+                return stale_response
             return jsonify({"error": "캐릭터 정보를 찾을 수 없거나 조회할 수 없습니다."}), response.status_code
 
         if not basic:
-            if is_temporary_nexon_failure(response):
-                return stale_snapshot_response(
-                    cache_key, "캐릭터 정보를 일시적으로 조회할 수 없습니다. 잠시 후 다시 시도해주세요."
-                )
+            stale_response = stale_snapshot_response(
+                cache_key, "캐릭터 정보를 일시적으로 조회할 수 없습니다. 잠시 후 다시 시도해주세요."
+            )
+            if stale_response[1] == 200:
+                return stale_response
             return jsonify({"error": "캐릭터 정보를 확인할 수 없습니다."}), response.status_code
 
         character_class = basic["character_class"]
