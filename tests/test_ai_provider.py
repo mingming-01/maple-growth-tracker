@@ -21,9 +21,10 @@ class AIProviderAdapterTests(unittest.TestCase):
             "OPENROUTER_API_KEY": "openrouter-test-key",
             "OPENROUTER_MODEL": "openrouter/free",
             "AI_PROVIDER_CONNECT_TIMEOUT": 1.5,
-            "AI_PROVIDER_READ_TIMEOUT": 4.0,
+            "AI_GEMINI_READ_TIMEOUT": 5.0,
+            "AI_OPENROUTER_READ_TIMEOUT": 9.0,
             "AI_GEMINI_TOTAL_TIMEOUT": 7.0,
-            "AI_OPENROUTER_TOTAL_TIMEOUT": 5.0,
+            "AI_OPENROUTER_TOTAL_TIMEOUT": 12.0,
         })
 
     @patch("tracker.integrations.ai_provider.post_json_with_deadline")
@@ -41,7 +42,7 @@ class AIProviderAdapterTests(unittest.TestCase):
                          "https://generativelanguage.googleapis.com/v1beta/models/gemini-3.6-flash:generateContent")
         self.assertEqual(post_json.call_args.kwargs["headers"]["x-goog-api-key"], "gemini-test-key")
         self.assertEqual(post_json.call_args.kwargs["total_timeout"], 7.0)
-        self.assertEqual(post_json.call_args.kwargs["read_timeout"], 4.0)
+        self.assertEqual(post_json.call_args.kwargs["read_timeout"], 5.0)
         self.assertEqual(post_json.call_args.kwargs["json_body"]["generationConfig"]["maxOutputTokens"], 640)
 
     @patch("tracker.integrations.ai_provider.post_json_with_deadline")
@@ -57,7 +58,7 @@ class AIProviderAdapterTests(unittest.TestCase):
                          "https://openrouter.ai/api/v1/chat/completions")
         self.assertEqual(post_json.call_args.kwargs["headers"]["Authorization"],
                          "Bearer openrouter-test-key")
-        self.assertEqual(post_json.call_args.kwargs["total_timeout"], 5.0)
+        self.assertEqual(post_json.call_args.kwargs["total_timeout"], 12.0)
         self.assertEqual(post_json.call_args.kwargs["json_body"]["stream"], False)
         self.assertEqual(post_json.call_args.kwargs["json_body"]["max_tokens"], 640)
 
