@@ -84,7 +84,13 @@ class ApiResilienceTests(unittest.TestCase):
     def test_temporary_history_failure_returns_saved_history_as_stale(self):
         self.save_snapshot("history:테스트캐릭터", {
             "characterName": "테스트캐릭터",
-            "history": [{"date": "2026-10-26", "experience": 123}],
+            "history": [{
+                "date": "2026-10-26",
+                "experience": 123,
+                "ranking": 456,
+                "rankingScope": "overall",
+                "rankingChange": 12,
+            }],
             "historyStatus": "complete"
         })
 
@@ -101,6 +107,9 @@ class ApiResilienceTests(unittest.TestCase):
         body = response.get_json()
         self.assertEqual(body["dataStatus"], "stale")
         self.assertEqual(body["history"][0]["experience"], 123)
+        self.assertIsNone(body["history"][0]["ranking"])
+        self.assertIsNone(body["history"][0]["rankingScope"])
+        self.assertIsNone(body["history"][0]["rankingChange"])
 
     def test_temporary_failure_without_snapshot_returns_safe_error(self):
         with patch.object(
