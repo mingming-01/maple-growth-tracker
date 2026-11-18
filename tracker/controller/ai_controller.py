@@ -42,6 +42,19 @@ def _service_error_response(result):
     return response
 
 
+def _resolve_character_for_ai(character_name):
+    """AI 엔드포인트의 Nexon 조회는 짧은 1회 요청으로 제한한다."""
+    timeout = (
+        float(current_app.config.get("AI_NEXON_CONNECT_TIMEOUT", 1.5)),
+        float(current_app.config.get("AI_NEXON_READ_TIMEOUT", 2.5)),
+    )
+    return resolve_character(
+        character_name,
+        timeout_override=timeout,
+        max_attempts_override=1,
+    )
+
+
 AI_CHARACTER_SNAPSHOT_MAX_AGE_SECONDS = 30 * 60
 
 
@@ -119,14 +132,7 @@ def ai_analysis():
         if cached_profile:
             ocid, character = cached_profile
         else:
-            ocid, basic, basic_response = resolve_character(
-                character_name,
-                timeout_override=(
-                    float(current_app.config.get("AI_NEXON_CONNECT_TIMEOUT", 1.5)),
-                    float(current_app.config.get("AI_NEXON_READ_TIMEOUT", 2.5)),
-                ),
-                max_attempts_override=1,
-            )
+            ocid, basic, basic_response = _resolve_character_for_ai(character_name)
             if not ocid or not basic:
                 status = 503 if is_temporary_nexon_failure(basic_response) else 404
                 return jsonify({"error": "캐릭터 기본 정보를 확인하지 못했습니다."}), status
@@ -218,7 +224,7 @@ def ai_comparison():
         storage = get_growth_history_service()
         prepared = []
         for name in subjects:
-            ocid, basic, basic_response = resolve_character(name)
+            ocid, basic, basic_response = _resolve_character_for_ai(name)
             if not ocid or not basic:
                 status = 503 if is_temporary_nexon_failure(basic_response) else 404
                 return jsonify({"error": f"{name} 캐릭터 정보를 확인하지 못했습니다."}), status
