@@ -259,8 +259,9 @@ def generate_ai_analysis(character, history, computed_metrics=None, growth_insig
 
 
 def generate_ai_comparison(primary, comparison):
-    gemini_client = get_gemini_client()
-    openrouter_api_key = get_runtime_state().openrouter_api_key
+    runtime_state = get_runtime_state()
+    gemini_api_key = runtime_state.gemini_api_key
+    openrouter_api_key = runtime_state.openrouter_api_key
 
     def prepare_subject(subject):
         character = subject["character"]
@@ -306,9 +307,9 @@ def generate_ai_comparison(primary, comparison):
         return {"analysis": cached_analysis, "cacheHit": True}
 
     gemini_error = None
-    if gemini_client:
+    if gemini_api_key:
         try:
-            response = _generate_gemini_content(gemini_client, prompt)
+            response = _generate_gemini_content(prompt)
             analysis = sanitize_ai_text(response.text or "비교 분석 결과가 비어 있습니다.")
             set_ai_response_cache(prompt, analysis)
             return {"analysis": analysis, "cacheHit": False}
