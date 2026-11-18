@@ -16,7 +16,8 @@ def _set_socket_read_timeout(response, timeout):
         sock.settimeout(max(0.05, float(timeout)))
     except (AttributeError, OSError, TypeError, ValueError):
         # Requests/urllib3 내부 구조가 다른 버전에서는 초기 read timeout을 사용한다.
-        return
+        return False
+    return True
 
 
 def post_json_with_deadline(
@@ -28,6 +29,7 @@ def post_json_with_deadline(
     read_timeout=4.0,
     total_timeout=8.0,
     max_response_bytes=DEFAULT_MAX_RESPONSE_BYTES,
+    deadline=None,
 ):
     """POST JSON with a total deadline, not only Requests' per-read timeout.
 
@@ -40,7 +42,14 @@ def post_json_with_deadline(
     read_timeout = max(0.2, min(float(read_timeout), total_timeout))
     byte_limit = max(1024, int(max_response_bytes))
     started_at = time.monotonic()
-    deadline = started_at + total_timeout
+    local_deadline = started_at + total_timeout
+    if deadline is not None:
+        local_deadline = min(local_deadline, float(deadline))
+    remaining = local_deadline - started_at
+    if remaining <= 0:
+        raise requests.Timeout("AI provider request deadline has expired")
+    connect_timeout = min(connect_timeout, remaining)
+    read_timeout = min(read_timeout, remaining)
 
     response = requests.post(
         url,
@@ -53,18 +62,19 @@ def post_json_with_deadline(
         body = bytearray()
         chunks = iter(response.iter_content(chunk_size=1))
         while True:
-            remaining = deadline - time.monotonic()
+            remaining = local_deadline - time.monotonic()
             if remaining <= 0:
                 raise requests.Timeout(
                     f"AI provider response exceeded {total_timeout:.1f}s deadline"
                 )
-            _set_socket_read_timeout(response, min(read_timeout, remaining))
+            if not _set_socket_read_timeout(response, min(read_timeout, remaining)):
+                raise requests.Timeout("Unable to enforce AI provider response deadline")
             try:
                 chunk = next(chunks)
             except StopIteration:
                 break
 
-            if time.monotonic() >= deadline:
+            if time.monotonic() >= local_deadline:
                 raise requests.Timeout(
                     f"AI provider response exceeded {total_timeout:.1f}s deadline"
                 )
@@ -83,6 +93,8 @@ def post_json_with_deadline(
 
         raw_text = body.decode("utf-8-sig", errors="replace")
         if response.status_code >= 400:
+            response._content = bytes(body)
+            response._content_consumed = True
             raise requests.HTTPError(
                 f"{response.status_code} {response.reason}: {raw_text[:2000]}",
                 response=response,
