@@ -273,6 +273,7 @@ class GrowthHistoryApiTests(unittest.TestCase):
                 "level": 280,
                 "experience": 123456,
                 "ranking": 321,
+                "rankingScope": "overall",
                 "experienceRate": 12.345,
                 "experienceRateChecked": True
             }]
@@ -314,7 +315,8 @@ class GrowthHistoryApiTests(unittest.TestCase):
                 "recordStatus": "available",
                 "level": 279,
                 "experience": 98765,
-                "ranking": 654
+                "ranking": 654,
+                "rankingScope": "overall"
             }]
         )
 
@@ -329,6 +331,31 @@ class GrowthHistoryApiTests(unittest.TestCase):
         self.assertEqual(comparison_history[-2]["experience"], 98765)
         self.assertEqual(primary_history[-2]["ranking"], 321)
         self.assertEqual(comparison_history[-2]["ranking"], 654)
+
+    def test_archive_hides_non_overall_rankings_but_keeps_growth_data(self):
+        target_date = (self.today - timedelta(days=1)).isoformat()
+        self.store.save_records(
+            "test-ocid", "테스트캐릭터", "테스트월드",
+            [{
+                "date": target_date,
+                "recordStatus": "available",
+                "level": 280,
+                "experience": 123456,
+                "ranking": 77,
+                "rankingScope": "world",
+                "experienceRate": 12.345,
+                "experienceRateChecked": True,
+            }],
+        )
+
+        response = self.client.get("/api/history/archive?ocid=test-ocid&days=30")
+
+        self.assertEqual(response.status_code, 200)
+        saved = response.get_json()["history"][-2]
+        self.assertEqual(saved["recordStatus"], "available")
+        self.assertEqual(saved["experience"], 123456)
+        self.assertIsNone(saved["ranking"])
+        self.assertIsNone(saved["rankingScope"])
 
     def test_archive_does_not_fetch_past_data_without_collection_request(self):
         with patch.object(history_archive_service, "get_ranking_snapshot", side_effect=AssertionError("should not call Nexon")), patch.object(
