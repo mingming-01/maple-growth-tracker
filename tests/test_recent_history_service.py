@@ -105,6 +105,21 @@ class RecentHistoryServiceTests(unittest.TestCase):
             "test-ocid", target_date="2026-11-09", historical=True
         )
 
+    def test_non_positive_ranking_is_exposed_as_no_rank_for_verified_date(self):
+        self.ranking.return_value = ({
+            "ranking": 0,
+            "character_level": 290,
+            "character_exp": 12345,
+            "character_exp_rate": 12.5,
+        }, self.response)
+
+        result = self.collect([self.yesterday])
+
+        self.assertEqual(result[0]["recordStatus"], "available")
+        self.assertIsNone(result[0]["ranking"])
+        self.assertIsNone(result[0]["rankingScope"])
+        self.assertEqual(result[0]["rankingSourceDate"], "2026-11-09")
+
     def test_does_not_call_basic_api_after_temporary_ranking_failure(self):
         failed_response = Mock(status_code=503)
         self.ranking.return_value = (None, failed_response)
