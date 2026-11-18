@@ -1,7 +1,7 @@
 """AI 성장 분석 HTTP 라우트."""
 from datetime import date, datetime, timedelta
 
-from flask import Blueprint, jsonify, request
+from flask import Blueprint, current_app, jsonify, request
 
 from tracker.services.nexon_service import resolve_character, is_temporary_nexon_failure
 from tracker.services.request_limits import consume_ai_request
