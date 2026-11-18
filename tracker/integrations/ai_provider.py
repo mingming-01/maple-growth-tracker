@@ -187,7 +187,7 @@ def request_openrouter(prompt, api_key=None, deadline=None):
             "messages": [{"role": "user", "content": prompt}],
             "temperature": 0.35,
             "max_tokens": max(512, min(
-                16384,
+                4096,
                 int(_setting("AI_OPENROUTER_MAX_OUTPUT_TOKENS", 2048)),
             )),
             "stream": False,
