@@ -74,6 +74,7 @@ class AIResponseCacheTests(unittest.TestCase):
                 first = tracker.generate_ai_analysis(character, history, metrics)
                 second = tracker.generate_ai_analysis(character, history, metrics)
 
+        self.assertIn("analysis", first, f"첫 번째 AI 분석 결과: {first!r}")
         self.assertEqual(first["analysis"], second["analysis"])
         self.assertFalse(first["cacheHit"])
         self.assertTrue(second["cacheHit"])
