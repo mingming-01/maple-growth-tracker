@@ -1,9 +1,10 @@
 """AI 성장 분석과 캐릭터 비교의 프롬프트·모델 호출을 담당한다."""
 import json
+import logging
 import re
 import time
 
-from flask import current_app, has_request_context, request
+from flask import current_app, has_app_context, has_request_context, request
 from datetime import date
 from types import SimpleNamespace
 
@@ -64,10 +65,12 @@ def _log_provider_failure(provider, error, started_at, deadline):
         "http_status": http_status,
         "finish_reason": getattr(error, "finish_reason", None),
     }
-    current_app.logger.warning(
-        "AI 공급자 요청 실패: %s",
-        json.dumps(details, ensure_ascii=False, sort_keys=True),
-    )
+    log_message = json.dumps(details, ensure_ascii=False, sort_keys=True)
+    if has_app_context():
+        current_app.logger.warning("AI 공급자 요청 실패: %s", log_message)
+    else:
+        # 서비스 단위 테스트나 Flask 외부 작업에서도 폴백 경로를 중단하지 않는다.
+        logging.getLogger(__name__).warning("AI 공급자 요청 실패: %s", log_message)
 
 
 def _gemini_cooldown_remaining(runtime_state):
