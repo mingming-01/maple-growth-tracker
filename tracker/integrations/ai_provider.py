@@ -17,11 +17,12 @@ OPENROUTER_URL = "https://openrouter.ai/api/v1/chat/completions"
 class ProviderError(requests.RequestException):
     """Structured provider failure safe to classify across service layers."""
 
-    def __init__(self, message, error_type, status_code=None, retry_after_seconds=None):
+    def __init__(self, message, error_type, status_code=None, retry_after_seconds=None, finish_reason=None):
         super().__init__(message)
         self.error_type = error_type
         self.status_code = status_code
         self.retry_after_seconds = retry_after_seconds
+        self.finish_reason = finish_reason
 
 
 def provider_error_type(error):
@@ -155,10 +156,28 @@ def request_gemini(prompt, api_key=None, deadline=None):
     candidates = payload.get("candidates") or []
     if not candidates or not isinstance(candidates[0], dict):
         raise ProviderError("Gemini 응답에 생성 결과가 없습니다.", "provider_empty_response")
-    content = candidates[0].get("content") or {}
+    candidate = candidates[0]
+    finish_reason = candidate.get("finishReason")
+    if finish_reason == "MAX_TOKENS":
+        raise ProviderError(
+            "Gemini 응답이 출력 길이 제한으로 잘렸습니다.",
+            "provider_output_truncated",
+            finish_reason=finish_reason,
+        )
+    if finish_reason in {"SAFETY", "RECITATION", "BLOCKLIST", "PROHIBITED_CONTENT"}:
+        raise ProviderError(
+            "Gemini가 정책상 응답을 생성하지 않았습니다.",
+            "provider_rejected",
+            finish_reason=finish_reason,
+        )
+    content = candidate.get("content") or {}
     text = _extract_text_parts(content.get("parts"))
     if not text:
-        raise ProviderError("Gemini 응답에 분석 내용이 없습니다.", "provider_empty_response")
+        raise ProviderError(
+            "Gemini 응답에 분석 내용이 없습니다.",
+            "provider_empty_response",
+            finish_reason=finish_reason,
+        )
     return text
 
 
