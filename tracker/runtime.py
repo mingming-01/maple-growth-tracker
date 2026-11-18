@@ -58,7 +58,10 @@ class RuntimeState:
         self.gemini_client = (
             genai.Client(
                 api_key=self.gemini_api_key,
-                http_options=types.HttpOptions(timeout=ai_timeout_ms),
+                http_options=types.HttpOptions(
+                    timeout=ai_timeout_ms,
+                    retry_options=types.HttpRetryOptions(attempts=1),
+                ),
             )
             if self.gemini_api_key else None
         )
