@@ -47,11 +47,13 @@ class RecentHistoryServiceTests(unittest.TestCase):
         saved = {
             "2026-11-09": {
                 "ranking": 456,
+                "rankingSourceDate": "2026-11-09",
                 "level": 289,
                 "experience": 9876,
                 "experienceRate": 11.2,
                 "experienceRateChecked": True,
                 "rankingScope": "overall",
+                "rankingSourceDate": "2026-11-09",
                 "recordStatus": "available",
             }
         }
@@ -68,6 +70,7 @@ class RecentHistoryServiceTests(unittest.TestCase):
         result = self.collect([self.yesterday], stored=saved)
         self.assertEqual(result[0]["ranking"], 123)
         self.assertEqual(result[0]["rankingScope"], "overall")
+        self.assertEqual(result[0]["rankingSourceDate"], "2026-11-09")
         self.ranking.assert_called_once_with(target_date="2026-11-09", world_name=None, ocid="test-ocid", world_type=0)
 
     def test_fetches_ranking_first_and_returns_available_record(self):
@@ -75,6 +78,7 @@ class RecentHistoryServiceTests(unittest.TestCase):
 
         self.assertEqual(result[0]["recordStatus"], "available")
         self.assertEqual(result[0]["experienceRate"], 12.5)
+        self.assertEqual(result[0]["rankingSourceDate"], "2026-11-09")
         self.ranking.assert_called_once_with(
             target_date="2026-11-09",
             world_name=None,
@@ -144,6 +148,7 @@ class RecentHistoryServiceTests(unittest.TestCase):
 
         self.assertEqual(result[0]["ranking"], 123)
         self.assertEqual(result[0]["rankingScope"], "overall")
+        self.assertEqual(result[0]["rankingSourceDate"], self.today.isoformat())
         self.ranking.assert_called_once_with(
             target_date=self.today.isoformat(),
             world_name=None,
@@ -168,6 +173,7 @@ class RecentHistoryServiceTests(unittest.TestCase):
         result = self.collect([self.today], basic=basic)
 
         self.assertEqual(result[0]["ranking"], 99)
+        self.assertEqual(result[0]["rankingSourceDate"], self.today.isoformat())
         self.assertEqual(result[0]["recordStatus"], "available")
         self.ranking.assert_not_called()
         self.metric.assert_called_once_with("history.current_ranking_reused")
