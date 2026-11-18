@@ -7,7 +7,7 @@ from tracker.services.nexon_service import resolve_character, is_temporary_nexon
 from tracker.services.request_limits import consume_ai_request
 from tracker.domain.ai_growth_insights import build_growth_insights
 from tracker.domain.ai_metrics import build_server_growth_metrics
-from tracker.runtime import KOREA_TIMEZONE, get_growth_history_service
+from tracker.runtime import KOREA_TIMEZONE, get_growth_history_service, load_api_snapshot
 from tracker.services.ai_analysis_service import (
     generate_ai_analysis,
     generate_ai_comparison,
@@ -42,6 +42,49 @@ def _service_error_response(result):
     return response
 
 
+AI_CHARACTER_SNAPSHOT_MAX_AGE_SECONDS = 30 * 60
+
+
+def _load_recent_character_profile(character_name, now=None):
+    """최근 캐릭터 화면 조회가 저장한 프로필을 재사용해 Nexon 재조회 시간을 줄인다."""
+    try:
+        snapshot, saved_at = load_api_snapshot(f"character:{character_name}")
+        if not isinstance(snapshot, dict) or not saved_at:
+            return None
+        saved_name = str(snapshot.get("characterName") or "").strip()
+        world_name = str(snapshot.get("worldName") or "").strip()
+        ocid = str(snapshot.get("ocid") or "").strip()
+        if (
+            not saved_name
+            or saved_name.casefold() != character_name.casefold()
+            or not world_name
+            or not ocid
+            or snapshot.get("level") is None
+        ):
+            return None
+
+        saved_time = datetime.fromisoformat(str(saved_at))
+        current_time = now or datetime.now().astimezone()
+        if saved_time.tzinfo is None:
+            saved_time = saved_time.astimezone()
+        age_seconds = (current_time - saved_time).total_seconds()
+        if age_seconds < 0 or age_seconds > AI_CHARACTER_SNAPSHOT_MAX_AGE_SECONDS:
+            return None
+
+        return ocid, {
+            "characterName": saved_name,
+            "worldName": world_name,
+            "job": snapshot.get("job"),
+            "level": snapshot.get("level"),
+            "experience": snapshot.get("experience"),
+            "experienceRate": snapshot.get("experienceRate"),
+            "ocid": ocid,
+        }
+    except (OSError, TypeError, ValueError, OverflowError):
+        # 캐시 저장소가 일시적으로 unavailable이어도 원래 Nexon 조회 경로로 폴백한다.
+        return None
+
+
 @ai_bp.route("/ai-analysis", methods=["GET", "POST"])
 def ai_analysis():
     """저장된 성장 기록으로 지표를 재계산해 AI 성장 리포트를 만든다."""
@@ -72,31 +115,43 @@ def ai_analysis():
         return rate_limit_response
 
     try:
-        ocid, basic, basic_response = resolve_character(character_name)
-        if not ocid or not basic:
-            status = 503 if is_temporary_nexon_failure(basic_response) else 404
-            return jsonify({"error": "캐릭터 기본 정보를 확인하지 못했습니다."}), status
-        character = {
-            "characterName": basic.get("character_name"),
-            "worldName": basic.get("world_name"),
-            "job": basic.get("character_class"),
-            "level": basic.get("character_level"),
-            "experience": basic.get("character_exp"),
-            "experienceRate": basic.get("character_exp_rate"),
-            "ocid": ocid,
-        }
+        cached_profile = _load_recent_character_profile(character_name)
+        if cached_profile:
+            ocid, character = cached_profile
+        else:
+            ocid, basic, basic_response = resolve_character(character_name)
+            if not ocid or not basic:
+                status = 503 if is_temporary_nexon_failure(basic_response) else 404
+                return jsonify({"error": "캐릭터 기본 정보를 확인하지 못했습니다."}), status
+            character = {
+                "characterName": basic.get("character_name"),
+                "worldName": basic.get("world_name"),
+                "job": basic.get("character_class"),
+                "level": basic.get("character_level"),
+                "experience": basic.get("character_exp"),
+                "experienceRate": basic.get("character_exp_rate"),
+                "ocid": ocid,
+            }
 
         today = datetime.now(KOREA_TIMEZONE).date()
         storage = get_growth_history_service()
+        period_start = today - timedelta(days=period_days - 1)
+        insight_start = today - timedelta(days=14)
+        query_start = min(period_start, insight_start)
         try:
-            stored_records = storage.get_records(
-                ocid, today - timedelta(days=period_days - 1), today
-            )
-            insight_records = storage.get_records(
-                ocid, today - timedelta(days=14), today
-            )
+            # 선택 기간과 14일 인사이트를 하나의 DB 조회로 확보한다.
+            combined_records = storage.get_records(ocid, query_start, today)
         except Exception:
             return jsonify({"error": "서버에 저장된 성장 기록을 확인할 수 없습니다."}), 503
+
+        stored_records = [
+            item for item in combined_records
+            if str(item.get("date") or "") >= period_start.isoformat()
+        ]
+        insight_records = [
+            item for item in combined_records
+            if str(item.get("date") or "") >= insight_start.isoformat()
+        ]
 
         calculated = build_server_growth_metrics(
             character, stored_records, reference_date=today, period_days=period_days
