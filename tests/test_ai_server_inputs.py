@@ -75,7 +75,7 @@ class AIServerInputTests(unittest.TestCase):
                 ai_controller,
                 "resolve_character",
                 return_value=("ocid-one", self.make_basic("테스트캐릭터"), Mock(status_code=200)),
-            ),
+            ) as resolve,
             patch.object(ai_controller, "get_growth_history_service", return_value=storage),
             patch.object(ai_controller, "generate_ai_analysis", side_effect=generate),
         ):
@@ -93,6 +93,11 @@ class AIServerInputTests(unittest.TestCase):
         self.assertEqual(len(captured["history"]), 2)
         self.assertNotEqual(captured["history"][0]["date"], "2099-01-01")
         self.assertEqual(captured["context"]["periodSummary"]["averageDailyExperience"], 150)
+        resolve.assert_called_once_with(
+            "테스트캐릭터",
+            timeout_override=(1.5, 2.5),
+            max_attempts_override=1,
+        )
 
     def test_comparison_rebuilds_both_subjects_from_server_records(self):
         captured = {}
