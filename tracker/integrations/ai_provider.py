@@ -1,6 +1,7 @@
 """AI provider adapters with a strict end-to-end response budget."""
 import re
 import time
+from email.utils import parsedate_to_datetime
 import requests
 
 from flask import current_app, has_app_context
@@ -49,7 +50,10 @@ def provider_retry_after_seconds(error, default_seconds=300):
         try:
             return max(1, min(86400, int(float(retry_after))))
         except (TypeError, ValueError):
-            pass
+            try:
+                return max(1, min(86400, int(parsedate_to_datetime(retry_after).timestamp() - time.time())))
+            except (TypeError, ValueError, OverflowError):
+                pass
     body = ""
     if response is not None:
         try:
@@ -238,6 +242,15 @@ def request_openrouter(prompt, api_key=None, deadline=None):
             error_type,
         )
     if choice.get("finish_reason") == "length":
+        usage = payload.get("usage") if isinstance(payload.get("usage"), dict) else {}
+        _log_openrouter_empty_response(
+            requested_model=_setting("OPENROUTER_MODEL", "openrouter/free"),
+            selected_model=payload.get("model"),
+            provider=payload.get("provider"),
+            finish_reason="length",
+            content_length=len(content),
+            usage={key: usage.get(key) for key in ("prompt_tokens", "completion_tokens", "total_tokens", "reasoning_tokens") if isinstance(usage.get(key), (int, float))},
+        )
         raise ProviderError("OpenRouter 응답이 출력 길이 제한으로 잘렸습니다.", "provider_output_truncated")
     if has_app_context():
         usage = payload.get("usage") if isinstance(payload.get("usage"), dict) else {}
