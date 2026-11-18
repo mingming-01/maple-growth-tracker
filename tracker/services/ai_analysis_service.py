@@ -47,6 +47,20 @@ def _request_deadline():
     return float(started) + total
 
 
+def _log_provider_failure(provider, error, started_at, deadline):
+    """공급자 실패 원인을 비밀정보 없이 시간 예산과 함께 기록한다."""
+    elapsed_ms = round((time.monotonic() - started_at) * 1000, 1)
+    remaining_ms = max(0, round((float(deadline) - time.monotonic()) * 1000, 1))
+    details = {
+        "provider": provider,
+        "exception": type(error).__name__,
+        "error_type": provider_error_type(error),
+        "elapsed_ms": elapsed_ms,
+        "deadline_remaining_ms": remaining_ms,
+    }
+    print(f"AI 공급자 요청 실패: {json.dumps(details, ensure_ascii=False)}")
+
+
 def _gemini_cooldown_remaining(runtime_state):
     try:
         until = runtime_state.ai_provider_state_store.get_cooldown_until("gemini")
@@ -303,6 +317,7 @@ def generate_ai_analysis(character, history, computed_metrics=None, growth_insig
             retry_after_seconds=max(1, int(cooldown_remaining)),
         )
     elif gemini_api_key or legacy_gemini_client:
+        gemini_started_at = time.monotonic()
         try:
             response = (
                 _generate_gemini_content(legacy_gemini_client, prompt)
@@ -323,11 +338,12 @@ def generate_ai_analysis(character, history, computed_metrics=None, growth_insig
             if _is_quota_error(error):
                 delay = _set_gemini_cooldown(runtime_state, error)
                 print(f"Gemini 쿼터 제한으로 {delay}초 쿨다운을 적용했습니다.")
-            print(f"Gemini 성장 분석 요청에 실패했습니다: {type(error).__name__}")
+            _log_provider_failure("gemini", error, gemini_started_at, deadline)
             if not should_use_openrouter(error):
                 return _error_result(error, "AI 분석을 불러오지 못했습니다.")
 
     if openrouter_api_key:
+        openrouter_started_at = time.monotonic()
         try:
             response_text = _require_provider_text(
                 request_openrouter(prompt, api_key=openrouter_api_key, deadline=deadline),
@@ -342,7 +358,7 @@ def generate_ai_analysis(character, history, computed_metrics=None, growth_insig
             set_ai_response_cache(prompt, analysis)
             return {"analysis": analysis, "cacheHit": False, "growthInsights": growth_insights}
         except Exception as error:
-            print(f"OpenRouter 성장 분석 요청에 실패했습니다: {type(error).__name__}")
+            _log_provider_failure("openrouter", error, openrouter_started_at, deadline)
             return _fallback_failure_result(gemini_error, error)
 
     if gemini_error:
@@ -408,6 +424,7 @@ def generate_ai_comparison(primary, comparison):
             retry_after_seconds=max(1, int(cooldown_remaining)),
         )
     elif gemini_api_key:
+        gemini_started_at = time.monotonic()
         try:
             response = _generate_gemini_content(prompt, api_key=gemini_api_key, deadline=deadline)
             analysis = sanitize_ai_text(_require_provider_text(getattr(response, "text", None), "Gemini"))
@@ -418,11 +435,12 @@ def generate_ai_comparison(primary, comparison):
             gemini_error = error
             if _is_quota_error(error):
                 _set_gemini_cooldown(runtime_state, error)
-            print(f"Gemini 성장 비교 분석 요청에 실패했습니다: {type(error).__name__}")
+            _log_provider_failure("gemini_comparison", error, gemini_started_at, deadline)
             if not should_use_openrouter(error):
                 return _error_result(error, "AI 성장 분석을 불러오지 못했습니다.")
 
     if openrouter_api_key:
+        openrouter_started_at = time.monotonic()
         try:
             response_text = _require_provider_text(
                 request_openrouter(prompt, api_key=openrouter_api_key, deadline=deadline),
@@ -433,7 +451,7 @@ def generate_ai_comparison(primary, comparison):
             set_ai_response_cache(prompt, analysis)
             return {"analysis": analysis, "cacheHit": False}
         except Exception as error:
-            print(f"OpenRouter 성장 비교 분석 요청에 실패했습니다: {type(error).__name__}")
+            _log_provider_failure("openrouter_comparison", error, openrouter_started_at, deadline)
             return _fallback_failure_result(gemini_error, error)
 
     if gemini_error:
