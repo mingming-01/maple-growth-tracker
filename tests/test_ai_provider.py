@@ -62,6 +62,42 @@ class AIProviderAdapterTests(unittest.TestCase):
         self.assertEqual(post_json.call_args.kwargs["json_body"]["stream"], False)
         self.assertEqual(post_json.call_args.kwargs["json_body"]["max_tokens"], 640)
 
+    @patch("tracker.integrations.ai_provider._log_openrouter_empty_response")
+    @patch("tracker.integrations.ai_provider.post_json_with_deadline")
+    def test_openrouter_empty_content_reports_safe_provider_metadata(self, post_json, log_metadata):
+        post_json.return_value = {
+            "id": "response-id",
+            "choices": [{
+                "finish_reason": "stop",
+                "message": {"role": "assistant", "content": None},
+            }],
+        }
+        with self.app.app_context():
+            with self.assertRaises(requests.RequestException):
+                request_openrouter("private prompt text")
+
+        details = log_metadata.call_args.kwargs
+        self.assertEqual(details["finish_reason"], "stop")
+        self.assertEqual(details["message_keys"], ["content", "role"])
+        self.assertNotIn("private prompt text", repr(log_metadata.call_args))
+
+    @patch("tracker.integrations.ai_provider.post_json_with_deadline")
+    def test_openrouter_extracts_text_from_multimodal_content_parts(self, post_json):
+        post_json.return_value = {
+            "choices": [{
+                "message": {
+                    "content": [
+                        {"type": "text", "text": "대체 분석 "},
+                        {"type": "text", "text": "완료"},
+                    ]
+                }
+            }]
+        }
+        with self.app.app_context():
+            result = request_openrouter("prompt")
+
+        self.assertEqual(result, "대체 분석 완료")
+
     def test_gemini_deadline_and_http_504_trigger_fallback(self):
         self.assertTrue(should_use_openrouter(requests.Timeout("deadline exceeded")))
         error = requests.HTTPError("upstream timeout", response=type(
