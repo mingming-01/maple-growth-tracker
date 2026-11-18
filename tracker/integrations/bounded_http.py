@@ -8,13 +8,24 @@ import requests
 DEFAULT_MAX_RESPONSE_BYTES = 96 * 1024
 
 
+
+def _set_socket_read_timeout(response, timeout):
+    """각 socket read의 timeout을 남은 전체 예산으로 줄인다."""
+    try:
+        sock = response.raw._fp.fp.raw._sock
+        sock.settimeout(max(0.05, float(timeout)))
+    except (AttributeError, OSError, TypeError, ValueError):
+        # Requests/urllib3 내부 구조가 다른 버전에서는 초기 read timeout을 사용한다.
+        return
+
+
 def post_json_with_deadline(
     url,
     *,
     headers,
     json_body,
     connect_timeout=1.5,
-    read_timeout=1.0,
+    read_timeout=4.0,
     total_timeout=8.0,
     max_response_bytes=DEFAULT_MAX_RESPONSE_BYTES,
 ):
@@ -40,7 +51,19 @@ def post_json_with_deadline(
     )
     try:
         body = bytearray()
-        for chunk in response.iter_content(chunk_size=1):
+        chunks = iter(response.iter_content(chunk_size=1))
+        while True:
+            remaining = deadline - time.monotonic()
+            if remaining <= 0:
+                raise requests.Timeout(
+                    f"AI provider response exceeded {total_timeout:.1f}s deadline"
+                )
+            _set_socket_read_timeout(response, min(read_timeout, remaining))
+            try:
+                chunk = next(chunks)
+            except StopIteration:
+                break
+
             if time.monotonic() >= deadline:
                 raise requests.Timeout(
                     f"AI provider response exceeded {total_timeout:.1f}s deadline"
