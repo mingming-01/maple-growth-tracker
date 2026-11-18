@@ -6,9 +6,7 @@ from tracker.services.ai_analysis_service import (
     _deterministic_growth_forecast,
     _error_result,
     _build_deterministic_growth_report,
-    _build_growth_comment_prompt,
     _validate_growth_report_facts,
-    _validate_ai_comment,
     _format_experience_korean,
     _build_growth_report_cache_key,
 )
@@ -220,10 +218,10 @@ class AIAnalysisQualityTests(unittest.TestCase):
             "selectedPeriod": {"periodDays": 7},
         }
         report = (
-            "[성장 패턴] 최근 7일 동안 성장 기록이 이어졌어요.\\n"
-            "[성장 변화] 하루 평균은 16.5조예요.\\n"
-            "[레벨업 분석] 11월 18일에 298레벨에서 299레벨로 올랐어요. 현재 진행률은 67.4%예요.\\n"
-            "[성장 전망] 기록을 바탕으로 다음 레벨을 예상해요.\\n"
+            "[성장 패턴] 최근 7일 동안 성장 기록이 이어졌어요.\n"
+            "[성장 변화] 하루 평균은 16.5조예요.\n"
+            "[레벨업 분석] 11월 18일에 298레벨에서 299레벨로 올랐어요. 현재 진행률은 67.4%예요.\n"
+            "[성장 전망] 기록을 바탕으로 다음 레벨을 예상해요.\n"
             "[AI 코멘트] 최근 흐름을 조금 더 지켜보면 좋겠어요."
         )
         self.assertTrue(_validate_growth_report_facts(report, source))
@@ -234,10 +232,10 @@ class AIAnalysisQualityTests(unittest.TestCase):
             "history": [{"date": "2026-11-18"}],
         }
         report = (
-            "[성장 패턴] 최근 기록이 있어요.\\n"
-            "[성장 변화] 하루 평균은 19.0조예요.\\n"
-            "[레벨업 분석] 11월 19일에 레벨업했어요.\\n"
-            "[성장 전망] 기록을 더 쌓아야 해요.\\n"
+            "[성장 패턴] 최근 기록이 있어요.\n"
+            "[성장 변화] 하루 평균은 19.0조예요.\n"
+            "[레벨업 분석] 11월 19일에 레벨업했어요.\n"
+            "[성장 전망] 기록을 더 쌓아야 해요.\n"
             "[AI 코멘트] 지금 흐름을 이어가면 좋겠어요."
         )
         self.assertFalse(_validate_growth_report_facts(report, source))
