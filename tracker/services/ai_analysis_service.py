@@ -533,6 +533,25 @@ def _build_deterministic_growth_report(character, metrics, growth_insights, anal
     return report
 
 
+def _filter_growth_history_to_selected_period(history, analysis_context):
+    """기간 경계 계산에 사용한 직전 스냅샷은 AI의 선택 기간 서술에서 제외한다."""
+    summary = (analysis_context or {}).get("periodSummary") or {}
+    try:
+        start = date.fromisoformat(str(summary.get("startDate")))
+        end = date.fromisoformat(str(summary.get("endDate")))
+    except (TypeError, ValueError):
+        return list(history or [])
+    filtered = []
+    for item in history or []:
+        try:
+            item_date = date.fromisoformat(str(item.get("date")))
+        except (TypeError, ValueError):
+            continue
+        if start <= item_date <= end:
+            filtered.append(item)
+    return filtered
+
+
 def generate_ai_analysis(character, history, computed_metrics=None, growth_insights=None, analysis_context=None, force_refresh=False):
     runtime_state = get_runtime_state()
     gemini_api_key = getattr(runtime_state, "gemini_api_key", "")
@@ -555,6 +574,9 @@ def generate_ai_analysis(character, history, computed_metrics=None, growth_insig
         }
         for item in history
     ]
+    growth_data = _filter_growth_history_to_selected_period(
+        growth_data, analysis_context
+    )
 
     if computed_metrics is not None:
         prediction = computed_metrics.get("prediction")
