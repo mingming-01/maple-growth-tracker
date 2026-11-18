@@ -71,6 +71,7 @@ class HistoryArchiveServiceTests(unittest.TestCase):
         self.assertEqual(result["level"], 289)
         self.assertEqual(result["experienceRate"], 8.75)
         self.assertEqual(result["rankingSourceDate"], "2026-11-08")
+        self.assertEqual(result["rankingSourceDate"], "2026-11-08")
         get_basic.assert_called_once_with(
             "ocid-1", target_date="2026-11-08", historical=True
         )
