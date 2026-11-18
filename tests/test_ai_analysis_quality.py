@@ -135,6 +135,7 @@ class AIAnalysisQualityTests(unittest.TestCase):
         self.assertEqual(_format_experience_korean(16530569535123.67), "16.5조")
         self.assertEqual(_format_experience_korean(16776913065046.14), "16.8조")
         self.assertEqual(_format_experience_korean(250000000), "2.5억")
+        self.assertEqual(_format_experience_korean(999999999999.99), "1.0조")
 
     def test_deterministic_report_uses_server_values_for_units_dates_and_progress(self):
         character = {"level": 299}
