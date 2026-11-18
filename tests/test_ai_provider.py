@@ -22,9 +22,9 @@ class AIProviderAdapterTests(unittest.TestCase):
             "OPENROUTER_MODEL": "openrouter/free",
             "AI_PROVIDER_CONNECT_TIMEOUT": 1.5,
             "AI_GEMINI_READ_TIMEOUT": 5.0,
-            "AI_OPENROUTER_READ_TIMEOUT": 9.0,
+            "AI_OPENROUTER_READ_TIMEOUT": 11.0,
             "AI_GEMINI_TOTAL_TIMEOUT": 7.0,
-            "AI_OPENROUTER_TOTAL_TIMEOUT": 12.0,
+            "AI_OPENROUTER_TOTAL_TIMEOUT": 14.0,
         })
 
     @patch("tracker.integrations.ai_provider.post_json_with_deadline")
@@ -58,9 +58,10 @@ class AIProviderAdapterTests(unittest.TestCase):
                          "https://openrouter.ai/api/v1/chat/completions")
         self.assertEqual(post_json.call_args.kwargs["headers"]["Authorization"],
                          "Bearer openrouter-test-key")
-        self.assertEqual(post_json.call_args.kwargs["total_timeout"], 12.0)
+        self.assertEqual(post_json.call_args.kwargs["total_timeout"], 14.0)
+        self.assertEqual(post_json.call_args.kwargs["read_timeout"], 11.0)
         self.assertEqual(post_json.call_args.kwargs["json_body"]["stream"], False)
-        self.assertEqual(post_json.call_args.kwargs["json_body"]["max_tokens"], 640)
+        self.assertEqual(post_json.call_args.kwargs["json_body"]["max_tokens"], 1536)
 
     @patch("tracker.integrations.ai_provider._log_openrouter_empty_response")
     @patch("tracker.integrations.ai_provider.post_json_with_deadline")
