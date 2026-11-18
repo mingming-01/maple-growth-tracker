@@ -48,7 +48,7 @@ class RuntimeState:
         self.nexon_api_key = config.get("NEXON_API_KEY", "")
         self.gemini_api_key = config.get("GEMINI_API_KEY", "")
         try:
-            ai_timeout_ms = max(1000, int(float(config.get("AI_API_TIMEOUT", 30)) * 1000))
+            ai_timeout_ms = max(1000, int(float(config.get("AI_API_TIMEOUT", 12)) * 1000))
         except (TypeError, ValueError):
             ai_timeout_ms = 30000
         self.gemini_client = (
@@ -63,7 +63,7 @@ class RuntimeState:
         self.admin_username = config.get("ADMIN_USERNAME", "")
         self.admin_password_hash = config.get("ADMIN_PASSWORD_HASH", "")
         self.admin_password = config.get("ADMIN_PASSWORD", "")
-        self.ai_api_retries = config.get("AI_API_RETRIES", 1)
+        self.ai_api_retries = config.get("AI_API_RETRIES", 0)
         self.ai_api_retry_backoff = config.get("AI_API_RETRY_BACKOFF", 0.5)
         self.growth_database_url = config.get("GROWTH_DATABASE_URL", "").strip()
         self.log_db_backend = (
