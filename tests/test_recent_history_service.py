@@ -127,6 +127,31 @@ class RecentHistoryServiceTests(unittest.TestCase):
             ["2026-11-08", "2026-11-09", "2026-11-10"],
         )
 
+    def test_previous_day_profile_fallback_fetches_todays_ranking(self):
+        basic = {
+            "character_name": "테스트",
+            "world_name": "크로아",
+            "character_level": 290,
+            "character_exp": 12345,
+            "ranking": 99,
+            "ranking_data_status": "available",
+            "ranking_scope": "overall",
+            "ranking_date": self.yesterday.isoformat(),
+            "character_exp_rate": 7.5,
+        }
+
+        result = self.collect([self.today], basic=basic)
+
+        self.assertEqual(result[0]["ranking"], 123)
+        self.assertEqual(result[0]["rankingScope"], "overall")
+        self.ranking.assert_called_once_with(
+            target_date=self.today.isoformat(),
+            world_name=None,
+            ocid="test-ocid",
+            world_type=0,
+        )
+        self.metric.assert_not_called()
+
     def test_reuses_today_ranking_from_character_snapshot(self):
         basic = {
             "character_name": "테스트",
