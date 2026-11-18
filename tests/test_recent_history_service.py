@@ -157,6 +157,57 @@ class RecentHistoryServiceTests(unittest.TestCase):
         )
         self.metric.assert_not_called()
 
+    def test_legacy_rank_is_hidden_when_revalidation_request_temporarily_fails(self):
+        saved = {
+            "2026-11-09": {
+                "ranking": 377,
+                "rankingScope": "overall",
+                "rankingSourceDate": None,
+                "level": 290,
+                "experience": 12345,
+                "experienceRate": 12.5,
+                "experienceRateChecked": True,
+                "recordStatus": "available",
+            }
+        }
+        self.ranking.return_value = (None, Mock(status_code=503))
+        self.temporary_failure.return_value = True
+
+        result = self.collect([self.yesterday], stored=saved)
+
+        self.assertEqual(result[0]["recordStatus"], "available")
+        self.assertIsNone(result[0]["ranking"])
+        self.assertIsNone(result[0]["rankingScope"])
+        self.assertEqual(result[0]["level"], 290)
+        self.assertEqual(result[0]["experience"], 12345)
+        self.assertTrue(result[0]["_fromStore"])
+        self.basic_lookup.assert_not_called()
+
+    def test_verified_empty_ranking_clears_legacy_rank_and_preserves_growth(self):
+        saved = {
+            "2026-11-09": {
+                "ranking": 377,
+                "rankingScope": "overall",
+                "rankingSourceDate": None,
+                "level": 290,
+                "experience": 12345,
+                "experienceRate": 12.5,
+                "experienceRateChecked": True,
+                "recordStatus": "available",
+            }
+        }
+        self.ranking.return_value = (None, self.response)
+        self.basic_lookup.return_value = (None, Mock(status_code=503))
+
+        result = self.collect([self.yesterday], stored=saved)
+
+        self.assertEqual(result[0]["recordStatus"], "available")
+        self.assertIsNone(result[0]["ranking"])
+        self.assertIsNone(result[0]["rankingScope"])
+        self.assertEqual(result[0]["rankingSourceDate"], "2026-11-09")
+        self.assertEqual(result[0]["level"], 290)
+        self.assertEqual(result[0]["experience"], 12345)
+
     def test_reuses_today_ranking_from_character_snapshot(self):
         basic = {
             "character_name": "테스트",
