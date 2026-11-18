@@ -108,6 +108,30 @@ class GrowthHistoryStoreTests(unittest.TestCase):
         self.assertIsNone(saved[0]["ranking"])
         self.assertIsNone(saved[0]["rankingScope"])
 
+    def test_rank_from_a_different_source_date_is_not_persisted(self):
+        record_date = self.today.isoformat()
+        self.store.save_records(
+            "test-ocid", "테스트캐릭터", "테스트월드",
+            [{
+                "date": record_date,
+                "recordStatus": "available",
+                "level": 280,
+                "experience": 12345,
+                "ranking": 25,
+                "rankingScope": "overall",
+                "rankingSourceDate": (self.today - timedelta(days=1)).isoformat(),
+                "experienceRate": 12.5,
+                "experienceRateChecked": True,
+            }],
+        )
+
+        saved = self.store.get_records("test-ocid", self.today, self.today)[0]
+
+        self.assertEqual(saved["experience"], 12345)
+        self.assertIsNone(saved["ranking"])
+        self.assertIsNone(saved["rankingScope"])
+        self.assertIsNone(saved["rankingSourceDate"])
+
     def test_same_character_and_date_is_upserted_instead_of_duplicated(self):
         record_date = self.today.isoformat()
         first = [{"date": record_date, "recordStatus": "available", "level": 280, "experience": 100, "ranking": 20, "rankingScope": "overall", "rankingSourceDate": record_date}]
