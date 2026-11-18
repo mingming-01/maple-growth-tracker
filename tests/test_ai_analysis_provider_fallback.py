@@ -174,13 +174,10 @@ class AIAnalysisFallbackTests(unittest.TestCase):
     @patch("tracker.services.ai_analysis_service.get_ai_response_cache", return_value=None)
     @patch("tracker.services.ai_analysis_service.set_ai_response_cache")
     @patch("tracker.services.ai_analysis_service._gemini_cooldown_remaining", return_value=0)
-    @patch("tracker.services.ai_analysis_service.validate_growth_report", side_effect=[False, True])
-    @patch("tracker.services.ai_analysis_service.sanitize_ai_text", side_effect=lambda value, *_: value)
-    @patch("tracker.services.ai_analysis_service.request_gemini", return_value="불완전한 리포트")
+    @patch("tracker.services.ai_analysis_service.request_gemini", return_value="[AI 코멘트]\\n주말 사냥이 평일보다 5% 효율적이에요.")
     @patch("tracker.services.ai_analysis_service.request_openrouter", return_value=VALID_REPORT)
-    def test_gemini_missing_required_report_sections_falls_back(
-        self, openrouter, _gemini, _sanitize, _validate, _cooldown,
-        _set_cache, _get_cache, get_state
+    def test_gemini_comment_with_numeric_or_unsupported_claim_falls_back(
+        self, openrouter, _gemini, _cooldown, _set_cache, _get_cache, get_state
     ):
         get_state.return_value = self.state
         result = service.generate_ai_analysis(
