@@ -35,13 +35,13 @@ def _is_quota_error(error):
 
 
 def _request_deadline():
-    """요청 시작부터 계산한 전체 AI deadline으로 사전 처리 시간도 예산에 포함한다."""
+    """요청 시작부터 최대 90초의 전체 AI deadline을 적용한다."""
     total = 32.0
     started = None
     if has_request_context():
         started = request.environ.get("maple_request_started_at")
         try:
-            total = min(32.0, max(5.0, float(current_app.config.get("AI_REQUEST_TOTAL_TIMEOUT", 32.0))))
+            total = min(90.0, max(5.0, float(current_app.config.get("AI_REQUEST_TOTAL_TIMEOUT", 90.0))))
         except (TypeError, ValueError):
             pass
     if started is None:
