@@ -32,6 +32,7 @@ class HistoryArchiveServiceTests(unittest.TestCase):
         self.assertEqual(result, {
             "date": "2026-11-08",
             "ranking": 123,
+            "rankingScope": "overall",
             "level": 290,
             "experience": 98765,
             "experienceRate": 12.5,
@@ -41,7 +42,7 @@ class HistoryArchiveServiceTests(unittest.TestCase):
         get_basic.assert_not_called()
         get_ranking.assert_called_once_with(
             "2026-11-08",
-            world_name="크로아",
+            world_name=None,
             ocid="ocid-1",
             world_type=0,
             historical=True,

@@ -41,9 +41,12 @@ class Config:
     NEXON_API_READ_TIMEOUT = _float_env("NEXON_API_READ_TIMEOUT", 10)
     NEXON_API_RETRIES = _int_env("NEXON_API_RETRIES", 2)
     NEXON_API_RETRY_BACKOFF = _float_env("NEXON_API_RETRY_BACKOFF", 0.35)
-    AI_API_TIMEOUT = _float_env("AI_API_TIMEOUT", 30)
-    AI_API_RETRIES = _int_env("AI_API_RETRIES", 1)
+    AI_API_TIMEOUT = _float_env("AI_API_TIMEOUT", 12)
+    AI_API_RETRIES = _int_env("AI_API_RETRIES", 0)
     AI_API_RETRY_BACKOFF = _float_env("AI_API_RETRY_BACKOFF", 0.5)
+    # OpenRouter는 Gunicorn 기본 30초 제한 안에서 끝나도록 짧게 한 번만 호출한다.
+    OPENROUTER_CONNECT_TIMEOUT = _float_env("OPENROUTER_CONNECT_TIMEOUT", 2.5)
+    OPENROUTER_READ_TIMEOUT = _float_env("OPENROUTER_READ_TIMEOUT", 6.5)
     NEXON_API_MIN_INTERVAL = _float_env("NEXON_API_MIN_INTERVAL", 0.22)
     EXTERNAL_API_MAX_RETRY_AFTER_WAIT_SECONDS = _float_env("EXTERNAL_API_MAX_RETRY_AFTER_WAIT_SECONDS", 5.0)
     # 캐시 미스와 강제 새로고침을 구분해 공개 데이터 API를 보호한다.

@@ -106,6 +106,7 @@ class RecentCharacterBasicSnapshotTests(TestCase):
             result,
             {
                 "ranking": 1234,
+                "ranking_scope": "overall",
                 "character_level": 290,
                 "character_exp": 123456,
                 "character_exp_rate": 45.6,

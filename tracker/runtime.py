@@ -48,13 +48,20 @@ class RuntimeState:
         self.nexon_api_key = config.get("NEXON_API_KEY", "")
         self.gemini_api_key = config.get("GEMINI_API_KEY", "")
         try:
-            ai_timeout_ms = max(1000, int(float(config.get("AI_API_TIMEOUT", 30)) * 1000))
+            # 외부 AI 호출이 Gunicorn 기본 30초 제한을 넘지 않도록 SDK 타임아웃을 상한 제한한다.
+            ai_timeout_ms = min(
+                15000,
+                max(1000, int(float(config.get("AI_API_TIMEOUT", 12)) * 1000)),
+            )
         except (TypeError, ValueError):
-            ai_timeout_ms = 30000
+            ai_timeout_ms = 12000
         self.gemini_client = (
             genai.Client(
                 api_key=self.gemini_api_key,
-                http_options=types.HttpOptions(timeout=ai_timeout_ms),
+                http_options=types.HttpOptions(
+                    timeout=ai_timeout_ms,
+                    retry_options=types.HttpRetryOptions(attempts=1),
+                ),
             )
             if self.gemini_api_key else None
         )
@@ -63,7 +70,7 @@ class RuntimeState:
         self.admin_username = config.get("ADMIN_USERNAME", "")
         self.admin_password_hash = config.get("ADMIN_PASSWORD_HASH", "")
         self.admin_password = config.get("ADMIN_PASSWORD", "")
-        self.ai_api_retries = config.get("AI_API_RETRIES", 1)
+        self.ai_api_retries = config.get("AI_API_RETRIES", 0)
         self.ai_api_retry_backoff = config.get("AI_API_RETRY_BACKOFF", 0.5)
         self.growth_database_url = config.get("GROWTH_DATABASE_URL", "").strip()
         self.log_db_backend = (

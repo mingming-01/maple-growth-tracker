@@ -20,17 +20,12 @@ def request_openrouter(prompt):
     if not api_key:
         return None
 
-    timeout = _setting("AI_API_TIMEOUT", 30)
-    retries = _setting("AI_API_RETRIES", 1)
-    backoff = _setting("AI_API_RETRY_BACKOFF", 0.5)
-    try:
-        retries = int(retries)
-    except (TypeError, ValueError):
-        retries = 1
-    try:
-        backoff = float(backoff)
-    except (TypeError, ValueError):
-        backoff = 0.5
+    # Gunicorn 기본 30초 제한 전에 fallback이 끝나도록 연결/읽기 시간을 분리한다.
+    # Gemini가 실패한 뒤 실행되는 경로이므로 재시도하지 않고 빠르게 제어를 반환한다.
+    timeout = (
+        min(3.0, max(0.5, float(_setting("OPENROUTER_CONNECT_TIMEOUT", 2.5)))),
+        min(7.0, max(1.0, float(_setting("OPENROUTER_READ_TIMEOUT", 6.5)))),
+    )
 
     response = request_with_retries(
         "post",
@@ -44,9 +39,9 @@ def request_openrouter(prompt):
             "messages": [{"role": "user", "content": prompt}],
         },
         timeout=timeout,
-        max_attempts=max(1, retries + 1),
-        backoff_factor=max(0.0, backoff),
-        max_retry_after_wait=max(0.0, float(_setting("EXTERNAL_API_MAX_RETRY_AFTER_WAIT_SECONDS", 5.0))),
+        max_attempts=1,
+        backoff_factor=0,
+        max_retry_after_wait=0,
     )
     response.raise_for_status()
 

@@ -9,33 +9,16 @@ from tracker.services.ai_analysis_service import _generate_gemini_content
 
 
 class GeminiRetryTests(unittest.TestCase):
-    @patch("tracker.services.ai_analysis_service.time.sleep")
-    @patch("tracker.services.ai_analysis_service.get_runtime_state")
-    def test_retries_transient_connection_failure(self, get_state, sleep):
-        get_state.return_value = SimpleNamespace(
-            ai_api_retries=1,
-            ai_api_retry_backoff=0,
-        )
+    def test_transient_failure_returns_immediately_for_provider_fallback(self):
         client = Mock()
-        expected = Mock(text="성장 흐름이 안정적입니다.")
-        client.models.generate_content.side_effect = [
-            requests.Timeout("temporary timeout"),
-            expected,
-        ]
+        client.models.generate_content.side_effect = requests.Timeout("temporary timeout")
 
-        result = _generate_gemini_content(client, "prompt")
+        with self.assertRaises(requests.Timeout):
+            _generate_gemini_content(client, "prompt")
 
-        self.assertIs(result, expected)
-        self.assertEqual(client.models.generate_content.call_count, 2)
-        sleep.assert_not_called()
+        self.assertEqual(client.models.generate_content.call_count, 1)
 
-    @patch("tracker.services.ai_analysis_service.time.sleep")
-    @patch("tracker.services.ai_analysis_service.get_runtime_state")
-    def test_does_not_retry_permanent_error(self, get_state, sleep):
-        get_state.return_value = SimpleNamespace(
-            ai_api_retries=3,
-            ai_api_retry_backoff=0,
-        )
+    def test_permanent_error_is_not_retried(self):
         client = Mock()
         client.models.generate_content.side_effect = ValueError("invalid prompt")
 
@@ -43,7 +26,6 @@ class GeminiRetryTests(unittest.TestCase):
             _generate_gemini_content(client, "prompt")
 
         self.assertEqual(client.models.generate_content.call_count, 1)
-        sleep.assert_not_called()
 
 
 if __name__ == "__main__":
