@@ -594,6 +594,45 @@ class GrowthHistoryApiTests(unittest.TestCase):
         self.assertEqual(saved["rankingSourceDate"], target_date)
         self.assertEqual(saved["experience"], 123999)
 
+    def test_archive_reuses_recent_verified_character_identity_between_batches(self):
+        target_date = (self.today - timedelta(days=29)).isoformat()
+        cached_basic = {
+            "character_name": "테스트캐릭터",
+            "world_name": "테스트월드",
+            "character_level": 280,
+            "character_exp": 123456,
+        }
+        ranking = {
+            "ranking": 321,
+            "character_level": 280,
+            "character_exp": 123456,
+            "character_exp_rate": 12.5,
+        }
+        with patch.object(
+            history_controller, "_load_recent_character_basic_snapshot",
+            return_value=cached_basic,
+        ) as cached_identity, patch.object(
+            history_controller, "get_basic_character_snapshot",
+            side_effect=AssertionError("recent verified profile should be reused"),
+        ) as identity_api, patch.object(
+            history_archive_service, "get_ranking_snapshot",
+            return_value=(ranking, Mock(status_code=200)),
+        ) as get_ranking:
+            response = self.client.get(
+                "/api/history/archive?ocid=test-ocid&days=30&collect=1"
+                "&character_name=%ED%85%8C%EC%8A%A4%ED%8A%B8%EC%BA%90%EB%A6%AD%ED%84%B0"
+                "&offset=0&limit=1&summary_only=1"
+            )
+
+        self.assertEqual(response.status_code, 200)
+        cached_identity.assert_called_once_with("테스트캐릭터", "test-ocid")
+        identity_api.assert_not_called()
+        get_ranking.assert_called_once()
+        saved = self.store.get_records("test-ocid", target_date, target_date)[0]
+        self.assertEqual(saved["ranking"], 321)
+        self.assertEqual(saved["rankingSourceDate"], target_date)
+        self.assertEqual(response.get_json()["collection"]["checkedDays"], 1)
+
     def test_archive_does_not_fetch_past_data_without_collection_request(self):
         with patch.object(history_archive_service, "get_ranking_snapshot", side_effect=AssertionError("should not call Nexon")), patch.object(
             history_archive_service, "get_basic_character_snapshot", side_effect=AssertionError("should not call Nexon")
