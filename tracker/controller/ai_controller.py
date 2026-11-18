@@ -55,7 +55,7 @@ def _resolve_character_for_ai(character_name):
     )
 
 
-AI_CHARACTER_SNAPSHOT_MAX_AGE_SECONDS = 30 * 60
+AI_CHARACTER_SNAPSHOT_MAX_AGE_SECONDS = 5 * 60
 
 
 def _load_recent_character_profile(character_name, now=None):
