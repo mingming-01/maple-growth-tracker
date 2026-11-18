@@ -241,26 +241,29 @@ def _build_growth_report_prompt(source_data):
 
 
 def _format_experience_korean(value):
-    """정수 경험치를 한국어 단위로 정확하게 변환한다."""
+    """큰 경험치는 대표 단위 하나로 줄여 소수점 첫째 자리까지 표시한다."""
     try:
-        number = int(Decimal(str(value)).quantize(Decimal("1"), rounding=ROUND_HALF_UP))
-    except (InvalidOperation, TypeError, ValueError, OverflowError):
+        number = Decimal(str(value))
+        if not number.is_finite():
+            return None
+    except (InvalidOperation, TypeError, ValueError):
         return None
+
     sign = "-" if number < 0 else ""
-    remainder = abs(number)
-    parts = []
+    absolute = abs(number)
     for unit_name, unit_value in (
-        ("경", 10**16),
-        ("조", 10**12),
-        ("억", 10**8),
-        ("만", 10**4),
+        ("경", Decimal(10**16)),
+        ("조", Decimal(10**12)),
+        ("억", Decimal(10**8)),
+        ("만", Decimal(10**4)),
     ):
-        amount, remainder = divmod(remainder, unit_value)
-        if amount:
-            parts.append(f"{amount:,}{unit_name}")
-    if remainder:
-        parts.append(f"{remainder:,}")
-    return sign + (" ".join(parts) if parts else "0")
+        if absolute >= unit_value:
+            amount = (absolute / unit_value).quantize(
+                Decimal("0.1"), rounding=ROUND_HALF_UP
+            )
+            return f"{sign}{amount:,.1f}{unit_name}"
+    rounded = number.quantize(Decimal("1"), rounding=ROUND_HALF_UP)
+    return f"{rounded:,.0f}"
 
 
 def _format_period_date_range(start_value, end_value):
@@ -316,7 +319,8 @@ def _build_growth_report_cache_key(prompt, source_data):
     """같은 정성 신호라도 서로 다른 캐릭터/기록의 결과가 섞이지 않게 한다."""
     return (
         prompt
-        + "\n[캐시 식별 데이터]\n"
+        + "\n[리포트 형식 버전] 2\n"
+        + "[캐시 식별 데이터]\n"
         + json.dumps(source_data, ensure_ascii=False, sort_keys=True)
     )
 
