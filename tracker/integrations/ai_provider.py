@@ -21,17 +21,24 @@ def _provider_timeouts(provider):
     connect_timeout = min(
         2.0, max(0.5, float(_setting("AI_PROVIDER_CONNECT_TIMEOUT", 1.5)))
     )
-    read_timeout = min(
-        4.0, max(1.0, float(_setting("AI_PROVIDER_READ_TIMEOUT", 4.0)))
-    )
-    total_default = 7.0 if provider == "gemini" else 5.0
-    total_timeout = min(
-        8.0 if provider == "gemini" else 6.0,
-        max(1.0, float(_setting(
-            "AI_GEMINI_TOTAL_TIMEOUT" if provider == "gemini" else "AI_OPENROUTER_TOTAL_TIMEOUT",
-            total_default,
-        ))),
-    )
+    if provider == "gemini":
+        read_timeout = min(
+            5.5, max(2.0, float(_setting("AI_GEMINI_READ_TIMEOUT", 5.0)))
+        )
+        total_timeout = min(
+            8.0,
+            max(1.0, float(_setting("AI_GEMINI_TOTAL_TIMEOUT", 7.0))),
+        )
+    else:
+        # Free routed models commonly need longer to start and complete generation.
+        # Keep this bounded below Gunicorn's 30s worker timeout after Gemini fallback.
+        read_timeout = min(
+            10.0, max(3.0, float(_setting("AI_OPENROUTER_READ_TIMEOUT", 9.0)))
+        )
+        total_timeout = min(
+            13.0,
+            max(2.0, float(_setting("AI_OPENROUTER_TOTAL_TIMEOUT", 12.0))),
+        )
     read_timeout = min(read_timeout, max(0.5, total_timeout - connect_timeout))
     return connect_timeout, read_timeout, total_timeout
 
@@ -81,6 +88,13 @@ def request_gemini(prompt, api_key=None):
     return text
 
 
+
+def _log_openrouter_empty_response(**details):
+    """응답 본문/프롬프트/인증정보는 제외하고 제공자 메타데이터만 기록한다."""
+    if has_app_context():
+        current_app.logger.warning("OpenRouter 텍스트 없는 응답: %s", details)
+
+
 def request_openrouter(prompt, api_key=None):
     """OpenRouter 대체 호출도 전체 응답 시간을 제한해 worker timeout을 막는다."""
     key = api_key or _setting("OPENROUTER_API_KEY", "")
@@ -107,14 +121,43 @@ def request_openrouter(prompt, api_key=None):
     )
     choices = payload.get("choices") or []
     if not choices or not isinstance(choices[0], dict):
-        raise requests.RequestException("OpenRouter 응답에 choices가 없습니다.")
+        provider_error = payload.get("error")
+        error_code = None
+        error_message = None
+        if isinstance(provider_error, dict):
+            error_code = provider_error.get("code")
+            error_message = provider_error.get("message")
+        _log_openrouter_empty_response(
+            model=_setting("OPENROUTER_MODEL", "openrouter/free"),
+            payload_keys=sorted(payload.keys()),
+            error_code=error_code,
+            error_message=error_message,
+        )
+        raise requests.RequestException(
+            f"OpenRouter 응답에 choices가 없습니다 (code={error_code!r})."
+        )
 
-    message = choices[0].get("message") or {}
-    content = message.get("content")
+    choice = choices[0]
+    message = choice.get("message") or {}
+    content = message.get("content") if isinstance(message, dict) else None
     if isinstance(content, list):
         content = _extract_text_parts(content)
     if not isinstance(content, str) or not content.strip():
-        raise requests.RequestException("OpenRouter 응답에 분석 내용이 없습니다.")
+        # Provider metadata only: never log prompts, API keys, or model output.
+        _log_openrouter_empty_response(
+            model=_setting("OPENROUTER_MODEL", "openrouter/free"),
+            payload_keys=sorted(payload.keys()),
+            choice_keys=sorted(choice.keys()),
+            finish_reason=choice.get("finish_reason"),
+            message_keys=sorted(message.keys()) if isinstance(message, dict) else [],
+            content_type=type(content).__name__,
+            content_length=len(content) if isinstance(content, str) else None,
+            refusal_present=bool(message.get("refusal")) if isinstance(message, dict) else False,
+        )
+        raise requests.RequestException(
+            "OpenRouter 응답에 분석 내용이 없습니다 "
+            f"(finish_reason={choice.get('finish_reason')!r})."
+        )
     return content.strip()
 
 
