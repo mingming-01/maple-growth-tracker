@@ -99,15 +99,16 @@ export function detectLevelUpEvents(records) {
       : Number(item.level);
     const currentLevel = Number.isFinite(parsedLevel) ? parsedLevel : null;
     const available = !!item &&
-      (!item.recordStatus || item.recordStatus === "available") &&
-      currentLevel !== null;
-    if (!available) {
-      // A missing/unavailable date breaks the exact level-up date chain.
+      (!item.recordStatus || item.recordStatus === "available");
+    const explicitlyMarked = available && item.levelUp === true;
+
+    if (!available || currentLevel === null) {
+      // A missing/unavailable date breaks inferred level-up date continuity.
       previousAvailableLevel = null;
-      return false;
+      return explicitlyMarked;
     }
 
-    const detected = item.levelUp === true ||
+    const detected = explicitlyMarked ||
       (previousAvailableLevel !== null && currentLevel > previousAvailableLevel);
     previousAvailableLevel = currentLevel;
     return detected;
