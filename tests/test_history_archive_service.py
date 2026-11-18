@@ -52,6 +52,29 @@ class HistoryArchiveServiceTests(unittest.TestCase):
     @patch("tracker.services.history_archive_service.get_basic_character_snapshot")
     @patch("tracker.services.history_archive_service.get_ranking_snapshot")
     @patch("tracker.services.history_archive_service.get_world_type", return_value=0)
+    def test_non_positive_rank_is_removed_from_verified_date_record(
+        self, _get_world_type, get_ranking, get_basic
+    ):
+        get_ranking.return_value = ({
+            "ranking": 0,
+            "character_level": 290,
+            "character_exp": 98765,
+            "character_exp_rate": 12.5,
+        }, Mock(status_code=200))
+
+        result = history_archive_service.fetch_historical_record(
+            "ocid-1", "크로아", self.target_date, self.today
+        )
+
+        self.assertEqual(result["recordStatus"], "available")
+        self.assertIsNone(result["ranking"])
+        self.assertIsNone(result["rankingScope"])
+        self.assertEqual(result["rankingSourceDate"], "2026-11-08")
+        get_basic.assert_not_called()
+
+    @patch("tracker.services.history_archive_service.get_basic_character_snapshot")
+    @patch("tracker.services.history_archive_service.get_ranking_snapshot")
+    @patch("tracker.services.history_archive_service.get_world_type", return_value=0)
     def test_falls_back_to_basic_snapshot_when_ranking_is_empty(
         self, _get_world_type, get_ranking, get_basic
     ):
