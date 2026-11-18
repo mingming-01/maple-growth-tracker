@@ -8,7 +8,6 @@ from flask import Blueprint, current_app, jsonify, request
 
 from tracker.services.nexon_service import (
     get_character_rankings,
-    is_temporary_nexon_failure,
     resolve_character,
 )
 from tracker.services.character_detail_service import get_current_combat_power
