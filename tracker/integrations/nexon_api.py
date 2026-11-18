@@ -91,11 +91,11 @@ def _throttle_nexon_request():
             time.sleep(wait_seconds)
 
 
-def request_nexon_api(endpoint, params, historical=False):
+def request_nexon_api(endpoint, params, historical=False, timeout_override=None, max_attempts_override=None):
     """넥슨 API 요청에 공통 호출 간격 제한과 일시적 오류 재시도를 적용한다."""
     api_key = _setting("NEXON_API_KEY", "")
     headers = {"x-nxopen-api-key": api_key} if api_key else {}
-    timeout = (
+    timeout = timeout_override or (
         float(_setting("NEXON_API_CONNECT_TIMEOUT", 3.05)),
         float(_setting("NEXON_API_READ_TIMEOUT", 10)),
     )
@@ -126,6 +126,13 @@ def request_nexon_api(endpoint, params, historical=False):
         increment_metric("nexon.errors", endpoint=endpoint, error=type(error).__name__)
         observe_metric("nexon.attempt_ms", elapsed_ms, endpoint=endpoint)
 
+    max_attempts = retries + 1
+    if max_attempts_override is not None:
+        try:
+            max_attempts = max(1, int(max_attempts_override))
+        except (TypeError, ValueError):
+            max_attempts = retries + 1
+
     increment_metric("nexon.logical_requests", endpoint=endpoint)
     try:
         response = request_with_retries(
@@ -134,7 +141,7 @@ def request_nexon_api(endpoint, params, historical=False):
             headers=headers,
             params=params,
             timeout=timeout,
-            max_attempts=retries + 1,
+            max_attempts=max_attempts,
             backoff_factor=max(0.0, backoff),
             max_retry_after_wait=max(0.0, float(_setting("EXTERNAL_API_MAX_RETRY_AFTER_WAIT_SECONDS", 5.0))),
             before_attempt=_throttle_nexon_request,
@@ -157,19 +164,32 @@ def request_nexon_api(endpoint, params, historical=False):
     return response
 
 
-def get_ocid(character_name):
-    response = request_nexon_api("id", {"character_name": character_name})
+def get_ocid(character_name, timeout_override=None, max_attempts_override=None):
+    options = {}
+    if timeout_override is not None:
+        options["timeout_override"] = timeout_override
+    if max_attempts_override is not None:
+        options["max_attempts_override"] = max_attempts_override
+    response = request_nexon_api("id", {"character_name": character_name}, **options)
     if response.status_code != 200:
         return None, response
     return response.json()["ocid"], response
 
 
-def get_basic_character(ocid, target_date=None, historical=False):
+def get_basic_character(
+    ocid, target_date=None, historical=False,
+    timeout_override=None, max_attempts_override=None,
+):
     """캐릭터 기본 정보를 조회하며, 날짜를 지정하면 해당 날짜의 스냅샷을 요청한다."""
     params = {"ocid": ocid}
     if target_date:
         params["date"] = target_date
-    response = request_nexon_api("character/basic", params, historical)
+    options = {}
+    if timeout_override is not None:
+        options["timeout_override"] = timeout_override
+    if max_attempts_override is not None:
+        options["max_attempts_override"] = max_attempts_override
+    response = request_nexon_api("character/basic", params, historical, **options)
     if response.status_code != 200:
         return None, response
     return response.json(), response
