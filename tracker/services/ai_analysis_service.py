@@ -3,6 +3,7 @@ import json
 import logging
 import re
 import time
+from decimal import Decimal, InvalidOperation, ROUND_HALF_UP
 
 from flask import current_app, has_app_context, has_request_context, request
 from datetime import date
@@ -238,6 +239,231 @@ def _build_growth_report_prompt(source_data):
 """
 
 
+
+def _format_experience_korean(value):
+    """정수 경험치를 한국어 단위로 정확하게 변환한다."""
+    try:
+        number = int(Decimal(str(value)).quantize(Decimal("1"), rounding=ROUND_HALF_UP))
+    except (InvalidOperation, TypeError, ValueError, OverflowError):
+        return None
+    sign = "-" if number < 0 else ""
+    remainder = abs(number)
+    parts = []
+    for unit_name, unit_value in (
+        ("경", 10**16),
+        ("조", 10**12),
+        ("억", 10**8),
+        ("만", 10**4),
+    ):
+        amount, remainder = divmod(remainder, unit_value)
+        if amount:
+            parts.append(f"{amount:,}{unit_name}")
+    if remainder:
+        parts.append(f"{remainder:,}")
+    return sign + (" ".join(parts) if parts else "0")
+
+
+def _format_period_date_range(start_value, end_value):
+    """ISO 날짜 구간을 혼동 없는 한국어 날짜 구간으로 표시한다."""
+    try:
+        start = date.fromisoformat(str(start_value))
+        end = date.fromisoformat(str(end_value))
+    except (TypeError, ValueError):
+        return None
+    if (start.year, start.month) == (end.year, end.month):
+        return f"{start.month}월 {start.day}일~{end.day}일"
+    return f"{start.month}월 {start.day}일~{end.month}월 {end.day}일"
+
+
+def _build_growth_comment_prompt(source_data):
+    """모델에는 숫자·날짜 없는 정성 코멘트만 맡긴다."""
+    metrics = source_data.get("metrics") or {}
+    insights = source_data.get("growthInsights") or {}
+    comparison = insights.get("weekOverWeek") or {}
+    direction = comparison.get("direction")
+    direction_label = {
+        "increase": "직전 기간보다 증가",
+        "decrease": "직전 기간보다 감소",
+        "stable": "직전 기간과 비슷",
+    }.get(direction, "비교할 근거 부족")
+    quality = (insights.get("basis") or {}).get("dataQualityLabel", "확인되지 않음")
+    level_ups = metrics.get("levelUps") or []
+    period_summary = metrics.get("periodSummary") or {}
+    has_level_up = bool(level_ups) or bool(period_summary.get("levelUpIntervals"))
+    signals = {
+        "recent_growth_trend": direction_label,
+        "record_quality": quality,
+        "level_up_observed": has_level_up,
+    }
+    return f"""
+너는 메이플스토리 성장 기록을 해석하는 도우미야.
+아래에 주어진 정성적 신호만 바탕으로 [AI 코멘트]에 들어갈 보충 의견을 한국어 해요체로 1~2문장 작성해.
+
+[작성 규칙]
+- 수치, 숫자, 날짜, 요일, 백분율, 경험치 단위, 레벨을 절대 쓰지 마.
+- 합계·평균을 계산하거나 새로운 통계 사실을 만들지 마.
+- 주말/평일, 사냥 효율, 플레이 시간, 접속 습관처럼 제공되지 않은 원인을 추측하지 마.
+- 확인된 흐름에 대한 조심스러운 해석과 다음 기록을 볼 때 유의할 점만 말해.
+- 제목, 목록, 마크다운 없이 코멘트 본문만 출력해.
+
+[정성적 신호]
+{json.dumps(signals, ensure_ascii=False)}
+"""
+
+
+def _extract_ai_comment(value):
+    """모델 응답에서 AI 코멘트 본문만 추출한다."""
+    text = sanitize_ai_text(value)
+    marker = "[AI 코멘트]"
+    if marker in text:
+        text = text.split(marker, 1)[1]
+    elif any(section in text for section in REQUIRED_GROWTH_SECTIONS):
+        return ""
+    return text.strip()
+
+
+def _validate_ai_comment(value):
+    """숫자·날짜·근거 없는 요일/플레이 행동 주장을 차단한다."""
+    text = str(value or "").strip()
+    if len(text) < 4 or len(text) > 400:
+        return False
+    if re.search(r"[0-9０-９%％]", text):
+        return False
+    if re.search(r"(?:주말|평일|사냥|접속|플레이 시간|효율)", text):
+        return False
+    if re.search(r"[\\u3400-\\u4DBF\\u4E00-\\u9FFF\\uF900-\\uFAFF\\u3040-\\u30FF]", text):
+        return False
+    return True
+
+
+def _build_deterministic_growth_report(character, metrics, growth_insights, analysis_context, ai_comment):
+    """수치·날짜·레벨 진행률은 서버 계산값으로만 리포트에 작성한다."""
+    metrics = metrics or {}
+    insights = growth_insights or {}
+    period_days = (analysis_context or {}).get("periodDays", 7)
+    recent = insights.get("recentPeriod") if period_days == 7 else None
+    previous = insights.get("previousPeriod") if period_days == 7 else None
+    summary = recent or metrics.get("periodSummary") or {}
+
+    period_label = _format_period_date_range(
+        summary.get("startDate"), summary.get("endDate")
+    )
+    period_name = "최근 7일" if period_days == 7 else f"선택한 {period_days}일"
+
+    total_text = _format_experience_korean(summary.get("observedExperienceSum"))
+    average_text = _format_experience_korean(summary.get("averageDailyExperience"))
+    valid_intervals = summary.get("validGrowthIntervals")
+
+    if total_text and average_text and isinstance(valid_intervals, int):
+        date_prefix = f"{period_label} 동안 " if period_label else ""
+        growth_pattern = (
+            f"{date_prefix}확인된 {valid_intervals}회의 일일 경험치 변화 합계는 "
+            f"{total_text}이며, 변화가 확인된 날의 하루 평균은 {average_text}예요."
+        )
+    elif average_text:
+        growth_pattern = f"{period_name}의 하루 평균 경험치는 {average_text}예요."
+    else:
+        growth_pattern = f"{period_name}은 경험치 변화 기록이 충분하지 않아 증가량을 확정하기 어려워요."
+
+    comparison = insights.get("weekOverWeek") or {}
+    previous_average = _format_experience_korean(
+        (previous or {}).get("averageDailyExperience")
+    )
+    recent_average = _format_experience_korean(
+        (recent or {}).get("averageDailyExperience")
+    )
+    change_percent = comparison.get("averageDailyGrowthChangePercent")
+
+    if (
+        period_days == 7
+        and comparison.get("status") == "available"
+        and previous_average
+        and recent_average
+        and isinstance(change_percent, (int, float))
+    ):
+        previous_range = _format_period_date_range(
+            (previous or {}).get("startDate"), (previous or {}).get("endDate")
+        )
+        recent_range = _format_period_date_range(
+            (recent or {}).get("startDate"), (recent or {}).get("endDate")
+        )
+        direction = comparison.get("direction")
+        if direction == "increase":
+            change_text = f"{abs(change_percent):.1f}% 늘었어요."
+        elif direction == "decrease":
+            change_text = f"{abs(change_percent):.1f}% 줄었어요."
+        else:
+            change_text = "큰 차이가 없어요."
+        previous_label = f"직전 7일({previous_range})" if previous_range else "직전 7일"
+        recent_label = f"최근 7일({recent_range})" if recent_range else "최근 7일"
+        growth_change = (
+            f"{previous_label}의 하루 평균은 {previous_average}, "
+            f"{recent_label}은 {recent_average}로, 직전 기간보다 {change_text}"
+        )
+    elif average_text:
+        growth_change = f"{period_name}의 하루 평균은 {average_text}로 확인됐어요. 비교할 이전 기간의 기록은 충분하지 않아요."
+    else:
+        growth_change = "이전 기간과 비교할 만큼 충분한 성장 기록이 아직 없어요."
+
+    level_ups = metrics.get("levelUps") or []
+    if level_ups:
+        level_sentences = []
+        for event in level_ups:
+            event_date = event.get("date")
+            try:
+                parsed = date.fromisoformat(str(event_date))
+                date_label = f"{parsed.month}월 {parsed.day}일"
+            except (TypeError, ValueError):
+                date_label = None
+            previous_level = event.get("previousLevel")
+            current_level = event.get("currentLevel")
+            if date_label and previous_level is not None and current_level is not None:
+                level_sentences.append(
+                    f"{date_label}에 {previous_level}레벨에서 {current_level}레벨로 올라갔어요."
+                )
+        level_up_text = " ".join(level_sentences) or "레벨업 전환이 기록에서 확인됐어요."
+    else:
+        level_up_count = (
+            summary.get("levelUpIntervals")
+            or (metrics.get("periodSummary") or {}).get("levelUpIntervals")
+            or 0
+        )
+        if level_up_count:
+            level_up_text = (
+                f"선택 기간에 레벨업 전환 {int(level_up_count)}회가 확인됐지만, "
+                "정확한 날짜와 레벨 변화는 확인된 연속 기록만으로 특정하지 않았어요."
+            )
+        else:
+            level_up_text = "선택 기간의 연속된 기록에서는 레벨업 변화가 확인되지 않았어요."
+
+    current_level = character.get("level")
+    level_progress = metrics.get("levelProgress") or {}
+    current_rate = level_progress.get("currentRate")
+    progress_text = ""
+    if isinstance(current_rate, (int, float)) and 0 <= current_rate <= 100:
+        remaining_rate = max(0.0, 100.0 - float(current_rate))
+        progress_text = (
+            f" 현재 {current_level}레벨 경험치 진행률은 {float(current_rate):.1f}%이며, "
+            f"다음 레벨까지 {remaining_rate:.1f}% 남았어요."
+        )
+    level_analysis = level_up_text + progress_text
+    forecast = _deterministic_growth_forecast(character, metrics)
+
+    report = (
+        f"[성장 패턴]\\n{growth_pattern}\\n"
+        f"[성장 변화]\\n{growth_change}\\n"
+        f"[레벨업 분석]\\n{level_analysis}\\n"
+        f"[성장 전망]\\n{forecast}\\n"
+        f"[AI 코멘트]\\n{ai_comment.strip()}"
+    )
+    if not validate_growth_report(report):
+        raise ProviderError(
+            "서버가 조립한 성장 리포트가 형식 검증을 통과하지 못했습니다.",
+            "provider_invalid_output",
+        )
+    return report
+
+
 def generate_ai_analysis(character, history, computed_metrics=None, growth_insights=None, analysis_context=None, force_refresh=False):
     runtime_state = get_runtime_state()
     gemini_api_key = getattr(runtime_state, "gemini_api_key", "")
@@ -286,7 +512,7 @@ def generate_ai_analysis(character, history, computed_metrics=None, growth_insig
             "predictionDisplayDate": prediction_date_label,
             "history": growth_data,
         }
-        prompt = _build_growth_report_prompt(source_data)
+        prompt = _build_growth_comment_prompt(source_data)
     else:
         required_sections = "\n".join(REQUIRED_GROWTH_SECTIONS)
         prompt = f"""
@@ -337,11 +563,17 @@ def generate_ai_analysis(character, history, computed_metrics=None, growth_insig
                 else _generate_gemini_content(prompt, api_key=gemini_api_key, deadline=deadline)
             )
             gemini_text = _require_provider_text(getattr(response, "text", None), "Gemini")
-            analysis = sanitize_ai_text(gemini_text, expected_date)
             if computed_metrics is not None:
-                analysis = _apply_deterministic_growth_forecast(analysis, character, computed_metrics)
-            if not validate_growth_report(analysis):
-                raise ProviderError("Gemini 분석 결과가 리포트 검증을 통과하지 못했습니다.", "provider_invalid_output")
+                ai_comment = _extract_ai_comment(gemini_text)
+                if not _validate_ai_comment(ai_comment):
+                    raise ProviderError("Gemini 코멘트에 허용되지 않은 숫자나 근거 없는 주장이 있습니다.", "provider_invalid_output")
+                analysis = _build_deterministic_growth_report(
+                    character, computed_metrics, growth_insights, analysis_context, ai_comment
+                )
+            else:
+                analysis = sanitize_ai_text(gemini_text, expected_date)
+                if not validate_growth_report(analysis):
+                    raise ProviderError("Gemini 분석 결과가 리포트 검증을 통과하지 못했습니다.", "provider_invalid_output")
             _clear_gemini_cooldown(runtime_state)
             set_ai_response_cache(prompt, analysis)
             return {"analysis": analysis, "cacheHit": False, "growthInsights": growth_insights}
@@ -361,12 +593,18 @@ def generate_ai_analysis(character, history, computed_metrics=None, growth_insig
                 request_openrouter(prompt, api_key=openrouter_api_key, deadline=deadline),
                 "OpenRouter",
             )
-            print("OpenRouter로 성장 분석을 처리했습니다.")
-            analysis = sanitize_ai_text(response_text, expected_date)
+            print("OpenRouter로 성장 분석 코멘트를 처리했습니다.")
             if computed_metrics is not None:
-                analysis = _apply_deterministic_growth_forecast(analysis, character, computed_metrics)
-            if not validate_growth_report(analysis):
-                raise ProviderError("OpenRouter 분석 결과가 리포트 검증을 통과하지 못했습니다.", "provider_invalid_output")
+                ai_comment = _extract_ai_comment(response_text)
+                if not _validate_ai_comment(ai_comment):
+                    raise ProviderError("OpenRouter 코멘트에 허용되지 않은 숫자나 근거 없는 주장이 있습니다.", "provider_invalid_output")
+                analysis = _build_deterministic_growth_report(
+                    character, computed_metrics, growth_insights, analysis_context, ai_comment
+                )
+            else:
+                analysis = sanitize_ai_text(response_text, expected_date)
+                if not validate_growth_report(analysis):
+                    raise ProviderError("OpenRouter 분석 결과가 리포트 검증을 통과하지 못했습니다.", "provider_invalid_output")
             set_ai_response_cache(prompt, analysis)
             return {"analysis": analysis, "cacheHit": False, "growthInsights": growth_insights}
         except Exception as error:
