@@ -20,6 +20,8 @@ class AIResponseCacheTests(unittest.TestCase):
         with self.app.app_context():
             self.state = get_runtime_state()
             self.state.ai_response_cache.clear()
+            self.state.ai_provider_state_store.clear_cooldown("gemini")
+            self.state.ai_provider_state_store.clear_cooldown("gemini")
 
     def tearDown(self):
         with self.app.app_context():
