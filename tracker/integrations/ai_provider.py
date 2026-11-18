@@ -56,7 +56,7 @@ def provider_retry_after_seconds(error, default_seconds=300):
             body = response.text or ""
         except Exception:
             body = ""
-    match = re.search(r"retryDelay['\\"]?\\s*:\\s*['\\"]?(\\d+(?:\\.\\d+)?)s", body or str(error), re.I)
+    match = re.search(r"retryDelay.{0,12}?(\d+(?:\.\d+)?)s", body or str(error), re.I)
     if match:
         return max(1, min(86400, int(float(match.group(1)))))
     return max(1, min(86400, int(default_seconds)))
