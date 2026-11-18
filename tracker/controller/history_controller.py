@@ -87,6 +87,24 @@ def _load_recent_character_basic_snapshot(character_name, ocid, now=None):
     }
 
 
+def _verified_overall_rank(record, target_date):
+    """종합 랭킹의 범위·실제 집계일·양의 정수 여부를 함께 검증한다."""
+    if not isinstance(record, dict):
+        return None
+    if record.get("rankingScope") != "overall":
+        return None
+    if record.get("rankingSourceDate") != target_date:
+        return None
+    value = record.get("ranking")
+    if isinstance(value, bool) or value in (None, ""):
+        return None
+    try:
+        rank = int(str(value).replace(",", "").strip())
+    except (TypeError, ValueError):
+        return None
+    return rank if rank > 0 else None
+
+
 def _stale_history_response(cache_key, character_name, error_message):
     """현재 형식 캐시를 우선 사용하고, 구형 캐시는 순위를 제거해 제공한다."""
     snapshot, saved_at = load_api_snapshot(cache_key)
@@ -153,7 +171,7 @@ def get_history():
             and item.get("rankingSourceDate") == item.get("date")
             and (
                 item.get("ranking") is None
-                or item.get("rankingScope") == "overall"
+                or _verified_overall_rank(item, item.get("date")) is not None
             )
             for item in cached_records
         )
@@ -464,21 +482,10 @@ def get_history_archive():
         if saved:
             history.append({
                 "date": date_string,
-                "ranking": (
-                    saved.get("ranking")
-                    if (
-                        saved.get("rankingScope") == "overall"
-                        and saved.get("rankingSourceDate") == date_string
-                    )
-                    else None
-                ),
+                "ranking": _verified_overall_rank(saved, date_string),
                 "rankingScope": (
                     "overall"
-                    if (
-                        saved.get("rankingScope") == "overall"
-                        and saved.get("rankingSourceDate") == date_string
-                        and saved.get("ranking") is not None
-                    )
+                    if _verified_overall_rank(saved, date_string) is not None
                     else None
                 ),
                 "rankingSourceDate": saved.get("rankingSourceDate"),
