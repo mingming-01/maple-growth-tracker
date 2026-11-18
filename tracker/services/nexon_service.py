@@ -15,12 +15,23 @@ from tracker.integrations.nexon_api import (
 )
 
 
-def resolve_character(character_name):
-    """캐릭터명으로 OCID와 기본 정보를 순서대로 확인한다."""
-    ocid, response = get_ocid(character_name)
+def resolve_character(
+    character_name, timeout_override=None, max_attempts_override=None
+):
+    """캐릭터명으로 OCID와 기본 정보를 확인한다.
+
+    timeout_override/max_attempts_override는 AI 요청처럼 전체 응답 시간에
+    상한이 필요한 호출에서만 지정하며, 기본 캐릭터 조회 정책은 유지한다.
+    """
+    options = {}
+    if timeout_override is not None:
+        options["timeout_override"] = timeout_override
+    if max_attempts_override is not None:
+        options["max_attempts_override"] = max_attempts_override
+    ocid, response = get_ocid(character_name, **options)
     if not ocid:
         return None, None, response
-    basic, response = get_basic_character(ocid)
+    basic, response = get_basic_character(ocid, **options)
     return ocid, basic, response
 
 
