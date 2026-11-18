@@ -80,23 +80,23 @@ def _setting(name, default=None):
 
 def _provider_timeouts(provider, deadline=None):
     connect_timeout = min(
-        2.0, max(0.5, float(_setting("AI_PROVIDER_CONNECT_TIMEOUT", 1.5)))
+        2.0, max(0.5, float(_setting("AI_PROVIDER_CONNECT_TIMEOUT", 2.0)))
     )
     if provider == "gemini":
         read_timeout = min(
-            5.5, max(2.0, float(_setting("AI_GEMINI_READ_TIMEOUT", 5.0)))
+            20.0, max(2.0, float(_setting("AI_GEMINI_READ_TIMEOUT", 15.0)))
         )
         total_timeout = min(
-            8.0,
-            max(1.0, float(_setting("AI_GEMINI_TOTAL_TIMEOUT", 7.0))),
+            22.0,
+            max(1.0, float(_setting("AI_GEMINI_TOTAL_TIMEOUT", 18.0))),
         )
     else:
         read_timeout = min(
-            26.0, max(3.0, float(_setting("AI_OPENROUTER_READ_TIMEOUT", 25.0)))
+            70.0, max(3.0, float(_setting("AI_OPENROUTER_READ_TIMEOUT", 60.0)))
         )
         total_timeout = min(
-            27.0,
-            max(2.0, float(_setting("AI_OPENROUTER_TOTAL_TIMEOUT", 27.0))),
+            75.0,
+            max(2.0, float(_setting("AI_OPENROUTER_TOTAL_TIMEOUT", 65.0))),
         )
     read_timeout = min(read_timeout, max(0.5, total_timeout - connect_timeout))
     if deadline is not None:
@@ -106,7 +106,7 @@ def _provider_timeouts(provider, deadline=None):
             # slow primary request to consume the entire request deadline.
             reserve = max(
                 1.0,
-                float(_setting("AI_OPENROUTER_MIN_REMAINING_SECONDS", 20.0)),
+                float(_setting("AI_OPENROUTER_MIN_REMAINING_SECONDS", 65.0)),
             )
             remaining -= reserve
         if remaining <= 0:
@@ -145,7 +145,7 @@ def request_gemini(prompt, api_key=None, deadline=None):
             "contents": [{"role": "user", "parts": [{"text": prompt}]}],
             "generationConfig": {
                 "temperature": 0.35,
-                "maxOutputTokens": 640,
+                "maxOutputTokens": 2048,
             },
         },
         connect_timeout=connect_timeout,
@@ -206,8 +206,8 @@ def request_openrouter(prompt, api_key=None, deadline=None):
             "messages": [{"role": "user", "content": prompt}],
             "temperature": 0.35,
             "max_tokens": max(512, min(
-                4096,
-                int(_setting("AI_OPENROUTER_MAX_OUTPUT_TOKENS", 2048)),
+                8192,
+                int(_setting("AI_OPENROUTER_MAX_OUTPUT_TOKENS", 4096)),
             )),
             "stream": False,
         },
