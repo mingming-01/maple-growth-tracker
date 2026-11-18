@@ -48,17 +48,26 @@ def _request_deadline():
 
 
 def _log_provider_failure(provider, error, started_at, deadline):
-    """공급자 실패 원인을 비밀정보 없이 시간 예산과 함께 기록한다."""
-    elapsed_ms = round((time.monotonic() - started_at) * 1000, 1)
-    remaining_ms = max(0, round((float(deadline) - time.monotonic()) * 1000, 1))
+    """공급자 실패 원인을 비밀정보 없이 구조화 로그로 기록한다."""
+    now = time.monotonic()
+    response = getattr(error, "response", None)
+    http_status = (
+        getattr(error, "status_code", None)
+        or getattr(response, "status_code", None)
+    )
     details = {
         "provider": provider,
-        "exception": type(error).__name__,
         "error_type": provider_error_type(error),
-        "elapsed_ms": elapsed_ms,
-        "deadline_remaining_ms": remaining_ms,
+        "exception_class": type(error).__name__,
+        "elapsed_ms": round((now - started_at) * 1000, 1),
+        "deadline_remaining_ms": max(0, round((float(deadline) - now) * 1000, 1)),
+        "http_status": http_status,
+        "finish_reason": getattr(error, "finish_reason", None),
     }
-    print(f"AI 공급자 요청 실패: {json.dumps(details, ensure_ascii=False)}")
+    current_app.logger.warning(
+        "AI 공급자 요청 실패: %s",
+        json.dumps(details, ensure_ascii=False, sort_keys=True),
+    )
 
 
 def _gemini_cooldown_remaining(runtime_state):
