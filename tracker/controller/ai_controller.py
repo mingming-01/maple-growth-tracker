@@ -1,5 +1,6 @@
 """AI 성장 분석 HTTP 라우트."""
 from datetime import date, datetime, timedelta
+import time
 
 from flask import Blueprint, current_app, jsonify, request
 
@@ -127,6 +128,11 @@ def ai_analysis():
     if rate_limit_response:
         return rate_limit_response
 
+    request_started = time.perf_counter()
+    stage_started = request_started
+    stage = "profile"
+    timings = {}
+
     try:
         cached_profile = _load_recent_character_profile(character_name)
         if cached_profile:
@@ -146,6 +152,9 @@ def ai_analysis():
                 "ocid": ocid,
             }
 
+        timings["profile_ms"] = round((time.perf_counter() - stage_started) * 1000, 1)
+        stage = "history_db"
+        stage_started = time.perf_counter()
         today = datetime.now(KOREA_TIMEZONE).date()
         storage = get_growth_history_service()
         period_start = today - timedelta(days=period_days - 1)
@@ -155,8 +164,14 @@ def ai_analysis():
             # 선택 기간과 14일 인사이트를 하나의 DB 조회로 확보한다.
             combined_records = storage.get_records(ocid, query_start, today)
         except Exception:
+            current_app.logger.exception(
+                "AI 리포트 요청 중 저장 기록 조회 실패: period_days=%s", period_days
+            )
             return jsonify({"error": "서버에 저장된 성장 기록을 확인할 수 없습니다."}), 503
 
+        timings["history_db_ms"] = round((time.perf_counter() - stage_started) * 1000, 1)
+        stage = "calculation"
+        stage_started = time.perf_counter()
         stored_records = [
             item for item in combined_records
             if str(item.get("date") or "") >= period_start.isoformat()
@@ -175,6 +190,9 @@ def ai_analysis():
             "periodSummary": calculated["periodSummary"],
         }
         growth_insights = build_growth_insights(insight_records, reference_date=today)
+        timings["calculation_ms"] = round((time.perf_counter() - stage_started) * 1000, 1)
+        stage = "provider"
+        stage_started = time.perf_counter()
         result = generate_ai_analysis(
             character,
             recent_history,
@@ -183,11 +201,31 @@ def ai_analysis():
             analysis_context,
             force_refresh,
         )
+        timings["provider_ms"] = round((time.perf_counter() - stage_started) * 1000, 1)
+        total_ms = round((time.perf_counter() - request_started) * 1000, 1)
         if "error" in result:
+            current_app.logger.warning(
+                "AI 리포트 공급자 실패: error_type=%s timings=%s total_ms=%s",
+                result.get("errorType", "unknown"),
+                timings,
+                total_ms,
+            )
             return _service_error_response(result)
+
+        current_app.logger.info(
+            "AI 리포트 생성 완료: cache_hit=%s timings=%s total_ms=%s",
+            bool(result.get("cacheHit")),
+            timings,
+            total_ms,
+        )
         return jsonify(result)
-    except Exception as error:
-        print(f"AI 분석 API 요청에 실패했습니다: {error}")
+    except Exception:
+        current_app.logger.exception(
+            "AI 리포트 요청 예외: stage=%s timings=%s elapsed_ms=%s",
+            stage,
+            timings,
+            round((time.perf_counter() - request_started) * 1000, 1),
+        )
         return jsonify({"error": "AI 분석을 불러오지 못했습니다."}), 502
 
 
