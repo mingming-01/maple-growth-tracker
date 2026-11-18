@@ -42,14 +42,18 @@ def _get_cached_current_ranking(basic, target_date, today):
 
 def _saved_record_without_unverified_ranking(date_string, saved):
     """기존 성장 데이터는 보존하고 실제 집계일을 확인하지 못한 순위는 숨긴다."""
-    ranking_is_verified = (
-        saved.get("rankingSourceDate") == date_string
-        and saved.get("rankingScope") == "overall"
+    ranking = (
+        _positive_rank(saved.get("ranking"))
+        if (
+            saved.get("rankingSourceDate") == date_string
+            and saved.get("rankingScope") == "overall"
+        )
+        else None
     )
     return {
         "date": date_string,
-        "ranking": saved.get("ranking") if ranking_is_verified else None,
-        "rankingScope": "overall" if ranking_is_verified and saved.get("ranking") is not None else None,
+        "ranking": ranking,
+        "rankingScope": "overall" if ranking is not None else None,
         "rankingSourceDate": saved.get("rankingSourceDate"),
         "level": saved.get("level"),
         "experience": saved.get("experience"),
