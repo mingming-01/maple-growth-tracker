@@ -205,8 +205,10 @@ def ai_analysis():
         total_ms = round((time.perf_counter() - request_started) * 1000, 1)
         if "error" in result:
             current_app.logger.warning(
-                "AI 리포트 공급자 실패: error_type=%s timings=%s total_ms=%s",
+                "AI 리포트 공급자 실패: error_type=%s primary_error=%s fallback_error=%s timings=%s total_ms=%s",
                 result.get("errorType", "unknown"),
+                result.get("primaryErrorType", ""),
+                result.get("fallbackErrorType", ""),
                 timings,
                 total_ms,
             )
