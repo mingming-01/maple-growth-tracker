@@ -311,6 +311,15 @@ def _build_growth_comment_prompt(source_data):
 """
 
 
+def _build_growth_report_cache_key(prompt, source_data):
+    """같은 정성 신호라도 서로 다른 캐릭터/기록의 결과가 섞이지 않게 한다."""
+    return (
+        prompt
+        + "\n[캐시 식별 데이터]\n"
+        + json.dumps(source_data, ensure_ascii=False, sort_keys=True)
+    )
+
+
 def _extract_ai_comment(value):
     """모델 응답에서 AI 코멘트 본문만 추출한다."""
     text = sanitize_ai_text(value)
@@ -515,11 +524,7 @@ def generate_ai_analysis(character, history, computed_metrics=None, growth_insig
         prompt = _build_growth_comment_prompt(source_data)
         # 모델에 전달하는 코멘트 프롬프트와 달리 캐시 키에는 해당 캐릭터의
         # 실제 계산 데이터 전체를 포함해 다른 캐릭터/기간의 리포트가 섞이지 않게 한다.
-        cache_key = (
-            prompt
-            + "\n[캐시 식별 데이터]\n"
-            + json.dumps(source_data, ensure_ascii=False, sort_keys=True)
-        )
+        cache_key = _build_growth_report_cache_key(prompt, source_data)
     else:
         required_sections = "\n".join(REQUIRED_GROWTH_SECTIONS)
         prompt = f"""
