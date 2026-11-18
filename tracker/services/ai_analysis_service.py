@@ -1,10 +1,20 @@
 """AI 성장 분석과 캐릭터 비교의 프롬프트·모델 호출을 담당한다."""
 import json
 import re
+import time
+
+from flask import current_app, has_request_context, request
 from datetime import date
 from types import SimpleNamespace
 
-from tracker.integrations.ai_provider import request_gemini, request_openrouter, should_use_openrouter
+from tracker.integrations.ai_provider import (
+    ProviderError,
+    provider_error_type,
+    provider_retry_after_seconds,
+    request_gemini,
+    request_openrouter,
+    should_use_openrouter,
+)
 from tracker.services.ai_text_service import (
     REQUIRED_GROWTH_SECTIONS,
     sanitize_ai_text,
@@ -19,68 +29,99 @@ from tracker.runtime import (
 
 
 def _is_quota_error(error):
-    text = str(error).upper()
-    status_code = getattr(error, "code", None) or getattr(
-        getattr(error, "response", None), "status_code", None
-    )
-    return status_code == 429 or "RESOURCE_EXHAUSTED" in text or "QUOTA" in text
+    return provider_error_type(error) == "provider_quota" or "RESOURCE_EXHAUSTED" in str(error).upper()
+
+
+def _request_deadline():
+    """요청 시작부터 계산한 전체 AI deadline으로 사전 처리 시간도 예산에 포함한다."""
+    total = 22.0
+    started = None
+    if has_request_context():
+        started = request.environ.get("maple_request_started_at")
+        try:
+            total = max(5.0, float(current_app.config.get("AI_REQUEST_TOTAL_TIMEOUT", total)))
+        except (TypeError, ValueError):
+            pass
+    if started is None:
+        started = time.monotonic()
+    return float(started) + total
+
+
+def _gemini_cooldown_remaining(runtime_state):
+    try:
+        until = runtime_state.ai_provider_state_store.get_cooldown_until("gemini")
+        return max(0.0, float(until) - time.time())
+    except Exception as error:
+        # 상태 저장소 장애는 분석 자체를 중단하지 않는다.
+        print(f"Gemini 쿨다운 상태 조회를 건너뜁니다: {type(error).__name__}")
+        return 0.0
+
+
+def _set_gemini_cooldown(runtime_state, error):
+    default_seconds = 300
+    try:
+        default_seconds = int(current_app.config.get("GEMINI_QUOTA_COOLDOWN_SECONDS", default_seconds))
+    except Exception:
+        pass
+    delay = provider_retry_after_seconds(error, default_seconds)
+    try:
+        runtime_state.ai_provider_state_store.set_cooldown_until("gemini", time.time() + delay)
+    except Exception as store_error:
+        print(f"Gemini 쿨다운 저장을 건너뜁니다: {type(store_error).__name__}")
+    return delay
+
+
+def _clear_gemini_cooldown(runtime_state):
+    try:
+        runtime_state.ai_provider_state_store.clear_cooldown("gemini")
+    except Exception as error:
+        print(f"Gemini 쿨다운 초기화를 건너뜁니다: {type(error).__name__}")
 
 
 def _error_result(error, fallback_message):
     """공급자 오류를 HTTP 계층에서 구분할 수 있는 안전한 형태로 변환한다."""
-    if _is_quota_error(error):
-        retry_after = None
-        delay_match = re.search(
-            r"retryDelay['\"]?\s*:\s*['\"]?(\d+(?:\.\d+)?)s",
-            str(error),
-            re.I,
-        )
-        if delay_match:
-            retry_after = max(1, int(float(delay_match.group(1))))
-        return {
-            "error": "AI 분석 사용량 한도를 초과했습니다. 사용량이 초기화된 후 다시 시도해주세요.",
-            "statusCode": 429,
-            "retryAfterSeconds": retry_after,
-            "errorType": "provider_quota",
-        }
-    return {"error": fallback_message, "statusCode": 502, "errorType": "provider_error"}
+    error_type = provider_error_type(error)
+    status_code = 503 if error_type in {
+        "provider_quota", "provider_timeout", "provider_unavailable"
+    } else 502
+    result = {
+        "error": (
+            "AI 분석 사용량 한도를 초과했습니다. 잠시 후 다시 시도해주세요."
+            if error_type == "provider_quota" else fallback_message
+        ),
+        "statusCode": status_code,
+        "errorType": error_type,
+    }
+    if error_type == "provider_quota":
+        result["retryAfterSeconds"] = provider_retry_after_seconds(error)
+    return result
 
 
 def _fallback_failure_result(primary_error, fallback_error=None):
-    """Gemini 쿼터 초과와 OpenRouter 폴백 실패를 구분해 반환한다."""
-    if not _is_quota_error(primary_error):
-        return _error_result(
-            fallback_error or primary_error,
-            "AI 분석을 불러오지 못했습니다.",
-        )
-
+    """기본 공급자와 대체 공급자의 실패 유형을 구조화해 반환한다."""
     if fallback_error is None:
-        return {
-            "error": "Gemini 사용량 한도에 도달했고 대체 AI 서비스가 설정되지 않았습니다.",
-            "statusCode": 503,
-            "errorType": "provider_fallback_unavailable",
-            "primaryErrorType": "provider_quota",
-        }
-
-    fallback_text = str(fallback_error).lower()
-    fallback_error_type = (
-        "provider_timeout"
-        if any(token in fallback_text for token in ("timeout", "timed out", "deadline"))
-        else "provider_error"
-    )
+        if primary_error is None:
+            return {
+                "error": "AI 분석을 사용할 수 없습니다.",
+                "statusCode": 503,
+                "errorType": "provider_unavailable",
+            }
+        result = _error_result(primary_error, "AI 분석을 불러오지 못했습니다.")
+        if _is_quota_error(primary_error):
+            result["statusCode"] = 503
+        return result
+    if primary_error is None:
+        return _error_result(fallback_error, "AI 분석을 불러오지 못했습니다.")
     return {
-        "error": (
-            "Gemini 사용량 한도에 도달했고 OpenRouter 대체 요청도 실패했습니다. "
-            "잠시 후 다시 시도해주세요."
-        ),
+        "error": "기본 AI와 대체 AI 분석 요청이 모두 실패했습니다. 잠시 후 다시 시도해주세요.",
         "statusCode": 503,
         "errorType": "provider_fallback_failed",
-        "primaryErrorType": "provider_quota",
-        "fallbackErrorType": fallback_error_type,
+        "primaryErrorType": provider_error_type(primary_error),
+        "fallbackErrorType": provider_error_type(fallback_error),
     }
 
 
-def _generate_gemini_content(client_or_prompt, prompt=None, api_key=None):
+def _generate_gemini_content(client_or_prompt, prompt=None, api_key=None, deadline=None):
     """Gemini 호출을 제한 시간 REST 어댑터로 전달한다.
 
     두 인자 호출은 구버전 단위 테스트·외부 호출부와의 호환성을 위해 남긴다.
@@ -90,7 +131,7 @@ def _generate_gemini_content(client_or_prompt, prompt=None, api_key=None):
         return client_or_prompt.models.generate_content(
             model="gemini-3.6-flash", contents=prompt
         )
-    return SimpleNamespace(text=request_gemini(client_or_prompt, api_key=api_key))
+    return SimpleNamespace(text=request_gemini(client_or_prompt, api_key=api_key, deadline=deadline))
 
 
 
@@ -172,6 +213,8 @@ def generate_ai_analysis(character, history, computed_metrics=None, growth_insig
     runtime_state = get_runtime_state()
     gemini_api_key = getattr(runtime_state, "gemini_api_key", "")
     openrouter_api_key = getattr(runtime_state, "openrouter_api_key", "")
+    deadline = _request_deadline()
+    cooldown_remaining = _gemini_cooldown_remaining(runtime_state) if gemini_api_key else 0.0
     # Legacy 호출자는 computed_metrics를 넘기지 않는다. 기존 SDK 호출은
     # 호환성을 위해 유지하고, 웹 API의 정상 경로는 제한 시간이 있는 REST adapter를 쓴다.
     legacy_gemini_client = get_gemini_client() if computed_metrics is None else None
@@ -250,47 +293,49 @@ def generate_ai_analysis(character, history, computed_metrics=None, growth_insig
         return {"analysis": cached_analysis, "cacheHit": True, "growthInsights": growth_insights}
 
     gemini_error = None
-    if gemini_api_key or legacy_gemini_client:
+    if gemini_api_key and cooldown_remaining > 0:
+        gemini_error = ProviderError(
+            "Gemini quota cooldown is active.",
+            "provider_quota",
+            retry_after_seconds=max(1, int(cooldown_remaining)),
+        )
+    elif gemini_api_key or legacy_gemini_client:
         try:
             response = (
                 _generate_gemini_content(legacy_gemini_client, prompt)
                 if legacy_gemini_client is not None
-                else _generate_gemini_content(prompt, api_key=gemini_api_key)
+                else _generate_gemini_content(prompt, api_key=gemini_api_key, deadline=deadline)
             )
             analysis = sanitize_ai_text(response.text or "분석 결과가 비어 있습니다.", expected_date)
             if computed_metrics is not None:
                 analysis = _apply_deterministic_growth_forecast(analysis, character, computed_metrics)
             if not validate_growth_report(analysis):
-                return {
-                    "error": "AI 분석 결과의 문장 품질이나 필수 항목을 확인하지 못했습니다. 다시 분석해주세요.",
-                    "statusCode": 502,
-                    "errorType": "invalid_model_output",
-                }
+                raise ProviderError("Gemini 분석 결과가 리포트 검증을 통과하지 못했습니다.", "provider_invalid_output")
+            _clear_gemini_cooldown(runtime_state)
             set_ai_response_cache(prompt, analysis)
             return {"analysis": analysis, "cacheHit": False, "growthInsights": growth_insights}
         except Exception as error:
             gemini_error = error
-            print(f"Gemini 성장 분석 요청에 실패했습니다: {error}")
+            if _is_quota_error(error):
+                delay = _set_gemini_cooldown(runtime_state, error)
+                print(f"Gemini 쿼터 제한으로 {delay}초 쿨다운을 적용했습니다.")
+            print(f"Gemini 성장 분석 요청에 실패했습니다: {type(error).__name__}")
             if not should_use_openrouter(error):
                 return _error_result(error, "AI 분석을 불러오지 못했습니다.")
 
     if openrouter_api_key:
         try:
-            response_text = request_openrouter(prompt, api_key=openrouter_api_key)
+            response_text = request_openrouter(prompt, api_key=openrouter_api_key, deadline=deadline)
             print("OpenRouter로 성장 분석을 처리했습니다.")
             analysis = sanitize_ai_text(response_text or "분석 결과가 비어 있습니다.", expected_date)
             if computed_metrics is not None:
                 analysis = _apply_deterministic_growth_forecast(analysis, character, computed_metrics)
             if not validate_growth_report(analysis):
-                return {
-                    "error": "AI 분석 결과의 문장 품질이나 필수 항목을 확인하지 못했습니다. 다시 분석해주세요.",
-                    "statusCode": 502,
-                    "errorType": "invalid_model_output",
-                }
+                raise ProviderError("OpenRouter 분석 결과가 리포트 검증을 통과하지 못했습니다.", "provider_invalid_output")
             set_ai_response_cache(prompt, analysis)
             return {"analysis": analysis, "cacheHit": False, "growthInsights": growth_insights}
         except Exception as error:
-            print(f"OpenRouter 성장 분석 요청에 실패했습니다: {error}")
+            print(f"OpenRouter 성장 분석 요청에 실패했습니다: {type(error).__name__}")
             return _fallback_failure_result(gemini_error, error)
 
     if gemini_error:
@@ -302,6 +347,8 @@ def generate_ai_comparison(primary, comparison):
     runtime_state = get_runtime_state()
     gemini_api_key = getattr(runtime_state, "gemini_api_key", "")
     openrouter_api_key = getattr(runtime_state, "openrouter_api_key", "")
+    deadline = _request_deadline()
+    cooldown_remaining = _gemini_cooldown_remaining(runtime_state) if gemini_api_key else 0.0
 
     def prepare_subject(subject):
         character = subject["character"]
@@ -347,27 +394,36 @@ def generate_ai_comparison(primary, comparison):
         return {"analysis": cached_analysis, "cacheHit": True}
 
     gemini_error = None
-    if gemini_api_key:
+    if gemini_api_key and cooldown_remaining > 0:
+        gemini_error = ProviderError(
+            "Gemini quota cooldown is active.",
+            "provider_quota",
+            retry_after_seconds=max(1, int(cooldown_remaining)),
+        )
+    elif gemini_api_key:
         try:
-            response = _generate_gemini_content(prompt, api_key=gemini_api_key)
+            response = _generate_gemini_content(prompt, api_key=gemini_api_key, deadline=deadline)
             analysis = sanitize_ai_text(response.text or "비교 분석 결과가 비어 있습니다.")
+            _clear_gemini_cooldown(runtime_state)
             set_ai_response_cache(prompt, analysis)
             return {"analysis": analysis, "cacheHit": False}
         except Exception as error:
             gemini_error = error
-            print(f"Gemini 성장 비교 분석 요청에 실패했습니다: {error}")
+            if _is_quota_error(error):
+                _set_gemini_cooldown(runtime_state, error)
+            print(f"Gemini 성장 비교 분석 요청에 실패했습니다: {type(error).__name__}")
             if not should_use_openrouter(error):
                 return _error_result(error, "AI 성장 분석을 불러오지 못했습니다.")
 
     if openrouter_api_key:
         try:
-            response_text = request_openrouter(prompt, api_key=openrouter_api_key)
+            response_text = request_openrouter(prompt, api_key=openrouter_api_key, deadline=deadline)
             print("OpenRouter로 성장 비교 분석을 처리했습니다.")
             analysis = sanitize_ai_text(response_text or "비교 분석 결과가 비어 있습니다.")
             set_ai_response_cache(prompt, analysis)
             return {"analysis": analysis, "cacheHit": False}
         except Exception as error:
-            print(f"OpenRouter 성장 비교 분석 요청에 실패했습니다: {error}")
+            print(f"OpenRouter 성장 비교 분석 요청에 실패했습니다: {type(error).__name__}")
             return _fallback_failure_result(gemini_error, error)
 
     if gemini_error:
