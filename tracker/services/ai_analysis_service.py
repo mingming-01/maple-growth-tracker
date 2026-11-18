@@ -251,16 +251,23 @@ def _format_experience_korean(value):
 
     sign = "-" if number < 0 else ""
     absolute = abs(number)
-    for unit_name, unit_value in (
+    units = (
         ("경", Decimal(10**16)),
         ("조", Decimal(10**12)),
         ("억", Decimal(10**8)),
         ("만", Decimal(10**4)),
-    ):
+    )
+    for index, (unit_name, unit_value) in enumerate(units):
         if absolute >= unit_value:
             amount = (absolute / unit_value).quantize(
                 Decimal("0.1"), rounding=ROUND_HALF_UP
             )
+            # 반올림 결과가 다음 큰 단위를 넘으면 표시 단위도 올린다.
+            if amount >= Decimal("10000") and index > 0:
+                unit_name, unit_value = units[index - 1]
+                amount = (absolute / unit_value).quantize(
+                    Decimal("0.1"), rounding=ROUND_HALF_UP
+                )
             return f"{sign}{amount:,.1f}{unit_name}"
     rounded = number.quantize(Decimal("1"), rounding=ROUND_HALF_UP)
     return f"{rounded:,.0f}"
