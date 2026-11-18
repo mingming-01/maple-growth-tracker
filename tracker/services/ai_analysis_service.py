@@ -45,7 +45,7 @@ def _error_result(error, fallback_message):
     return {"error": fallback_message, "statusCode": 502, "errorType": "provider_error"}
 
 
-def _generate_gemini_content(client_or_prompt, prompt=None):
+def _generate_gemini_content(client_or_prompt, prompt=None, api_key=None):
     """Gemini 호출을 제한 시간 REST 어댑터로 전달한다.
 
     두 인자 호출은 구버전 단위 테스트·외부 호출부와의 호환성을 위해 남긴다.
@@ -55,7 +55,7 @@ def _generate_gemini_content(client_or_prompt, prompt=None):
         return client_or_prompt.models.generate_content(
             model="gemini-3.6-flash", contents=prompt
         )
-    return SimpleNamespace(text=request_gemini(client_or_prompt))
+    return SimpleNamespace(text=request_gemini(client_or_prompt, api_key=api_key))
 
 
 
@@ -214,7 +214,7 @@ def generate_ai_analysis(character, history, computed_metrics=None, growth_insig
     gemini_error = None
     if gemini_api_key:
         try:
-            response = _generate_gemini_content(prompt)
+            response = _generate_gemini_content(prompt, api_key=gemini_api_key)
             analysis = sanitize_ai_text(response.text or "분석 결과가 비어 있습니다.", expected_date)
             if computed_metrics is not None:
                 analysis = _apply_deterministic_growth_forecast(analysis, character, computed_metrics)
@@ -234,7 +234,7 @@ def generate_ai_analysis(character, history, computed_metrics=None, growth_insig
 
     if openrouter_api_key:
         try:
-            response_text = request_openrouter(prompt)
+            response_text = request_openrouter(prompt, api_key=openrouter_api_key)
             print("OpenRouter로 성장 분석을 처리했습니다.")
             analysis = sanitize_ai_text(response_text or "분석 결과가 비어 있습니다.", expected_date)
             if computed_metrics is not None:
