@@ -99,6 +99,85 @@ class AIServerInputTests(unittest.TestCase):
             max_attempts_override=1,
         )
 
+    def test_analysis_excludes_unverified_legacy_ranks_before_ai_generation(self):
+        captured = {}
+        records = [
+            {
+                "date": (self.today - timedelta(days=1)).isoformat(),
+                "level": 280,
+                "experience": 1000,
+                "ranking": 200,
+                "rankingScope": "overall",
+                "rankingSourceDate": None,
+                "recordStatus": "available",
+            },
+            {
+                "date": self.today.isoformat(),
+                "level": 280,
+                "experience": 1150,
+                "ranking": 190,
+                "rankingScope": "overall",
+                "rankingSourceDate": (self.today - timedelta(days=1)).isoformat(),
+                "recordStatus": "available",
+            },
+        ]
+        storage = FakeGrowthStorage({"ocid-one": records})
+
+        def generate(character, history, metrics, insights, context, force_refresh):
+            captured.update(history=history, metrics=metrics, context=context)
+            return {"analysis": "테스트 분석"}
+
+        with (
+            patch.object(
+                ai_controller,
+                "resolve_character",
+                return_value=("ocid-one", self.make_basic("테스트캐릭터"), Mock(status_code=200)),
+            ),
+            patch.object(ai_controller, "get_growth_history_service", return_value=storage),
+            patch.object(ai_controller, "generate_ai_analysis", side_effect=generate),
+        ):
+            response = self.client.post("/api/ai-analysis?name=테스트캐릭터", json={})
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual([item["ranking"] for item in captured["history"]], [None, None])
+        self.assertIsNone(captured["metrics"]["rankingChange"])
+
+    def test_ai_analysis_uses_server_period_boundaries_for_30_and_90_days(self):
+        for period_days in (30, 90):
+            with self.subTest(period_days=period_days):
+                captured = {}
+                storage = FakeGrowthStorage({"ocid-one": self.make_records(1000)})
+
+                def generate(character, history, metrics, insights, context, force_refresh):
+                    captured.update(history=history, metrics=metrics, insights=insights, context=context)
+                    return {"analysis": "테스트 분석"}
+
+                with (
+                    patch.object(
+                        ai_controller,
+                        "resolve_character",
+                        return_value=("ocid-one", self.make_basic("테스트캐릭터"), Mock(status_code=200)),
+                    ),
+                    patch.object(ai_controller, "get_growth_history_service", return_value=storage),
+                    patch.object(ai_controller, "generate_ai_analysis", side_effect=generate),
+                ):
+                    response = self.client.post(
+                        "/api/ai-analysis?name=테스트캐릭터",
+                        json={"analysisContext": {"periodDays": period_days}},
+                    )
+
+                self.assertEqual(response.status_code, 200)
+                self.assertEqual(captured["context"]["periodDays"], period_days)
+                summary = captured["context"]["periodSummary"]
+                self.assertEqual(summary["expectedSnapshots"], period_days)
+                self.assertEqual(
+                    summary["startDate"],
+                    (self.today - timedelta(days=period_days - 1)).isoformat(),
+                )
+                self.assertEqual(summary["endDate"], self.today.isoformat())
+                self.assertEqual(storage.calls[0][1], self.today - timedelta(days=period_days - 1))
+                self.assertEqual(storage.calls[0][2], self.today)
+
     def test_comparison_rebuilds_both_subjects_from_server_records(self):
         captured = {}
         storage = FakeGrowthStorage({
