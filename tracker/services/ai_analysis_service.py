@@ -46,6 +46,40 @@ def _error_result(error, fallback_message):
     return {"error": fallback_message, "statusCode": 502, "errorType": "provider_error"}
 
 
+def _fallback_failure_result(primary_error, fallback_error=None):
+    """Gemini 쿼터 초과와 OpenRouter 폴백 실패를 구분해 반환한다."""
+    if not _is_quota_error(primary_error):
+        return _error_result(
+            fallback_error or primary_error,
+            "AI 분석을 불러오지 못했습니다.",
+        )
+
+    if fallback_error is None:
+        return {
+            "error": "Gemini 사용량 한도에 도달했고 대체 AI 서비스가 설정되지 않았습니다.",
+            "statusCode": 503,
+            "errorType": "provider_fallback_unavailable",
+            "primaryErrorType": "provider_quota",
+        }
+
+    fallback_text = str(fallback_error).lower()
+    fallback_error_type = (
+        "provider_timeout"
+        if any(token in fallback_text for token in ("timeout", "timed out", "deadline"))
+        else "provider_error"
+    )
+    return {
+        "error": (
+            "Gemini 사용량 한도에 도달했고 OpenRouter 대체 요청도 실패했습니다. "
+            "잠시 후 다시 시도해주세요."
+        ),
+        "statusCode": 503,
+        "errorType": "provider_fallback_failed",
+        "primaryErrorType": "provider_quota",
+        "fallbackErrorType": fallback_error_type,
+    }
+
+
 def _generate_gemini_content(client_or_prompt, prompt=None, api_key=None):
     """Gemini 호출을 제한 시간 REST 어댑터로 전달한다.
 
@@ -257,12 +291,10 @@ def generate_ai_analysis(character, history, computed_metrics=None, growth_insig
             return {"analysis": analysis, "cacheHit": False, "growthInsights": growth_insights}
         except Exception as error:
             print(f"OpenRouter 성장 분석 요청에 실패했습니다: {error}")
-            if gemini_error and _is_quota_error(gemini_error):
-                return _error_result(gemini_error, "AI 분석 사용량 한도를 초과했습니다.")
-            return _error_result(error, "AI 분석을 불러오지 못했습니다.")
+            return _fallback_failure_result(gemini_error, error)
 
     if gemini_error:
-        return _error_result(gemini_error, "AI 분석을 불러오지 못했습니다.")
+        return _fallback_failure_result(gemini_error)
     return {"error": "AI 분석을 사용할 수 없습니다.", "statusCode": 503, "errorType": "provider_unavailable"}
 
 
@@ -336,10 +368,8 @@ def generate_ai_comparison(primary, comparison):
             return {"analysis": analysis, "cacheHit": False}
         except Exception as error:
             print(f"OpenRouter 성장 비교 분석 요청에 실패했습니다: {error}")
-            if gemini_error and _is_quota_error(gemini_error):
-                return _error_result(gemini_error, "AI 분석 사용량 한도를 초과했습니다.")
-            return _error_result(error, "AI 성장 분석을 불러오지 못했습니다.")
+            return _fallback_failure_result(gemini_error, error)
 
     if gemini_error:
-        return _error_result(gemini_error, "AI 성장 분석을 불러오지 못했습니다.")
+        return _fallback_failure_result(gemini_error)
     return {"error": "AI 성장 분석을 사용할 수 없습니다.", "statusCode": 503, "errorType": "provider_unavailable"}

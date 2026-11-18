@@ -33,11 +33,11 @@ def _provider_timeouts(provider):
         # Free routed models commonly need longer to start and complete generation.
         # Keep this bounded below Gunicorn's 30s worker timeout after Gemini fallback.
         read_timeout = min(
-            10.0, max(3.0, float(_setting("AI_OPENROUTER_READ_TIMEOUT", 9.0)))
+            12.0, max(3.0, float(_setting("AI_OPENROUTER_READ_TIMEOUT", 11.0)))
         )
         total_timeout = min(
-            13.0,
-            max(2.0, float(_setting("AI_OPENROUTER_TOTAL_TIMEOUT", 12.0))),
+            15.0,
+            max(2.0, float(_setting("AI_OPENROUTER_TOTAL_TIMEOUT", 14.0))),
         )
     read_timeout = min(read_timeout, max(0.5, total_timeout - connect_timeout))
     return connect_timeout, read_timeout, total_timeout
@@ -112,7 +112,7 @@ def request_openrouter(prompt, api_key=None):
             "model": _setting("OPENROUTER_MODEL", "openrouter/free"),
             "messages": [{"role": "user", "content": prompt}],
             "temperature": 0.35,
-            "max_tokens": 640,
+            "max_tokens": 1536,
             "stream": False,
         },
         connect_timeout=connect_timeout,
