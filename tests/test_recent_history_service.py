@@ -47,7 +47,6 @@ class RecentHistoryServiceTests(unittest.TestCase):
         saved = {
             "2026-11-09": {
                 "ranking": 456,
-                "rankingSourceDate": "2026-11-09",
                 "level": 289,
                 "experience": 9876,
                 "experienceRate": 11.2,
@@ -101,6 +100,7 @@ class RecentHistoryServiceTests(unittest.TestCase):
         self.assertEqual(result[0]["recordStatus"], "available")
         self.assertEqual(result[0]["level"], 288)
         self.assertEqual(result[0]["experienceRate"], 8.5)
+        self.assertEqual(result[0]["rankingSourceDate"], "2026-11-09")
         self.basic_lookup.assert_called_once_with(
             "test-ocid", target_date="2026-11-09", historical=True
         )
