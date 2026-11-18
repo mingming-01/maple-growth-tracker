@@ -210,6 +210,91 @@ class GrowthHistoryStoreTests(unittest.TestCase):
         ])
 
 
+    def test_existing_sqlite_schema_adds_ranking_source_date_as_unverified(self):
+        legacy_path = str(Path(self.temp_dir.name) / "legacy_growth_history.sqlite3")
+        connection = sqlite3.connect(legacy_path)
+        try:
+            connection.execute(
+                """
+                CREATE TABLE growth_daily_snapshots (
+                    ocid TEXT NOT NULL,
+                    snapshot_date TEXT NOT NULL,
+                    character_name TEXT NOT NULL,
+                    world_name TEXT,
+                    level INTEGER,
+                    experience NUMERIC,
+                    ranking INTEGER,
+                    ranking_scope TEXT,
+                    experience_rate REAL,
+                    experience_rate_checked INTEGER NOT NULL DEFAULT 0,
+                    record_status TEXT NOT NULL,
+                    recorded_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                    PRIMARY KEY (ocid, snapshot_date)
+                )
+                """
+            )
+            connection.execute(
+                """
+                INSERT INTO growth_daily_snapshots
+                    (ocid, snapshot_date, character_name, world_name, level,
+                     experience, ranking, ranking_scope, experience_rate,
+                     experience_rate_checked, record_status)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                ("legacy-ocid", self.today.isoformat(), "테스트", "테스트월드",
+                 280, 12345, 77, "overall", 12.5, 1, "available"),
+            )
+            connection.commit()
+        finally:
+            connection.close()
+
+        legacy_store = GrowthHistoryStore(sqlite_path=legacy_path)
+        records = legacy_store.get_records("legacy-ocid", self.today, self.today)
+
+        self.assertEqual(len(records), 1)
+        self.assertEqual(records[0]["ranking"], 77)
+        self.assertEqual(records[0]["rankingScope"], "overall")
+        self.assertIsNone(records[0]["rankingSourceDate"])
+
+    def test_archive_hides_legacy_overall_rank_without_matching_source_date(self):
+        target_date = (self.today - timedelta(days=1)).isoformat()
+        self.store.save_records(
+            "test-ocid", "테스트캐릭터", "테스트월드",
+            [{
+                "date": target_date,
+                "recordStatus": "available",
+                "level": 280,
+                "experience": 123456,
+                "ranking": 77,
+                "rankingScope": "overall",
+                "rankingSourceDate": target_date,
+                "experienceRate": 12.345,
+                "experienceRateChecked": True,
+            }],
+        )
+        connection = self.store._connect()
+        try:
+            with connection:
+                connection.execute(
+                    """
+                    UPDATE growth_daily_snapshots
+                    SET ranking_source_date = NULL
+                    WHERE ocid = ? AND snapshot_date = ?
+                    """,
+                    ("test-ocid", target_date),
+                )
+        finally:
+            connection.close()
+
+        response = self.client.get("/api/history/archive?ocid=test-ocid&days=30")
+
+        self.assertEqual(response.status_code, 200)
+        record = response.get_json()["history"][-2]
+        self.assertEqual(record["experience"], 123456)
+        self.assertIsNone(record["ranking"])
+        self.assertIsNone(record["rankingScope"])
+        self.assertIsNone(record["rankingSourceDate"])
+
     def test_api_rate_limit_is_shared_between_store_instances(self):
         store_path = str(Path(self.temp_dir.name) / "shared_limits.sqlite3")
         first_store = GrowthHistoryStore(sqlite_path=store_path)
