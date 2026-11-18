@@ -14,6 +14,13 @@ function isAvailableRecord(item) {
         toFiniteNumber(item.experience) !== null;
 }
 
+function isConsecutiveCalendarDate(previousDate, currentDate) {
+    const previous = parseISODate(previousDate);
+    const current = parseISODate(currentDate);
+    return previous !== null && current !== null &&
+        current - previous === 86400000;
+}
+
 export function sortHistoryAscending(history) {
     return [...(history || [])].sort((a, b) => String(a.date).localeCompare(String(b.date)));
 }
@@ -185,6 +192,67 @@ export function formatLocalISODate(value) {
     return `${year}-${month}-${day}`;
 }
 
+export function summarizeGrowthPeriod(history, days, referenceDate = formatLocalISODate(new Date())) {
+    const records = sortHistoryAscending(filterHistoryThroughToday(
+        Array.isArray(history) ? history : [],
+        referenceDate,
+    ));
+    const valid = records.filter(isAvailableRecord);
+    const changes = records
+        .map(item => ({ item, change: getObservedChange(item) }))
+        .filter(entry => entry.change !== null);
+    const growth = changes.length
+        ? changes.reduce((sum, entry) => sum + entry.change, 0)
+        : null;
+    const average = growth === null ? null : growth / changes.length;
+    const positive = changes.filter(entry => entry.change > 0);
+    const best = positive.reduce((bestEntry, entry) =>
+        !bestEntry || entry.change > bestEntry.change ? entry : bestEntry, null);
+    const ranked = valid
+        .map(item => ({ item, rank: toFiniteNumber(item.ranking) }))
+        .filter(entry =>
+            Number.isInteger(entry.rank) &&
+            entry.rank > 0 &&
+            entry.item.rankingScope === "overall" &&
+            entry.item.rankingSourceDate === entry.item.date
+        );
+    const levelUps = records.filter((item, index) => {
+        if (!isAvailableRecord(item)) return false;
+        if (item.levelUp === true) return true;
+        if (index === 0) return false;
+        const previous = records[index - 1];
+        if (!isAvailableRecord(previous)) return false;
+        if (!isConsecutiveCalendarDate(previous.date, item.date)) return false;
+        const previousLevel = toFiniteNumber(previous.level);
+        const currentLevel = toFiniteNumber(item.level);
+        return previousLevel !== null && currentLevel !== null &&
+            currentLevel > previousLevel;
+    });
+
+    return {
+        days,
+        startDate: records[0]?.date || null,
+        endDate: records[records.length - 1]?.date || null,
+        growth,
+        averageGrowth: average,
+        confirmedChangeDays: changes.length,
+        bestDailyGrowth: best?.change ?? null,
+        bestDailyGrowthDate: best?.item.date || null,
+        growthDays: positive.length,
+        zeroGrowthDays: changes.filter(entry => entry.change === 0).length,
+        negativeGrowthDays: changes.filter(entry => entry.change < 0).length,
+        levelUpCount: levelUps.length,
+        levelUpDates: levelUps.map(item => item.date),
+        rankingChange: ranked.length >= 2
+            ? ranked[0].rank - ranked[ranked.length - 1].rank
+            : null,
+        availableDays: records.filter(item => item.recordStatus === "available").length,
+        notReadyDays: records.filter(item => item.recordStatus === "not_ready").length,
+        notCollectedDays: records.filter(item => item.recordStatus === "not_collected").length,
+        coveragePercent: records.length ? valid.length / records.length * 100 : 0,
+    };
+}
+
 export function buildGrowthTimeline(history, limit = 8) {
     const sorted = sortHistoryAscending(filterHistoryThroughToday(history));
     if (!sorted.length) return [];
@@ -192,10 +260,15 @@ export function buildGrowthTimeline(history, limit = 8) {
     const events = [];
     const levelUpEvents = sorted.flatMap((item, index) => {
         const previous = sorted[index - 1];
-        const previousLevel = toFiniteNumber(previous?.level);
+        const previousLevel = isAvailableRecord(previous)
+            ? toFiniteNumber(previous.level)
+            : null;
         const currentLevel = toFiniteNumber(item?.level);
+        const isConsecutive = previous &&
+            isConsecutiveCalendarDate(previous.date, item.date);
         const levelUp = item?.levelUp === true ||
-            (previousLevel !== null && currentLevel !== null && currentLevel > previousLevel);
+            (isConsecutive && previousLevel !== null &&
+                currentLevel !== null && currentLevel > previousLevel);
         if (!levelUp || !isAvailableRecord(item)) return [];
         return [{
             type: "level-up",
@@ -269,10 +342,15 @@ export function calculateGrowthMetrics(character, history, sharedPrediction) {
     const levelProgress = calculateLevelProgress(character, averageDailyGrowth);
     const levelUps = sorted
         .filter((item, index) => {
-            const previousLevel = toFiniteNumber(sorted[index - 1]?.level);
-            const currentLevel = toFiniteNumber(item?.level);
-            return item.levelUp === true ||
-                (previousLevel !== null && currentLevel !== null && currentLevel > previousLevel);
+            if (!isAvailableRecord(item)) return false;
+            if (item.levelUp === true) return true;
+            const previous = sorted[index - 1];
+            if (!isAvailableRecord(previous) ||
+                !isConsecutiveCalendarDate(previous.date, item.date)) return false;
+            const previousLevel = toFiniteNumber(previous.level);
+            const currentLevel = toFiniteNumber(item.level);
+            return previousLevel !== null && currentLevel !== null &&
+                currentLevel > previousLevel;
         })
         .map(item => {
             const index = sorted.indexOf(item);
