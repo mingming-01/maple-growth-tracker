@@ -225,5 +225,34 @@ class AIProviderAdapterTests(unittest.TestCase):
         self.assertTrue(should_use_openrouter(InvalidProviderResponse("invalid JSON")))
 
 
+    @patch("tracker.integrations.ai_provider.post_json_with_deadline")
+    def test_gemini_max_tokens_is_reported_as_truncated_and_fallback_eligible(self, post_json):
+        post_json.return_value = {
+            "candidates": [{
+                "finishReason": "MAX_TOKENS",
+                "content": {"parts": [{"text": "부분 응답"}]},
+            }]
+        }
+        with self.app.app_context():
+            with self.assertRaises(ProviderError) as caught:
+                request_gemini("prompt")
+        self.assertEqual(caught.exception.error_type, "provider_output_truncated")
+        self.assertEqual(caught.exception.finish_reason, "MAX_TOKENS")
+        self.assertTrue(should_use_openrouter(caught.exception))
+
+    @patch("tracker.integrations.ai_provider.post_json_with_deadline")
+    def test_gemini_safety_block_is_not_treated_as_transient_fallback(self, post_json):
+        post_json.return_value = {
+            "candidates": [{
+                "finishReason": "SAFETY",
+                "content": {"parts": []},
+            }]
+        }
+        with self.app.app_context():
+            with self.assertRaises(ProviderError) as caught:
+                request_gemini("prompt")
+        self.assertEqual(caught.exception.error_type, "provider_rejected")
+        self.assertFalse(should_use_openrouter(caught.exception))
+
 if __name__ == "__main__":
     unittest.main()
