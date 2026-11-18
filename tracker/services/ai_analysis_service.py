@@ -12,6 +12,7 @@ from tracker.services.ai_text_service import (
 )
 from tracker.runtime import (
     get_ai_response_cache,
+    get_gemini_client,
     get_runtime_state,
     set_ai_response_cache,
 )
@@ -135,8 +136,11 @@ def _build_growth_report_prompt(source_data):
 
 def generate_ai_analysis(character, history, computed_metrics=None, growth_insights=None, analysis_context=None, force_refresh=False):
     runtime_state = get_runtime_state()
-    gemini_api_key = runtime_state.gemini_api_key
-    openrouter_api_key = runtime_state.openrouter_api_key
+    gemini_api_key = getattr(runtime_state, "gemini_api_key", "")
+    openrouter_api_key = getattr(runtime_state, "openrouter_api_key", "")
+    # Legacy 호출자는 computed_metrics를 넘기지 않는다. 기존 SDK 호출은
+    # 호환성을 위해 유지하고, 웹 API의 정상 경로는 제한 시간이 있는 REST adapter를 쓴다.
+    legacy_gemini_client = get_gemini_client() if computed_metrics is None else None
 
     growth_data = [
         {
@@ -212,9 +216,13 @@ def generate_ai_analysis(character, history, computed_metrics=None, growth_insig
         return {"analysis": cached_analysis, "cacheHit": True, "growthInsights": growth_insights}
 
     gemini_error = None
-    if gemini_api_key:
+    if gemini_api_key or legacy_gemini_client:
         try:
-            response = _generate_gemini_content(prompt, api_key=gemini_api_key)
+            response = (
+                _generate_gemini_content(legacy_gemini_client, prompt)
+                if legacy_gemini_client is not None
+                else _generate_gemini_content(prompt, api_key=gemini_api_key)
+            )
             analysis = sanitize_ai_text(response.text or "분석 결과가 비어 있습니다.", expected_date)
             if computed_metrics is not None:
                 analysis = _apply_deterministic_growth_forecast(analysis, character, computed_metrics)
@@ -260,8 +268,8 @@ def generate_ai_analysis(character, history, computed_metrics=None, growth_insig
 
 def generate_ai_comparison(primary, comparison):
     runtime_state = get_runtime_state()
-    gemini_api_key = runtime_state.gemini_api_key
-    openrouter_api_key = runtime_state.openrouter_api_key
+    gemini_api_key = getattr(runtime_state, "gemini_api_key", "")
+    openrouter_api_key = getattr(runtime_state, "openrouter_api_key", "")
 
     def prepare_subject(subject):
         character = subject["character"]
@@ -309,7 +317,7 @@ def generate_ai_comparison(primary, comparison):
     gemini_error = None
     if gemini_api_key:
         try:
-            response = _generate_gemini_content(prompt)
+            response = _generate_gemini_content(prompt, api_key=gemini_api_key)
             analysis = sanitize_ai_text(response.text or "비교 분석 결과가 비어 있습니다.")
             set_ai_response_cache(prompt, analysis)
             return {"analysis": analysis, "cacheHit": False}
@@ -321,7 +329,7 @@ def generate_ai_comparison(primary, comparison):
 
     if openrouter_api_key:
         try:
-            response_text = request_openrouter(prompt)
+            response_text = request_openrouter(prompt, api_key=openrouter_api_key)
             print("OpenRouter로 성장 비교 분석을 처리했습니다.")
             analysis = sanitize_ai_text(response_text or "비교 분석 결과가 비어 있습니다.")
             set_ai_response_cache(prompt, analysis)
