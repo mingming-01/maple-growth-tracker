@@ -505,6 +505,72 @@ class GrowthHistoryApiTests(unittest.TestCase):
         self.assertIsNone(saved["ranking"])
         self.assertIsNone(saved["rankingScope"])
 
+    def test_archive_revalidates_existing_unverified_rank_only_for_requested_batch(self):
+        target_date = (self.today - timedelta(days=1)).isoformat()
+        self.store.save_records(
+            "test-ocid", "테스트캐릭터", "테스트월드",
+            [{
+                "date": target_date,
+                "recordStatus": "available",
+                "level": 280,
+                "experience": 123456,
+                "ranking": 77,
+                "rankingScope": "overall",
+                "rankingSourceDate": target_date,
+                "experienceRate": 12.345,
+                "experienceRateChecked": True,
+            }],
+        )
+        connection = self.store._connect()
+        try:
+            with connection:
+                connection.execute(
+                    """
+                    UPDATE growth_daily_snapshots
+                    SET ranking_source_date = NULL
+                    WHERE ocid = ? AND snapshot_date = ?
+                    """,
+                    ("test-ocid", target_date),
+                )
+        finally:
+            connection.close()
+
+        ranking_response = Mock(status_code=200)
+        ranking = {
+            "ranking": 55,
+            "character_level": 280,
+            "character_exp": 123999,
+            "character_exp_rate": 12.5,
+        }
+        verified_basic = {
+            "character_name": "테스트캐릭터",
+            "world_name": "테스트월드",
+            "character_level": 280,
+            "character_exp": 123999,
+        }
+        with patch.object(
+            history_controller, "get_basic_character_snapshot",
+            return_value=(verified_basic, Mock(status_code=200))
+        ) as verify_basic, patch.object(
+            history_archive_service, "get_ranking_snapshot",
+            return_value=(ranking, ranking_response)
+        ) as get_ranking:
+            response = self.client.get(
+                "/api/history/archive?ocid=test-ocid&days=30&collect=1"
+                "&character_name=%ED%85%8C%EC%8A%A4%ED%8A%B8%EC%BA%90%EB%A6%AD%ED%84%B0"
+                "&offset=28&limit=1"
+            )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(verify_basic.call_count, 1)
+        get_ranking.assert_called_once()
+        self.assertEqual(get_ranking.call_args.kwargs["target_date"], target_date)
+        saved = self.store.get_records("test-ocid", target_date, target_date)[0]
+        self.assertEqual(saved["ranking"], 55)
+        self.assertEqual(saved["rankingScope"], "overall")
+        self.assertEqual(saved["rankingSourceDate"], target_date)
+        self.assertEqual(saved["experience"], 123999)
+
     def test_archive_does_not_fetch_past_data_without_collection_request(self):
         with patch.object(history_archive_service, "get_ranking_snapshot", side_effect=AssertionError("should not call Nexon")), patch.object(
             history_archive_service, "get_basic_character_snapshot", side_effect=AssertionError("should not call Nexon")
