@@ -5,6 +5,10 @@ from tracker.services.ai_analysis_service import (
     _build_growth_report_prompt,
     _deterministic_growth_forecast,
     _error_result,
+    _build_deterministic_growth_report,
+    _build_growth_comment_prompt,
+    _validate_ai_comment,
+    _format_experience_korean,
 )
 from tracker.services.ai_text_service import sanitize_ai_text, validate_growth_report
 
@@ -124,6 +128,86 @@ class AIAnalysisQualityTests(unittest.TestCase):
         self.assertNotIn("1.78×10¹³", result)
         self.assertIn("11월 19일쯤 299레벨", result)
         self.assertTrue(validate_growth_report(result))
+
+    def test_experience_formatter_uses_trillion_scale_and_full_korean_units(self):
+        self.assertEqual(
+            _format_experience_korean(99183417210742),
+            "99조 1,834억 1,721만 742",
+        )
+        self.assertEqual(
+            _format_experience_korean(16530569535123.67),
+            "16조 5,305억 6,953만 5,124",
+        )
+
+    def test_deterministic_report_uses_server_values_for_units_dates_and_progress(self):
+        character = {"level": 299}
+        metrics = {
+            "levelProgress": {"currentRate": 67.4, "remainingRate": 32.6},
+            "levelUps": [{
+                "date": "2026-11-18",
+                "previousLevel": 298,
+                "currentLevel": 299,
+            }],
+            "prediction": None,
+        }
+        insights = {
+            "recentPeriod": {
+                "startDate": "2026-11-13",
+                "endDate": "2026-11-19",
+                "validGrowthIntervals": 6,
+                "levelUpIntervals": 1,
+                "observedExperienceSum": 99183417210742,
+                "averageDailyExperience": 16530569535123.67,
+            },
+            "previousPeriod": {
+                "startDate": "2026-11-06",
+                "endDate": "2026-11-12",
+                "averageDailyExperience": 16776913065046.14,
+            },
+            "weekOverWeek": {
+                "status": "available",
+                "direction": "decrease",
+                "averageDailyGrowthChangePercent": -1.5,
+            },
+        }
+
+        report = _build_deterministic_growth_report(
+            character,
+            metrics,
+            insights,
+            {"periodDays": 7},
+            "최근 흐름은 직전 기간과 큰 차이가 없지만, 추세를 더 지켜보는 것이 좋아요.",
+        )
+
+        self.assertIn("99조 1,834억 1,721만 742", report)
+        self.assertIn("16조 5,305억 6,953만 5,124", report)
+        self.assertIn("11월 6일~12일", report)
+        self.assertIn("11월 13일~19일", report)
+        self.assertIn("11월 18일에 298레벨에서 299레벨", report)
+        self.assertIn("67.4%", report)
+        self.assertIn("32.6% 남았어요", report)
+        self.assertNotIn("경", report)
+
+    def test_ai_comment_prompt_does_not_send_raw_numeric_data(self):
+        prompt = _build_growth_comment_prompt({
+            "metrics": {
+                "levelUps": [{"date": "2026-11-18", "previousLevel": 298, "currentLevel": 299}],
+                "averageDailyGrowth": 16530569535123,
+            },
+            "growthInsights": {
+                "weekOverWeek": {"direction": "decrease"},
+                "basis": {"dataQualityLabel": "높음"},
+            },
+        })
+
+        self.assertNotIn("16530569535123", prompt)
+        self.assertNotIn("2026-11-18", prompt)
+        self.assertIn("숫자, 날짜", prompt)
+
+    def test_ai_comment_rejects_numeric_and_unsupported_weekend_claims(self):
+        self.assertFalse(_validate_ai_comment("하루 평균 19경 경험치를 기록했어요."))
+        self.assertFalse(_validate_ai_comment("주말 사냥이 평일보다 효율적이에요."))
+        self.assertTrue(_validate_ai_comment("최근 성장 흐름은 조금 둔화됐어요. 추세를 더 지켜보면 좋겠어요."))
 
     def test_report_validator_rejects_scientific_notation(self):
         report = (
