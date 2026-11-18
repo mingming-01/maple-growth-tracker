@@ -258,6 +258,13 @@ class GrowthHistoryStore:
             experience = cls._to_integer(record.get("experience"))
             if level is None or experience is None:
                 return None
+            ranking = cls._to_integer(record.get("ranking"))
+            if (
+                ranking is not None
+                and (ranking <= 0 or record.get("rankingScope") != "overall")
+            ):
+                ranking = None
+            ranking_scope = "overall" if ranking is not None else None
             return (
                 str(ocid),
                 snapshot_date.isoformat(),
@@ -265,8 +272,8 @@ class GrowthHistoryStore:
                 world_name,
                 level,
                 experience,
-                cls._to_integer(record.get("ranking")),
-                record.get("rankingScope"),
+                ranking,
+                ranking_scope,
                 cls._to_rate(record.get("experienceRate")),
                 bool(record.get("experienceRateChecked", False)),
                 "available",

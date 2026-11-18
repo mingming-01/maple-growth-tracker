@@ -6,10 +6,16 @@ import requests
 
 
 def _get_cached_current_ranking(basic, target_date, today):
-    """캐릭터 조회 스냅샷에서 오늘 종합 랭킹을 안전하게 추출한다."""
+    """같은 집계일의 종합 랭킹만 캐릭터 스냅샷에서 재사용한다."""
     if target_date != today or not isinstance(basic, dict):
         return None
     if basic.get("ranking_data_status") != "available":
+        return None
+    if basic.get("ranking_scope") != "overall":
+        return None
+    # 프로필 랭킹은 공개 데이터가 늦을 때 이전 집계일로 대체될 수 있다.
+    # 실제 집계일이 오늘과 다르면 오늘 성장 기록으로 재사용하지 않는다.
+    if basic.get("ranking_date") != target_date.isoformat():
         return None
     ranking = basic.get("ranking")
     if ranking is None:

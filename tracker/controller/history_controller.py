@@ -31,7 +31,6 @@ from tracker.runtime import (
     load_api_snapshot,
     save_api_snapshot,
     set_cache,
-    stale_snapshot_response,
     with_data_status,
     get_cache,
     get_cache_timestamp,
@@ -82,8 +81,43 @@ def _load_recent_character_basic_snapshot(character_name, ocid, now=None):
         "character_exp": snapshot.get("experience"),
         "character_exp_rate": snapshot.get("experienceRate"),
         "ranking": snapshot.get("ranking"),
+        "ranking_scope": "overall",
+        "ranking_date": snapshot.get("rankingDate"),
         "ranking_data_status": snapshot.get("rankingDataStatus"),
     }
+
+
+def _stale_history_response(cache_key, character_name, error_message):
+    """신규 스냅샷을 우선 사용하고, 레거시 스냅샷은 랭킹을 제거해 제공한다."""
+    snapshot, saved_at = load_api_snapshot(cache_key)
+    if snapshot is not None:
+        return jsonify(with_data_status(snapshot, "stale", saved_at)), 200
+
+    # 이전 구현은 프로필 조회의 전일 fallback 순위를 오늘로 저장했을 수 있다.
+    # 해당 스냅샷은 성장량/레벨만 보존하고 모든 랭킹 값과 랭킹 변화량을 숨긴다.
+    legacy_snapshot, legacy_saved_at = load_api_snapshot(
+        f"history:{character_name}"
+    )
+    if isinstance(legacy_snapshot, dict):
+        legacy_history = legacy_snapshot.get("history")
+        if isinstance(legacy_history, list):
+            sanitized = dict(legacy_snapshot)
+            sanitized_history = []
+            for record in legacy_history:
+                if not isinstance(record, dict):
+                    sanitized_history.append(record)
+                    continue
+                safe_record = dict(record)
+                safe_record["ranking"] = None
+                safe_record["rankingScope"] = None
+                safe_record["rankingChange"] = None
+                sanitized_history.append(safe_record)
+            sanitized["history"] = sanitized_history
+            return jsonify(with_data_status(
+                sanitized, "stale", legacy_saved_at
+            )), 200
+
+    return jsonify({"error": error_message}), 503
 
 
 # 최근 7일 성장 기록 조회 및 변화량 계산
@@ -101,7 +135,9 @@ def get_history():
     if len(requested_ocid) > 128:
         return jsonify({"error": "캐릭터 식별 정보가 올바르지 않습니다."}), 400
 
-    cache_key = f"history:{character_name}"
+    # 이전 캐시에는 과거 집계일의 프로필 랭킹이 오늘 순위로 섞였을 수 있어
+    # 정합성 기준을 적용한 새 키로 분리한다.
+    cache_key = f"history:rank-overall-v2:{character_name}"
     force_refresh = request.args.get("refresh") == "1"
     cached_history = None if force_refresh else get_cache(cache_key)
     cached_records = cached_history.get("history") if isinstance(cached_history, dict) else None
@@ -140,15 +176,13 @@ def get_history():
             ocid, basic, response = resolve_character(character_name)
         if not ocid:
             if is_temporary_nexon_failure(response):
-                return stale_snapshot_response(
-                    cache_key, "넥슨 API가 일시적으로 응답하지 않습니다. 잠시 후 다시 시도해주세요."
+                return _stale_history_response(cache_key, character_name, "넥슨 API가 일시적으로 응답하지 않습니다. 잠시 후 다시 시도해주세요."
                 )
             return jsonify({"error": "캐릭터 정보를 찾을 수 없거나 조회할 수 없습니다."}), response.status_code
 
         if not basic:
             if is_temporary_nexon_failure(response):
-                return stale_snapshot_response(
-                    cache_key, "캐릭터 정보를 일시적으로 조회할 수 없습니다. 잠시 후 다시 시도해주세요."
+                return _stale_history_response(cache_key, character_name, "캐릭터 정보를 일시적으로 조회할 수 없습니다. 잠시 후 다시 시도해주세요."
                 )
             return jsonify({"error": "캐릭터 정보를 확인할 수 없습니다."}), response.status_code
 
@@ -181,8 +215,7 @@ def get_history():
             max_workers=3,
         )
     except requests.RequestException:
-        return stale_snapshot_response(
-            cache_key, "성장 기록 조회 중 넥슨 API 연결에 실패했습니다. 잠시 후 다시 시도해주세요."
+        return _stale_history_response(cache_key, character_name, "성장 기록 조회 중 넥슨 API 연결에 실패했습니다. 잠시 후 다시 시도해주세요."
         )
 
     failed_records = [item for item in history if item.get("recordStatus") == "unavailable"]
@@ -191,8 +224,7 @@ def get_history():
         # 하나라도 429/5xx/네트워크 오류가 있으면 전체 결과를 502로 단정하지 않고
         # 저장된 정상 스냅샷을 우선 제공하거나 재시도 가능한 503으로 응답한다.
         if any(item.get("retryable") for item in failed_records):
-            return stale_snapshot_response(
-                cache_key, "성장 기록 조회가 일시적으로 지연되고 있습니다. 잠시 후 다시 시도해주세요."
+            return _stale_history_response(cache_key, character_name, "성장 기록 조회가 일시적으로 지연되고 있습니다. 잠시 후 다시 시도해주세요."
             )
         return jsonify({"error": "성장 기록을 정상적으로 가져오지 못했습니다."}), 502
 
@@ -410,7 +442,16 @@ def get_history_archive():
         if saved:
             history.append({
                 "date": date_string,
-                "ranking": saved.get("ranking"),
+                "ranking": (
+                    saved.get("ranking")
+                    if saved.get("rankingScope") == "overall"
+                    else None
+                ),
+                "rankingScope": (
+                    "overall"
+                    if saved.get("rankingScope") == "overall" and saved.get("ranking") is not None
+                    else None
+                ),
                 "level": saved.get("level"),
                 "experience": saved.get("experience"),
                 "experienceRate": saved.get("experienceRate"),

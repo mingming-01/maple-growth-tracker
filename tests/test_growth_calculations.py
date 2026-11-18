@@ -106,6 +106,7 @@ class GrowthCalculationBehaviorTests(unittest.TestCase):
                 "level": 280,
                 "experience": 1000,
                 "ranking": 300,
+                "rankingScope": "overall",
             },
             {
                 "date": (start_date + timedelta(days=1)).isoformat(),
@@ -113,6 +114,7 @@ class GrowthCalculationBehaviorTests(unittest.TestCase):
                 "level": 280,
                 "experience": 1500,
                 "ranking": 290,
+                "rankingScope": "overall",
             },
             {
                 "date": (start_date + timedelta(days=2)).isoformat(),
@@ -124,6 +126,7 @@ class GrowthCalculationBehaviorTests(unittest.TestCase):
                 "level": 280,
                 "experience": 2500,
                 "ranking": 270,
+                "rankingScope": "overall",
             },
             {
                 "date": (start_date + timedelta(days=4)).isoformat(),
@@ -131,6 +134,7 @@ class GrowthCalculationBehaviorTests(unittest.TestCase):
                 "level": 281,
                 "experience": 100,
                 "ranking": 260,
+                "rankingScope": "overall",
             },
         ]
         self.store.save_records(
