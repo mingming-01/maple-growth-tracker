@@ -61,6 +61,7 @@ class RecentHistoryServiceTests(unittest.TestCase):
         result = self.collect([self.yesterday], stored=saved)
 
         self.assertEqual(result[0]["ranking"], 456)
+        self.assertEqual(result[0]["rankingSourceDate"], "2026-11-09")
         self.assertTrue(result[0]["_fromStore"])
         self.ranking.assert_not_called()
         self.basic_lookup.assert_not_called()
