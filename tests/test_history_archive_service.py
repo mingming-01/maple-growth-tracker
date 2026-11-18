@@ -38,7 +38,6 @@ class HistoryArchiveServiceTests(unittest.TestCase):
             "experience": 98765,
             "experienceRate": 12.5,
             "experienceRateChecked": True,
-            "rankingSourceDate": "2026-11-08",
             "recordStatus": "available",
         })
         get_basic.assert_not_called()
