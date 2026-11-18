@@ -1,5 +1,7 @@
 """Regression tests for AI provider fallback orchestration."""
+import logging
 import requests
+import time
 import unittest
 from types import SimpleNamespace
 from unittest.mock import patch
@@ -50,6 +52,18 @@ class AIAnalysisFallbackTests(unittest.TestCase):
             "level": 280,
             "experienceRate": 12.5,
         }
+
+    def test_provider_failure_logging_works_without_flask_app_context(self):
+        started_at = time.monotonic()
+        deadline = started_at + 10
+        error = ProviderError("temporary provider failure", "provider_timeout")
+
+        with self.assertLogs(service.__name__, level="WARNING") as captured:
+            service._log_provider_failure("gemini", error, started_at, deadline)
+
+        self.assertIn('"provider": "gemini"', captured.output[0])
+        self.assertIn('"error_type": "provider_timeout"', captured.output[0])
+        self.assertNotIn("temporary provider failure", captured.output[0])
 
     @patch("tracker.services.ai_analysis_service._request_deadline", return_value=12345.0)
     @patch("tracker.services.ai_analysis_service.get_runtime_state")
