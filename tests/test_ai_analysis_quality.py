@@ -226,10 +226,48 @@ class AIAnalysisQualityTests(unittest.TestCase):
         self.assertIn("비교할 근거 부족", prompt)
         self.assertNotIn("직전 기간보다 감소", prompt)
 
-    def test_ai_comment_rejects_numeric_and_unsupported_weekend_claims(self):
-        self.assertFalse(_validate_ai_comment("하루 평균 19경 경험치를 기록했어요."))
-        self.assertFalse(_validate_ai_comment("주말 사냥이 평일보다 효율적이에요."))
-        self.assertTrue(_validate_ai_comment("최근 성장 흐름은 조금 둔화됐어요. 추세를 더 지켜보면 좋겠어요."))
+    def test_growth_report_prompt_gives_ai_all_five_sections_and_server_facts(self):
+        source = self.make_source_data(7)
+        source["history"] = [{"date": "2026-11-18", "level": 299, "experienceChange": 16530569535123}]
+        prompt = _build_growth_report_prompt(source)
+
+        for section in ("[성장 패턴]", "[성장 변화]", "[레벨업 분석]", "[성장 전망]", "[AI 코멘트]"):
+            self.assertIn(section, prompt)
+        self.assertIn("16530569535123", prompt)
+        self.assertIn("친근하고 담백한 해요체", prompt)
+        self.assertNotIn("숫자, 숫자, 날짜", prompt)
+
+    def test_growth_report_fact_validator_accepts_server_numbers_and_dates(self):
+        source = {
+            "metrics": {
+                "averageDailyGrowth": 16530569535123,
+                "levelProgress": {"currentRate": 67.4, "remainingRate": 32.6},
+                "levelUps": [{"date": "2026-11-18", "previousLevel": 298, "currentLevel": 299}],
+            },
+            "selectedPeriod": {"periodDays": 7},
+        }
+        report = (
+            "[성장 패턴] 최근 7일 동안 성장 기록이 이어졌어요.\\n"
+            "[성장 변화] 하루 평균은 16.5조예요.\\n"
+            "[레벨업 분석] 11월 18일에 298레벨에서 299레벨로 올랐어요. 현재 진행률은 67.4%예요.\\n"
+            "[성장 전망] 기록을 바탕으로 다음 레벨을 예상해요.\\n"
+            "[AI 코멘트] 최근 흐름을 조금 더 지켜보면 좋겠어요."
+        )
+        self.assertTrue(_validate_growth_report_facts(report, source))
+
+    def test_growth_report_fact_validator_rejects_invented_number_and_date(self):
+        source = {
+            "metrics": {"averageDailyGrowth": 16530569535123},
+            "history": [{"date": "2026-11-18"}],
+        }
+        report = (
+            "[성장 패턴] 최근 기록이 있어요.\\n"
+            "[성장 변화] 하루 평균은 19.0조예요.\\n"
+            "[레벨업 분석] 11월 19일에 레벨업했어요.\\n"
+            "[성장 전망] 기록을 더 쌓아야 해요.\\n"
+            "[AI 코멘트] 지금 흐름을 이어가면 좋겠어요."
+        )
+        self.assertFalse(_validate_growth_report_facts(report, source))
 
     def test_report_validator_rejects_scientific_notation(self):
         report = (
