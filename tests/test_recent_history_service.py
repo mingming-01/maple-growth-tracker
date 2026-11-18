@@ -160,6 +160,8 @@ class RecentHistoryServiceTests(unittest.TestCase):
             "character_exp": 12345,
             "ranking": 99,
             "ranking_data_status": "available",
+            "ranking_scope": "overall",
+            "ranking_date": self.today.isoformat(),
             "character_exp_rate": 7.5,
         }
 
