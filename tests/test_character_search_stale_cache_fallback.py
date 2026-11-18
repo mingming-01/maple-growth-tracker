@@ -25,7 +25,7 @@ class CharacterSearchStaleCacheFallbackTests(TestCase):
         with patch.object(character_controller, "get_cache", return_value=None), \
              patch.object(character_controller, "api_request_limit_response", return_value=None), \
              patch.object(character_controller, "resolve_character", return_value=(None, None, upstream_response)), \
-             patch.object(character_controller, "stale_snapshot_response", return_value=(jsonify(snapshot), 200)) as stale:
+             patch.object(character_controller, "stale_snapshot_response", side_effect=lambda *args: (jsonify(snapshot), 200)) as stale:
             response = self.app.test_client().get("/api/character?name=밍득")
 
         self.assertEqual(response.status_code, 200)
@@ -42,7 +42,7 @@ class CharacterSearchStaleCacheFallbackTests(TestCase):
         with patch.object(character_controller, "get_cache", return_value=None), \
              patch.object(character_controller, "api_request_limit_response", return_value=None), \
              patch.object(character_controller, "resolve_character", return_value=(None, None, upstream_response)), \
-             patch.object(character_controller, "stale_snapshot_response", return_value=(jsonify({"error": "not found"}), 503)):
+             patch.object(character_controller, "stale_snapshot_response", side_effect=lambda *args: (jsonify({"error": "not found"}), 503)):
             response = self.app.test_client().get("/api/character?name=없는캐릭터")
 
         self.assertEqual(response.status_code, 400)
