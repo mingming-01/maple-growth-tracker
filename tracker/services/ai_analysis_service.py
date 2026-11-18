@@ -293,7 +293,7 @@ def _build_growth_comment_prompt(source_data):
     quality = (insights.get("basis") or {}).get("dataQualityLabel", "확인되지 않음")
     level_ups = metrics.get("levelUps") or []
     period_summary = metrics.get("periodSummary") or {}
-    has_level_up = bool(level_ups) or bool(period_summary.get("levelUpIntervals"))
+    has_level_up = bool(period_summary.get("levelUpIntervals"))
     signals = {
         "recent_growth_trend": direction_label,
         "record_quality": quality,
@@ -420,6 +420,17 @@ def _build_deterministic_growth_report(character, metrics, growth_insights, anal
         growth_change = "이전 기간과 비교할 만큼 충분한 성장 기록이 아직 없어요."
 
     level_ups = metrics.get("levelUps") or []
+    try:
+        period_start_date = date.fromisoformat(str(summary.get("startDate")))
+        period_end_date = date.fromisoformat(str(summary.get("endDate")))
+        level_ups = [
+            event for event in level_ups
+            if period_start_date <= date.fromisoformat(str(event.get("date"))) <= period_end_date
+        ]
+    except (TypeError, ValueError):
+        # 기간 경계를 알 수 없으면 원본 이벤트를 그대로 사용하되 날짜는 개별 파싱한다.
+        pass
+
     if level_ups:
         level_sentences = []
         for event in level_ups:
