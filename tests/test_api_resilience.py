@@ -89,6 +89,7 @@ class ApiResilienceTests(unittest.TestCase):
                 "experience": 123,
                 "ranking": 456,
                 "rankingScope": "overall",
+                "rankingSourceDate": "2026-10-26",
                 "rankingChange": 12,
             }],
             "historyStatus": "complete"
@@ -109,6 +110,7 @@ class ApiResilienceTests(unittest.TestCase):
         self.assertEqual(body["history"][0]["experience"], 123)
         self.assertIsNone(body["history"][0]["ranking"])
         self.assertIsNone(body["history"][0]["rankingScope"])
+        self.assertIsNone(body["history"][0]["rankingSourceDate"])
         self.assertIsNone(body["history"][0]["rankingChange"])
 
     def test_temporary_failure_without_snapshot_returns_safe_error(self):
