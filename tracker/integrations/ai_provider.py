@@ -32,6 +32,7 @@ def _provider_timeouts(provider):
             total_default,
         ))),
     )
+    read_timeout = min(read_timeout, max(0.5, total_timeout - connect_timeout))
     return connect_timeout, read_timeout, total_timeout
 
 
