@@ -130,15 +130,11 @@ class AIAnalysisQualityTests(unittest.TestCase):
         self.assertIn("11월 19일쯤 299레벨", result)
         self.assertTrue(validate_growth_report(result))
 
-    def test_experience_formatter_uses_trillion_scale_and_full_korean_units(self):
-        self.assertEqual(
-            _format_experience_korean(99183417210742),
-            "99조 1,834억 1,721만 742",
-        )
-        self.assertEqual(
-            _format_experience_korean(16530569535123.67),
-            "16조 5,305억 6,953만 5,124",
-        )
+    def test_experience_formatter_uses_compact_trillion_units(self):
+        self.assertEqual(_format_experience_korean(99183417210742), "99.2조")
+        self.assertEqual(_format_experience_korean(16530569535123.67), "16.5조")
+        self.assertEqual(_format_experience_korean(16776913065046.14), "16.8조")
+        self.assertEqual(_format_experience_korean(250000000), "2.5억")
 
     def test_deterministic_report_uses_server_values_for_units_dates_and_progress(self):
         character = {"level": 299}
@@ -180,8 +176,8 @@ class AIAnalysisQualityTests(unittest.TestCase):
             "최근 흐름은 직전 기간과 큰 차이가 없지만, 추세를 더 지켜보는 것이 좋아요.",
         )
 
-        self.assertIn("99조 1,834억 1,721만 742", report)
-        self.assertIn("16조 5,305억 6,953만 5,124", report)
+        self.assertIn("99.2조", report)
+        self.assertIn("16.5조", report)
         self.assertIn("11월 6일~12일", report)
         self.assertIn("11월 13일~19일", report)
         self.assertIn("11월 18일에 298레벨에서 299레벨", report)
@@ -189,6 +185,7 @@ class AIAnalysisQualityTests(unittest.TestCase):
         self.assertIn("32.6% 남았어요", report)
         self.assertNotIn("99경", report)
         self.assertNotIn("16경", report)
+        self.assertNotIn("1,834억", report)
 
     def test_growth_report_cache_key_includes_character_specific_data(self):
         prompt = "comment-only prompt"
