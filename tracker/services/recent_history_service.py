@@ -5,6 +5,17 @@ from concurrent.futures import ThreadPoolExecutor
 import requests
 
 
+def _positive_rank(value):
+    """양의 정수인 랭킹 값만 유효한 순위로 취급한다."""
+    if isinstance(value, bool) or value in (None, ""):
+        return None
+    try:
+        ranking = int(str(value).replace(",", "").strip())
+    except (TypeError, ValueError):
+        return None
+    return ranking if ranking > 0 else None
+
+
 def _get_cached_current_ranking(basic, target_date, today):
     """실제 집계일이 같은 종합 랭킹만 프로필 스냅샷에서 재사용한다."""
     if target_date != today or not isinstance(basic, dict):
@@ -16,7 +27,7 @@ def _get_cached_current_ranking(basic, target_date, today):
     ranking_date = basic.get("ranking_date")
     if ranking_date != target_date.isoformat():
         return None
-    ranking = basic.get("ranking")
+    ranking = _positive_rank(basic.get("ranking"))
     if ranking is None:
         return None
     return {
@@ -132,7 +143,7 @@ def _fetch_recent_record(
             rate_checked = bool(
                 rate_response is not None and rate_response.status_code == 200
             )
-        ranking = ranking_data.get("ranking")
+        ranking = _positive_rank(ranking_data.get("ranking"))
         return {
             "date": date_string,
             "ranking": ranking,
