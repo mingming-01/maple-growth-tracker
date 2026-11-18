@@ -94,7 +94,7 @@ export function dailyGrowthSegmentDash(context) {
 export function detectLevelUpEvents(records) {
   let previousAvailableLevel = null;
   return records.map(item => {
-    const parsedLevel = item?.level === null || item?.level === undefined || item?.level === ""
+    const parsedLevel = item?.level === null || item?.level === undefined || item.level === ""
       ? null
       : Number(item.level);
     const currentLevel = Number.isFinite(parsedLevel) ? parsedLevel : null;
