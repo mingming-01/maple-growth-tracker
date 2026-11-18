@@ -33,11 +33,11 @@ def _provider_timeouts(provider):
         # Free routed models commonly need longer to start and complete generation.
         # Keep this bounded below Gunicorn's 30s worker timeout after Gemini fallback.
         read_timeout = min(
-            12.0, max(3.0, float(_setting("AI_OPENROUTER_READ_TIMEOUT", 11.0)))
+            17.0, max(3.0, float(_setting("AI_OPENROUTER_READ_TIMEOUT", 16.5)))
         )
         total_timeout = min(
-            15.0,
-            max(2.0, float(_setting("AI_OPENROUTER_TOTAL_TIMEOUT", 14.0))),
+            18.0,
+            max(2.0, float(_setting("AI_OPENROUTER_TOTAL_TIMEOUT", 18.0))),
         )
     read_timeout = min(read_timeout, max(0.5, total_timeout - connect_timeout))
     return connect_timeout, read_timeout, total_timeout
@@ -112,7 +112,10 @@ def request_openrouter(prompt, api_key=None):
             "model": _setting("OPENROUTER_MODEL", "openrouter/free"),
             "messages": [{"role": "user", "content": prompt}],
             "temperature": 0.35,
-            "max_tokens": 1536,
+            "max_tokens": 4096,
+            # openrouter/free may route to reasoning models; cap internal reasoning
+            # so the limited completion budget is not consumed before final content.
+            "reasoning": {"effort": "low"},
             "stream": False,
         },
         connect_timeout=connect_timeout,
@@ -144,14 +147,27 @@ def request_openrouter(prompt, api_key=None):
         content = _extract_text_parts(content)
     if not isinstance(content, str) or not content.strip():
         # Provider metadata only: never log prompts, API keys, or model output.
+        usage = payload.get("usage") if isinstance(payload.get("usage"), dict) else {}
+        safe_usage = {
+            key: usage.get(key)
+            for key in ("prompt_tokens", "completion_tokens", "total_tokens", "reasoning_tokens")
+            if isinstance(usage.get(key), (int, float))
+        }
+        reasoning = message.get("reasoning") if isinstance(message, dict) else None
         _log_openrouter_empty_response(
-            model=_setting("OPENROUTER_MODEL", "openrouter/free"),
+            requested_model=_setting("OPENROUTER_MODEL", "openrouter/free"),
+            selected_model=payload.get("model"),
+            provider=payload.get("provider") if isinstance(payload.get("provider"), str) else None,
             payload_keys=sorted(payload.keys()),
             choice_keys=sorted(choice.keys()),
             finish_reason=choice.get("finish_reason"),
+            native_finish_reason=choice.get("native_finish_reason"),
             message_keys=sorted(message.keys()) if isinstance(message, dict) else [],
             content_type=type(content).__name__,
             content_length=len(content) if isinstance(content, str) else None,
+            reasoning_type=type(reasoning).__name__,
+            reasoning_length=len(reasoning) if isinstance(reasoning, str) else None,
+            usage=safe_usage,
             refusal_present=bool(message.get("refusal")) if isinstance(message, dict) else False,
         )
         raise requests.RequestException(
