@@ -69,9 +69,22 @@ class AIProviderAdapterTests(unittest.TestCase):
     def test_openrouter_empty_content_reports_safe_provider_metadata(self, post_json, log_metadata):
         post_json.return_value = {
             "id": "response-id",
+            "model": "sample/free-model",
+            "provider": "sample-provider",
+            "usage": {
+                "prompt_tokens": 1200,
+                "completion_tokens": 1536,
+                "total_tokens": 2736,
+                "reasoning_tokens": 1500,
+            },
             "choices": [{
-                "finish_reason": "stop",
-                "message": {"role": "assistant", "content": None},
+                "finish_reason": "length",
+                "native_finish_reason": "max_tokens",
+                "message": {
+                    "role": "assistant",
+                    "content": None,
+                    "reasoning": "private reasoning must not be logged",
+                },
             }],
         }
         with self.app.app_context():
@@ -79,9 +92,13 @@ class AIProviderAdapterTests(unittest.TestCase):
                 request_openrouter("private prompt text")
 
         details = log_metadata.call_args.kwargs
-        self.assertEqual(details["finish_reason"], "stop")
-        self.assertEqual(details["message_keys"], ["content", "role"])
+        self.assertEqual(details["finish_reason"], "length")
+        self.assertEqual(details["selected_model"], "sample/free-model")
+        self.assertEqual(details["provider"], "sample-provider")
+        self.assertEqual(details["usage"]["reasoning_tokens"], 1500)
+        self.assertEqual(details["reasoning_length"], len("private reasoning must not be logged"))
         self.assertNotIn("private prompt text", repr(log_metadata.call_args))
+        self.assertNotIn("private reasoning must not be logged", repr(log_metadata.call_args))
 
     @patch("tracker.integrations.ai_provider.post_json_with_deadline")
     def test_openrouter_extracts_text_from_multimodal_content_parts(self, post_json):
