@@ -111,7 +111,7 @@ def _extract_text_parts(parts):
     ).strip()
 
 
-def request_gemini(prompt, api_key=None, deadline=None)
+def request_gemini(prompt, api_key=None, deadline=None):
     """Gemini REST 요청을 한 번 수행하고 응답 전체 시간에 상한을 둔다."""
     key = api_key or _setting("GEMINI_API_KEY", "")
     if not key:
@@ -154,7 +154,7 @@ def _log_openrouter_empty_response(**details):
         current_app.logger.warning("OpenRouter 텍스트 없는 응답: %s", details)
 
 
-def request_openrouter(prompt, api_key=None, deadline=None)
+def request_openrouter(prompt, api_key=None, deadline=None):
     """OpenRouter 대체 호출도 전체 응답 시간을 제한해 worker timeout을 막는다."""
     key = api_key or _setting("OPENROUTER_API_KEY", "")
     if not key:
