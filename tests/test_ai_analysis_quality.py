@@ -113,7 +113,7 @@ class AIAnalysisQualityTests(unittest.TestCase):
             {"level": 298}, {"prediction": {"nextLevel": 299, "estimatedDate": "not-a-date"}}
         ))
 
-    def test_growth_forecast_section_is_replaced_before_validation(self):
+    def test_growth_forecast_keeps_ai_interpretation_and_adds_server_forecast(self):
         report = (
             "[성장 패턴] 최근 기록이 확인됩니다.\n"
             "[성장 변화] 성장량이 확인됩니다.\n"
@@ -121,11 +121,13 @@ class AIAnalysisQualityTests(unittest.TestCase):
             "[성장 전망] 1.78×10¹³ 경험치로 조건부 전망입니다.\n"
             "[AI 코멘트] 기록을 계속 확인해 주세요."
         )
+        sanitized = sanitize_ai_text(report)
         result = _apply_deterministic_growth_forecast(
-            report, {"level": 298},
+            sanitized, {"level": 298},
             {"prediction": {"nextLevel": 299, "estimatedDate": "2026-11-19"}},
         )
         self.assertNotIn("1.78×10¹³", result)
+        self.assertIn("조건부 전망입니다.", result)
         self.assertIn("11월 19일쯤 299레벨", result)
         self.assertTrue(validate_growth_report(result))
 
@@ -225,6 +227,8 @@ class AIAnalysisQualityTests(unittest.TestCase):
             "[AI 코멘트] 최근 흐름을 조금 더 지켜보면 좋겠어요."
         )
         self.assertTrue(_validate_growth_report_facts(report, source))
+        wrong_unit = report.replace("16.5조", "16.5경")
+        self.assertFalse(_validate_growth_report_facts(wrong_unit, source))
 
     def test_growth_report_fact_validator_rejects_invented_number_and_date(self):
         source = {
