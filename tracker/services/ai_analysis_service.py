@@ -279,7 +279,8 @@ def _build_growth_comment_prompt(source_data):
     """모델에는 숫자·날짜 없는 정성 코멘트만 맡긴다."""
     metrics = source_data.get("metrics") or {}
     insights = source_data.get("growthInsights") or {}
-    comparison = insights.get("weekOverWeek") or {}
+    period_days = (source_data.get("selectedPeriod") or {}).get("periodDays", 7)
+    comparison = (insights.get("weekOverWeek") or {}) if period_days == 7 else {}
     direction = comparison.get("direction")
     direction_label = {
         "increase": "직전 기간보다 증가",
