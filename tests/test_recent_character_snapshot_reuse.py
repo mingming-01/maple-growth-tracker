@@ -112,6 +112,7 @@ class RecentCharacterBasicSnapshotTests(TestCase):
             {
                 "ranking": 1234,
                 "ranking_scope": "overall",
+                "ranking_source_date": "2026-11-10",
                 "character_level": 290,
                 "character_exp": 123456,
                 "character_exp_rate": 45.6,
