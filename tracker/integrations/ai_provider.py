@@ -22,11 +22,11 @@ def _provider_timeouts(provider):
         2.0, max(0.5, float(_setting("AI_PROVIDER_CONNECT_TIMEOUT", 1.5)))
     )
     read_timeout = min(
-        1.25, max(0.2, float(_setting("AI_PROVIDER_READ_TIMEOUT", 1.0)))
+        4.0, max(1.0, float(_setting("AI_PROVIDER_READ_TIMEOUT", 4.0)))
     )
-    total_default = 8.0 if provider == "gemini" else 6.0
+    total_default = 7.0 if provider == "gemini" else 5.0
     total_timeout = min(
-        9.0 if provider == "gemini" else 7.0,
+        8.0 if provider == "gemini" else 6.0,
         max(1.0, float(_setting(
             "AI_GEMINI_TOTAL_TIMEOUT" if provider == "gemini" else "AI_OPENROUTER_TOTAL_TIMEOUT",
             total_default,
