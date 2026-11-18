@@ -6,6 +6,7 @@ from datetime import date, datetime
 from threading import Lock
 from zoneinfo import ZoneInfo
 from tracker.repositories.growth_history_store import GrowthHistoryStore
+from tracker.repositories.ai_provider_state_store import AIProviderStateStore
 from tracker.repositories.admin_log_repository import AdminLogRepository
 from tracker.services.growth_history_service import GrowthHistoryService
 from tracker.services.admin_log_service import (
@@ -72,6 +73,10 @@ class RuntimeState:
         )
         self.growth_history_service = GrowthHistoryService(
             self.growth_history_repository
+        )
+        self.ai_provider_state_store = AIProviderStateStore(
+            database_url=self.growth_database_url,
+            sqlite_path=os.path.join(instance_path, "ai_provider_state.sqlite3"),
         )
         self.admin_log_repository = AdminLogRepository(self)
         self.admin_log_service = AdminLogService(self.admin_log_repository)
