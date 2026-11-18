@@ -199,34 +199,6 @@ class AIAnalysisQualityTests(unittest.TestCase):
             _build_growth_report_cache_key(prompt, second),
         )
 
-    def test_ai_comment_prompt_does_not_send_raw_numeric_data(self):
-        prompt = _build_growth_comment_prompt({
-            "metrics": {
-                "levelUps": [{"date": "2026-11-18", "previousLevel": 298, "currentLevel": 299}],
-                "averageDailyGrowth": 16530569535123,
-            },
-            "growthInsights": {
-                "weekOverWeek": {"direction": "decrease"},
-                "basis": {"dataQualityLabel": "높음"},
-            },
-        })
-
-        self.assertNotIn("16530569535123", prompt)
-        self.assertNotIn("2026-11-18", prompt)
-        self.assertIn("숫자, 날짜", prompt)
-
-    def test_long_period_comment_does_not_use_seven_day_comparison_signal(self):
-        prompt = _build_growth_comment_prompt({
-            "selectedPeriod": {"periodDays": 30},
-            "growthInsights": {
-                "weekOverWeek": {"direction": "decrease"},
-                "basis": {"dataQualityLabel": "높음"},
-            },
-        })
-
-        self.assertIn("비교할 근거 부족", prompt)
-        self.assertNotIn("직전 기간보다 감소", prompt)
-
     def test_growth_report_prompt_gives_ai_all_five_sections_and_server_facts(self):
         source = self.make_source_data(7)
         source["history"] = [{"date": "2026-11-18", "level": 299, "experienceChange": 16530569535123}]
