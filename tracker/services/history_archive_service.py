@@ -2,6 +2,18 @@
 
 import requests
 
+
+def _positive_rank(value):
+    """양의 정수인 랭킹 값만 유효한 순위로 취급한다."""
+    if isinstance(value, bool) or value in (None, ""):
+        return None
+    try:
+        ranking = int(str(value).replace(",", "").strip())
+    except (TypeError, ValueError):
+        return None
+    return ranking if ranking > 0 else None
+
+
 from tracker.services.nexon_service import (
     get_basic_character_snapshot,
     get_ranking_snapshot,
@@ -58,7 +70,7 @@ def fetch_historical_record(
                 rate_response is not None and rate_response.status_code == 200
             )
 
-        ranking = ranking_data.get("ranking")
+        ranking = _positive_rank(ranking_data.get("ranking"))
         return {
             "date": date_text,
             "ranking": ranking,
