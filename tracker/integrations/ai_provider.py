@@ -23,8 +23,8 @@ def request_openrouter(prompt):
     # Gunicorn 기본 30초 제한 전에 fallback이 끝나도록 연결/읽기 시간을 분리한다.
     # Gemini가 실패한 뒤 실행되는 경로이므로 재시도하지 않고 빠르게 제어를 반환한다.
     timeout = (
-        max(0.5, float(_setting("OPENROUTER_CONNECT_TIMEOUT", 2.5))),
-        max(1.0, float(_setting("OPENROUTER_READ_TIMEOUT", 6.5))),
+        min(3.0, max(0.5, float(_setting("OPENROUTER_CONNECT_TIMEOUT", 2.5)))),
+        min(7.0, max(1.0, float(_setting("OPENROUTER_READ_TIMEOUT", 6.5)))),
     )
 
     response = request_with_retries(
