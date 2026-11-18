@@ -1,6 +1,8 @@
 import unittest
 from unittest.mock import patch
 
+import requests
+
 import app as tracker
 from tracker import create_app
 from tracker.runtime import get_runtime_state
@@ -154,6 +156,35 @@ class AIResponseCacheTests(unittest.TestCase):
         self.assertEqual(first["analysis"], second["analysis"])
         self.assertTrue(second["cacheHit"])
         generate.assert_called_once()
+
+    def test_gemini_quota_and_openrouter_timeout_report_fallback_failure(self):
+        character = {
+            "characterName": "테스트캐릭터", "worldName": "크로아",
+            "job": "히어로", "level": 280, "experienceRate": 42.5,
+        }
+        history = [{
+            "date": "2026-10-26", "level": 280, "experienceChange": 12345,
+            "ranking": 500, "rankingChange": 4, "levelUp": False,
+        }]
+
+        with self.app.app_context():
+            self.state.gemini_api_key = "test-key"
+            self.state.openrouter_api_key = "test-key"
+            with patch(
+                "tracker.services.ai_analysis_service.request_gemini",
+                side_effect=RuntimeError("429 RESOURCE_EXHAUSTED: quota exceeded"),
+            ):
+                with patch(
+                    "tracker.services.ai_analysis_service.request_openrouter",
+                    side_effect=requests.Timeout("Read timed out"),
+                ):
+                    result = tracker.generate_ai_analysis(character, history)
+
+        self.assertEqual(result["statusCode"], 503)
+        self.assertEqual(result["errorType"], "provider_fallback_failed")
+        self.assertEqual(result["primaryErrorType"], "provider_quota")
+        self.assertEqual(result["fallbackErrorType"], "provider_timeout")
+        self.assertNotIn("retryAfterSeconds", result)
 
 
 if __name__ == "__main__":
