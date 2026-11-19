@@ -91,6 +91,8 @@ def _fetch_recent_record(
     """하루치 기록을 저장소 우선·랭킹 API 우선 순서로 수집한다."""
     date_string = target_date.strftime("%Y-%m-%d")
     saved = stored_recent.get(date_string)
+    # True means the rate source was checked successfully, even when Nexon supplied no rate.
+    # A missing value alone is not a reason to repeat the same historical API request.
     should_check_api = (
         target_date == today
         or (
