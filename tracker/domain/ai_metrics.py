@@ -95,13 +95,12 @@ def build_server_growth_metrics(character, records, reference_date=None, period_
                 "previousLevel": current["levelUpPreviousLevel"],
                 "currentLevel": current["levelUpCurrentLevel"],
             })
-            continue
-        if level_changed or duplicate_level_catch_up:
-            # Do not count a level-up reset or next-day ranking catch-up as EXP.
-            continue
-        if current["experience"] < previous["experience"]:
-            continue
+
+        # 레벨업 이벤트를 감지했다고 양수 경험치 변화까지 버리면 안 된다.
+        # 원본 EXP가 증가한 구간은 정상 성장으로 포함하고, 레벨 전환으로 감소한 값만 제외한다.
         change = current["experience"] - previous["experience"]
+        if change < 0:
+            continue
         current["experienceChange"] = change
         changes.append({"date": current_date, "experience": change})
     values = [item["experience"] for item in changes]
