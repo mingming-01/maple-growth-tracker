@@ -73,6 +73,39 @@ def _log_provider_failure(provider, error, started_at, deadline):
         # 서비스 단위 테스트나 Flask 외부 작업에서도 폴백 경로를 중단하지 않는다.
         logging.getLogger(__name__).warning("AI 공급자 요청 실패: %s", log_message)
 
+def _log_ai_cache_failure(operation, error):
+    """AI 응답 캐시 장애는 분석 공급자 장애와 분리해 기록한다."""
+    details = {
+        "operation": operation,
+        "exception_class": type(error).__name__,
+    }
+    message = json.dumps(details, ensure_ascii=False, sort_keys=True)
+    if has_app_context():
+        current_app.logger.warning("AI 응답 캐시 작업 실패(분석은 계속 진행): %s", message)
+    else:
+        logging.getLogger(__name__).warning(
+            "AI 응답 캐시 작업 실패(분석은 계속 진행): %s", message
+        )
+
+
+def _get_cached_ai_response(cache_key):
+    """캐시 조회가 실패해도 공급자 분석 경로를 계속 사용한다."""
+    try:
+        return get_ai_response_cache(cache_key)
+    except Exception as error:
+        _log_ai_cache_failure("read", error)
+        return None
+
+
+def _store_cached_ai_response(cache_key, analysis):
+    """공급자가 만든 정상 분석문을 캐시 저장 실패와 무관하게 반환한다."""
+    try:
+        _store_cached_ai_response(cache_key, analysis)
+        return True
+    except Exception as error:
+        _log_ai_cache_failure("write", error)
+        return False
+
 
 def _gemini_cooldown_remaining(runtime_state):
     try:
@@ -635,7 +668,7 @@ def generate_ai_analysis(character, history, computed_metrics=None, growth_insig
         if isinstance(prediction, dict):
             expected_date = prediction.get("estimatedDate")
 
-    cached_analysis = None if force_refresh else get_ai_response_cache(cache_key)
+    cached_analysis = None if force_refresh else _get_cached_ai_response(cache_key)
     if cached_analysis is not None:
         if computed_metrics is not None:
             cached_analysis = _apply_deterministic_growth_forecast(
@@ -781,7 +814,7 @@ def generate_ai_comparison(primary, comparison):
 비교 데이터:
 {json.dumps(prompt_data, ensure_ascii=False)}
 """
-    cached_analysis = get_ai_response_cache(prompt)
+    cached_analysis = _get_cached_ai_response(prompt)
     if cached_analysis is not None:
         print("저장된 AI 성장 비교 분석을 재사용했습니다.")
         return {"analysis": cached_analysis, "cacheHit": True}
@@ -799,7 +832,7 @@ def generate_ai_comparison(primary, comparison):
             response = _generate_gemini_content(prompt, api_key=gemini_api_key, deadline=deadline)
             analysis = sanitize_ai_text(_require_provider_text(getattr(response, "text", None), "Gemini"))
             _clear_gemini_cooldown(runtime_state)
-            set_ai_response_cache(prompt, analysis)
+            _store_cached_ai_response(prompt, analysis)
             return {"analysis": analysis, "cacheHit": False}
         except Exception as error:
             gemini_error = error
