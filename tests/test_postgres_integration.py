@@ -83,6 +83,17 @@ class PostgreSQLIntegrationTests(unittest.TestCase):
         self.assertEqual(result[0]["growthObservedAt"], "2026-11-19T10:00:00+00:00")
         self.assertEqual(result[0]["recordStatus"], "available")
 
+    def test_growth_history_store_reuses_a_checked_in_postgres_connection(self):
+        first = self.store._connect()
+        physical_connection = first._connection
+        first.close()
+
+        second = self.store._connect()
+        try:
+            self.assertIs(second._connection, physical_connection)
+        finally:
+            second.close()
+
     def test_ai_daily_limits_are_shared_and_atomic_under_concurrency(self):
         client_key = uuid4().hex
         today = date.today().isoformat()
