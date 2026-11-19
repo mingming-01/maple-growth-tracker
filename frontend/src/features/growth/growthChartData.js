@@ -54,8 +54,18 @@ export function buildExperienceChartSeries(records) {
     }
 
     if (levelUpEvents[index] || item?.levelUpCatchUp === true) {
-      // Carry the confirmed total across the reset day and the following
-      // delayed level-field update without drawing a second level-up marker.
+      // A marker must not erase a valid positive source EXP delta. Only a
+      // negative/reset or missing delta is excluded from the cumulative line.
+      const transitionChange = Number(item?.experienceChange);
+      if (
+        item?.experienceChange !== null &&
+        item?.experienceChange !== undefined &&
+        item?.experienceChange !== "" &&
+        Number.isFinite(transitionChange) &&
+        transitionChange >= 0
+      ) {
+        running += transitionChange;
+      }
       cumulative.push(running / 1_000_000_000_000);
       return;
     }
