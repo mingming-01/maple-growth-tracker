@@ -35,6 +35,16 @@ def provider_error_type(error):
     status = (getattr(response, "status_code", None) or getattr(error, "status_code", None) or getattr(error, "code", None))
     if status == 429:
         return "provider_quota"
+    if status in (401, 403):
+        return "provider_auth"
+    if status == 402:
+        return "provider_billing"
+    if status == 400:
+        return "provider_bad_request"
+    if status == 404:
+        return "provider_model_unavailable"
+    if status == 413:
+        return "provider_payload_too_large"
     error_text = str(error).upper()
     if status in (408, 425) or isinstance(error, requests.Timeout) or any(
         marker in error_text for marker in ("READ TIMED OUT", "CONNECT TIMED OUT", "DEADLINE")
