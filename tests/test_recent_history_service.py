@@ -22,7 +22,7 @@ class RecentHistoryServiceTests(unittest.TestCase):
         self.temporary_failure = Mock(return_value=False)
         self.metric = Mock()
 
-    def collect(self, dates, *, basic=None, stored=None):
+    def collect(self, dates, *, basic=None, stored=None, world_name="크로아"):
         return fetch_recent_history(
             dates,
             basic=basic or {
@@ -32,7 +32,7 @@ class RecentHistoryServiceTests(unittest.TestCase):
                 "character_exp": 12345,
             },
             ocid="test-ocid",
-            world_name="크로아",
+            world_name=world_name,
             stored_recent=stored or {},
             today=self.today,
             get_ranking_snapshot=self.ranking,
@@ -66,6 +66,39 @@ class RecentHistoryServiceTests(unittest.TestCase):
         self.assertTrue(result[0]["_fromStore"])
         self.ranking.assert_not_called()
         self.basic_lookup.assert_not_called()
+
+    def test_reuses_checked_snapshot_even_when_experience_rate_is_unavailable(self):
+        saved = {
+            "2026-11-09": {
+                "ranking": 456,
+                "level": 289,
+                "experience": 9876,
+                "experienceRate": None,
+                "experienceRateChecked": True,
+                "growthSource": "ranking/overall",
+                "growthObservedAt": "2026-11-09T01:00:00+00:00",
+                "rankingScope": "overall",
+                "rankingSourceDate": "2026-11-09",
+                "recordStatus": "available",
+            }
+        }
+
+        result = self.collect([self.yesterday], stored=saved)
+
+        self.assertIsNone(result[0]["experienceRate"])
+        self.assertTrue(result[0]["experienceRateChecked"])
+        self.assertTrue(result[0]["_fromStore"])
+        self.ranking.assert_not_called()
+        self.basic_lookup.assert_not_called()
+
+    def test_passes_eos_world_type_to_recent_historical_ranking(self):
+        self.world_type.return_value = 1
+
+        result = self.collect([self.yesterday], world_name="에오스")
+
+        self.assertEqual(result[0]["recordStatus"], "available")
+        self.world_type.assert_called_once_with("에오스")
+        self.assertEqual(self.ranking.call_args.kwargs["world_type"], 1)
 
     def test_legacy_saved_rank_is_refetched_as_overall_ranking(self):
         saved = {"2026-11-09": {"ranking": 377, "level": 290, "experience": 12345, "experienceRate": 12.5, "experienceRateChecked": True, "recordStatus": "available"}}
