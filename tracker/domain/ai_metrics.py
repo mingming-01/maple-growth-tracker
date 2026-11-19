@@ -58,6 +58,7 @@ def build_server_growth_metrics(character, records, reference_date=None, period_
             "levelUp": False,
             "levelUpPreviousLevel": None,
             "levelUpCurrentLevel": None,
+            "levelUpCatchUp": False,
         }
 
     history = [by_date[key] for key in sorted(by_date)]
@@ -81,6 +82,8 @@ def build_server_growth_metrics(character, records, reference_date=None, period_
             previous.get("experienceRate"), current.get("experienceRate")
         )
         duplicate_level_catch_up = previous.get("levelUp") is True and level_changed
+        if duplicate_level_catch_up:
+            current["levelUpCatchUp"] = True
         if (level_changed or rate_reset) and not duplicate_level_catch_up:
             current["levelUp"] = True
             current["levelUpPreviousLevel"] = previous["level"]
