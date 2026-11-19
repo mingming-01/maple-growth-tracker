@@ -67,6 +67,48 @@ class GrowthHistoryStoreTests(unittest.TestCase):
         self.assertTrue(result[0]["experienceRateChecked"])
         self.assertEqual(result[0]["rankingScope"], "overall")
 
+    def test_growth_snapshot_source_and_observation_time_are_persisted(self):
+        observed_at = "2026-11-10T03:15:00+00:00"
+        self.store.save_records(
+            "test-ocid", "테스트캐릭터", "테스트월드",
+            [{
+                "date": self.today.isoformat(),
+                "recordStatus": "available",
+                "level": 280,
+                "experience": 12345,
+                "experienceRate": 12.3456,
+                "experienceRateChecked": True,
+                "growthSource": "character/basic",
+                "growthObservedAt": observed_at,
+            }],
+        )
+
+        saved = self.store.get_records("test-ocid", self.today, self.today)[0]
+
+        self.assertEqual(saved["growthSource"], "character/basic")
+        self.assertEqual(
+            datetime.fromisoformat(saved["growthObservedAt"]),
+            datetime.fromisoformat(observed_at),
+        )
+
+    def test_invalid_growth_source_or_timezone_free_observation_time_is_not_persisted(self):
+        self.store.save_records(
+            "test-ocid", "테스트캐릭터", "테스트월드",
+            [{
+                "date": self.today.isoformat(),
+                "recordStatus": "available",
+                "level": 280,
+                "experience": 12345,
+                "growthSource": "unknown-endpoint",
+                "growthObservedAt": "2026-11-10T03:15:00",
+            }],
+        )
+
+        saved = self.store.get_records("test-ocid", self.today, self.today)[0]
+
+        self.assertIsNone(saved["growthSource"])
+        self.assertIsNone(saved["growthObservedAt"])
+
     def test_non_overall_and_invalid_rankings_are_not_persisted(self):
         records = [{
             "date": self.today.isoformat(),
@@ -280,6 +322,8 @@ class GrowthHistoryStoreTests(unittest.TestCase):
         self.assertEqual(records[0]["ranking"], 77)
         self.assertEqual(records[0]["rankingScope"], "overall")
         self.assertIsNone(records[0]["rankingSourceDate"])
+        self.assertIsNone(records[0]["growthSource"])
+        self.assertIsNone(records[0]["growthObservedAt"])
 
     def test_api_rate_limit_is_shared_between_store_instances(self):
         store_path = str(Path(self.temp_dir.name) / "shared_limits.sqlite3")
