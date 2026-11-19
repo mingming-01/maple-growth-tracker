@@ -107,7 +107,6 @@ def _fetch_recent_record(
                     and saved.get("rankingScope") != "overall"
                 )
                 or not saved.get("experienceRateChecked", False)
-                or saved.get("experienceRate") is None
                 or not saved.get("growthSource")
                 or not saved.get("growthObservedAt")
             )
