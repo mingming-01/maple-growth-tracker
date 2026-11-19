@@ -7,6 +7,7 @@ from types import SimpleNamespace
 from unittest.mock import patch
 
 from tracker.integrations.ai_provider import ProviderError
+from tracker.domain.ai_metrics import build_server_growth_metrics
 from tracker.services import ai_analysis_service as service
 
 
@@ -64,6 +65,74 @@ class AIAnalysisFallbackTests(unittest.TestCase):
         self.assertIn('"provider": "gemini"', captured.output[0])
         self.assertIn('"error_type": "provider_timeout"', captured.output[0])
         self.assertNotIn("temporary provider failure", captured.output[0])
+
+    @patch("tracker.services.ai_analysis_service.get_runtime_state")
+    @patch("tracker.services.ai_analysis_service.get_ai_response_cache", return_value=None)
+    @patch("tracker.services.ai_analysis_service.set_ai_response_cache")
+    @patch("tracker.services.ai_analysis_service._gemini_cooldown_remaining", return_value=0)
+    @patch("tracker.services.ai_analysis_service.request_gemini", side_effect=ProviderError(
+        "Gemini unavailable", "provider_unavailable"
+    ))
+    @patch("tracker.services.ai_analysis_service.request_openrouter", return_value=VALID_REPORT)
+    def test_server_calculated_level_up_growth_reaches_openrouter_prompt_and_returns_report(
+        self, openrouter, _gemini, _cooldown, _set_cache, _get_cache, get_state
+    ):
+        get_state.return_value = self.state
+        records = [
+            {
+                "date": "2026-11-17", "level": 298,
+                "experience": 1129263590513928, "experienceRate": 99.226,
+                "recordStatus": "available",
+            },
+            {
+                "date": "2026-11-18", "level": 298,
+                "experience": 1156066685461973, "experienceRate": 0.355,
+                "recordStatus": "available",
+            },
+            {
+                "date": "2026-11-19", "level": 299,
+                "experience": 17096549681346, "experienceRate": 0.984,
+                "recordStatus": "available",
+            },
+        ]
+        today = __import__("datetime").date(2026, 11, 19)
+        calculated = build_server_growth_metrics(
+            {"level": 299, "experienceRate": 0.984},
+            records,
+            reference_date=today,
+            period_days=7,
+        )
+        expected_change = 1156066685461973 - 1129263590513928
+        self.assertEqual(calculated["metrics"]["observedChangeDays"], 1)
+        self.assertEqual(calculated["history"][1]["experienceChange"], expected_change)
+        self.assertTrue(calculated["history"][1]["levelUp"])
+        self.assertTrue(calculated["history"][2]["levelUpCatchUp"])
+        self.assertIsNone(calculated["history"][2]["experienceChange"])
+
+        result = service.generate_ai_analysis(
+            {
+                "characterName": "밍득", "worldName": "크로아", "job": "아델",
+                "level": 299, "experienceRate": 0.984,
+            },
+            calculated["history"],
+            computed_metrics=calculated["metrics"],
+            growth_insights={},
+            analysis_context={
+                "periodDays": 7,
+                "periodSummary": calculated["periodSummary"],
+            },
+            force_refresh=True,
+        )
+
+        self.assertIn("analysis", result)
+        self.assertEqual(result["analysis"], VALID_REPORT)
+        prompt = openrouter.call_args.args[0]
+        self.assertIn(f'"experienceChange": {expected_change}', prompt)
+        self.assertIn('"date": "2026-11-18"', prompt)
+        self.assertIn('"levelUp": true', prompt)
+        self.assertNotIn(f'"experienceChange": {-(
+            1156066685461973 - 17096549681346
+        )}', prompt)
 
     @patch("tracker.services.ai_analysis_service._request_deadline", return_value=12345.0)
     @patch("tracker.services.ai_analysis_service.get_runtime_state")
