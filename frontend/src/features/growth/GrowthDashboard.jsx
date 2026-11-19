@@ -1,21 +1,7 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { detectLevelUpEvents, buildExperienceChartSeries, dailyGrowthSegmentDash } from "./growthChartData.js";
 import { fetchHistoryArchive } from "../../lib/historyCollection.js";
-import {
-  sortHistoryAscending,
-  sortHistoryDescending,
-  getDailyGrowth,
-  calculateAverageGrowth,
-  calculateDailyExperienceRateChanges,
-  calculateWeeklyGrowth,
-  getRankingChange,
-  calculatePrediction,
-  formatLocalISODate,
-  calculateLevelProgress,
-  calculateGrowthMetrics,
-  buildGrowthTimeline,
-  summarizeGrowthPeriod
-} from "../../lib/growth.js";
+import { sortHistoryDescending, formatLocalISODate } from "../../lib/growth.js";
 import { readGrowthGoals, saveGrowthGoals, readTrackerState } from "../../lib/storage.js";
 
 function fmt(value) {
@@ -130,17 +116,20 @@ export async function loadGrowthPeriod(character, days, onProgress = null) {
       previous = null;
     }
   }
-  const summary = summarizeGrowthPeriod(current.history || [], normalizedDays);
-  summary.startDate = current.startDate || summary.startDate;
-  summary.endDate = current.endDate || summary.endDate;
-  const completeSummary = {
-    ...summary,
-    previousSummary: previous ? summarizeGrowthPeriod(previous.history || [], normalizedDays) : null
-  };
+  const summary = current.periodSummary
+    ? {
+        ...current.periodSummary,
+        days: current.periodSummary.expectedSnapshots ?? normalizedDays,
+        startDate: current.periodSummary.startDate || current.startDate || null,
+        endDate: current.periodSummary.endDate || current.endDate || null,
+        previousSummary: previous?.periodSummary || null
+      }
+    : null;
   return {
     days: normalizedDays,
     history: current.history || [],
-    summary: completeSummary,
+    metrics: current.metrics || null,
+    summary,
     rangeStatus: {
       availableDays: current.availableDays || 0,
       notReadyDays: current.notReadyDays || 0,
@@ -380,7 +369,7 @@ function PeriodSummary({ summary, previous, label }) {
   );
 }
 
-export default function GrowthDashboard({ character, history, onHistoryChange, onAnalysisPeriodChange, onPersist }) {
+export default function GrowthDashboard({ character, history, metrics: serverMetrics, analysisPeriod, onHistoryChange, onAnalysisPeriodChange, onPersist }) {
   const initialState = readTrackerState() || {};
   const initialRange = [7,30,90].includes(Number(initialState.historyRange)) ? Number(initialState.historyRange) : 7;
   const [range, setRange] = useState(initialRange);
@@ -389,6 +378,7 @@ export default function GrowthDashboard({ character, history, onHistoryChange, o
   );
   const [rangeStatus, setRangeStatus] = useState(initialState.historyRangeStatus || null);
   const [periodSummary, setPeriodSummary] = useState(initialState.periodSummary || null);
+  const [periodMetrics, setPeriodMetrics] = useState(initialRange === 7 ? serverMetrics : (initialState.periodMetrics || analysisPeriod?.metrics || null));
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [progressText, setProgressText] = useState("");
@@ -403,18 +393,15 @@ export default function GrowthDashboard({ character, history, onHistoryChange, o
     setDisplayHistory(savedRange === 7 || !Array.isArray(saved.displayHistory) ? history || [] : saved.displayHistory);
     setRangeStatus(saved.historyRangeStatus || null);
     setPeriodSummary(saved.periodSummary || null);
+    setPeriodMetrics(savedRange === 7 ? serverMetrics : (saved.periodMetrics || analysisPeriod?.metrics || null));
     setError("");
     setProgressText("");
   }, [character.ocid]);
 
-  const prediction = useMemo(() => calculatePrediction(character, history || []), [character, history]);
-  const metrics = useMemo(() => calculateGrowthMetrics(character, history || [], prediction), [character, history, prediction]);
-  const levelProgress = metrics.levelProgress;
-  const timeline = useMemo(() => buildGrowthTimeline(displayHistory, 8), [displayHistory]);
-  const progressRateChanges = useMemo(
-    () => calculateDailyExperienceRateChanges(displayHistory),
-    [displayHistory]
-  );
+  const metrics = range === 7 ? serverMetrics : periodMetrics;
+  const levelProgress = serverMetrics?.levelProgress || metrics?.levelProgress || null;
+  const prediction = metrics?.prediction || null;
+  const timeline = Array.isArray(metrics?.timeline) ? metrics.timeline : [];
 
   useEffect(() => {
     let cancelled = false;
@@ -495,45 +482,26 @@ export default function GrowthDashboard({ character, history, onHistoryChange, o
         setDisplayHistory(history || []);
         setRangeStatus(null);
         setPeriodSummary(null);
-        onAnalysisPeriodChange?.({ days:7, history:history || [], summary:null });
-        onPersist?.({historyRange:7,displayHistory:history || [],historyRangeStatus:null,periodSummary:null});
+        setPeriodMetrics(serverMetrics || null);
+        onAnalysisPeriodChange?.({ days:7, history:history || [], summary:null, metrics:serverMetrics || null });
+        onPersist?.({historyRange:7,displayHistory:history || [],historyRangeStatus:null,periodSummary:null,periodMetrics:null,growthMetrics:serverMetrics || null});
       } else {
-        const current = await fetchHistoryArchive(days,character,{
-          collect:true,
-          onProgress:setProgressText
-        });
-        let previous = null;
-        const previousEnd = shiftDate(current.startDate,-1);
-        if (previousEnd) {
-          try { previous = await fetchHistoryArchive(days,character,{end:previousEnd,collect:false}); } catch { previous = null; }
-        }
-        const summary = summarizeGrowthPeriod(current.history || [],days);
-        summary.startDate = current.startDate || summary.startDate;
-        summary.endDate = current.endDate || summary.endDate;
+        const loaded = await loadGrowthPeriod(character,days,setProgressText);
+        const currentHistory = loaded.history || [];
+        const summary = loaded.summary || null;
         setRange(days);
-        setDisplayHistory(current.history || []);
+        setDisplayHistory(currentHistory);
         setPeriodSummary(summary);
-        onAnalysisPeriodChange?.({ days, history:current.history || [], summary:{ ...summary, previousSummary:previous ? summarizeGrowthPeriod(previous.history || [],days) : null } });
-        setRangeStatus({
-          availableDays:current.availableDays || 0,
-          notReadyDays:current.notReadyDays || 0,
-          notCollectedDays:current.notCollectedDays || 0,
-          collection:current.collectionSummary || null
-        });
+        setPeriodMetrics(loaded.metrics || null);
+        onAnalysisPeriodChange?.({ days, history:currentHistory, summary, metrics:loaded.metrics || null });
+        setRangeStatus(loaded.rangeStatus || null);
         onPersist?.({
-          historyRange:days,displayHistory:current.history || [],
-          historyRangeStatus:{
-            availableDays:current.availableDays || 0,
-            notReadyDays:current.notReadyDays || 0,
-            notCollectedDays:current.notCollectedDays || 0,
-            collection:current.collectionSummary || null
-          },
-          periodSummary:summary
+          historyRange:days,
+          displayHistory:currentHistory,
+          historyRangeStatus:loaded.rangeStatus || null,
+          periodSummary:summary,
+          periodMetrics:loaded.metrics || null
         });
-        const priorSummary = previous ? summarizeGrowthPeriod(previous.history || [],days) : null;
-        const completeSummary = { ...summary, previousSummary:priorSummary };
-        setPeriodSummary(completeSummary);
-        onPersist?.({ periodSummary:completeSummary });
       }
       setChartVersion(value => value + 1);
       setProgressText("");
@@ -545,12 +513,12 @@ export default function GrowthDashboard({ character, history, onHistoryChange, o
     }
   }
 
-  const daily = getDailyGrowth(history || []);
-  const weekly = calculateWeeklyGrowth(history || []);
-  const average = calculateAverageGrowth(history || []);
-  const rankChange = getRankingChange(history || []);
-  const percent = Number(String(character.experienceRate ?? "").replace("%",""));
-  const remaining = Number.isFinite(percent) ? Math.max(0,100-percent) : null;
+  const daily = metrics?.latestDailyGrowth ?? null;
+  const weekly = metrics?.sevenDayGrowth ?? null;
+  const average = metrics?.averageDailyGrowth ?? null;
+  const rankChange = metrics?.rankingChange ?? null;
+  const percent = levelProgress?.currentRate ?? null;
+  const remaining = levelProgress?.remainingRate ?? (percent === null ? null : Math.max(0,100-Number(percent)));
 
   return (
     <div className="growth-dashboard">
@@ -611,7 +579,7 @@ export default function GrowthDashboard({ character, history, onHistoryChange, o
             <div className="prediction-item"><div className="prediction-label">예상 레벨업</div><div className="prediction-value">{prediction?.date ? localDate(formatLocalISODate(prediction.date)) : "자료 부족"}</div></div>
             <div className="prediction-item"><div className="prediction-label">최근 평균</div><div className="prediction-value">{prediction?.averageGrowth > 0 ? fmt(prediction.averageGrowth) : "자료 부족"}</div></div>
           </div>
-          <p className="prediction-note">최근과 비슷한 속도로 경험치를 얻는다고 가정한 예상이에요. 기록이 없는 날짜나 레벨업으로 경험치 기준이 바뀐 구간은 예상해서 채우지 않아요.</p>
+          <p className="prediction-note">정확한 레벨별 필요 EXP 기준이 확인되지 않아 남은 경험치와 예상 날짜는 표시하지 않아요. 확인되지 않은 기준으로 값을 역산하지 않습니다.</p>
         </div>
           <div id="growth-goal"><GoalPanel character={character} metrics={metrics} history={history || []} /></div>
         </div>
@@ -623,10 +591,7 @@ export default function GrowthDashboard({ character, history, onHistoryChange, o
 
 export function GrowthHistoryTable({ history }) {
   const records = Array.isArray(history) ? history : [];
-  const progressRateChanges = useMemo(
-    () => calculateDailyExperienceRateChanges(records),
-    [records]
-  );
+  const progressRateChanges = null;
 
   return (
     <section className="section growth-history-section" aria-labelledby="growth-history-title">
@@ -645,7 +610,7 @@ export function GrowthHistoryTable({ history }) {
                 const rate = item.experienceRate == null
                   ? null
                   : Number(String(item.experienceRate).replace("%",""));
-                const rateChange = progressRateChanges[item.date];
+                const rateChange = item.experienceRateChange;
                 const validRate = Number.isFinite(rate) && rate >= 0 && rate <= 100;
                 const experienceChange = item.experienceChange == null
                   ? null

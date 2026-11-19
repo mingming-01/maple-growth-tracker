@@ -53,6 +53,7 @@ export default function GrowthHome({
   character,
   profileRevision = 0,
   history,
+  metrics,
   onStatsLoaded,
   onHistoryChange,
   onAnalysisPeriodChange,
@@ -111,10 +112,10 @@ export default function GrowthHome({
         <>
           <div className="mgt-growth-home-top">
             <div id="character" className="mgt-growth-home__profile">
-              <CharacterOverview character={character} history={history} />
+              <CharacterOverview character={character} history={history} metrics={metrics} />
             </div>
             <div id="insight" className="mgt-growth-home__insight">
-              <GrowthInsight character={character} history={history} />
+              <GrowthInsight character={character} history={history} metrics={metrics} />
             </div>
           </div>
           <section className="mgt-growth-page-index" aria-labelledby="mgt-growth-page-index-title">
@@ -150,6 +151,8 @@ export default function GrowthHome({
           <GrowthDashboard
             character={character}
             history={history}
+            metrics={metrics}
+            analysisPeriod={analysisPeriod}
             onHistoryChange={onHistoryChange}
             onAnalysisPeriodChange={onAnalysisPeriodChange}
             onPersist={onPersist}
@@ -175,6 +178,7 @@ export default function GrowthHome({
             analysisHistory={analysisPeriod.history || history}
             periodDays={analysisPeriod.days}
             periodSummary={analysisPeriod.summary}
+            metrics={analysisPeriod.metrics || metrics}
             onPeriodSelect={onAnalysisPeriodSelect}
           />
         </div>
@@ -195,6 +199,7 @@ export default function GrowthHome({
           <GrowthComparison
             character={character}
             history={history}
+            metrics={metrics}
             initialState={comparisonState}
             onSave={onPersist}
           />

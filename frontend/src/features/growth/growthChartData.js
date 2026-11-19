@@ -120,11 +120,11 @@ export function detectLevelUpEvents(records) {
       return explicitlyMarked;
     }
 
-    const detected = explicitlyMarked || (
-      !delayedLevelCatchUp &&
-      previousAvailableLevel !== null &&
-      currentLevel > previousAvailableLevel
-    );
+    const detected = typeof item?.levelUp === "boolean"
+      ? explicitlyMarked && !delayedLevelCatchUp
+      : !delayedLevelCatchUp &&
+        previousAvailableLevel !== null &&
+        currentLevel > previousAvailableLevel;
     previousAvailableLevel = currentLevel;
     return detected;
   });
