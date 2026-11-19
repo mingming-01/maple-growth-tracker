@@ -57,7 +57,7 @@ def _safe_response_headers(response):
 
 
 def _consume_sse_frame(frame, aggregate):
-    normalized = frame.decode("utf-8", errors="replace").replace("\\r\\n", "\\n").replace("\\r", "\\n")
+    normalized = frame.decode("utf-8", errors="replace").replace("\r\n", "\n").replace("\r", "\n")
     data_lines = [
         line[5:].lstrip()
         for line in normalized.splitlines()
