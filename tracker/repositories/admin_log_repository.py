@@ -10,6 +10,7 @@ import psycopg
 from psycopg.rows import dict_row
 
 from tracker.services.performance_metrics import increment_metric, observe_metric
+from tracker.repositories.postgres_connection_pool import get_pooled_connection
 
 KOREA_TIMEZONE = ZoneInfo("Asia/Seoul")
 
@@ -25,12 +26,13 @@ class AdminLogRepository:
         started_at = time.perf_counter()
         try:
             if backend == "postgres":
-                return psycopg.connect(
+                return get_pooled_connection(
                     self.state.growth_database_url,
                     connect_timeout=3,
                     sslmode="require",
                     prepare_threshold=None,
                     row_factory=dict_row,
+                    store="admin_logs",
                 )
 
             connection = sqlite3.connect(self.state.log_db_path, timeout=5)
