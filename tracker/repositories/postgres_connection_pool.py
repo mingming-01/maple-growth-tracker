@@ -4,7 +4,8 @@ import os
 from threading import Lock
 import time
 
-from psycopg_pool import ConnectionPool
+from psycopg import OperationalError
+from psycopg_pool import ConnectionPool, PoolTimeout
 
 from tracker.services.performance_metrics import increment_metric, observe_metric
 
@@ -63,13 +64,14 @@ class PooledConnection:
         self._pool.putconn(self._connection)
 
 
-def _pool_key(database_url, connect_timeout, sslmode, prepare_threshold):
+def _pool_key(database_url, connect_timeout, sslmode, prepare_threshold, row_factory):
     return (
         os.getpid(),
         database_url,
         float(connect_timeout),
         str(sslmode),
         prepare_threshold,
+        row_factory,
     )
 
 
@@ -79,10 +81,11 @@ def get_pooled_connection(
     connect_timeout=3,
     sslmode="require",
     prepare_threshold=None,
+    row_factory=None,
     store="growth_history",
 ):
     """Check out one connection from a process-local, bounded pool."""
-    key = _pool_key(database_url, connect_timeout, sslmode, prepare_threshold)
+    key = _pool_key(database_url, connect_timeout, sslmode, prepare_threshold, row_factory)
     with _POOL_LOCK:
         pool = _POOLS.get(key)
         if pool is None:
@@ -91,12 +94,14 @@ def get_pooled_connection(
                 "sslmode": sslmode,
                 "prepare_threshold": prepare_threshold,
             }
+            if row_factory is not None:
+                kwargs["row_factory"] = row_factory
 
             def configure(_connection):
                 increment_metric(
                     "db.pool.physical_connections_opened",
                     backend="postgres",
-                    store=store,
+                    store="shared",
                 )
 
             pool = ConnectionPool(
@@ -113,6 +118,9 @@ def get_pooled_connection(
     started_at = time.perf_counter()
     try:
         connection = pool.getconn()
+    except PoolTimeout as error:
+        increment_metric("db.pool.checkout_errors", backend="postgres", store=store)
+        raise OperationalError("Timed out waiting for a PostgreSQL connection.") from error
     except Exception:
         increment_metric("db.pool.checkout_errors", backend="postgres", store=store)
         raise
