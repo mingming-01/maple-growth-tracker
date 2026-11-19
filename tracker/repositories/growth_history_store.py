@@ -3,7 +3,7 @@
 GROWTH_DATABASE_URL points to PostgreSQL (for example, a Supabase connection
 string). Without it, the application uses a local SQLite file for development.
 """
-from datetime import date
+from datetime import date, datetime, timezone
 import json
 import logging
 import math
@@ -94,6 +94,8 @@ class GrowthHistoryStore:
                             ranking_source_date DATE,
                             experience_rate NUMERIC(7, 4),
                             experience_rate_checked BOOLEAN NOT NULL DEFAULT FALSE,
+                            growth_source TEXT,
+                            growth_observed_at TIMESTAMPTZ,
                             record_status TEXT NOT NULL
                                 CHECK (record_status IN ('available', 'not_ready')),
                             recorded_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -123,6 +125,18 @@ class GrowthHistoryStore:
                         """
                         ALTER TABLE growth_daily_snapshots
                         ADD COLUMN IF NOT EXISTS experience_rate_checked BOOLEAN NOT NULL DEFAULT FALSE
+                        """
+                    )
+                    connection.execute(
+                        """
+                        ALTER TABLE growth_daily_snapshots
+                        ADD COLUMN IF NOT EXISTS growth_source TEXT
+                        """
+                    )
+                    connection.execute(
+                        """
+                        ALTER TABLE growth_daily_snapshots
+                        ADD COLUMN IF NOT EXISTS growth_observed_at TIMESTAMPTZ
                         """
                     )
                     connection.execute(
@@ -180,6 +194,8 @@ class GrowthHistoryStore:
                             ranking_source_date TEXT,
                             experience_rate REAL,
                             experience_rate_checked INTEGER NOT NULL DEFAULT 0,
+                            growth_source TEXT,
+                            growth_observed_at TEXT,
                             record_status TEXT NOT NULL
                                 CHECK (record_status IN ('available', 'not_ready')),
                             recorded_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -204,6 +220,14 @@ class GrowthHistoryStore:
                         connection.execute(
                             "ALTER TABLE growth_daily_snapshots "
                             "ADD COLUMN experience_rate_checked INTEGER NOT NULL DEFAULT 0"
+                        )
+                    if "growth_source" not in columns:
+                        connection.execute(
+                            "ALTER TABLE growth_daily_snapshots ADD COLUMN growth_source TEXT"
+                        )
+                    if "growth_observed_at" not in columns:
+                        connection.execute(
+                            "ALTER TABLE growth_daily_snapshots ADD COLUMN growth_observed_at TEXT"
                         )
                     connection.execute(
                         """
@@ -252,6 +276,21 @@ class GrowthHistoryStore:
             return None
         return number
 
+    @staticmethod
+    def _to_timestamp(value):
+        """타임존이 명시된 관측 시각만 UTC datetime으로 보존한다."""
+        if value in (None, ""):
+            return None
+        try:
+            parsed = value if isinstance(value, datetime) else datetime.fromisoformat(
+                str(value).strip().replace("Z", "+00:00")
+            )
+        except (TypeError, ValueError, OverflowError):
+            return None
+        if parsed.tzinfo is None or parsed.utcoffset() is None:
+            return None
+        return parsed.astimezone(timezone.utc)
+
     @classmethod
     def _normalize_record(cls, ocid, character_name, world_name, record):
         if not isinstance(record, dict):
@@ -293,6 +332,12 @@ class GrowthHistoryStore:
                 ranking_source_date = None
 
             ranking_scope = "overall" if ranking is not None else None
+            growth_source = record.get("growthSource")
+            if growth_source not in ("character/basic", "ranking/overall"):
+                growth_source = None
+            growth_observed_at = cls._to_timestamp(record.get("growthObservedAt"))
+            if growth_source is None:
+                growth_observed_at = None
             return (
                 str(ocid),
                 snapshot_date.isoformat(),
@@ -305,6 +350,8 @@ class GrowthHistoryStore:
                 ranking_source_date.isoformat() if ranking_source_date else None,
                 cls._to_rate(record.get("experienceRate")),
                 bool(record.get("experienceRateChecked", False)),
+                growth_source,
+                growth_observed_at,
                 "available",
             )
 
@@ -323,6 +370,8 @@ class GrowthHistoryStore:
                 None,
                 None,
                 False,
+                None,
+                None,
                 "not_ready",
             )
         return None
@@ -342,8 +391,9 @@ class GrowthHistoryStore:
                 INSERT INTO growth_daily_snapshots
                     (ocid, snapshot_date, character_name, world_name, level,
                      experience, ranking, ranking_scope, ranking_source_date,
-                     experience_rate, experience_rate_checked, record_status)
-                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                     experience_rate, experience_rate_checked, growth_source,
+                     growth_observed_at, record_status)
+                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
                 ON CONFLICT (ocid, snapshot_date) DO UPDATE SET
                     character_name = EXCLUDED.character_name,
                     world_name = EXCLUDED.world_name,
@@ -354,6 +404,8 @@ class GrowthHistoryStore:
                     ranking_source_date = EXCLUDED.ranking_source_date,
                     experience_rate = EXCLUDED.experience_rate,
                     experience_rate_checked = EXCLUDED.experience_rate_checked,
+                    growth_source = EXCLUDED.growth_source,
+                    growth_observed_at = EXCLUDED.growth_observed_at,
                     record_status = EXCLUDED.record_status,
                     recorded_at = CURRENT_TIMESTAMP
                 WHERE (
@@ -370,6 +422,8 @@ class GrowthHistoryStore:
                     OR growth_daily_snapshots.ranking_source_date IS DISTINCT FROM EXCLUDED.ranking_source_date
                     OR growth_daily_snapshots.experience_rate IS DISTINCT FROM EXCLUDED.experience_rate
                     OR growth_daily_snapshots.experience_rate_checked IS DISTINCT FROM EXCLUDED.experience_rate_checked
+                    OR growth_daily_snapshots.growth_source IS DISTINCT FROM EXCLUDED.growth_source
+                    OR growth_daily_snapshots.growth_observed_at IS DISTINCT FROM EXCLUDED.growth_observed_at
                     OR growth_daily_snapshots.record_status IS DISTINCT FROM EXCLUDED.record_status
                 )
             """
@@ -378,8 +432,9 @@ class GrowthHistoryStore:
                 INSERT INTO growth_daily_snapshots
                     (ocid, snapshot_date, character_name, world_name, level,
                      experience, ranking, ranking_scope, ranking_source_date,
-                     experience_rate, experience_rate_checked, record_status)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                     experience_rate, experience_rate_checked, growth_source,
+                     growth_observed_at, record_status)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 ON CONFLICT (ocid, snapshot_date) DO UPDATE SET
                     character_name = excluded.character_name,
                     world_name = excluded.world_name,
@@ -390,6 +445,8 @@ class GrowthHistoryStore:
                     ranking_source_date = excluded.ranking_source_date,
                     experience_rate = excluded.experience_rate,
                     experience_rate_checked = excluded.experience_rate_checked,
+                    growth_source = excluded.growth_source,
+                    growth_observed_at = excluded.growth_observed_at,
                     record_status = excluded.record_status,
                     recorded_at = CURRENT_TIMESTAMP
                 WHERE (
@@ -406,6 +463,8 @@ class GrowthHistoryStore:
                     OR growth_daily_snapshots.ranking_source_date IS NOT excluded.ranking_source_date
                     OR growth_daily_snapshots.experience_rate IS NOT excluded.experience_rate
                     OR growth_daily_snapshots.experience_rate_checked IS NOT excluded.experience_rate_checked
+                    OR growth_daily_snapshots.growth_source IS NOT excluded.growth_source
+                    OR growth_daily_snapshots.growth_observed_at IS NOT excluded.growth_observed_at
                     OR growth_daily_snapshots.record_status IS NOT excluded.record_status
                 )
             """
@@ -461,7 +520,8 @@ class GrowthHistoryStore:
         query = f"""
             SELECT snapshot_date, character_name, world_name, level,
                    experience, ranking, ranking_scope, ranking_source_date,
-                   experience_rate, experience_rate_checked, record_status, recorded_at
+                   experience_rate, experience_rate_checked, growth_source,
+                   growth_observed_at, record_status, recorded_at
             FROM growth_daily_snapshots
             WHERE ocid = {placeholder} AND snapshot_date >= {placeholder}
               AND snapshot_date <= {placeholder}
@@ -483,7 +543,7 @@ class GrowthHistoryStore:
 
         result = []
         for row in rows:
-            snapshot_date, saved_name, saved_world, level, experience, ranking, ranking_scope, ranking_source_date, experience_rate, experience_rate_checked, status, recorded_at = row
+            snapshot_date, saved_name, saved_world, level, experience, ranking, ranking_scope, ranking_source_date, experience_rate, experience_rate_checked, growth_source, growth_observed_at, status, recorded_at = row
             result.append({
                 "date": snapshot_date.isoformat() if hasattr(snapshot_date, "isoformat") else str(snapshot_date),
                 "characterName": saved_name,
@@ -495,6 +555,8 @@ class GrowthHistoryStore:
                 "rankingSourceDate": ranking_source_date.isoformat() if hasattr(ranking_source_date, "isoformat") else (str(ranking_source_date) if ranking_source_date else None),
                 "experienceRate": self._to_rate(experience_rate),
                 "experienceRateChecked": bool(experience_rate_checked),
+                "growthSource": growth_source,
+                "growthObservedAt": growth_observed_at.isoformat() if hasattr(growth_observed_at, "isoformat") else (str(growth_observed_at) if growth_observed_at else None),
                 "recordStatus": status,
                 "recordedAt": recorded_at.isoformat() if hasattr(recorded_at, "isoformat") else str(recorded_at),
             })
