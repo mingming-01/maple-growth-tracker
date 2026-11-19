@@ -125,6 +125,20 @@ test("dashes only the daily EXP segment whose current day has zero growth", () =
   assert.deepEqual(dailyGrowthSegmentDash(context(80)), []);
 });
 
+test("shows the confirmed November 18 event as a level-up marker even when the daily level lags", () => {
+  const records = [
+    { date: "2026-11-17", level: 298, experienceRate: 99.226, levelUp: false },
+    { date: "2026-11-18", level: 298, experienceRate: 0.355, levelUp: true },
+    { date: "2026-11-19", level: 299, experienceRate: 0.984, levelUp: false }
+  ];
+
+  assert.deepEqual(detectLevelUpEvents(records), [false, true, false]);
+  assert.deepEqual(
+    buildLevelUpMarkers(records, [1150.0, 1156.6, 1156.6]),
+    [null, 1156.6, null]
+  );
+});
+
 test("carries the last known total across a level-up without inventing cross-level EXP", () => {
   const records = [
     { date: "2026-11-02", level: 280, recordStatus: "available", experience: 1_000_000_000_000, experienceChange: null },
