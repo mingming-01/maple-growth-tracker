@@ -188,7 +188,7 @@ def _log_openrouter_empty_response(**details):
         current_app.logger.warning("OpenRouter 텍스트 없는 응답: %s", details)
 
 
-def request_openrouter(prompt, api_key=None, deadline=None):
+def request_openrouter(prompt, api_key=None, deadline=None, reasoning_effort="low"):
     """OpenRouter 대체 호출도 전체 응답 시간을 제한해 worker timeout을 막는다."""
     key = api_key or _setting("OPENROUTER_API_KEY", "")
     if not key:
@@ -207,7 +207,7 @@ def request_openrouter(prompt, api_key=None, deadline=None):
             "temperature": 0.35,
             # Standard OpenRouter control for reasoning-capable routed models.
             # The model alias remains openrouter/free and routing stays automatic.
-            "reasoning": {"effort": "low"},
+            "reasoning": {"effort": reasoning_effort if reasoning_effort in {"minimal", "low", "medium", "high"} else "low"},
             "max_tokens": max(512, min(
                 8192,
                 int(_setting("AI_OPENROUTER_MAX_OUTPUT_TOKENS", 8192)),
