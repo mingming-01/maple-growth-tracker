@@ -139,7 +139,7 @@ test("dashes only the daily EXP segment whose current day has zero growth", () =
   assert.deepEqual(dailyGrowthSegmentDash(context(80)), []);
 });
 
-test("preserves the observed daily EXP increase on the level-up marker date without fabricating catch-up data", () => {
+test("continues daily EXP growth after the ranking level catches up", () => {
   const records = [
     { date: "2026-11-13", recordStatus: "available", experienceChange: null },
     { date: "2026-11-14", recordStatus: "available", experienceChange: 37_000_000_000_000 },
@@ -147,10 +147,10 @@ test("preserves the observed daily EXP increase on the level-up marker date with
     { date: "2026-11-16", recordStatus: "available", experienceChange: 15_000_000_000_000 },
     { date: "2026-11-17", recordStatus: "available", experienceChange: 10_000_000_000_000 },
     { date: "2026-11-18", recordStatus: "available", experienceChange: 26_803_094_948_045, levelUp: true },
-    { date: "2026-11-19", recordStatus: "available", experienceChange: null, levelUpCatchUp: true }
+    { date: "2026-11-19", recordStatus: "available", experienceChange: 17_096_549_681_346, levelUpCatchUp: true }
   ];
   const series = buildExperienceChartSeries(records);
-  assert.deepEqual(series.daily, [null, 37, 8, 15, 10, 26.803094948045, null]);
+  assert.deepEqual(series.daily, [null, 37, 8, 15, 10, 26.803094948045, 17.096549681346]);
   assert.equal(Object.hasOwn(series, "dailyDisplay"), false);
   assert.equal(Object.hasOwn(series, "dailyLastObservedIndex"), false);
 });
@@ -166,24 +166,24 @@ test("shows the confirmed November 18 event as a level-up marker even when the d
   assert.deepEqual(buildExperienceChartSeries([
     { date: "2026-11-17", recordStatus: "available", experience: 1_150_000_000_000 },
     { date: "2026-11-18", recordStatus: "available", experience: 1_156_600_000_000, experienceChange: 6_600_000_000, levelUp: true },
-    { date: "2026-11-19", recordStatus: "available", experience: 17_000_000_000, experienceChange: null, levelUpCatchUp: true }
-  ]).cumulative, [1.15, 1.1566, 1.1566]);
+    { date: "2026-11-19", recordStatus: "available", experience: 17_000_000_000, experienceChange: 17_000_000_000, levelUpCatchUp: true }
+  ]).cumulative, [1.15, 1.1566, 1.1736]);
   assert.deepEqual(
     buildLevelUpMarkers(records, [1150.0, 1150.0, 1150.0]),
     [null, 1150.0, null]
   );
 });
 
-test("carries the last known total across a level-up without inventing cross-level EXP", () => {
+test("adds observed new-level EXP to the cumulative total after a level-up", () => {
   const records = [
     { date: "2026-11-02", level: 280, recordStatus: "available", experience: 1_000_000_000_000, experienceChange: null },
     { date: "2026-11-03", level: 280, recordStatus: "available", experience: 1_100_000_000_000, experienceChange: 100_000_000_000 },
-    { date: "2026-11-04", level: 281, recordStatus: "available", experience: 20_000_000, experienceChange: null },
+    { date: "2026-11-04", level: 281, recordStatus: "available", experience: 20_000_000, experienceChange: 20_000_000 },
     { date: "2026-11-05", level: 281, recordStatus: "available", experience: 120_000_000, experienceChange: 100_000_000 }
   ];
 
   const series = buildExperienceChartSeries(records);
 
-  assert.deepEqual(series.cumulative, [1, 1.1, 1.1, 1.1001]);
-  assert.equal(series.daily[2], null);
+  assert.deepEqual(series.cumulative, [1, 1.1, 1.10002, 1.10012]);
+  assert.equal(series.daily[2], 0.00002);
 });
