@@ -638,6 +638,60 @@ class GrowthHistoryApiTests(unittest.TestCase):
         self.assertEqual(saved["rankingSourceDate"], target_date)
         self.assertEqual(saved["experience"], 123999)
 
+    def test_archive_recollects_legacy_records_without_growth_provenance(self):
+        target_date = (self.today - timedelta(days=1)).isoformat()
+        # 기존 저장 행에는 출처/수집 시각이 없지만 성장 수치 자체는 보존되어 있다.
+        self.store.save_records(
+            "test-ocid", "테스트캐릭터", "테스트월드",
+            [{
+                "date": target_date,
+                "recordStatus": "available",
+                "level": 280,
+                "experience": 123456,
+                "ranking": 77,
+                "rankingScope": "overall",
+                "rankingSourceDate": target_date,
+                "experienceRate": 12.345,
+                "experienceRateChecked": True,
+            }],
+        )
+        ranking = {
+            "ranking": 55,
+            "character_level": 280,
+            "character_exp": 123999,
+            "character_exp_rate": 12.5,
+        }
+        verified_basic = {
+            "character_name": "테스트캐릭터",
+            "world_name": "테스트월드",
+            "character_level": 280,
+            "character_exp": 123999,
+        }
+        with patch.object(
+            history_controller, "get_basic_character_snapshot",
+            return_value=(verified_basic, Mock(status_code=200)),
+        ) as verify_basic, patch.object(
+            history_archive_service, "get_ranking_snapshot",
+            return_value=(ranking, Mock(status_code=200)),
+        ) as get_ranking:
+            response = self.client.get(
+                "/api/history/archive?ocid=test-ocid&days=30&collect=1"
+                "&character_name=%ED%85%8C%EC%8A%A4%ED%8A%B8%EC%BA%90%EB%A6%AD%ED%84%B0"
+                "&offset=28&limit=1&summary_only=1"
+            )
+
+        self.assertEqual(response.status_code, 200)
+        collection = response.get_json()["collection"]
+        self.assertEqual(collection["checkedDays"], 1)
+        self.assertEqual(collection["savedRecords"], 1)
+        self.assertEqual(collection["remainingDays"], 29)
+        verify_basic.assert_called_once()
+        get_ranking.assert_called_once()
+        saved = self.store.get_records("test-ocid", target_date, target_date)[0]
+        self.assertEqual(saved["experience"], 123999)
+        self.assertEqual(saved["growthSource"], "ranking/overall")
+        self.assertIsNotNone(datetime.fromisoformat(saved["growthObservedAt"]))
+
     def test_archive_reuses_recent_verified_character_identity_between_batches(self):
         target_date = (self.today - timedelta(days=29)).isoformat()
         cached_basic = {

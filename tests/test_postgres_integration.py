@@ -43,6 +43,8 @@ class PostgreSQLIntegrationTests(unittest.TestCase):
             "ranking": 321,
             "rankingScope": "overall",
             "rankingSourceDate": date.today().isoformat(),
+            "growthSource": "ranking/overall",
+            "growthObservedAt": "2026-11-19T10:00:00+00:00",
             "recordStatus": "available",
         }]
         self.store.save_records(ocid, "통합테스트", "테스트월드", records)
@@ -55,6 +57,8 @@ class PostgreSQLIntegrationTests(unittest.TestCase):
         self.assertEqual(result[0]["ranking"], 321)
         self.assertEqual(result[0]["rankingScope"], "overall")
         self.assertEqual(result[0]["rankingSourceDate"], date.today().isoformat())
+        self.assertEqual(result[0]["growthSource"], "ranking/overall")
+        self.assertEqual(result[0]["growthObservedAt"], "2026-11-19T10:00:00+00:00")
         self.assertEqual(result[0]["recordStatus"], "available")
 
     def test_ai_daily_limits_are_shared_and_atomic_under_concurrency(self):

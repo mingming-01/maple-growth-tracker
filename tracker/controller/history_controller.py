@@ -444,6 +444,9 @@ def get_history_archive():
                         )
                         or not stored_by_date[target_date.isoformat()].get("experienceRateChecked", False)
                         or stored_by_date[target_date.isoformat()].get("experienceRate") is None
+                        # 레거시 아카이브 행도 성장 데이터 출처와 수집 시각을 확보하도록 다시 확인한다.
+                        or not stored_by_date[target_date.isoformat()].get("growthSource")
+                        or not stored_by_date[target_date.isoformat()].get("growthObservedAt")
                     )
                 )
             )
@@ -495,6 +498,8 @@ def get_history_archive():
                     )
                     or not stored_by_date[(start_date + timedelta(days=index)).isoformat()].get("experienceRateChecked", False)
                     or stored_by_date[(start_date + timedelta(days=index)).isoformat()].get("experienceRate") is None
+                    or not stored_by_date[(start_date + timedelta(days=index)).isoformat()].get("growthSource")
+                    or not stored_by_date[(start_date + timedelta(days=index)).isoformat()].get("growthObservedAt")
                 )
                 for index in range(days)
             )

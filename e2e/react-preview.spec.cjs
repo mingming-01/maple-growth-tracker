@@ -683,7 +683,7 @@ test("React AI report restores evidence details from cache", async ({ page }) =>
   await expect(cachedEvidence).toContainText("10 / 15일");
 });
 
-test("React growth chart keeps the real level-up-day EXP delta and AI receives the same history", async ({ page }) => {
+test("React growth chart marks the level-up reset without inventing cross-level daily EXP and AI receives the same history", async ({ page }) => {
   const timestamp = "2026-11-19T08:45:00+09:00";
   const character = {
     characterName: "레벨업검증",
@@ -706,7 +706,7 @@ test("React growth chart keeps the real level-up-day EXP delta and AI receives t
     { date: "2026-11-15", level: 298, experience: 1103053861914765, experienceRate: 96.177, experienceChange: 8704451426393, levelUp: false, recordStatus: "available" },
     { date: "2026-11-16", level: 298, experience: 1118748264632899, experienceRate: 97.143, experienceChange: 15694402718134, levelUp: false, recordStatus: "available" },
     { date: "2026-11-17", level: 298, experience: 1129263590513928, experienceRate: 99.226, experienceChange: 10515325881029, levelUp: false, recordStatus: "available" },
-    { date: "2026-11-18", level: 298, experience: 1156066685461973, experienceRate: 0.355, experienceChange: 26803094948045, levelUp: true, levelUpPreviousLevel: 298, levelUpCurrentLevel: 299, recordStatus: "available" },
+    { date: "2026-11-18", level: 298, experience: 1156066685461973, experienceRate: 0.355, experienceChange: null, levelUp: true, levelUpPreviousLevel: 298, levelUpCurrentLevel: 299, recordStatus: "available" },
     { date: "2026-11-19", level: 299, experience: 17096549681346, experienceRate: 0.984, experienceChange: null, levelUp: false, levelUpCatchUp: true, recordStatus: "available" }
   ];
 
@@ -728,7 +728,7 @@ test("React growth chart keeps the real level-up-day EXP delta and AI receives t
     await route.fulfill({
       status: 200, contentType: "application/json",
       body: JSON.stringify({
-        analysis: "[성장 패턴] 최근 기록에서 경험치 증가가 확인됐어요.\\n[성장 변화] 11월 18일의 경험치 증가량이 반영됐어요.\\n[레벨업 분석] 11월 18일에 298레벨에서 299레벨로 올라갔어요.\\n[성장 전망] 현재 진행률을 기준으로 확인해 주세요.\\n[AI 코멘트] 다음 기록도 계속 비교해 보세요.",
+        analysis: "[성장 패턴] 최근 기록에서 경험치 증가가 확인됐어요.\\n[성장 변화] 레벨업 당일의 비교 가능한 증가량은 확인되지 않아요.\\n[레벨업 분석] 11월 18일에 298레벨에서 299레벨로 올라갔어요.\\n[성장 전망] 현재 진행률을 기준으로 확인해 주세요.\\n[AI 코멘트] 다음 기록도 계속 비교해 보세요.",
         cacheHit: false,
         growthInsights: {}
       })
@@ -772,7 +772,7 @@ test("React growth chart keeps the real level-up-day EXP delta and AI receives t
   expect(submittedPayload).not.toBeNull();
   const resetDay = submittedPayload.history.find(item => item.date === "2026-11-18");
   const catchUpDay = submittedPayload.history.find(item => item.date === "2026-11-19");
-  expect(resetDay.experienceChange).toBe(26803094948045);
+  expect(resetDay.experienceChange).toBeNull();
   expect(resetDay.levelUp).toBe(true);
   expect(catchUpDay.experienceChange).toBeNull();
   expect(catchUpDay.levelUpCatchUp).toBe(true);

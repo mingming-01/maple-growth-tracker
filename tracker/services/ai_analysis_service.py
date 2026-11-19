@@ -875,7 +875,7 @@ def generate_ai_analysis(character, history, computed_metrics=None, growth_insig
                     if has_app_context():
                         current_app.logger.warning(
                             "OpenRouter 응답이 잘렸거나 사실 검증을 통과하지 못했습니다. "
-                            "같은 openrouter/free 요청을 한 번 재시도합니다: "
+                            "같은 OpenRouter 모델 별칭으로 한 번 재시도합니다: "
                             "reason=%s remaining_ms=%d",
                             provider_error_type(error), round(remaining_ms),
                         )

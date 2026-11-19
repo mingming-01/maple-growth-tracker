@@ -286,7 +286,7 @@ class AIAnalysisFallbackTests(unittest.TestCase):
         ProviderError("OpenRouter output was truncated", "provider_output_truncated"),
         VALID_REPORT,
     ])
-    def test_http_429_then_truncated_openrouter_retries_with_minimal_reasoning(
+    def test_http_429_then_truncated_openrouter_retries_same_model_alias(
         self, openrouter, gemini, _cooldown, _set_cache, _get_cache, get_state
     ):
         response = type("Response", (), {"status_code": 429, "headers": {}, "text": ""})()
