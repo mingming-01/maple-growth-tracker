@@ -27,8 +27,13 @@ class ServerAIMetricsTests(unittest.TestCase):
         self.assertEqual(summary["notReadyDays"], 1)
         self.assertEqual(summary["notCollectedDays"], 1)
         self.assertEqual(summary["coveragePercent"], 50.0)
-        self.assertEqual(result["metrics"]["timeline"][0]["type"], "latest")
+        self.assertEqual(result["metrics"]["timeline"][0]["type"], "best-growth")
         self.assertEqual(result["metrics"]["timeline"][0]["date"], "2026-11-14")
+        self.assertIn(
+            {"type": "latest", "date": "2026-11-14", "title": "최근 정상 기록",
+             "description": "Lv. 280 · 경험치 1,200", "priority": 3},
+            result["metrics"]["timeline"],
+        )
         self.assertIsNone(result["metrics"]["prediction"])
 
     def test_metrics_are_derived_from_contiguous_authoritative_records(self):

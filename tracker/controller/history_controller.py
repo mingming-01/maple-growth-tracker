@@ -41,19 +41,19 @@ from tracker.runtime import (
 history_bp = Blueprint("history", __name__, url_prefix="/api")
 
 
-def _attach_growth_metrics(payload, reference_date, period_days):
+def _attach_growth_metrics(payload, reference_date, period_days, character=None):
     """이력 API에 모든 화면이 공유할 서버 계산 지표를 추가한다."""
     records = payload.get("history") if isinstance(payload, dict) else None
     records = records if isinstance(records, list) else []
-    latest = next(
-        (
-            item for item in reversed(records)
+    if character is None:
+        available = [
+            item for item in records
             if isinstance(item, dict) and item.get("recordStatus") == "available"
-        ),
-        None,
-    )
+        ]
+        latest = max(available, key=lambda item: str(item.get("date") or ""), default=None)
+        character = {"experienceRate": latest.get("experienceRate") if latest else None}
     calculated = build_server_growth_metrics(
-        {"experienceRate": latest.get("experienceRate") if latest else None},
+        character,
         records,
         reference_date=reference_date,
         period_days=period_days,
@@ -346,7 +346,7 @@ def get_history():
             "status": storage_status,
             "savedRecords": saved_record_count
         }
-    }, today, 7)
+    }, today, 7, {"experienceRate": basic.get("character_exp_rate")})
 
     saved_at = datetime.now().astimezone().isoformat(timespec="seconds")
     # 완전한 기록은 갱신하고, 부분 기록은 기존 스냅샷이 없을 때만 저장한다.
