@@ -82,7 +82,9 @@ class AIProviderAdapterTests(unittest.TestCase):
                          "Bearer openrouter-test-key")
         self.assertEqual(post_json.call_args.kwargs["total_timeout"], 27.0)
         self.assertEqual(post_json.call_args.kwargs["read_timeout"], 25.0)
-        self.assertEqual(post_json.call_args.kwargs["json_body"]["stream"], False)
+        self.assertEqual(post_json.call_args.kwargs["json_body"]["stream"], True)
+        self.assertEqual(post_json.call_args.kwargs["headers"]["Accept"], "text/event-stream")
+        self.assertEqual(post_json.call_args.kwargs["response_format"], "sse")
         # Even when configured above the supported cap, the adapter must send at most 8192 tokens.
         self.assertEqual(post_json.call_args.kwargs["json_body"]["max_tokens"], 8192)
         self.assertNotIn("reasoning", post_json.call_args.kwargs["json_body"])
