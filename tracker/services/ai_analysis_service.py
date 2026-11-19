@@ -57,6 +57,32 @@ def _log_provider_failure(provider, error, started_at, deadline):
         getattr(error, "status_code", None)
         or getattr(response, "status_code", None)
     )
+    response_body = ""
+    response_error_code = None
+    response_error_message = None
+    if response is not None:
+        try:
+            response_body = response.text or ""
+        except Exception:
+            response_body = ""
+        try:
+            response_json = json.loads(response_body) if response_body else {}
+        except (TypeError, ValueError):
+            response_json = {}
+        provider_payload = response_json.get("error") if isinstance(response_json, dict) else None
+        if isinstance(provider_payload, dict):
+            response_error_code = provider_payload.get("code")
+            response_error_message = provider_payload.get("message")
+        elif response_body:
+            response_error_message = response_body
+    safe_message = str(response_error_message or "")[:400]
+    # 공급자 오류 메시지에 인증 문자열이 섞이는 경우 로그에 남기지 않는다.
+    safe_message = re.sub(r"(?i)bearer\\s+[^\\s,;]+", "Bearer [REDACTED]", safe_message)
+    safe_message = re.sub(
+        r"(?i)(api[_-]?key|access[_-]?token|secret|authorization)(\\s*[:=]\\s*)[^,;\\s]+",
+        r"\\1\\2[REDACTED]",
+        safe_message,
+    )
     details = {
         "provider": provider,
         "error_type": provider_error_type(error),
@@ -64,6 +90,8 @@ def _log_provider_failure(provider, error, started_at, deadline):
         "elapsed_ms": round((now - started_at) * 1000, 1),
         "deadline_remaining_ms": max(0, round((float(deadline) - now) * 1000, 1)),
         "http_status": http_status,
+        "provider_error_code": response_error_code,
+        "provider_error_message": safe_message or None,
         "finish_reason": getattr(error, "finish_reason", None),
     }
     log_message = json.dumps(details, ensure_ascii=False, sort_keys=True)
