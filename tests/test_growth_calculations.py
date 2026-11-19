@@ -49,7 +49,7 @@ class GrowthCalculationBehaviorTests(unittest.TestCase):
             self.state.cache.clear()
         self.temp_dir.cleanup()
 
-    def test_recent_history_excludes_level_up_experience_change(self):
+    def test_recent_history_counts_new_level_experience_after_level_up(self):
         response_stub = Mock(status_code=200)
         basic = {
             "character_name": "테스트캐릭터",
@@ -92,7 +92,7 @@ class GrowthCalculationBehaviorTests(unittest.TestCase):
         self.assertEqual(response.status_code, 200)
         history = response.get_json()["history"]
         self.assertEqual(len(history), 7)
-        self.assertIsNone(history[6]["experienceChange"])
+        self.assertEqual(history[6]["experienceChange"], 100)
         self.assertTrue(history[6]["levelUp"])
         self.assertEqual(history[6]["rankingChange"], 10)
         self.assertEqual(history[6]["experienceRate"], "23.4567")
@@ -128,7 +128,7 @@ class GrowthCalculationBehaviorTests(unittest.TestCase):
         )
         self.assertFalse(history[2]["levelUp"])
         self.assertTrue(history[2]["levelUpCatchUp"])
-        self.assertIsNone(history[2]["experienceChange"])
+        self.assertEqual(history[2]["experienceChange"], 17096549681346)
 
     def test_archive_history_uses_experience_rate_reset_for_level_up(self):
         history = [
@@ -159,7 +159,7 @@ class GrowthCalculationBehaviorTests(unittest.TestCase):
         )
         self.assertFalse(history[2]["levelUp"])
         self.assertTrue(history[2]["levelUpCatchUp"])
-        self.assertIsNone(history[2]["experienceChange"])
+        self.assertEqual(history[2]["experienceChange"], 17096549681346)
 
     def test_archive_history_does_not_calculate_changes_across_missing_records(self):
         start_date = self.today - timedelta(days=29)
