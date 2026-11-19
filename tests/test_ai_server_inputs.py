@@ -5,7 +5,7 @@ from unittest.mock import Mock, patch
 
 from tracker import create_app
 from tracker.controller import ai_controller
-from tracker.runtime import KOREA_TIMEZONE
+from tracker.runtime import KOREA_TIMEZONE, get_runtime_state
 
 
 class FakeGrowthStorage:
@@ -163,6 +163,106 @@ class AIServerInputTests(unittest.TestCase):
         self.assertEqual(captured["insights"]["recentPeriod"]["observedExperienceSum"], expected_change)
         self.assertEqual(captured["insights"]["recentPeriod"]["levelUpIntervals"], 1)
         self.assertEqual(captured["context"]["periodSummary"]["validGrowthIntervals"], 1)
+
+    def test_api_route_runs_real_ai_report_pipeline_with_saved_level_up_growth(self):
+        event_date = self.today - timedelta(days=1)
+        previous_date = self.today - timedelta(days=2)
+        previous_experience = 1129263590513928
+        reset_experience = 1156066685461973
+        expected_change = reset_experience - previous_experience
+        storage = FakeGrowthStorage({"ocid-one": [
+            {
+                "date": previous_date.isoformat(),
+                "level": 298,
+                "experience": previous_experience,
+                "experienceRate": 99.226,
+                "recordStatus": "available",
+            },
+            {
+                "date": event_date.isoformat(),
+                "level": 298,
+                "experience": reset_experience,
+                "experienceRate": 0.355,
+                "recordStatus": "available",
+            },
+            {
+                "date": self.today.isoformat(),
+                "level": 299,
+                "experience": 17096549681346,
+                "experienceRate": 0.984,
+                "recordStatus": "available",
+            },
+        ]}
+        report = (
+            "[성장 패턴] 확인된 성장 기록을 바탕으로 최근 변화를 살펴봤어요.\n"
+            "[성장 변화] 레벨업 당일의 실제 경험치 증가량도 분석에 반영됐어요.\n"
+            f"[레벨업 분석] {event_date.month}월 {event_date.day}일에 298레벨에서 299레벨로 올라갔어요.\n"
+            "[성장 전망] 현재 기록만으로는 다음 레벨업 날짜를 확정하기 어려워요.\n"
+            "[AI 코멘트] 레벨업 뒤에는 새 레벨의 경험치 진행률을 기준으로 살펴보세요."
+        )
+
+        with self.app.app_context():
+            state = get_runtime_state()
+            state.gemini_api_key = "test-gemini-key"
+            state.openrouter_api_key = "test-openrouter-key"
+            state.ai_response_cache.clear()
+
+        with (
+            patch.object(
+                ai_controller,
+                "resolve_character",
+                return_value=("ocid-one", {
+                    **self.make_basic("테스트캐릭터"),
+                    "character_level": 299,
+                    "character_exp": 17096549681346,
+                    "character_exp_rate": 0.984,
+                }, Mock(status_code=200)),
+            ),
+            patch.object(ai_controller, "get_growth_history_service", return_value=storage),
+            patch(
+                "tracker.services.ai_analysis_service._gemini_cooldown_remaining",
+                return_value=0,
+            ),
+            patch(
+                "tracker.services.ai_analysis_service.request_gemini",
+                side_effect=__import__("tracker.integrations.ai_provider", fromlist=["ProviderError"]).ProviderError(
+                    "Gemini unavailable", "provider_unavailable"
+                ),
+            ) as gemini_request,
+            patch(
+                "tracker.services.ai_analysis_service.request_openrouter",
+                return_value=report,
+            ) as openrouter_request,
+        ):
+            response = self.client.post(
+                "/api/ai-analysis?name=테스트캐릭터",
+                json={
+                    "forceRefresh": True,
+                    "analysisContext": {"periodDays": 7},
+                },
+            )
+
+        self.assertEqual(response.status_code, 200, response.get_json())
+        payload = response.get_json()
+        self.assertFalse(payload["cacheHit"])
+        self.assertIn("[성장 패턴]", payload["analysis"])
+        self.assertIn("[AI 코멘트]", payload["analysis"])
+        self.assertIn(
+            f"{event_date.month}월 {event_date.day}일에 298레벨에서 299레벨로 올라갔어요.",
+            payload["analysis"],
+        )
+        self.assertIn("레벨업 날짜를 확정하기 어려워요.", payload["analysis"])
+
+        gemini_request.assert_called_once()
+        openrouter_request.assert_called_once()
+        prompt = openrouter_request.call_args.args[0]
+        self.assertIn(f'"experienceChange": {expected_change}', prompt)
+        self.assertIn(f'"date": "{event_date.isoformat()}"', prompt)
+        self.assertIn('"levelUp": true', prompt)
+        self.assertNotIn(
+            str(17096549681346 - reset_experience),
+            prompt,
+        )
 
     def test_analysis_excludes_unverified_legacy_ranks_before_ai_generation(self):
         captured = {}
