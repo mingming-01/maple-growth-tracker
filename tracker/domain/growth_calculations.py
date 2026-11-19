@@ -70,12 +70,23 @@ def calculate_recent_history_changes(history):
         elif duplicate_level_catch_up:
             current["levelUpCatchUp"] = True
 
-        if transition or duplicate_level_catch_up:
-            # The reset day and the following ranking-metadata catch-up are
-            # both excluded from daily EXP deltas.
+        if not records_available:
             current["experienceChange"] = None
         elif current.get("experience") is not None and previous.get("experience") is not None:
-            current["experienceChange"] = current["experience"] - previous["experience"]
+            try:
+                observed_change = current["experience"] - previous["experience"]
+            except (TypeError, ValueError):
+                observed_change = None
+            # 레벨업 판정과 일일 경험치 산출은 독립적이다.
+            # 진행률 초기화일이라도 원본 경험치가 실제로 증가했다면 보존한다.
+            # 반대로 레벨 필드가 다음 날 갱신되며 원본 경험치가 초기화된 음수 구간은
+            # 서로 다른 레벨 기준의 차이이므로 일일 증가량으로 사용하지 않는다.
+            current["experienceChange"] = (
+                observed_change
+                if observed_change is not None
+                and (not (transition or duplicate_level_catch_up) or observed_change >= 0)
+                else None
+            )
         else:
             current["experienceChange"] = None
 
@@ -125,14 +136,22 @@ def calculate_archive_history_changes(history):
         elif duplicate_level_catch_up:
             current["levelUpCatchUp"] = True
 
-        if not duplicate_level_catch_up and not transition:
-            if (
-                current.get("experience") is not None
-                and previous.get("experience") is not None
-            ):
-                current["experienceChange"] = (
-                    current["experience"] - previous["experience"]
-                )
+        if (
+            current.get("experience") is not None
+            and previous.get("experience") is not None
+        ):
+            try:
+                observed_change = current["experience"] - previous["experience"]
+            except (TypeError, ValueError):
+                observed_change = None
+            # 레벨업 플래그는 별도로 유지하고, 같은 날 원본 경험치가 증가한 값은 보존한다.
+            # 새로운 레벨 기준으로 초기화되어 음수가 된 구간만 계산 불가로 둔다.
+            current["experienceChange"] = (
+                observed_change
+                if observed_change is not None
+                and (not (transition or duplicate_level_catch_up) or observed_change >= 0)
+                else None
+            )
 
         if current.get("ranking") is not None and previous.get("ranking") is not None:
             current["rankingChange"] = previous["ranking"] - current["ranking"]
