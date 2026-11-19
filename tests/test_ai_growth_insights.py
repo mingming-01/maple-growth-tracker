@@ -117,7 +117,7 @@ class AIGrowthInsightsTests(unittest.TestCase):
         self.assertEqual(result["recentPeriod"]["validGrowthIntervals"], 6)
         self.assertEqual(
             result["recentPeriod"]["observedExperienceSum"],
-            0,  # calculated below from all six verified daily deltas
+            121697626764388,
         )
 
     def test_insufficient_history_is_reported_without_a_percentage(self):
