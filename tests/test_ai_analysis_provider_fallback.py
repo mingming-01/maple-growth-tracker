@@ -184,6 +184,7 @@ class AIAnalysisFallbackTests(unittest.TestCase):
     def test_cache_read_failure_is_treated_as_a_cache_miss(self, _cache_read):
         self.assertIsNone(service._get_cached_ai_response("cache-key"))
 
+    @patch("tracker.services.ai_analysis_service._request_deadline", return_value=12345.0)
     @patch("tracker.services.ai_analysis_service.get_runtime_state")
     @patch("tracker.services.ai_analysis_service.get_ai_response_cache", return_value=None)
     @patch("tracker.services.ai_analysis_service.set_ai_response_cache")
@@ -194,7 +195,7 @@ class AIAnalysisFallbackTests(unittest.TestCase):
     @patch("tracker.services.ai_analysis_service.request_openrouter", return_value=VALID_REPORT)
     def test_http_429_falls_back_successfully_with_same_prompt_and_deadline(
         self, openrouter, gemini, _sanitize, _validate, _cooldown,
-        _set_cache, _get_cache, get_state
+        _set_cache, _get_cache, get_state, _deadline
     ):
         response = type("Response", (), {"status_code": 429, "headers": {}, "text": ""})()
         gemini.side_effect = requests.HTTPError("429 Too Many Requests", response=response)
