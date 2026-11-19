@@ -163,6 +163,24 @@ def _fetch_recent_record(
     # 랭킹 API 오류는 데이터 없음과 구분한다. 기존 행은 보존하되
     # 집계일을 증명할 수 없는 순위는 이 응답에서 노출하지 않는다.
     if response is None or response.status_code != 200:
+        # 오늘 캐릭터 기본 프로필은 현재 레벨·경험치의 유효한 원본이다.
+        # 랭킹 API만 실패한 경우에도 프로필 성장 기록은 계속 저장한다.
+        if target_date == today and isinstance(basic, dict):
+            current_level = basic.get("character_level")
+            current_experience = basic.get("character_exp")
+            if current_level is not None and current_experience is not None:
+                current_rate = basic.get("character_exp_rate")
+                return {
+                    "date": date_string,
+                    "ranking": None,
+                    "rankingScope": None,
+                    "rankingSourceDate": None,
+                    "level": current_level,
+                    "experience": current_experience,
+                    "experienceRate": current_rate,
+                    "experienceRateChecked": current_rate is not None,
+                    "recordStatus": "available",
+                }
         if saved and saved.get("recordStatus") == "available":
             return _saved_record_without_unverified_ranking(date_string, saved)
         return {
