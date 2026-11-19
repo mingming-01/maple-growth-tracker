@@ -205,9 +205,12 @@ def request_openrouter(prompt, api_key=None, deadline=None):
             "model": _setting("OPENROUTER_MODEL", "openrouter/free"),
             "messages": [{"role": "user", "content": prompt}],
             "temperature": 0.35,
+            # Standard OpenRouter control for reasoning-capable routed models.
+            # The model alias remains openrouter/free and routing stays automatic.
+            "reasoning": {"effort": "low"},
             "max_tokens": max(512, min(
                 8192,
-                int(_setting("AI_OPENROUTER_MAX_OUTPUT_TOKENS", 4096)),
+                int(_setting("AI_OPENROUTER_MAX_OUTPUT_TOKENS", 8192)),
             )),
             "stream": False,
         },
