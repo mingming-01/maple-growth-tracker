@@ -61,6 +61,20 @@ test("detects level-up days by comparing the recorded level when no flag is supp
   );
 });
 
+test("does not create a second marker when ranking level catches up after the EXP reset", () => {
+  const records = [
+    { date: "2026-11-17", level: 298, levelUp: false },
+    { date: "2026-11-18", level: 298, levelUp: true, levelUpCatchUp: false },
+    { date: "2026-11-19", level: 299, levelUp: false, levelUpCatchUp: true }
+  ];
+
+  assert.deepEqual(detectLevelUpEvents(records), [false, true, false]);
+  assert.deepEqual(
+    buildLevelUpMarkers(records, [1.15, 1.1566, 1.1566]),
+    [null, 1.1566, null]
+  );
+});
+
 test("does not place an exact level-up marker after a missing level interval", () => {
   const records = [
     { date: "2026-11-01", level: 280, recordStatus: "available" },
