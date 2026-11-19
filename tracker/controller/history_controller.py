@@ -459,6 +459,7 @@ def get_history_archive():
             start_date + timedelta(days=index)
             for index in range(offset, min(offset + limit, days))
         ]
+        # A checked-but-missing rate is a completed check, not an uncollected date.
         missing_dates = [
             target_date for target_date in batch_dates
             if (
