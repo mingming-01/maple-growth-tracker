@@ -36,7 +36,7 @@ class RecentHistoryCalculationTests(unittest.TestCase):
         self.assertEqual(result[1]["experienceChange"], 500)
         self.assertEqual(result[1]["rankingChange"], 5)
         self.assertFalse(result[1]["levelUp"])
-        self.assertIsNone(result[2]["experienceChange"])
+        self.assertEqual(result[2]["experienceChange"], 100)
         self.assertEqual(result[2]["rankingChange"], 5)
         self.assertTrue(result[2]["levelUp"])
 
@@ -89,7 +89,7 @@ class ArchiveHistoryCalculationTests(unittest.TestCase):
         self.assertIsNone(result[3]["experienceChange"])
         self.assertIsNone(result[3]["rankingChange"])
         self.assertTrue(result[4]["levelUp"])
-        self.assertIsNone(result[4]["experienceChange"])
+        self.assertEqual(result[4]["experienceChange"], 100)
         self.assertEqual(result[4]["rankingChange"], 10)
 
     def test_keeps_missing_record_status_unchanged(self):
