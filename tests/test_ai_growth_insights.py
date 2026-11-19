@@ -110,14 +110,13 @@ class AIGrowthInsightsTests(unittest.TestCase):
 
         result = build_growth_insights(records, reference_date="2026-11-19")
 
-        expected_reset_day_change = 1156066685461973 - 1129263590513928
         self.assertEqual(result["recentPeriod"]["levelUpIntervals"], 1)
-        # The positive reset-day EXP delta remains valid; the following negative
-        # cross-level delta is excluded because the level EXP field reset.
-        self.assertEqual(result["recentPeriod"]["validGrowthIntervals"], 6)
+        # Both intervals touching the level-up boundary are excluded until the
+        # exact previous-level requirement EXP is available.
+        self.assertEqual(result["recentPeriod"]["validGrowthIntervals"], 5)
         self.assertEqual(
             result["recentPeriod"]["observedExperienceSum"],
-            121697626764388,
+            94894531816343,
         )
 
     def test_insufficient_history_is_reported_without_a_percentage(self):

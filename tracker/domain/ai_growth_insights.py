@@ -4,9 +4,11 @@ All values in this module are derived from observed daily snapshots. Missing
 calendar days and level-up transitions are never interpolated or estimated.
 """
 from datetime import date, timedelta
-from math import isfinite
-
-from tracker.domain.growth_calculations import is_experience_rate_reset
+from tracker.domain.growth_calculations import (
+    calculate_observed_experience_change,
+    is_experience_rate_reset,
+    to_exact_integer,
+)
 
 
 def _parse_date(value):
@@ -16,24 +18,14 @@ def _parse_date(value):
         return None
 
 
-def _number(value):
-    if value is None or value == "":
-        return None
-    try:
-        number = float(value)
-    except (TypeError, ValueError):
-        return None
-    return number if isfinite(number) else None
-
-
-def _is_available(record):
+ def _is_available(record):
     if not isinstance(record, dict):
         return False
     if record.get("recordStatus") not in (None, "available"):
         return False
     return (
-        _number(record.get("level")) is not None
-        and _number(record.get("experience")) is not None
+        to_exact_integer(record.get("level")) is not None
+        and to_exact_integer(record.get("experience")) is not None
     )
 
 
@@ -55,10 +47,8 @@ def _period_summary(by_date, start_date, end_date):
         if not _is_available(current) or not _is_available(previous):
             continue
 
-        current_level = _number(current.get("level"))
-        previous_level = _number(previous.get("level"))
-        current_exp = _number(current.get("experience"))
-        previous_exp = _number(previous.get("experience"))
+        current_level = to_exact_integer(current.get("level"))
+        previous_level = to_exact_integer(previous.get("level"))
 
         level_changed = current_level > previous_level
         rate_reset = is_experience_rate_reset(
@@ -69,11 +59,9 @@ def _period_summary(by_date, start_date, end_date):
             level_ups += 1
             detected_level_up_dates.add(current_date)
 
-        # The event marker is independent from a measurable daily EXP delta.
-        # Keep positive source-to-source changes on the reset date; ignore a
-        # negative cross-level delta when the next day's EXP field has reset.
-        experience_change = current_exp - previous_exp
-        if experience_change < 0:
+        # 레벨업 경계에서는 레벨별 필요 EXP 원본이 없으면 일일 획득량을 계산하지 않는다.
+        experience_change = calculate_observed_experience_change(previous, current)
+        if experience_change is None:
             continue
 
         changes.append({

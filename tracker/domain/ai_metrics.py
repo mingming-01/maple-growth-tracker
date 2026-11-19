@@ -2,7 +2,11 @@
 from datetime import date, timedelta
 from math import isfinite
 
-from tracker.domain.growth_calculations import is_experience_rate_reset
+from tracker.domain.growth_calculations import (
+    calculate_observed_experience_change,
+    is_experience_rate_reset,
+    to_exact_integer,
+)
 
 
 def _number(value):
@@ -26,8 +30,8 @@ def build_server_growth_metrics(character, records, reference_date=None, period_
             record_date = date.fromisoformat(str(record.get("date", "")))
         except (TypeError, ValueError):
             continue
-        level = _number(record.get("level"))
-        experience = _number(record.get("experience"))
+        level = to_exact_integer(record.get("level"))
+        experience = to_exact_integer(record.get("experience"))
         if record_date > today or level is None or experience is None:
             continue
         raw_rank = _number(record.get("ranking"))
@@ -96,10 +100,9 @@ def build_server_growth_metrics(character, records, reference_date=None, period_
                 "currentLevel": current["levelUpCurrentLevel"],
             })
 
-        # 레벨업 이벤트를 감지했다고 양수 경험치 변화까지 버리면 안 된다.
-        # 원본 EXP가 증가한 구간은 정상 성장으로 포함하고, 레벨 전환으로 감소한 값만 제외한다.
-        change = current["experience"] - previous["experience"]
-        if change < 0:
+        # 레벨업 경계에서는 레벨별 필요 EXP 원본이 없으면 일일 획득량을 계산하지 않는다.
+        change = calculate_observed_experience_change(previous, current)
+        if change is None:
             continue
         current["experienceChange"] = change
         changes.append({"date": current_date, "experience": change})

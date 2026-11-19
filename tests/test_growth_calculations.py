@@ -7,7 +7,11 @@ from unittest.mock import Mock, patch
 import app as tracker
 from tracker import create_app
 from tracker.controller import history_controller
-from tracker.domain.growth_calculations import calculate_recent_history_changes, calculate_archive_history_changes
+from tracker.domain.growth_calculations import (
+    calculate_recent_history_changes,
+    calculate_archive_history_changes,
+    calculate_observed_experience_change,
+)
 from tracker.repositories.growth_history_store import GrowthHistoryStore
 from tracker.runtime import get_runtime_state
 from tracker.services.growth_history_service import GrowthHistoryService
@@ -49,7 +53,7 @@ class GrowthCalculationBehaviorTests(unittest.TestCase):
             self.state.cache.clear()
         self.temp_dir.cleanup()
 
-    def test_recent_history_counts_new_level_experience_after_level_up(self):
+    def test_recent_history_does_not_invent_daily_change_across_level_up(self):
         response_stub = Mock(status_code=200)
         basic = {
             "character_name": "테스트캐릭터",
@@ -92,7 +96,7 @@ class GrowthCalculationBehaviorTests(unittest.TestCase):
         self.assertEqual(response.status_code, 200)
         history = response.get_json()["history"]
         self.assertEqual(len(history), 7)
-        self.assertEqual(history[6]["experienceChange"], 100)
+        self.assertIsNone(history[6]["experienceChange"])
         self.assertTrue(history[6]["levelUp"])
         self.assertEqual(history[6]["rankingChange"], 10)
         self.assertEqual(history[6]["experienceRate"], "23.4567")
@@ -122,13 +126,10 @@ class GrowthCalculationBehaviorTests(unittest.TestCase):
         self.assertTrue(history[1]["levelUp"])
         self.assertEqual(history[1]["levelUpPreviousLevel"], 298)
         self.assertEqual(history[1]["levelUpCurrentLevel"], 299)
-        self.assertEqual(
-            history[1]["experienceChange"],
-            1156066685461973 - 1129263590513928,
-        )
+        self.assertIsNone(history[1]["experienceChange"])
         self.assertFalse(history[2]["levelUp"])
         self.assertTrue(history[2]["levelUpCatchUp"])
-        self.assertEqual(history[2]["experienceChange"], 17096549681346)
+        self.assertIsNone(history[2]["experienceChange"])
 
     def test_archive_history_uses_experience_rate_reset_for_level_up(self):
         history = [
@@ -153,13 +154,23 @@ class GrowthCalculationBehaviorTests(unittest.TestCase):
 
         self.assertTrue(history[1]["levelUp"])
         self.assertEqual(history[1]["levelUpCurrentLevel"], 299)
-        self.assertEqual(
-            history[1]["experienceChange"],
-            1156066685461973 - 1129263590513928,
-        )
+        self.assertIsNone(history[1]["experienceChange"])
         self.assertFalse(history[2]["levelUp"])
         self.assertTrue(history[2]["levelUpCatchUp"])
-        self.assertEqual(history[2]["experienceChange"], 17096549681346)
+        self.assertIsNone(history[2]["experienceChange"])
+
+    def test_shared_experience_delta_preserves_large_integer_precision(self):
+        previous = {
+            "date": "2026-11-17", "recordStatus": "available", "level": 298,
+            "experience": "9007199254740992", "experienceRate": "97.000",
+        }
+        current = {
+            "date": "2026-11-18", "recordStatus": "available", "level": 298,
+            "experience": "9007199254740993", "experienceRate": "97.001",
+        }
+        self.assertEqual(calculate_observed_experience_change(previous, current), 1)
+        current["experience"] = float(9007199254740993)
+        self.assertIsNone(calculate_observed_experience_change(previous, current))
 
     def test_archive_history_does_not_calculate_changes_across_missing_records(self):
         start_date = self.today - timedelta(days=29)
@@ -218,7 +229,7 @@ class GrowthCalculationBehaviorTests(unittest.TestCase):
         self.assertIsNone(history[3]["experienceChange"])
         self.assertIsNone(history[3]["rankingChange"])
         self.assertTrue(history[4]["levelUp"])
-        self.assertEqual(history[4]["experienceChange"], 100)
+        self.assertIsNone(history[4]["experienceChange"])
         self.assertEqual(history[4]["rankingChange"], 10)
 
 

@@ -156,9 +156,8 @@ class AIAnalysisFallbackTests(unittest.TestCase):
             reference_date=today,
             period_days=7,
         )
-        expected_change = 1156066685461973 - 1129263590513928
-        self.assertEqual(calculated["metrics"]["observedChangeDays"], 1)
-        self.assertEqual(calculated["history"][1]["experienceChange"], expected_change)
+        self.assertEqual(calculated["metrics"]["observedChangeDays"], 0)
+        self.assertIsNone(calculated["history"][1]["experienceChange"])
         self.assertTrue(calculated["history"][1]["levelUp"])
         self.assertTrue(calculated["history"][2]["levelUpCatchUp"])
         self.assertIsNone(calculated["history"][2]["experienceChange"])
@@ -183,8 +182,9 @@ class AIAnalysisFallbackTests(unittest.TestCase):
         self.assertIn("[AI 코멘트]", result["analysis"])
         self.assertIn("현재 기록만으로는 다음 레벨업 날짜를 예상하기 어려워요.", result["analysis"])
         prompt = openrouter.call_args.args[0]
-        self.assertIn(f'"experienceChange": {expected_change}', prompt)
+        self.assertIn('"experienceChange": null', prompt)
         self.assertIn('"date": "2026-11-18"', prompt)
+        self.assertNotIn("26803094948045", prompt)
         self.assertIn('"levelUp": true', prompt)
         self.assertNotIn(f'"experienceChange": {-(
             1156066685461973 - 17096549681346
