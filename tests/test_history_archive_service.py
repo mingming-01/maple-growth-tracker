@@ -266,5 +266,27 @@ class HistoryArchiveServiceTests(unittest.TestCase):
         )
 
 
+    @patch("tracker.services.history_archive_service.get_basic_character_snapshot")
+    @patch("tracker.services.history_archive_service.get_ranking_snapshot")
+    @patch("tracker.services.history_archive_service.get_world_type", return_value=1)
+    def test_uses_world_type_one_for_helios_historical_archive(
+        self, _get_world_type, get_ranking, get_basic
+    ):
+        get_ranking.return_value = ({
+            "ranking": 123,
+            "character_level": 290,
+            "character_exp": 98765,
+            "character_exp_rate": 12.5,
+        }, Mock(status_code=200))
+
+        result = history_archive_service.fetch_historical_record(
+            "ocid-1", "헬리오스", self.target_date, self.today
+        )
+
+        self.assertEqual(result["recordStatus"], "available")
+        self.assertEqual(get_ranking.call_args.kwargs["world_type"], 1)
+        get_basic.assert_not_called()
+
+
 if __name__ == "__main__":
     unittest.main()
