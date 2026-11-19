@@ -11,6 +11,7 @@ from tracker.integrations.ai_provider import (
     request_openrouter,
     should_use_openrouter,
     ProviderError,
+    provider_error_type,
     provider_retry_after_seconds,
 )
 from tracker.integrations.bounded_http import InvalidProviderResponse
@@ -187,6 +188,23 @@ class AIProviderAdapterTests(unittest.TestCase):
         response = type("Response", (), {"status_code": 429, "headers": {}, "text": ""})()
         error = requests.HTTPError("429 Too Many Requests", response=response)
         self.assertTrue(should_use_openrouter(error))
+
+    def test_provider_rejection_statuses_are_classified_precisely(self):
+        cases = {
+            400: "provider_bad_request",
+            401: "provider_auth",
+            402: "provider_billing",
+            403: "provider_auth",
+            404: "provider_model_unavailable",
+            413: "provider_payload_too_large",
+        }
+        for status, expected in cases.items():
+            with self.subTest(status=status):
+                response = type("Response", (), {"status_code": status})()
+                error = requests.HTTPError(f"{status} provider rejection", response=response)
+                self.assertEqual(provider_error_type(error), expected)
+                self.assertFalse(should_use_openrouter(error))
+
 
     def test_retry_delay_from_gemini_error_body_is_used(self):
         response = type("Response", (), {
