@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { detectLevelUpEvents, buildLevelUpMarkers, buildExperienceChartSeries, dailyGrowthSegmentDash } from "./growthChartData.js";
+import { detectLevelUpEvents, buildExperienceChartSeries, dailyGrowthSegmentDash } from "./growthChartData.js";
 import { fetchHistoryArchive } from "../../lib/historyCollection.js";
 import {
   sortHistoryAscending,
@@ -388,59 +388,30 @@ export default function GrowthDashboard({ character, history, onHistoryChange, o
     // The history API provides daily levels rather than a levelUp flag.
     // Detect level changes locally so the yellow star is drawn on actual events.
     const levelUpEvents = detectLevelUpEvents(sorted);
-    const levelUps = buildLevelUpMarkers(sorted, cumulative);
-    const levelUpPlugin = {
-      id: "visibleLevelUpMarkers",
-      afterDatasetsDraw(chart) {
-        const { ctx, chartArea, scales } = chart;
-        const xScale = scales?.x;
-        if (!chartArea || !xScale) return;
-        ctx.save();
-        levelUpEvents.forEach((isLevelUp, index) => {
-          if (!isLevelUp) return;
-          const x = xScale.getPixelForValue(index);
-          if (!Number.isFinite(x) || x < chartArea.left || x > chartArea.right) return;
-          ctx.beginPath();
-          ctx.setLineDash([4, 4]);
-          ctx.strokeStyle = "#f5c542";
-          ctx.lineWidth = 1.5;
-          ctx.moveTo(x, chartArea.top + 20);
-          ctx.lineTo(x, chartArea.bottom);
-          ctx.stroke();
-          ctx.setLineDash([]);
-          ctx.fillStyle = "#f5c542";
-          ctx.font = "bold 16px sans-serif";
-          ctx.textAlign = "center";
-          ctx.textBaseline = "top";
-          ctx.fillText("★", x, chartArea.top + 2);
-        });
-        ctx.restore();
-      }
-    };
+    // 레벨업 날짜는 누적 경험치 선의 기본 점을 별 모양으로 교체한다.
     import("chart.js/auto").then(({ default: Chart }) => {
       if (cancelled || !canvasRef.current) return;
       chartRef.current = new Chart(canvasRef.current.getContext("2d"), {
       type: "line",
-      plugins: [levelUpPlugin],
+      plugins: [],
       data: {
         labels: sorted.map(item => String(item.date || "").slice(5)),
         datasets: [
-          { label:"총 경험치 증가량",data:cumulative,yAxisID:"experience",borderColor:"#36a2eb",backgroundColor:"#36a2eb",borderWidth:3,tension:0,pointRadius:3,pointHoverRadius:6,fill:false },
-          { label:"일일 경험치 증가량",data:daily,yAxisID:"dailyGrowth",borderColor:"#ff6384",backgroundColor:"#ff6384",borderWidth:2,segment:{borderDash:dailyGrowthSegmentDash},tension:0,pointRadius:2,pointHoverRadius:5,fill:false },
-          { label:"레벨업",data:levelUps,yAxisID:"experience",showLine:false,pointStyle:"star",pointRadius:9,pointHoverRadius:11,pointBackgroundColor:"#f5c542",pointBorderColor:"#805b00",pointBorderWidth:1.5,borderWidth:0 }
+          { label:"총 경험치 증가량",data:cumulative,yAxisID:"experience",borderColor:"#36a2eb",backgroundColor:"#36a2eb",borderWidth:3,tension:0,pointRadius:context=>levelUpEvents[context.dataIndex]?8:3,pointHoverRadius:context=>levelUpEvents[context.dataIndex]?10:6,pointStyle:context=>levelUpEvents[context.dataIndex]?"star":"circle",pointBackgroundColor:context=>levelUpEvents[context.dataIndex]?"#f5c542":"#36a2eb",pointBorderColor:context=>levelUpEvents[context.dataIndex]?"#805b00":"#36a2eb",pointBorderWidth:context=>levelUpEvents[context.dataIndex]?1.5:0,fill:false },
+          { label:"일일 경험치 증가량",data:daily,yAxisID:"dailyGrowth",borderColor:"#ff6384",backgroundColor:"#ff6384",borderWidth:2,segment:{borderDash:dailyGrowthSegmentDash},spanGaps:true,tension:0,pointRadius:2,pointHoverRadius:5,fill:false }
         ]
       },
       options: {
         responsive:true,maintainAspectRatio:false,interaction:{intersect:false,mode:"index"},
         plugins:{legend:{display:true},tooltip:{callbacks:{
           label(context) {
-            if (context.dataset.label === "레벨업") {
+            if (levelUpEvents[context.dataIndex] && context.dataset.label === "총 경험치 증가량") {
               const current = sorted[context.dataIndex];
               const previous = sorted.slice(0, context.dataIndex).reverse()
                 .find(item => item?.level !== null && item?.level !== undefined && Number.isFinite(Number(item.level)));
               const previousLevel = current?.levelUpPreviousLevel ?? previous?.level ?? "—";
               const currentLevel = current?.levelUpCurrentLevel ?? current?.level ?? "—";
-              return "⭐ 레벨업 · Lv. " + previousLevel + " → " + currentLevel;
+              return "⭐ 레벨업 · Lv. " + previousLevel + " → " + currentLevel + " · 누적 " + context.parsed.y.toFixed(2) + "조";
             }
             return context.parsed.y === null ? "" : context.dataset.label + ": " + context.parsed.y.toFixed(2) + "조";
           }
