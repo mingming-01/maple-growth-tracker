@@ -250,18 +250,23 @@ def request_openrouter(prompt, api_key=None, deadline=None):
     connect_timeout, read_timeout, total_timeout = _provider_timeouts("openrouter", deadline=deadline)
     payload = post_json_with_deadline(
         OPENROUTER_URL,
-        headers={"Authorization": f"Bearer {key}", "Content-Type": "application/json"},
+        headers={
+            "Authorization": f"Bearer {key}",
+            "Content-Type": "application/json",
+            "Accept": "text/event-stream",
+        },
         json_body={
             "model": model_alias,
             "messages": [{"role": "user", "content": prompt}],
             "temperature": 0.35,
             "max_tokens": max(512, min(8192, int(_setting("AI_OPENROUTER_MAX_OUTPUT_TOKENS", 8192)))),
-            "stream": False,
+            "stream": True,
         },
         connect_timeout=connect_timeout,
         read_timeout=read_timeout,
         total_timeout=total_timeout,
         deadline=deadline,
+        response_format="sse",
     )
     metadata = _http_metadata(payload, "openrouter", model_alias)
     metadata.update({
@@ -280,6 +285,10 @@ def request_openrouter(prompt, api_key=None, deadline=None):
     raw_content = message.get("content")
     content = _extract_text_parts(raw_content) if isinstance(raw_content, list) else raw_content
     reasoning = message.get("reasoning") or message.get("reasoning_content")
+    reasoning_length = message.get("reasoning_length")
+    reasoning_present = bool(reasoning) or (
+        isinstance(reasoning_length, (int, float)) and reasoning_length > 0
+    )
     finish_reason = choice.get("finish_reason") or choice.get("native_finish_reason")
     metadata.update({
         "has_choices": True,
@@ -288,8 +297,8 @@ def request_openrouter(prompt, api_key=None, deadline=None):
         "content_present": isinstance(content, str) and bool(content.strip()),
         "content_length": len(content) if isinstance(content, str) else 0,
         "content_type": type(raw_content).__name__,
-        "reasoning_present": bool(reasoning),
-        "reasoning_length": len(reasoning) if isinstance(reasoning, str) else None,
+        "reasoning_present": reasoning_present,
+        "reasoning_length": len(reasoning) if isinstance(reasoning, str) else reasoning_length,
         "finish_reason": finish_reason,
         "native_finish_reason": choice.get("native_finish_reason"),
         "response_classification": "content_present",
@@ -299,7 +308,7 @@ def request_openrouter(prompt, api_key=None, deadline=None):
         _log_openrouter_empty_response(**metadata)
         raise ProviderError("OpenRouter output reached its completion limit", "provider_output_truncated", finish_reason=finish_reason, provider_metadata=metadata)
     if not isinstance(content, str) or not content.strip():
-        classification = "reasoning_only" if reasoning else "empty_content"
+        classification = "reasoning_only" if reasoning_present else "empty_content"
         metadata["response_classification"] = classification
         _log_openrouter_empty_response(**metadata)
         raise ProviderError("OpenRouter response contained no report text", "provider_empty_response", finish_reason=finish_reason, provider_metadata=metadata)
