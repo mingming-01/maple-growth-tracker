@@ -162,6 +162,7 @@ class ServerAIMetricsTests(unittest.TestCase):
         )
         self.assertTrue(result["history"][1]["levelUp"])
         self.assertFalse(result["history"][2]["levelUp"])
+        self.assertTrue(result["history"][2]["levelUpCatchUp"])
         self.assertEqual(result["periodSummary"]["levelUpIntervals"], 1)
         self.assertEqual(result["metrics"]["observedChangeDays"], 0)
 
