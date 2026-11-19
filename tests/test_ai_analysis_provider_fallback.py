@@ -127,10 +127,11 @@ class AIAnalysisFallbackTests(unittest.TestCase):
     @patch("tracker.services.ai_analysis_service.set_ai_response_cache")
     @patch("tracker.services.ai_analysis_service._gemini_cooldown_remaining", return_value=0)
     @patch("tracker.services.ai_analysis_service.request_gemini")
-    @patch("tracker.services.ai_analysis_service.request_openrouter", side_effect=ProviderError(
-        "OpenRouter output was truncated", "provider_output_truncated"
-    ))
-    def test_http_429_then_truncated_openrouter_returns_error_without_retry(
+    @patch("tracker.services.ai_analysis_service.request_openrouter", side_effect=[
+        ProviderError("OpenRouter output was truncated", "provider_output_truncated"),
+        VALID_REPORT,
+    ])
+    def test_http_429_then_truncated_openrouter_retries_with_minimal_reasoning(
         self, openrouter, gemini, _cooldown, _set_cache, _get_cache, get_state
     ):
         response = type("Response", (), {"status_code": 429, "headers": {}, "text": ""})()
@@ -141,10 +142,14 @@ class AIAnalysisFallbackTests(unittest.TestCase):
             self.character, [], computed_metrics={}, force_refresh=True
         )
 
-        self.assertEqual(result["statusCode"], 503)
-        self.assertEqual(result["errorType"], "provider_fallback_failed")
-        self.assertEqual(result["fallbackErrorType"], "provider_output_truncated")
-        openrouter.assert_called_once()
+        self.assertIn("analysis", result)
+        self.assertEqual(openrouter.call_count, 2)
+        self.assertEqual(openrouter.call_args_list[0].kwargs["reasoning_effort"], "low")
+        self.assertEqual(openrouter.call_args_list[1].kwargs["reasoning_effort"], "minimal")
+        self.assertEqual(
+            openrouter.call_args_list[0].kwargs["deadline"],
+            openrouter.call_args_list[1].kwargs["deadline"],
+        )
 
     @patch("tracker.services.ai_analysis_service.get_runtime_state")
     @patch("tracker.services.ai_analysis_service.get_ai_response_cache", return_value=None)
