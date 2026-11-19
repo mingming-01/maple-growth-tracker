@@ -58,6 +58,9 @@ _PROVIDER_LOG_FIELDS = (
     "content_length", "content_type", "reasoning_present", "reasoning_length",
     "finish_reason", "native_finish_reason", "response_classification", "timeout_phase", "attempt", "provider_error_code",
     "expected_response_bytes", "body_complete", "transfer_encoding",
+    "response_content_type", "response_content_encoding", "response_server",
+    "response_request_id", "cause_class", "context_class",
+    "stream_event_count", "stream_done", "stream_reasoning_bytes",
 )
 _SAFE_USAGE_FIELDS = (
     "prompt_tokens", "completion_tokens", "total_tokens", "reasoning_tokens",
