@@ -102,6 +102,7 @@ export function detectLevelUpEvents(records) {
     const available = !!item &&
       (!item.recordStatus || item.recordStatus === "available");
     const explicitlyMarked = available && item.levelUp === true;
+    const delayedLevelCatchUp = available && item.levelUpCatchUp === true;
 
     if (!available || currentLevel === null) {
       // A missing/unavailable date breaks inferred level-up date continuity.
@@ -109,8 +110,11 @@ export function detectLevelUpEvents(records) {
       return explicitlyMarked;
     }
 
-    const detected = explicitlyMarked ||
-      (previousAvailableLevel !== null && currentLevel > previousAvailableLevel);
+    const detected = explicitlyMarked || (
+      !delayedLevelCatchUp &&
+      previousAvailableLevel !== null &&
+      currentLevel > previousAvailableLevel
+    );
     previousAvailableLevel = currentLevel;
     return detected;
   });
