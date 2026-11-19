@@ -435,7 +435,9 @@ class GrowthHistoryApiTests(unittest.TestCase):
                 "rankingScope": "overall",
                 "rankingSourceDate": (self.today - timedelta(days=1)).isoformat(),
                 "experienceRate": 12.345,
-                "experienceRateChecked": True
+                "experienceRateChecked": True,
+                "growthSource": "ranking/overall",
+                "growthObservedAt": "2026-11-19T10:00:00+00:00",
             }]
         )
         with self.app.app_context():
