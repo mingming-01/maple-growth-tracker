@@ -701,10 +701,10 @@ test("React growth chart keeps the real level-up-day EXP delta and AI receives t
     dataAsOf: timestamp
   };
   const history = [
-    { date: "2026-11-13", level: 298, experience: 1050000000000000, experienceRate: 91.228, experienceChange: null, levelUp: false, recordStatus: "available" },
-    { date: "2026-11-14", level: 298, experience: 108746142237141, experienceRate: 93.284, experienceChange: 37466142237141, levelUp: false, recordStatus: "available" },
-    { date: "2026-11-15", level: 298, experience: 1096165873797804, experienceRate: 94.825, experienceChange: 8704451426393, levelUp: false, recordStatus: "available" },
-    { date: "2026-11-16", level: 298, experience: 1111860276515938, experienceRate: 96.177, experienceChange: 15694402718134, levelUp: false, recordStatus: "available" },
+    { date: "2026-11-13", level: 298, experience: 1056883268251231, experienceRate: 93.284, experienceChange: null, levelUp: false, recordStatus: "available" },
+    { date: "2026-11-14", level: 298, experience: 1094349410488372, experienceRate: 94.825, experienceChange: 37466142237141, levelUp: false, recordStatus: "available" },
+    { date: "2026-11-15", level: 298, experience: 1103053861914765, experienceRate: 96.177, experienceChange: 8704451426393, levelUp: false, recordStatus: "available" },
+    { date: "2026-11-16", level: 298, experience: 1118748264632899, experienceRate: 97.143, experienceChange: 15694402718134, levelUp: false, recordStatus: "available" },
     { date: "2026-11-17", level: 298, experience: 1129263590513928, experienceRate: 99.226, experienceChange: 10515325881029, levelUp: false, recordStatus: "available" },
     { date: "2026-11-18", level: 298, experience: 1156066685461973, experienceRate: 0.355, experienceChange: 26803094948045, levelUp: true, levelUpPreviousLevel: 298, levelUpCurrentLevel: 299, recordStatus: "available" },
     { date: "2026-11-19", level: 299, experience: 17096549681346, experienceRate: 0.984, experienceChange: null, levelUp: false, levelUpCatchUp: true, recordStatus: "available" }
@@ -742,6 +742,39 @@ test("React growth chart keeps the real level-up-day EXP delta and AI receives t
 
   await page.locator('.mgt-nav a[href="#/growth"]').click();
   await expect(page.locator("#growth-trend canvas[aria-label='기간별 성장 추이 그래프']")).toBeVisible();
+  const chartCanvas = page.locator("#growth-trend canvas[aria-label='기간별 성장 추이 그래프']");
+  await expect.poll(async () => chartCanvas.evaluate(canvas => {
+    const context = canvas.getContext("2d");
+    const { data, width, height } = context.getImageData(0, 0, canvas.width, canvas.height);
+    let redPixels = 0;
+    let yellowPixels = 0;
+    for (let y = Math.floor(height * 0.18); y < Math.floor(height * 0.9); y += 1) {
+      for (let x = 0; x < width; x += 1) {
+        const offset = (y * width + x) * 4;
+        const [red, green, blue, alpha] = data.slice(offset, offset + 4);
+        if (alpha > 160 && red > 210 && green < 150 && blue > 90 && blue < 190) redPixels += 1;
+        if (alpha > 160 && red > 200 && green > 150 && blue < 100) yellowPixels += 1;
+      }
+    }
+    return { redPixels, yellowPixels };
+  })).toMatchObject({ redPixels: expect.any(Number), yellowPixels: expect.any(Number) });
+  const chartPixels = await chartCanvas.evaluate(canvas => {
+    const context = canvas.getContext("2d");
+    const { data, width, height } = context.getImageData(0, 0, canvas.width, canvas.height);
+    let redPixels = 0;
+    let yellowPixels = 0;
+    for (let y = Math.floor(height * 0.18); y < Math.floor(height * 0.9); y += 1) {
+      for (let x = 0; x < width; x += 1) {
+        const offset = (y * width + x) * 4;
+        const red = data[offset], green = data[offset + 1], blue = data[offset + 2], alpha = data[offset + 3];
+        if (alpha > 160 && red > 210 && green < 150 && blue > 90 && blue < 190) redPixels += 1;
+        if (alpha > 160 && red > 200 && green > 150 && blue < 100) yellowPixels += 1;
+      }
+    }
+    return { redPixels, yellowPixels };
+  });
+  expect(chartPixels.redPixels).toBeGreaterThan(30);
+  expect(chartPixels.yellowPixels).toBeGreaterThan(8);
   await expect(page.locator("#growth-timeline .growth-timeline-item.is-level-up")).toHaveCount(1);
   await expect(page.locator("#growth-timeline")).toContainText("2026.11.18");
   await expect(page.locator("#growth-timeline")).toContainText("Lv. 298에서 레벨업");
