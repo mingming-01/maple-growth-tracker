@@ -6,12 +6,19 @@ import time
 import psycopg
 
 from tracker.services.performance_metrics import increment_metric, observe_metric
+from tracker.repositories.postgres_connection_pool import get_pooled_connection
 
 
 def _connect_postgres(database_url):
     started_at = time.perf_counter()
     try:
-        return psycopg.connect(database_url, connect_timeout=3, sslmode="require", prepare_threshold=None)
+        return get_pooled_connection(
+            database_url,
+            connect_timeout=3,
+            sslmode="require",
+            prepare_threshold=None,
+            store="snapshots",
+        )
     finally:
         increment_metric("db.connection_attempts", backend="postgres", store="snapshots")
         observe_metric(
