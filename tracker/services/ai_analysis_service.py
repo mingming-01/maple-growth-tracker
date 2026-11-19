@@ -100,7 +100,7 @@ def _get_cached_ai_response(cache_key):
 def _store_cached_ai_response(cache_key, analysis):
     """공급자가 만든 정상 분석문을 캐시 저장 실패와 무관하게 반환한다."""
     try:
-        _store_cached_ai_response(cache_key, analysis)
+        set_ai_response_cache(cache_key, analysis)
         return True
     except Exception as error:
         _log_ai_cache_failure("write", error)
