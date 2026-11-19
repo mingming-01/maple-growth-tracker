@@ -712,7 +712,7 @@ def generate_ai_analysis(character, history, computed_metrics=None, growth_insig
             if not validate_growth_report(analysis):
                 raise ProviderError("Gemini 분석 결과가 리포트 검증을 통과하지 못했습니다.", "provider_invalid_output")
             _clear_gemini_cooldown(runtime_state)
-            set_ai_response_cache(cache_key, analysis)
+            _store_cached_ai_response(cache_key, analysis)
             return {"analysis": analysis, "cacheHit": False, "growthInsights": growth_insights}
         except Exception as error:
             gemini_error = error
@@ -750,7 +750,7 @@ def generate_ai_analysis(character, history, computed_metrics=None, growth_insig
                         )
                 if not validate_growth_report(analysis):
                     raise ProviderError("OpenRouter 분석 결과가 리포트 검증을 통과하지 못했습니다.", "provider_invalid_output")
-                set_ai_response_cache(cache_key, analysis)
+                _store_cached_ai_response(cache_key, analysis)
                 return {"analysis": analysis, "cacheHit": False, "growthInsights": growth_insights}
             except Exception as error:
                 openrouter_error = error
@@ -851,7 +851,7 @@ def generate_ai_comparison(primary, comparison):
             )
             print("OpenRouter로 성장 비교 분석을 처리했습니다.")
             analysis = sanitize_ai_text(response_text)
-            set_ai_response_cache(prompt, analysis)
+            _store_cached_ai_response(prompt, analysis)
             return {"analysis": analysis, "cacheHit": False}
         except Exception as error:
             _log_provider_failure("openrouter_comparison", error, openrouter_started_at, deadline)
