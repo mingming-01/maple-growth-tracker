@@ -67,6 +67,35 @@ class AIAnalysisFallbackTests(unittest.TestCase):
 
     @patch("tracker.services.ai_analysis_service._request_deadline", return_value=12345.0)
     @patch("tracker.services.ai_analysis_service.get_runtime_state")
+    @patch("tracker.services.ai_analysis_service._gemini_cooldown_remaining", return_value=0)
+    @patch("tracker.services.ai_analysis_service.request_gemini", side_effect=ProviderError(
+        "Gemini unavailable", "provider_unavailable"
+    ))
+    @patch("tracker.services.ai_analysis_service.request_openrouter", return_value=VALID_REPORT)
+    @patch("tracker.services.ai_analysis_service.set_ai_response_cache", side_effect=RuntimeError(
+        "cache backend unavailable"
+    ))
+    def test_cache_write_failure_does_not_turn_successful_openrouter_report_into_failure(
+        self, _cache_write, openrouter, _gemini, _cooldown, get_state
+    ):
+        get_state.return_value = self.state
+
+        result = service.generate_ai_analysis(
+            self.character, [], computed_metrics={}, force_refresh=True
+        )
+
+        self.assertIn("analysis", result)
+        self.assertFalse(result["cacheHit"])
+        self.assertTrue(result["analysis"].startswith("[성장 패턴]"))
+        openrouter.assert_called_once()
+
+    @patch("tracker.services.ai_analysis_service.get_ai_response_cache", side_effect=RuntimeError(
+        "cache read unavailable"
+    ))
+    def test_cache_read_failure_is_treated_as_a_cache_miss(self, _cache_read):
+        self.assertIsNone(service._get_cached_ai_response("cache-key"))
+
+    @patch("tracker.services.ai_analysis_service.get_runtime_state")
     @patch("tracker.services.ai_analysis_service.get_ai_response_cache", return_value=None)
     @patch("tracker.services.ai_analysis_service.set_ai_response_cache")
     @patch("tracker.services.ai_analysis_service._gemini_cooldown_remaining", return_value=0)
