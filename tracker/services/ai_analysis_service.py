@@ -3,6 +3,7 @@ import json
 import logging
 import re
 import time
+import requests
 from decimal import Decimal, InvalidOperation, ROUND_HALF_UP
 
 from flask import current_app, has_app_context, has_request_context, request
@@ -11,6 +12,7 @@ from types import SimpleNamespace
 
 from tracker.integrations.ai_provider import (
     ProviderError,
+    ProviderText,
     provider_error_type,
     provider_retry_after_seconds,
     request_gemini,
@@ -49,57 +51,88 @@ def _request_deadline():
     return float(started) + total
 
 
-def _log_provider_failure(provider, error, started_at, deadline):
-    """공급자 실패 원인을 비밀정보 없이 구조화 로그로 기록한다."""
+_PROVIDER_LOG_FIELDS = (
+    "provider", "model_alias", "selected_model", "selected_provider",
+    "http_status", "elapsed_ms", "response_bytes", "response_body_present",
+    "candidate_count", "choice_count", "has_choices", "has_message", "content_present",
+    "content_length", "content_type", "reasoning_present", "reasoning_length",
+    "finish_reason", "native_finish_reason", "response_classification", "timeout_phase", "attempt", "provider_error_code",
+    "expected_response_bytes", "body_complete", "transfer_encoding",
+)
+_SAFE_USAGE_FIELDS = (
+    "prompt_tokens", "completion_tokens", "total_tokens", "reasoning_tokens",
+    "promptTokenCount", "candidatesTokenCount", "totalTokenCount", "thoughtsTokenCount",
+)
+
+
+def _safe_provider_metadata(metadata):
+    source = metadata if isinstance(metadata, dict) else {}
+    safe = {key: source[key] for key in _PROVIDER_LOG_FIELDS if key in source}
+    for key in ("provider", "model_alias", "selected_model", "selected_provider", "response_classification"):
+        if safe.get(key) is not None:
+            safe[key] = str(safe[key])[:120]
+    usage = source.get("usage")
+    if isinstance(usage, dict):
+        safe["usage"] = {
+            key: usage[key] for key in _SAFE_USAGE_FIELDS
+            if isinstance(usage.get(key), (int, float)) and not isinstance(usage.get(key), bool)
+        }
+    return safe
+
+
+def _log_provider_failure(provider, error, started_at, deadline, attempt=1):
+    """Record classified failure metadata only; never log request or response text."""
     now = time.monotonic()
     response = getattr(error, "response", None)
+    metadata = getattr(error, "provider_metadata", None) or getattr(error, "http_metadata", None) or {}
+    provider_error_code = metadata.get("provider_error_code") if isinstance(metadata, dict) else None
+    if provider_error_code is None and response is not None:
+        try:
+            error_payload = json.loads(response.text or "")
+            error_object = error_payload.get("error") if isinstance(error_payload, dict) else None
+            provider_error_code = error_object.get("code") if isinstance(error_object, dict) else None
+        except (TypeError, ValueError, AttributeError):
+            provider_error_code = None
     http_status = (
-        getattr(error, "status_code", None)
-        or getattr(response, "status_code", None)
-    )
-    response_body = ""
-    response_error_code = None
-    response_error_message = None
-    if response is not None:
-        try:
-            response_body = response.text or ""
-        except Exception:
-            response_body = ""
-        try:
-            response_json = json.loads(response_body) if response_body else {}
-        except (TypeError, ValueError):
-            response_json = {}
-        provider_payload = response_json.get("error") if isinstance(response_json, dict) else None
-        if isinstance(provider_payload, dict):
-            response_error_code = provider_payload.get("code")
-            response_error_message = provider_payload.get("message")
-        elif response_body:
-            response_error_message = response_body
-    safe_message = str(response_error_message or "")[:400]
-    # 공급자 오류 메시지에 인증 문자열이 섞이는 경우 로그에 남기지 않는다.
-    safe_message = re.sub(r"(?i)bearer\s+[^\s,;]+", "Bearer [REDACTED]", safe_message)
-    safe_message = re.sub(
-        r"(?i)(api[_-]?key|access[_-]?token|secret|authorization)(\s*[:=]\s*)[^,;\s]+",
-        r"\1\2[REDACTED]",
-        safe_message,
-    )
+        metadata.get("http_status") if isinstance(metadata, dict) else None
+    ) or getattr(error, "status_code", None) or getattr(response, "status_code", None)
     details = {
         "provider": provider,
         "error_type": provider_error_type(error),
         "exception_class": type(error).__name__,
+        "timeout_phase": (metadata.get("timeout_phase") if isinstance(metadata, dict) and metadata.get("timeout_phase") else None) or (
+            "connect" if isinstance(error, requests.ConnectTimeout) else
+            "response_read" if isinstance(error, requests.ReadTimeout) else
+            "total_deadline" if provider_error_type(error) == "provider_timeout" else None
+        ),
         "elapsed_ms": round((now - started_at) * 1000, 1),
         "deadline_remaining_ms": max(0, round((float(deadline) - now) * 1000, 1)),
         "http_status": http_status,
-        "provider_error_code": response_error_code,
-        "provider_error_message": safe_message or None,
+        "provider_error_code": str(provider_error_code)[:80] if provider_error_code is not None else None,
+        "validation_failure_reason": getattr(error, "validation_reason", None),
         "finish_reason": getattr(error, "finish_reason", None),
+        "attempt": int(attempt),
+        "retry_count": max(0, int(attempt) - 1),
+        "response": _safe_provider_metadata(metadata),
     }
-    log_message = json.dumps(details, ensure_ascii=False, sort_keys=True)
-    if has_app_context():
-        current_app.logger.warning("AI 공급자 요청 실패: %s", log_message)
-    else:
-        # 서비스 단위 테스트나 Flask 외부 작업에서도 폴백 경로를 중단하지 않는다.
-        logging.getLogger(__name__).warning("AI 공급자 요청 실패: %s", log_message)
+    message = json.dumps(details, ensure_ascii=False, sort_keys=True)
+    logger = current_app.logger if has_app_context() else logging.getLogger(__name__)
+    logger.warning("AI provider request failed: %s", message)
+
+
+def _log_provider_success(provider, metadata, *, validated, returned, cache_hit):
+    details = _safe_provider_metadata(metadata)
+    details.update({
+        "provider": provider,
+        "backend_validated": bool(validated),
+        "report_returned": bool(returned),
+        "cache_hit": bool(cache_hit),
+    })
+    message = json.dumps(details, ensure_ascii=False, sort_keys=True)
+    logger = current_app.logger if has_app_context() else logging.getLogger(__name__)
+    logger.info("AI provider request succeeded: %s", message)
+    return details
+
 
 def _log_ai_cache_failure(operation, error):
     """AI 응답 캐시 장애는 분석 공급자 장애와 분리해 기록한다."""
@@ -203,7 +236,28 @@ def _fallback_failure_result(primary_error, fallback_error=None):
         "errorType": "provider_fallback_failed",
         "primaryErrorType": provider_error_type(primary_error),
         "fallbackErrorType": provider_error_type(fallback_error),
+        "primaryHttpStatus": _provider_http_status(primary_error),
+        "fallbackHttpStatus": _provider_http_status(fallback_error),
+        "primaryException": type(primary_error).__name__,
+        "fallbackException": type(fallback_error).__name__,
+        "primaryProviderMetadata": _safe_provider_metadata(
+            getattr(primary_error, "provider_metadata", None) or getattr(primary_error, "http_metadata", None)
+        ),
+        "fallbackProviderMetadata": _safe_provider_metadata(
+            getattr(fallback_error, "provider_metadata", None) or getattr(fallback_error, "http_metadata", None)
+        ),
     }
+
+
+def _provider_http_status(error):
+    response = getattr(error, "response", None)
+    metadata = getattr(error, "provider_metadata", None) or getattr(error, "http_metadata", None)
+    status = (
+        (metadata.get("http_status") if isinstance(metadata, dict) else None)
+        or getattr(error, "status_code", None)
+        or getattr(response, "status_code", None)
+    )
+    return status if isinstance(status, int) and 100 <= status <= 599 else None
 
 
 def _generate_gemini_content(client_or_prompt, prompt=None, api_key=None, deadline=None):
@@ -222,7 +276,8 @@ def _generate_gemini_content(client_or_prompt, prompt=None, api_key=None, deadli
 def _require_provider_text(value, provider):
     if not isinstance(value, str) or not value.strip():
         raise ProviderError(f"{provider} 응답에 분석 텍스트가 없습니다.", "provider_empty_response")
-    return value.strip()
+    text = value.strip()
+    return ProviderText(text, getattr(value, "provider_metadata", {})) if isinstance(value, ProviderText) else text
 
 
 
@@ -364,7 +419,7 @@ def _build_growth_report_cache_key(prompt, source_data):
     )
 
 
-def _validate_growth_report_facts(report, source_data):
+def _growth_report_fact_error(report, source_data):
     """AI가 작성한 수치와 날짜가 서버가 제공한 데이터에 존재하는지 확인한다."""
     allowed_numbers = set()
     allowed_dates = set()
@@ -434,16 +489,16 @@ def _validate_growth_report_facts(report, source_data):
 
     for match in re.finditer(r"(?<!\d)(\d{1,2})월\s*(\d{1,2})일", report):
         if (int(match.group(1)), int(match.group(2))) not in allowed_dates:
-            return False
+            return "unsupported_date"
 
     for token in re.findall(r"(?<![A-Za-z])\d+(?:,\d{3})*(?:\.\d+)?", report):
         normalized = token.replace(",", "")
         try:
             number = format(Decimal(normalized).normalize(), "f")
         except InvalidOperation:
-            return False
+            return "unsupported_number"
         if number not in allowed_numbers:
-            return False
+            return "unsupported_number"
 
     for number, unit in re.findall(
         r"(\d+(?:,\d{3})*(?:\.\d+)?)\s*(경|조|억|만|%p|%|레벨|회|일|위)",
@@ -451,8 +506,13 @@ def _validate_growth_report_facts(report, source_data):
     ):
         normalized = format(Decimal(number.replace(",", "")).normalize(), "f")
         if (normalized, unit) not in allowed_number_units:
-            return False
+            return "unsupported_number_unit"
     return True
+
+
+def _validate_growth_report_facts(report, source_data):
+    """Boolean compatibility wrapper around the categorized fact check."""
+    return _growth_report_fact_error(report, source_data) is True
 
 
 def _build_deterministic_growth_report(character, metrics, growth_insights, analysis_context, ai_comment):
@@ -709,7 +769,8 @@ def generate_ai_analysis(character, history, computed_metrics=None, growth_insig
                 cached_analysis = None
         if cached_analysis is not None:
             print("저장된 AI 성장 리포트를 재사용했습니다.")
-            return {"analysis": cached_analysis, "cacheHit": True, "growthInsights": growth_insights}
+            metadata = _log_provider_success("cache", {"response_body_present": True}, validated=True, returned=True, cache_hit=True)
+            return {"analysis": cached_analysis, "cacheHit": True, "growthInsights": growth_insights, "providerMetadata": metadata}
 
     gemini_error = None
     if gemini_api_key and cooldown_remaining > 0:
@@ -727,21 +788,31 @@ def generate_ai_analysis(character, history, computed_metrics=None, growth_insig
                 else _generate_gemini_content(prompt, api_key=gemini_api_key, deadline=deadline)
             )
             gemini_text = _require_provider_text(getattr(response, "text", None), "Gemini")
+            provider_metadata = dict(getattr(gemini_text, "provider_metadata", {}) or {})
+            provider_metadata["attempt"] = 1
             analysis = sanitize_ai_text(gemini_text, expected_date)
             if computed_metrics is not None:
                 analysis = _apply_deterministic_growth_forecast(
                     analysis, character, computed_metrics
                 )
-                if not _validate_growth_report_facts(analysis, source_data):
-                    raise ProviderError(
-                        "Gemini 분석에 입력 데이터와 일치하지 않는 수치나 날짜가 있습니다.",
+                fact_error = _growth_report_fact_error(analysis, source_data)
+                if fact_error is not True:
+                    error = ProviderError(
+                        "Gemini analysis contained unsupported facts.",
                         "provider_invalid_output",
                     )
+                    error.validation_reason = fact_error
+                    error.provider_metadata = {**provider_metadata, "response_classification": "fact_validation_failed"}
+                    raise error
             if not validate_growth_report(analysis):
-                raise ProviderError("Gemini 분석 결과가 리포트 검증을 통과하지 못했습니다.", "provider_invalid_output")
+                error = ProviderError("Gemini report format validation failed.", "provider_invalid_output")
+                error.validation_reason = "report_format"
+                error.provider_metadata = {**provider_metadata, "response_classification": "report_format_failed"}
+                raise error
             _clear_gemini_cooldown(runtime_state)
             _store_cached_ai_response(cache_key, analysis)
-            return {"analysis": analysis, "cacheHit": False, "growthInsights": growth_insights}
+            metadata = _log_provider_success("gemini", provider_metadata, validated=True, returned=True, cache_hit=False)
+            return {"analysis": analysis, "cacheHit": False, "growthInsights": growth_insights, "providerMetadata": metadata}
         except Exception as error:
             gemini_error = error
             if _is_quota_error(error):
@@ -753,7 +824,7 @@ def generate_ai_analysis(character, history, computed_metrics=None, growth_insig
 
     if openrouter_api_key:
         openrouter_error = None
-        for attempt, reasoning_effort in enumerate(("low", "minimal")):
+        for attempt in range(2):
             openrouter_started_at = time.monotonic()
             try:
                 response_text = _require_provider_text(
@@ -761,32 +832,49 @@ def generate_ai_analysis(character, history, computed_metrics=None, growth_insig
                         prompt,
                         api_key=openrouter_api_key,
                         deadline=deadline,
-                        reasoning_effort=reasoning_effort,
                     ),
                     "OpenRouter",
                 )
+                provider_metadata = dict(getattr(response_text, "provider_metadata", {}) or {})
+                provider_metadata["attempt"] = attempt + 1
                 print("OpenRouter로 성장 리포트를 처리했습니다.")
                 analysis = sanitize_ai_text(response_text, expected_date)
                 if computed_metrics is not None:
                     analysis = _apply_deterministic_growth_forecast(
                         analysis, character, computed_metrics
                     )
-                    if not _validate_growth_report_facts(analysis, source_data):
-                        raise ProviderError(
-                            "OpenRouter 분석에 입력 데이터와 일치하지 않는 수치나 날짜가 있습니다.",
+                    fact_error = _growth_report_fact_error(analysis, source_data)
+                    if fact_error is not True:
+                        error = ProviderError(
+                            "OpenRouter analysis contained unsupported facts.",
                             "provider_invalid_output",
                         )
+                        error.validation_reason = fact_error
+                        error.provider_metadata = {**provider_metadata, "response_classification": "fact_validation_failed"}
+                        raise error
                 if not validate_growth_report(analysis):
-                    raise ProviderError("OpenRouter 분석 결과가 리포트 검증을 통과하지 못했습니다.", "provider_invalid_output")
+                    error = ProviderError("OpenRouter report format validation failed.", "provider_invalid_output")
+                    error.validation_reason = "report_format"
+                    error.provider_metadata = {**provider_metadata, "response_classification": "report_format_failed"}
+                    raise error
                 _store_cached_ai_response(cache_key, analysis)
-                return {"analysis": analysis, "cacheHit": False, "growthInsights": growth_insights}
+                metadata = _log_provider_success("openrouter", provider_metadata, validated=True, returned=True, cache_hit=False)
+                return {"analysis": analysis, "cacheHit": False, "growthInsights": growth_insights, "providerMetadata": metadata}
             except Exception as error:
                 openrouter_error = error
-                _log_provider_failure("openrouter", error, openrouter_started_at, deadline)
-                if attempt == 0 and provider_error_type(error) == "provider_output_truncated":
+                _log_provider_failure("openrouter", error, openrouter_started_at, deadline, attempt=attempt + 1)
+                retryable_output_error = provider_error_type(error) in {
+                    "provider_output_truncated",
+                    "provider_invalid_output",
+                }
+                remaining_ms = max(0, (deadline - time.monotonic()) * 1000)
+                if attempt == 0 and retryable_output_error and remaining_ms >= 1000:
                     if has_app_context():
                         current_app.logger.warning(
-                            "OpenRouter 응답이 출력 한도에 도달해 같은 openrouter/free 경로를 최소 추론 강도로 한 번 재시도합니다."
+                            "OpenRouter 응답이 잘렸거나 사실 검증을 통과하지 못했습니다. "
+                            "같은 openrouter/free 요청을 한 번 재시도합니다: "
+                            "reason=%s remaining_ms=%d",
+                            provider_error_type(error), round(remaining_ms),
                         )
                     continue
                 break

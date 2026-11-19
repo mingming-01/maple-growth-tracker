@@ -14,7 +14,7 @@ from tracker.integrations.ai_provider import (
     provider_error_type,
     provider_retry_after_seconds,
 )
-from tracker.integrations.bounded_http import InvalidProviderResponse
+from tracker.integrations.bounded_http import InvalidProviderResponse, ProviderHTTPPayload
 from tracker.config import DEFAULT_OPENROUTER_MODEL, _resolve_openrouter_model
 
 
@@ -85,17 +85,26 @@ class AIProviderAdapterTests(unittest.TestCase):
         self.assertEqual(post_json.call_args.kwargs["json_body"]["stream"], False)
         # Even when configured above the supported cap, the adapter must send at most 8192 tokens.
         self.assertEqual(post_json.call_args.kwargs["json_body"]["max_tokens"], 8192)
-        self.assertEqual(post_json.call_args.kwargs["json_body"]["reasoning"], {"effort": "minimal", "max_tokens": 512})
+        self.assertNotIn("reasoning", post_json.call_args.kwargs["json_body"])
         self.assertEqual(post_json.call_args.kwargs["json_body"]["model"], "google/gemini-3.6-flash")
 
     @patch("tracker.integrations.ai_provider.post_json_with_deadline")
-    def test_openrouter_adapter_accepts_minimal_reasoning_retry(self, post_json):
+    def test_openrouter_adapter_omits_optional_model_specific_reasoning_controls(self, post_json):
         post_json.return_value = {"choices": [{"message": {"content": "재시도 응답"}}]}
         with self.app.app_context():
-            result = request_openrouter("prompt", reasoning_effort="minimal")
+            result = request_openrouter("prompt")
 
         self.assertEqual(result, "재시도 응답")
-        self.assertEqual(post_json.call_args.kwargs["json_body"]["reasoning"], {"effort": "minimal", "max_tokens": 512})
+        self.assertNotIn("reasoning", post_json.call_args.kwargs["json_body"])
+
+    @patch("tracker.integrations.ai_provider.post_json_with_deadline")
+    def test_openrouter_request_uses_dynamic_free_alias_without_reasoning_controls(self, post_json):
+        post_json.return_value = {"choices": [{"message": {"content": "report"}}]}
+
+        with self.app.app_context():
+            request_openrouter("prompt")
+
+        self.assertNotIn("reasoning", post_json.call_args.kwargs["json_body"])
         self.assertEqual(post_json.call_args.kwargs["json_body"]["model"], "google/gemini-3.6-flash")
 
     @patch("tracker.integrations.ai_provider._log_openrouter_empty_response")
@@ -128,11 +137,32 @@ class AIProviderAdapterTests(unittest.TestCase):
         details = log_metadata.call_args.kwargs
         self.assertEqual(details["finish_reason"], "length")
         self.assertEqual(details["selected_model"], "sample/free-model")
-        self.assertEqual(details["provider"], "sample-provider")
+        self.assertEqual(details["selected_provider"], "sample-provider")
         self.assertEqual(details["usage"]["reasoning_tokens"], 1500)
+        self.assertEqual(details["response_classification"], "truncated_output")
         self.assertEqual(details["reasoning_length"], len("private reasoning must not be logged"))
         self.assertNotIn("private prompt text", repr(log_metadata.call_args))
         self.assertNotIn("private reasoning must not be logged", repr(log_metadata.call_args))
+
+    @patch("tracker.integrations.ai_provider._log_openrouter_empty_response")
+    @patch("tracker.integrations.ai_provider.post_json_with_deadline")
+    def test_openrouter_reasoning_only_response_is_classified_without_logging_text(self, post_json, log_metadata):
+        post_json.return_value = ProviderHTTPPayload({
+            "model": "routed/free-model",
+            "choices": [{"finish_reason": "stop", "message": {"content": "", "reasoning": "private chain"}}],
+            "usage": {"prompt_tokens": 10, "completion_tokens": 12, "reasoning_tokens": 12},
+        }, status_code=200, elapsed_ms=3400, response_bytes=300)
+        with self.app.app_context():
+            with self.assertRaises(ProviderError) as caught:
+                request_openrouter("private prompt")
+        details = log_metadata.call_args.kwargs
+        self.assertEqual(caught.exception.provider_metadata["http_status"], 200)
+        self.assertEqual(caught.exception.provider_metadata["response_classification"], "reasoning_only")
+        self.assertEqual(caught.exception.provider_metadata["elapsed_ms"], 3400)
+        self.assertEqual(details["reasoning_present"], True)
+        self.assertEqual(details["usage"]["reasoning_tokens"], 12)
+        self.assertNotIn("private chain", repr(log_metadata.call_args))
+        self.assertNotIn("private prompt", repr(log_metadata.call_args))
 
     @patch("tracker.integrations.ai_provider.post_json_with_deadline")
     def test_openrouter_extracts_text_from_multimodal_content_parts(self, post_json):

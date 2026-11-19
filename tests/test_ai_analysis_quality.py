@@ -8,6 +8,7 @@ from tracker.services.ai_analysis_service import (
     _error_result,
     _build_deterministic_growth_report,
     _validate_growth_report_facts,
+    _growth_report_fact_error,
     _format_experience_korean,
     _build_growth_report_cache_key,
 )
@@ -257,6 +258,13 @@ class AIAnalysisQualityTests(unittest.TestCase):
             "[AI 코멘트] 지금 흐름을 이어가면 좋겠어요."
         )
         self.assertFalse(_validate_growth_report_facts(report, source))
+        self.assertEqual(_growth_report_fact_error(report, source), "unsupported_date")
+
+    def test_growth_report_fact_validator_allows_natural_prose_but_categorizes_unknown_number(self):
+        source = {"metrics": {"averageDailyGrowth": 1000}, "history": [{"date": "2026-11-18"}]}
+        prose = "기록을 보면 최근 성장 흐름이 안정적이며, 꾸준한 플레이가 이어졌습니다."
+        self.assertEqual(_growth_report_fact_error(prose, source), True)
+        self.assertEqual(_growth_report_fact_error(prose + " 9999", source), "unsupported_number")
 
     def test_report_validator_rejects_scientific_notation(self):
         report = (

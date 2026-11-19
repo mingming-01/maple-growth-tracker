@@ -66,7 +66,43 @@ class AIAnalysisFallbackTests(unittest.TestCase):
         self.assertIn('"error_type": "provider_timeout"', captured.output[0])
         self.assertNotIn("temporary provider failure", captured.output[0])
 
-    def test_provider_failure_log_includes_safe_upstream_error_code_and_message(self):
+    def test_success_log_records_provider_model_transport_and_validation_without_content(self):
+        metadata = {
+            "provider": "openrouter", "model_alias": "openrouter/free",
+            "selected_model": "vendor/free-route", "http_status": 200,
+            "elapsed_ms": 3400.0, "response_body_present": True,
+            "content_present": True, "usage": {"completion_tokens": 120},
+        }
+        with self.assertLogs(service.__name__, level="INFO") as captured:
+            returned = service._log_provider_success(
+                "openrouter", metadata, validated=True, returned=True, cache_hit=False
+            )
+
+        self.assertIn('"provider": "openrouter"', captured.output[0])
+        self.assertIn('"model_alias": "openrouter/free"', captured.output[0])
+        self.assertIn('"selected_model": "vendor/free-route"', captured.output[0])
+        self.assertIn('"http_status": 200', captured.output[0])
+        self.assertIn('"backend_validated": true', captured.output[0])
+        self.assertTrue(returned["report_returned"])
+
+    def test_http_200_fact_failure_logs_precise_reason_and_response_metadata(self):
+        error = ProviderError("invalid output", "provider_invalid_output")
+        error.validation_reason = "unsupported_number"
+        error.provider_metadata = {
+            "provider": "openrouter", "model_alias": "openrouter/free",
+            "selected_model": "vendor/free-route", "http_status": 200,
+            "elapsed_ms": 3400, "response_body_present": True,
+            "response_classification": "fact_validation_failed",
+            "content_present": True, "finish_reason": "stop",
+        }
+        started = time.monotonic()
+        with self.assertLogs(service.__name__, level="WARNING") as captured:
+            service._log_provider_failure("openrouter", error, started, started + 50)
+        self.assertIn('"http_status": 200', captured.output[0])
+        self.assertIn('"validation_failure_reason": "unsupported_number"', captured.output[0])
+        self.assertIn('"response_classification": "fact_validation_failed"', captured.output[0])
+
+    def test_provider_failure_log_includes_status_and_error_code_without_upstream_message(self):
         response = type("Response", (), {
             "status_code": 400,
             "text": '{"error":{"code":"unsupported_parameter","message":"Bad request. Bearer secret-value"}}',
@@ -81,7 +117,7 @@ class AIAnalysisFallbackTests(unittest.TestCase):
 
         self.assertIn('"http_status": 400', captured.output[0])
         self.assertIn('"provider_error_code": "unsupported_parameter"', captured.output[0])
-        self.assertIn("Bad request.", captured.output[0])
+        self.assertNotIn("Bad request.", captured.output[0])
         self.assertNotIn("secret-value", captured.output[0])
 
     @patch("tracker.services.ai_analysis_service.get_runtime_state")
@@ -263,12 +299,32 @@ class AIAnalysisFallbackTests(unittest.TestCase):
 
         self.assertIn("analysis", result)
         self.assertEqual(openrouter.call_count, 2)
-        self.assertEqual(openrouter.call_args_list[0].kwargs["reasoning_effort"], "low")
-        self.assertEqual(openrouter.call_args_list[1].kwargs["reasoning_effort"], "minimal")
         self.assertEqual(
             openrouter.call_args_list[0].kwargs["deadline"],
             openrouter.call_args_list[1].kwargs["deadline"],
         )
+
+    @patch("tracker.services.ai_analysis_service.get_runtime_state")
+    @patch("tracker.services.ai_analysis_service.get_ai_response_cache", return_value=None)
+    @patch("tracker.services.ai_analysis_service.set_ai_response_cache")
+    @patch("tracker.services.ai_analysis_service._gemini_cooldown_remaining", return_value=0)
+    @patch("tracker.services.ai_analysis_service._growth_report_fact_error", side_effect=["unsupported_number", True])
+    @patch("tracker.services.ai_analysis_service.request_gemini", side_effect=ProviderError(
+        "Gemini unavailable", "provider_unavailable"
+    ))
+    @patch("tracker.services.ai_analysis_service.request_openrouter", return_value=VALID_REPORT)
+    def test_openrouter_ungrounded_output_retries_once_with_same_bounded_request(
+        self, openrouter, _gemini, _facts, _cooldown, _set_cache, _get_cache, get_state
+    ):
+        get_state.return_value = self.state
+
+        result = service.generate_ai_analysis(
+            self.character, [], computed_metrics={}, force_refresh=True
+        )
+
+        self.assertIn("analysis", result)
+        self.assertEqual(openrouter.call_count, 2)
+        self.assertEqual(openrouter.call_args_list[0].kwargs, openrouter.call_args_list[1].kwargs)
 
     @patch("tracker.services.ai_analysis_service.get_runtime_state")
     @patch("tracker.services.ai_analysis_service.get_ai_response_cache", return_value=None)

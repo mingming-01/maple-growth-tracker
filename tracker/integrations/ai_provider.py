@@ -17,18 +17,39 @@ OPENROUTER_URL = "https://openrouter.ai/api/v1/chat/completions"
 class ProviderError(requests.RequestException):
     """Structured provider failure safe to classify across service layers."""
 
-    def __init__(self, message, error_type, status_code=None, retry_after_seconds=None, finish_reason=None):
+    def __init__(
+        self, message, error_type, status_code=None, retry_after_seconds=None,
+        finish_reason=None, provider_metadata=None,
+    ):
         super().__init__(message)
         self.error_type = error_type
         self.status_code = status_code
         self.retry_after_seconds = retry_after_seconds
         self.finish_reason = finish_reason
+        self.provider_metadata = provider_metadata or {}
+
+
+class ProviderText(str):
+    """Text-compatible provider result carrying non-sensitive response metadata."""
+
+    def __new__(cls, value, provider_metadata=None):
+        result = super().__new__(cls, value)
+        result.provider_metadata = provider_metadata or {}
+        return result
 
 
 def provider_error_type(error):
     explicit = getattr(error, "error_type", None)
     if explicit:
+        if explicit == "provider_invalid_response":
+            metadata = getattr(error, "provider_metadata", None) or getattr(error, "http_metadata", None)
+            return "provider_parse_error" if isinstance(metadata, dict) and metadata.get("response_classification") == "parse_error" else explicit
         return explicit
+    metadata = getattr(error, "provider_metadata", None) or getattr(error, "http_metadata", None)
+    if isinstance(metadata, dict) and metadata.get("response_classification") in {
+        "provider_timeout", "response_body_incomplete"
+    }:
+        return "provider_timeout"
     if any(token in str(error).upper() for token in ("RESOURCE_EXHAUSTED", "QUOTA")):
         return "provider_quota"
     response = getattr(error, "response", None)
@@ -139,8 +160,32 @@ def _extract_text_parts(parts):
     ).strip()
 
 
+def _safe_usage(usage):
+    if not isinstance(usage, dict):
+        return {}
+    safe_fields = {
+        "prompt_tokens", "completion_tokens", "total_tokens", "reasoning_tokens",
+        "promptTokenCount", "candidatesTokenCount", "totalTokenCount", "thoughtsTokenCount",
+    }
+    return {
+        str(key): value
+        for key, value in usage.items()
+        if key in safe_fields and isinstance(value, (int, float)) and not isinstance(value, bool)
+    }
+
+
+def _http_metadata(payload, provider, model_alias):
+    metadata = dict(getattr(payload, "provider_metadata", {}) or {})
+    metadata.update({
+        "provider": provider,
+        "model_alias": model_alias,
+        "selected_model": payload.get("modelVersion") or payload.get("model"),
+    })
+    return metadata
+
+
 def request_gemini(prompt, api_key=None, deadline=None):
-    """Gemini REST 요청을 한 번 수행하고 응답 전체 시간에 상한을 둔다."""
+    """Send one bounded Gemini request and preserve safe response metadata."""
     key = api_key or _setting("GEMINI_API_KEY", "")
     if not key:
         return None
@@ -149,49 +194,44 @@ def request_gemini(prompt, api_key=None, deadline=None):
     connect_timeout, read_timeout, total_timeout = _provider_timeouts("gemini", deadline=deadline)
     payload = post_json_with_deadline(
         GEMINI_URL.format(model=model),
-        headers={
-            "x-goog-api-key": key,
-            "Content-Type": "application/json",
-        },
+        headers={"x-goog-api-key": key, "Content-Type": "application/json"},
         json_body={
             "contents": [{"role": "user", "parts": [{"text": prompt}]}],
-            "generationConfig": {
-                "temperature": 0.35,
-                "maxOutputTokens": 2048,
-            },
+            "generationConfig": {"temperature": 0.35, "maxOutputTokens": 2048},
         },
         connect_timeout=connect_timeout,
         read_timeout=read_timeout,
         total_timeout=total_timeout,
         deadline=deadline,
     )
+    metadata = _http_metadata(payload, "gemini", model)
+    metadata["usage"] = _safe_usage(payload.get("usageMetadata"))
     candidates = payload.get("candidates") or []
     if not candidates or not isinstance(candidates[0], dict):
-        raise ProviderError("Gemini 응답에 생성 결과가 없습니다.", "provider_empty_response")
+        metadata.update({"candidate_count": len(candidates), "response_classification": "empty_content"})
+        raise ProviderError("Gemini returned no candidate", "provider_empty_response", provider_metadata=metadata)
     candidate = candidates[0]
     finish_reason = candidate.get("finishReason")
+    metadata.update({"candidate_count": len(candidates), "finish_reason": finish_reason})
     if finish_reason == "MAX_TOKENS":
-        raise ProviderError(
-            "Gemini 응답이 출력 길이 제한으로 잘렸습니다.",
-            "provider_output_truncated",
-            finish_reason=finish_reason,
-        )
+        metadata["response_classification"] = "truncated_output"
+        raise ProviderError("Gemini output was truncated", "provider_output_truncated", finish_reason=finish_reason, provider_metadata=metadata)
     if finish_reason in {"SAFETY", "RECITATION", "BLOCKLIST", "PROHIBITED_CONTENT"}:
-        raise ProviderError(
-            "Gemini가 정책상 응답을 생성하지 않았습니다.",
-            "provider_rejected",
-            finish_reason=finish_reason,
-        )
+        metadata["response_classification"] = "provider_rejected"
+        raise ProviderError("Gemini rejected the response", "provider_rejected", finish_reason=finish_reason, provider_metadata=metadata)
     content = candidate.get("content") or {}
-    text = _extract_text_parts(content.get("parts"))
+    parts = content.get("parts") or []
+    text = _extract_text_parts(parts)
     if not text:
-        raise ProviderError(
-            "Gemini 응답에 분석 내용이 없습니다.",
-            "provider_empty_response",
-            finish_reason=finish_reason,
-        )
-    return text
-
+        metadata.update({
+            "response_classification": "reasoning_only" if any(
+                isinstance(part, dict) and part.get("thought") is True for part in parts
+            ) or bool((payload.get("usageMetadata") or {}).get("thoughtsTokenCount")) else "empty_content",
+            "content_present": False,
+        })
+        raise ProviderError("Gemini response contained no report text", "provider_empty_response", finish_reason=finish_reason, provider_metadata=metadata)
+    metadata.update({"content_present": True, "response_classification": "content_present"})
+    return ProviderText(text, metadata)
 
 
 def _log_openrouter_empty_response(**details):
@@ -200,33 +240,22 @@ def _log_openrouter_empty_response(**details):
         current_app.logger.warning("OpenRouter 텍스트 없는 응답: %s", details)
 
 
-def request_openrouter(prompt, api_key=None, deadline=None, reasoning_effort="minimal"):
-    """OpenRouter 대체 호출도 전체 응답 시간을 제한해 worker timeout을 막는다."""
+def request_openrouter(prompt, api_key=None, deadline=None):
+    """Call the dynamic free router without model-specific optional controls."""
     key = api_key or _setting("OPENROUTER_API_KEY", "")
     if not key:
         return None
 
+    model_alias = _setting("OPENROUTER_MODEL", "openrouter/free")
     connect_timeout, read_timeout, total_timeout = _provider_timeouts("openrouter", deadline=deadline)
     payload = post_json_with_deadline(
         OPENROUTER_URL,
-        headers={
-            "Authorization": f"Bearer {key}",
-            "Content-Type": "application/json",
-        },
+        headers={"Authorization": f"Bearer {key}", "Content-Type": "application/json"},
         json_body={
-            "model": _setting("OPENROUTER_MODEL", "openrouter/free"),
+            "model": model_alias,
             "messages": [{"role": "user", "content": prompt}],
             "temperature": 0.35,
-            # Standard OpenRouter control for reasoning-capable routed models.
-            # The model alias remains openrouter/free and routing stays automatic.
-            "reasoning": {
-                "effort": reasoning_effort if reasoning_effort in {"minimal", "low", "medium", "high"} else "minimal",
-                "max_tokens": 512,
-            },
-            "max_tokens": max(512, min(
-                8192,
-                int(_setting("AI_OPENROUTER_MAX_OUTPUT_TOKENS", 8192)),
-            )),
+            "max_tokens": max(512, min(8192, int(_setting("AI_OPENROUTER_MAX_OUTPUT_TOKENS", 8192)))),
             "stream": False,
         },
         connect_timeout=connect_timeout,
@@ -234,89 +263,53 @@ def request_openrouter(prompt, api_key=None, deadline=None, reasoning_effort="mi
         total_timeout=total_timeout,
         deadline=deadline,
     )
-    choices = payload.get("choices") or []
-    if not choices or not isinstance(choices[0], dict):
-        provider_error = payload.get("error")
-        error_code = None
-        error_message = None
-        if isinstance(provider_error, dict):
-            error_code = provider_error.get("code")
-            error_message = provider_error.get("message")
-        _log_openrouter_empty_response(
-            model=_setting("OPENROUTER_MODEL", "openrouter/free"),
-            payload_keys=sorted(payload.keys()),
-            error_code=error_code,
-            error_message=error_message,
-        )
-        raise ProviderError(
-            f"OpenRouter 응답에 choices가 없습니다 (code={error_code!r}).",
-            "provider_invalid_response",
-        )
+    metadata = _http_metadata(payload, "openrouter", model_alias)
+    metadata.update({
+        "selected_provider": payload.get("provider") if isinstance(payload.get("provider"), str) else None,
+        "usage": _safe_usage(payload.get("usage")),
+    })
+    choices = payload.get("choices")
+    if not isinstance(choices, list) or not choices or not isinstance(choices[0], dict):
+        metadata.update({"has_choices": isinstance(choices, list) and bool(choices), "response_classification": "unknown_response_error"})
+        _log_openrouter_empty_response(**metadata)
+        raise ProviderError("OpenRouter returned no usable choice", "provider_invalid_response", provider_metadata=metadata)
 
     choice = choices[0]
-    message = choice.get("message") or {}
-    content = message.get("content") if isinstance(message, dict) else None
-    if isinstance(content, list):
-        content = _extract_text_parts(content)
+    message = choice.get("message")
+    message = message if isinstance(message, dict) else {}
+    raw_content = message.get("content")
+    content = _extract_text_parts(raw_content) if isinstance(raw_content, list) else raw_content
+    reasoning = message.get("reasoning") or message.get("reasoning_content")
+    finish_reason = choice.get("finish_reason") or choice.get("native_finish_reason")
+    metadata.update({
+        "has_choices": True,
+        "choice_count": len(choices),
+        "has_message": bool(message),
+        "content_present": isinstance(content, str) and bool(content.strip()),
+        "content_length": len(content) if isinstance(content, str) else 0,
+        "content_type": type(raw_content).__name__,
+        "reasoning_present": bool(reasoning),
+        "reasoning_length": len(reasoning) if isinstance(reasoning, str) else None,
+        "finish_reason": finish_reason,
+        "native_finish_reason": choice.get("native_finish_reason"),
+        "response_classification": "content_present",
+    })
+    if finish_reason == "length":
+        metadata["response_classification"] = "truncated_output"
+        _log_openrouter_empty_response(**metadata)
+        raise ProviderError("OpenRouter output reached its completion limit", "provider_output_truncated", finish_reason=finish_reason, provider_metadata=metadata)
     if not isinstance(content, str) or not content.strip():
-        # Provider metadata only: never log prompts, API keys, or model output.
-        usage = payload.get("usage") if isinstance(payload.get("usage"), dict) else {}
-        safe_usage = {
-            key: usage.get(key)
-            for key in ("prompt_tokens", "completion_tokens", "total_tokens", "reasoning_tokens")
-            if isinstance(usage.get(key), (int, float))
-        }
-        reasoning = message.get("reasoning") if isinstance(message, dict) else None
-        _log_openrouter_empty_response(
-            requested_model=_setting("OPENROUTER_MODEL", "openrouter/free"),
-            selected_model=payload.get("model"),
-            provider=payload.get("provider") if isinstance(payload.get("provider"), str) else None,
-            payload_keys=sorted(payload.keys()),
-            choice_keys=sorted(choice.keys()),
-            finish_reason=choice.get("finish_reason"),
-            native_finish_reason=choice.get("native_finish_reason"),
-            message_keys=sorted(message.keys()) if isinstance(message, dict) else [],
-            content_type=type(content).__name__,
-            content_length=len(content) if isinstance(content, str) else None,
-            reasoning_type=type(reasoning).__name__,
-            reasoning_length=len(reasoning) if isinstance(reasoning, str) else None,
-            usage=safe_usage,
-            refusal_present=bool(message.get("refusal")) if isinstance(message, dict) else False,
-        )
-        error_type = "provider_output_truncated" if choice.get("finish_reason") == "length" else "provider_empty_response"
-        raise ProviderError(
-            "OpenRouter 응답에 최종 분석 내용이 없습니다 "
-            f"(finish_reason={choice.get('finish_reason')!r}).",
-            error_type,
-        )
-    if choice.get("finish_reason") == "length":
-        usage = payload.get("usage") if isinstance(payload.get("usage"), dict) else {}
-        _log_openrouter_empty_response(
-            requested_model=_setting("OPENROUTER_MODEL", "openrouter/free"),
-            selected_model=payload.get("model"),
-            provider=payload.get("provider"),
-            finish_reason="length",
-            content_length=len(content),
-            usage={key: usage.get(key) for key in ("prompt_tokens", "completion_tokens", "total_tokens", "reasoning_tokens") if isinstance(usage.get(key), (int, float))},
-        )
-        raise ProviderError("OpenRouter 응답이 출력 길이 제한으로 잘렸습니다.", "provider_output_truncated")
-    if has_app_context():
-        usage = payload.get("usage") if isinstance(payload.get("usage"), dict) else {}
-        current_app.logger.info("OpenRouter 분석 응답 메타데이터: %s", {
-            "requested_model": _setting("OPENROUTER_MODEL", "openrouter/free"),
-            "selected_model": payload.get("model"),
-            "provider": payload.get("provider"),
-            "finish_reason": choice.get("finish_reason"),
-            "prompt_tokens": usage.get("prompt_tokens"),
-            "completion_tokens": usage.get("completion_tokens"),
-        })
-    return content.strip()
+        classification = "reasoning_only" if reasoning else "empty_content"
+        metadata["response_classification"] = classification
+        _log_openrouter_empty_response(**metadata)
+        raise ProviderError("OpenRouter response contained no report text", "provider_empty_response", finish_reason=finish_reason, provider_metadata=metadata)
+    return ProviderText(content.strip(), metadata)
 
 
 def should_use_openrouter(error):
     if provider_error_type(error) in {
         "provider_timeout", "provider_unavailable", "provider_quota",
-        "provider_empty_response", "provider_invalid_response",
+        "provider_empty_response", "provider_invalid_response", "provider_parse_error",
         "provider_output_truncated", "provider_invalid_output",
     }:
         return True
