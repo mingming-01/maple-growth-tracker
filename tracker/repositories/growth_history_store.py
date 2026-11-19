@@ -15,6 +15,7 @@ import time
 
 import psycopg
 from tracker.services.performance_metrics import increment_metric, observe_metric
+from tracker.repositories.postgres_connection_pool import get_pooled_connection
 
 
 class GrowthHistoryStore:
@@ -41,13 +42,14 @@ class GrowthHistoryStore:
                 try:
                     host = urlparse(self.database_url).hostname
                     sslmode = "disable" if host in ("localhost", "127.0.0.1", "::1") else "require"
-                    return psycopg.connect(
+                    return get_pooled_connection(
                         self.database_url,
                         connect_timeout=3,
                         sslmode=sslmode,
                         prepare_threshold=None,
+                        store="growth_history",
                     )
-                except psycopg.Error as error:
+                except Exception as error:
                     logging.getLogger(__name__).error(
                         "성장 기록 PostgreSQL 연결에 실패했습니다. "
                         "데이터 저장 작업을 중단합니다. 오류 유형: %s",
