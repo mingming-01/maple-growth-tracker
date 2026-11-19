@@ -1,4 +1,4 @@
-"""Per-process PostgreSQL connection pool for growth-history operations."""
+"""Bounded per-process PostgreSQL connection pools shared by repositories."""
 import atexit
 import os
 from threading import Lock
