@@ -130,6 +130,29 @@ class RecentHistoryServiceTests(unittest.TestCase):
         self.assertEqual(result[0]["recordStatus"], "unavailable")
         self.assertTrue(result[0]["retryable"])
         self.basic_lookup.assert_not_called()
+    def test_uses_current_profile_when_today_ranking_request_fails(self):
+        basic = {
+            "character_name": "테스트",
+            "world_name": "크로아",
+            "character_level": 291,
+            "character_exp": 987654321,
+            "character_exp_rate": 3.25,
+        }
+        failed_response = Mock(status_code=503)
+        self.ranking.return_value = (None, failed_response)
+        self.temporary_failure.return_value = True
+
+        result = self.collect([self.today], basic=basic)
+
+        self.assertEqual(result[0]["recordStatus"], "available")
+        self.assertEqual(result[0]["level"], 291)
+        self.assertEqual(result[0]["experience"], 987654321)
+        self.assertEqual(result[0]["experienceRate"], 3.25)
+        self.assertIsNone(result[0]["ranking"])
+        self.assertIsNone(result[0]["rankingSourceDate"])
+        self.assertFalse(result[0].get("retryable", False))
+        self.basic_lookup.assert_not_called()
+
 
     def test_returns_records_in_chronological_display_order(self):
         older = self.today - timedelta(days=2)
