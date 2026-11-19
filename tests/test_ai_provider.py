@@ -89,6 +89,16 @@ class AIProviderAdapterTests(unittest.TestCase):
 
     @patch("tracker.integrations.ai_provider._log_openrouter_empty_response")
     @patch("tracker.integrations.ai_provider.post_json_with_deadline")
+    def test_openrouter_adapter_accepts_minimal_reasoning_retry(self, post_json):
+        post_json.return_value = {"choices": [{"message": {"content": "재시도 응답"}}]}
+        with self.app.app_context():
+            result = request_openrouter("prompt", reasoning_effort="minimal")
+
+        self.assertEqual(result, "재시도 응답")
+        self.assertEqual(post_json.call_args.kwargs["json_body"]["reasoning"], {"effort": "minimal"})
+        self.assertEqual(post_json.call_args.kwargs["json_body"]["model"], "google/gemini-3.6-flash")
+
+    @patch("tracker.integrations.ai_provider.post_json_with_deadline")
     def test_openrouter_empty_content_reports_safe_provider_metadata(self, post_json, log_metadata):
         post_json.return_value = {
             "id": "response-id",
