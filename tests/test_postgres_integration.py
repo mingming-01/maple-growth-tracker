@@ -24,6 +24,28 @@ class PostgreSQLIntegrationTests(unittest.TestCase):
                     connection.execute(f"CREATE ROLE {role} NOLOGIN")
                 except psycopg.errors.DuplicateObject:
                     pass
+            # 현재 운영 DB의 업그레이드 경로를 재현하기 위해 출처 컬럼이 없는 구형 테이블을 만든다.
+            connection.execute(
+                """
+                CREATE TABLE IF NOT EXISTS public.growth_daily_snapshots (
+                    ocid TEXT NOT NULL,
+                    snapshot_date DATE NOT NULL,
+                    character_name TEXT NOT NULL,
+                    world_name TEXT,
+                    level INTEGER,
+                    experience NUMERIC(30, 0),
+                    ranking INTEGER,
+                    ranking_scope TEXT,
+                    ranking_source_date DATE,
+                    experience_rate NUMERIC(7, 4),
+                    experience_rate_checked BOOLEAN NOT NULL DEFAULT FALSE,
+                    record_status TEXT NOT NULL
+                        CHECK (record_status IN ('available', 'not_ready')),
+                    recorded_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                    PRIMARY KEY (ocid, snapshot_date)
+                )
+                """
+            )
             migration = Path("migrations/20261116_shared_rate_limit_state.sql").read_text(
                 encoding="utf-8"
             )
