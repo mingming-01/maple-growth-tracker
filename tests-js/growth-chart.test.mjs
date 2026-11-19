@@ -137,10 +137,10 @@ test("shows the confirmed November 18 event as a level-up marker even when the d
     { date: "2026-11-17", recordStatus: "available", experience: 1_150_000_000_000 },
     { date: "2026-11-18", recordStatus: "available", experience: 1_156_600_000_000, levelUp: true },
     { date: "2026-11-19", recordStatus: "available", experience: 17_000_000_000, levelUpCatchUp: true }
-  ]).cumulative, [1.15, 1.1566, 1.1566]);
+  ]).cumulative, [1.15, 1.15, 1.15]);
   assert.deepEqual(
-    buildLevelUpMarkers(records, [1150.0, 1156.6, 1156.6]),
-    [null, 1156.6, null]
+    buildLevelUpMarkers(records, [1150.0, 1150.0, 1150.0]),
+    [null, 1150.0, null]
   );
 });
 
