@@ -99,6 +99,71 @@ class AIServerInputTests(unittest.TestCase):
             max_attempts_override=1,
         )
 
+    def test_api_ai_route_preserves_reset_day_growth_in_all_server_ai_inputs(self):
+        captured = {}
+        records = [
+            {
+                "date": (self.today - timedelta(days=2)).isoformat(),
+                "level": 298, "experience": 1129263590513928,
+                "experienceRate": 99.226, "recordStatus": "available",
+            },
+            {
+                "date": (self.today - timedelta(days=1)).isoformat(),
+                "level": 298, "experience": 1156066685461973,
+                "experienceRate": 0.355, "recordStatus": "available",
+            },
+            {
+                "date": self.today.isoformat(),
+                "level": 299, "experience": 17096549681346,
+                "experienceRate": 0.984, "recordStatus": "available",
+            },
+        ]
+        storage = FakeGrowthStorage({"ocid-one": records})
+
+        def generate(character, history, metrics, insights, context, force_refresh):
+            captured.update(
+                history=history, metrics=metrics, insights=insights, context=context
+            )
+            return {"analysis": "실제 AI 출력 대체 검증"}
+
+        with (
+            patch.object(
+                ai_controller,
+                "resolve_character",
+                return_value=("ocid-one", self.make_basic("테스트캐릭터"), Mock(status_code=200)),
+            ),
+            patch.object(ai_controller, "get_growth_history_service", return_value=storage),
+            patch.object(ai_controller, "generate_ai_analysis", side_effect=generate),
+        ):
+            response = self.client.post(
+                "/api/ai-analysis?name=테스트캐릭터",
+                json={"analysisContext": {"periodDays": 7}},
+            )
+
+        self.assertEqual(response.status_code, 200)
+        reset_day = captured["history"][-2]
+        catch_up_day = captured["history"][-1]
+        expected_change = 1156066685461973 - 1129263590513928
+        self.assertTrue(reset_day["levelUp"])
+        self.assertEqual(reset_day["experienceChange"], expected_change)
+        self.assertTrue(catch_up_day["levelUpCatchUp"])
+        self.assertFalse(catch_up_day["levelUp"])
+        self.assertIsNone(catch_up_day["experienceChange"])
+        self.assertEqual(captured["metrics"]["observedChangeDays"], 1)
+        self.assertEqual(captured["metrics"]["averageDailyGrowth"], expected_change)
+        self.assertEqual(
+            captured["metrics"]["levelUps"],
+            [{
+                "date": (self.today - timedelta(days=1)).isoformat(),
+                "previousLevel": 298,
+                "currentLevel": 299,
+            }],
+        )
+        self.assertEqual(captured["insights"]["recentPeriod"]["validGrowthIntervals"], 1)
+        self.assertEqual(captured["insights"]["recentPeriod"]["observedExperienceSum"], expected_change)
+        self.assertEqual(captured["insights"]["recentPeriod"]["levelUpIntervals"], 1)
+        self.assertEqual(captured["context"]["periodSummary"]["validGrowthIntervals"], 1)
+
     def test_analysis_excludes_unverified_legacy_ranks_before_ai_generation(self):
         captured = {}
         records = [
