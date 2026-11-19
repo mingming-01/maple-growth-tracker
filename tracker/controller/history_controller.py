@@ -247,13 +247,23 @@ def get_history():
 
     failed_records = [item for item in history if item.get("recordStatus") == "unavailable"]
     if failed_records:
-        # 여러 날짜를 병렬 조회하므로 일시적 오류와 확정 오류가 섞일 수 있다.
-        # 하나라도 429/5xx/네트워크 오류가 있으면 전체 결과를 502로 단정하지 않고
-        # 저장된 정상 스냅샷을 우선 제공하거나 재시도 가능한 503으로 응답한다.
-        if any(item.get("retryable") for item in failed_records):
-            return _stale_history_response(cache_key, character_name, "성장 기록 조회가 일시적으로 지연되고 있습니다. 잠시 후 다시 시도해주세요."
+        # 일부 날짜의 API 오류가 있어도 저장된 정상 기록은 계속 표시한다.
+        # 사용 가능한 데이터가 하나도 없을 때만 이전 스냅샷으로 폴백한다.
+        usable_records = [
+            item for item in history
+            if item.get("recordStatus") in (None, "available")
+            and any(
+                item.get(field) is not None
+                for field in ("ranking", "level", "experience", "experienceRate")
             )
-        return jsonify({"error": "성장 기록을 정상적으로 가져오지 못했습니다."}), 502
+        ]
+        if not usable_records:
+            error_message = (
+                "성장 기록 조회가 일시적으로 지연되고 있습니다. 잠시 후 다시 시도해주세요."
+                if any(item.get("retryable") for item in failed_records)
+                else "성장 기록을 정상적으로 가져오지 못했습니다."
+            )
+            return _stale_history_response(cache_key, character_name, error_message)
 
     calculate_recent_history_changes(history)
 
@@ -279,7 +289,11 @@ def get_history():
     ]
     average_experience = sum(experience_changes) / len(experience_changes) if experience_changes else None
     latest_record = history[-1] if history else None
-    history_status = "today_not_ready" if latest_record and latest_record.get("recordStatus") == "not_ready" else "complete"
+    history_status = (
+        "partial" if failed_records
+        else "today_not_ready" if latest_record and latest_record.get("recordStatus") == "not_ready"
+        else "complete"
+    )
     result = {
         "characterName": basic["character_name"],
         "worldName": world_name,
