@@ -104,7 +104,7 @@ class PostgreSQLConnectionPoolTests(unittest.TestCase):
             second.close()
 
         self.assertEqual(pool_factory.call_count, 2)
-        self.assertIs(pool_factory.call_args_list[0].kwargs["kwargs"]["row_factory"], list)
+        self.assertIs(pool_factory.call_args_list[1].kwargs["kwargs"]["row_factory"], list)
 
     def test_pool_checkout_timeout_is_reported_as_postgres_operational_error(self):
         pool = MagicMock()
