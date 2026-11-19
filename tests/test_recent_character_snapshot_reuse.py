@@ -43,6 +43,8 @@ class RecentCharacterBasicSnapshotTests(TestCase):
                 "character_level": 290,
                 "character_exp": 123456,
                 "character_exp_rate": 45.6,
+                "_growthSource": "character/basic",
+                "_growthObservedAt": self.now.isoformat(timespec="seconds"),
                 "ranking": 1234,
                 "ranking_scope": "overall",
                 "ranking_date": "2026-11-10",
@@ -116,6 +118,8 @@ class RecentCharacterBasicSnapshotTests(TestCase):
                 "character_level": 290,
                 "character_exp": 123456,
                 "character_exp_rate": 45.6,
+                "_growthSource": "character/basic",
+                "_growthObservedAt": None,
             },
         )
 
