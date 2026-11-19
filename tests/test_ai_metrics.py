@@ -131,6 +131,40 @@ class ServerAIMetricsTests(unittest.TestCase):
 
         self.assertEqual([item["ranking"] for item in result["history"]], [None, None])
 
+    def test_experience_rate_reset_uses_level_up_date_before_ranking_metadata_catches_up(self):
+        today = date(2026, 11, 19)
+        records = [
+            {
+                "date": "2026-11-17", "level": 298,
+                "experience": 1129263590513928, "experienceRate": 99.226,
+                "recordStatus": "available",
+            },
+            {
+                "date": "2026-11-18", "level": 298,
+                "experience": 1156066685461973, "experienceRate": 0.355,
+                "recordStatus": "available",
+            },
+            {
+                "date": "2026-11-19", "level": 299,
+                "experience": 17096549681346, "experienceRate": 0.984,
+                "recordStatus": "available",
+            },
+        ]
+
+        result = build_server_growth_metrics(
+            {"level": 299, "experienceRate": 0.984},
+            records, reference_date=today, period_days=7
+        )
+
+        self.assertEqual(
+            result["metrics"]["levelUps"],
+            [{"date": "2026-11-18", "previousLevel": 298, "currentLevel": 299}],
+        )
+        self.assertTrue(result["history"][1]["levelUp"])
+        self.assertFalse(result["history"][2]["levelUp"])
+        self.assertEqual(result["periodSummary"]["levelUpIntervals"], 1)
+        self.assertEqual(result["metrics"]["observedChangeDays"], 1)
+
     def test_missing_dates_and_level_up_transitions_are_not_interpolated(self):
         today = date(2026, 11, 16)
         records = [
