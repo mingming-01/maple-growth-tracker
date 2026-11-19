@@ -6,6 +6,8 @@ calendar days and level-up transitions are never interpolated or estimated.
 from datetime import date, timedelta
 from math import isfinite
 
+from tracker.domain.growth_calculations import is_experience_rate_reset
+
 
 def _parse_date(value):
     try:
@@ -43,6 +45,7 @@ def _period_summary(by_date, start_date, end_date):
     )
     changes = []
     level_ups = 0
+    detected_level_up_dates = set()
 
     for offset in range(expected_days):
         current_date = start_date + timedelta(days=offset)
@@ -57,8 +60,17 @@ def _period_summary(by_date, start_date, end_date):
         current_exp = _number(current.get("experience"))
         previous_exp = _number(previous.get("experience"))
 
-        if current_level > previous_level:
+        level_changed = current_level > previous_level
+        rate_reset = is_experience_rate_reset(
+            previous.get("experienceRate"), current.get("experienceRate")
+        )
+        duplicate_level_catch_up = previous_date in detected_level_up_dates
+        if (level_changed or rate_reset) and not duplicate_level_catch_up:
             level_ups += 1
+            detected_level_up_dates.add(current_date)
+            continue
+        if level_changed or duplicate_level_catch_up:
+            # The day after an EXP-rate reset may only be a delayed level field.
             continue
         if current_level != previous_level or current_exp < previous_exp:
             continue
