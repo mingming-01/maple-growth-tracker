@@ -64,6 +64,56 @@ class AIGrowthInsightsTests(unittest.TestCase):
         self.assertEqual(result["previousPeriod"]["levelUpIntervals"], 1)
         self.assertEqual(result["previousPeriod"]["validGrowthIntervals"], 6)
 
+    def test_experience_rate_reset_counts_on_reset_date_not_delayed_level_date(self):
+        records = [
+            {
+                "date": "2026-11-12", "level": 298,
+                "experience": 1034369058697585, "experienceRate": 91.228,
+                "recordStatus": "available",
+            },
+            {
+                "date": "2026-11-13", "level": 298,
+                "experience": 1056883268251231, "experienceRate": 93.284,
+                "recordStatus": "available",
+            },
+            {
+                "date": "2026-11-14", "level": 298,
+                "experience": 1094349410488372, "experienceRate": 94.825,
+                "recordStatus": "available",
+            },
+            {
+                "date": "2026-11-15", "level": 298,
+                "experience": 1103053861914765, "experienceRate": 96.177,
+                "recordStatus": "available",
+            },
+            {
+                "date": "2026-11-16", "level": 298,
+                "experience": 1118748264632899, "experienceRate": 97.143,
+                "recordStatus": "available",
+            },
+            {
+                "date": "2026-11-17", "level": 298,
+                "experience": 1129263590513928, "experienceRate": 99.226,
+                "recordStatus": "available",
+            },
+            {
+                "date": "2026-11-18", "level": 298,
+                "experience": 1156066685461973, "experienceRate": 0.355,
+                "recordStatus": "available",
+            },
+            {
+                "date": "2026-11-19", "level": 299,
+                "experience": 17096549681346, "experienceRate": 0.984,
+                "recordStatus": "available",
+            },
+        ]
+
+        result = build_growth_insights(records, reference_date="2026-11-19")
+
+        self.assertEqual(result["recentPeriod"]["levelUpIntervals"], 1)
+        # The reset day and delayed ranking-level update are both excluded.
+        self.assertEqual(result["recentPeriod"]["validGrowthIntervals"], 5)
+
     def test_insufficient_history_is_reported_without_a_percentage(self):
         records = self.make_records()[-7:]
 
