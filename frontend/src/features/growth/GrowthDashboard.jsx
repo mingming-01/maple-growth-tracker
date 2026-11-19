@@ -397,7 +397,7 @@ export default function GrowthDashboard({ character, history, onHistoryChange, o
       data: {
         labels: sorted.map(item => String(item.date || "").slice(5)),
         datasets: [
-          { label:"총 경험치 증가량",data:cumulative,yAxisID:"experience",borderColor:"#36a2eb",backgroundColor:"#36a2eb",borderWidth:3,tension:0,pointRadius:context=>levelUpEvents[context.dataIndex]?8:3,pointHoverRadius:context=>levelUpEvents[context.dataIndex]?10:6,pointStyle:context=>levelUpEvents[context.dataIndex]?"star":"circle",pointBackgroundColor:context=>levelUpEvents[context.dataIndex]?"#f5c542":"#36a2eb",pointBorderColor:context=>levelUpEvents[context.dataIndex]?"#805b00":"#36a2eb",pointBorderWidth:context=>levelUpEvents[context.dataIndex]?1.5:0,fill:false },
+          { label:"총 경험치 증가량",data:cumulative,yAxisID:"experience",borderColor:"#36a2eb",backgroundColor:"#36a2eb",borderWidth:3,tension:0,pointRadius:levelUpEvents.map(isLevelUp=>isLevelUp?8:3),pointHoverRadius:levelUpEvents.map(isLevelUp=>isLevelUp?10:6),pointStyle:levelUpEvents.map(isLevelUp=>isLevelUp?"star":"circle"),pointBackgroundColor:levelUpEvents.map(isLevelUp=>isLevelUp?"#f5c542":"#36a2eb"),pointBorderColor:levelUpEvents.map(isLevelUp=>isLevelUp?"#805b00":"#36a2eb"),pointBorderWidth:levelUpEvents.map(isLevelUp=>isLevelUp?1.5:0),fill:false },
           { label:"일일 경험치 증가량",data:daily,yAxisID:"dailyGrowth",borderColor:"#ff6384",backgroundColor:"#ff6384",borderWidth:2,segment:{borderDash:dailyGrowthSegmentDash},spanGaps:false,tension:0,pointRadius:2,pointHoverRadius:5,fill:false }
         ]
       },
