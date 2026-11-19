@@ -691,30 +691,45 @@ def generate_ai_analysis(character, history, computed_metrics=None, growth_insig
                 return _error_result(error, "AI 분석을 불러오지 못했습니다.")
 
     if openrouter_api_key:
-        openrouter_started_at = time.monotonic()
-        try:
-            response_text = _require_provider_text(
-                request_openrouter(prompt, api_key=openrouter_api_key, deadline=deadline),
-                "OpenRouter",
-            )
-            print("OpenRouter로 성장 리포트를 처리했습니다.")
-            analysis = sanitize_ai_text(response_text, expected_date)
-            if computed_metrics is not None:
-                analysis = _apply_deterministic_growth_forecast(
-                    analysis, character, computed_metrics
+        openrouter_error = None
+        for attempt, reasoning_effort in enumerate(("low", "minimal")):
+            openrouter_started_at = time.monotonic()
+            try:
+                response_text = _require_provider_text(
+                    request_openrouter(
+                        prompt,
+                        api_key=openrouter_api_key,
+                        deadline=deadline,
+                        reasoning_effort=reasoning_effort,
+                    ),
+                    "OpenRouter",
                 )
-                if not _validate_growth_report_facts(analysis, source_data):
-                    raise ProviderError(
-                        "OpenRouter 분석에 입력 데이터와 일치하지 않는 수치나 날짜가 있습니다.",
-                        "provider_invalid_output",
+                print("OpenRouter로 성장 리포트를 처리했습니다.")
+                analysis = sanitize_ai_text(response_text, expected_date)
+                if computed_metrics is not None:
+                    analysis = _apply_deterministic_growth_forecast(
+                        analysis, character, computed_metrics
                     )
-            if not validate_growth_report(analysis):
-                raise ProviderError("OpenRouter 분석 결과가 리포트 검증을 통과하지 못했습니다.", "provider_invalid_output")
-            set_ai_response_cache(cache_key, analysis)
-            return {"analysis": analysis, "cacheHit": False, "growthInsights": growth_insights}
-        except Exception as error:
-            _log_provider_failure("openrouter", error, openrouter_started_at, deadline)
-            return _fallback_failure_result(gemini_error, error)
+                    if not _validate_growth_report_facts(analysis, source_data):
+                        raise ProviderError(
+                            "OpenRouter 분석에 입력 데이터와 일치하지 않는 수치나 날짜가 있습니다.",
+                            "provider_invalid_output",
+                        )
+                if not validate_growth_report(analysis):
+                    raise ProviderError("OpenRouter 분석 결과가 리포트 검증을 통과하지 못했습니다.", "provider_invalid_output")
+                set_ai_response_cache(cache_key, analysis)
+                return {"analysis": analysis, "cacheHit": False, "growthInsights": growth_insights}
+            except Exception as error:
+                openrouter_error = error
+                _log_provider_failure("openrouter", error, openrouter_started_at, deadline)
+                if attempt == 0 and provider_error_type(error) == "provider_output_truncated":
+                    if has_app_context():
+                        current_app.logger.warning(
+                            "OpenRouter 응답이 출력 한도에 도달해 같은 openrouter/free 경로를 최소 추론 강도로 한 번 재시도합니다."
+                        )
+                    continue
+                break
+        return _fallback_failure_result(gemini_error, openrouter_error)
 
     if gemini_error:
         return _fallback_failure_result(gemini_error)
