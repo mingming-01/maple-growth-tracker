@@ -92,11 +92,13 @@ def _provider_timeouts(provider, deadline=None):
         )
     else:
         read_timeout = min(
-            70.0, max(3.0, float(_setting("AI_OPENROUTER_READ_TIMEOUT", 60.0)))
+            45.0, max(3.0, float(_setting("AI_OPENROUTER_READ_TIMEOUT", 40.0)))
         )
+        # Keep enough of the request deadline for one bounded retry after a
+        # truncated free-model response instead of spending almost all 90s.
         total_timeout = min(
-            75.0,
-            max(2.0, float(_setting("AI_OPENROUTER_TOTAL_TIMEOUT", 65.0))),
+            48.0,
+            max(2.0, float(_setting("AI_OPENROUTER_TOTAL_TIMEOUT", 45.0))),
         )
     read_timeout = min(read_timeout, max(0.5, total_timeout - connect_timeout))
     if deadline is not None:
@@ -188,7 +190,7 @@ def _log_openrouter_empty_response(**details):
         current_app.logger.warning("OpenRouter 텍스트 없는 응답: %s", details)
 
 
-def request_openrouter(prompt, api_key=None, deadline=None, reasoning_effort="low"):
+def request_openrouter(prompt, api_key=None, deadline=None, reasoning_effort="minimal"):
     """OpenRouter 대체 호출도 전체 응답 시간을 제한해 worker timeout을 막는다."""
     key = api_key or _setting("OPENROUTER_API_KEY", "")
     if not key:
@@ -207,7 +209,10 @@ def request_openrouter(prompt, api_key=None, deadline=None, reasoning_effort="lo
             "temperature": 0.35,
             # Standard OpenRouter control for reasoning-capable routed models.
             # The model alias remains openrouter/free and routing stays automatic.
-            "reasoning": {"effort": reasoning_effort if reasoning_effort in {"minimal", "low", "medium", "high"} else "low"},
+            "reasoning": {
+                "effort": reasoning_effort if reasoning_effort in {"minimal", "low", "medium", "high"} else "minimal",
+                "max_tokens": 512,
+            },
             "max_tokens": max(512, min(
                 8192,
                 int(_setting("AI_OPENROUTER_MAX_OUTPUT_TOKENS", 8192)),
