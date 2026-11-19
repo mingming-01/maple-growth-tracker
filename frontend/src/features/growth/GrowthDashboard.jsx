@@ -384,7 +384,7 @@ export default function GrowthDashboard({ character, history, onHistoryChange, o
     const sorted = sortHistoryAscending(displayHistory)
       .filter(item => item?.date && item.date <= today);
     if (!sorted.length) return undefined;
-    const { daily, cumulative } = buildExperienceChartSeries(sorted);
+    const { daily, dailyDisplay, dailyLastObservedIndex, cumulative } = buildExperienceChartSeries(sorted);
     // The history API provides daily levels rather than a levelUp flag.
     // Detect level changes locally so the yellow star is drawn on actual events.
     const levelUpEvents = detectLevelUpEvents(sorted);
@@ -398,7 +398,7 @@ export default function GrowthDashboard({ character, history, onHistoryChange, o
         labels: sorted.map(item => String(item.date || "").slice(5)),
         datasets: [
           { label:"총 경험치 증가량",data:cumulative,yAxisID:"experience",borderColor:"#36a2eb",backgroundColor:"#36a2eb",borderWidth:3,tension:0,pointRadius:context=>levelUpEvents[context.dataIndex]?8:3,pointHoverRadius:context=>levelUpEvents[context.dataIndex]?10:6,pointStyle:context=>levelUpEvents[context.dataIndex]?"star":"circle",pointBackgroundColor:context=>levelUpEvents[context.dataIndex]?"#f5c542":"#36a2eb",pointBorderColor:context=>levelUpEvents[context.dataIndex]?"#805b00":"#36a2eb",pointBorderWidth:context=>levelUpEvents[context.dataIndex]?1.5:0,fill:false },
-          { label:"일일 경험치 증가량",data:daily,yAxisID:"dailyGrowth",borderColor:"#ff6384",backgroundColor:"#ff6384",borderWidth:2,segment:{borderDash:dailyGrowthSegmentDash},spanGaps:true,tension:0,pointRadius:2,pointHoverRadius:5,fill:false }
+          { label:"일일 경험치 증가량",data:dailyDisplay,yAxisID:"dailyGrowth",borderColor:"#ff6384",backgroundColor:"#ff6384",borderWidth:2,segment:{borderDash:context=>context.p1DataIndex>dailyLastObservedIndex?[5,4]:dailyGrowthSegmentDash(context)},spanGaps:true,tension:0,pointRadius:context=>context.dataIndex>dailyLastObservedIndex?0:2,pointHoverRadius:5,fill:false }
         ]
       },
       options: {
@@ -412,6 +412,9 @@ export default function GrowthDashboard({ character, history, onHistoryChange, o
               const previousLevel = current?.levelUpPreviousLevel ?? previous?.level ?? "—";
               const currentLevel = current?.levelUpCurrentLevel ?? current?.level ?? "—";
               return "⭐ 레벨업 · Lv. " + previousLevel + " → " + currentLevel + " · 누적 " + context.parsed.y.toFixed(2) + "조";
+            }
+            if (context.dataset.label === "일일 경험치 증가량" && context.dataIndex > dailyLastObservedIndex) {
+              return "일일 경험치 증가량: 기록 없음 (마지막 확인값 유지)";
             }
             return context.parsed.y === null ? "" : context.dataset.label + ": " + context.parsed.y.toFixed(2) + "조";
           }
