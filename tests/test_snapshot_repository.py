@@ -104,7 +104,7 @@ class ApiSnapshotRepositoryTests(unittest.TestCase):
         loaded, _ = load_api_snapshot(self.path, "character:new")
         self.assertEqual(loaded["level"], 281)
 
-    @patch("tracker.repositories.api_snapshot_repository.psycopg.connect")
+    @patch("tracker.repositories.api_snapshot_repository.get_pooled_connection")
     def test_postgres_insert_only_snapshot_uses_do_nothing_on_conflict(self, get_connection):
         connection = MagicMock()
         connection.__enter__.return_value = connection
@@ -126,7 +126,7 @@ class ApiSnapshotRepositoryTests(unittest.TestCase):
         self.assertIn("ON CONFLICT (cache_key) DO NOTHING", query)
         self.assertEqual(get_connection.call_count, 1)
 
-    @patch("tracker.repositories.api_snapshot_repository.psycopg.connect")
+    @patch("tracker.repositories.api_snapshot_repository.get_pooled_connection")
     def test_postgres_initialization_failure_falls_back_to_sqlite(self, get_connection):
         get_connection.side_effect = psycopg.OperationalError("database unavailable")
         backend, warning = initialize_snapshot_db(
