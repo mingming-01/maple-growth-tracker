@@ -36,6 +36,7 @@ def calculate_recent_history_changes(history):
         current["levelUp"] = False
         current["levelUpPreviousLevel"] = None
         current["levelUpCurrentLevel"] = None
+        current["levelUpCatchUp"] = False
         if index == 0:
             current["experienceChange"] = None
             current["rankingChange"] = None
@@ -66,6 +67,8 @@ def calculate_recent_history_changes(history):
             _mark_level_up(
                 current, previous.get("level"), current.get("level")
             )
+        elif duplicate_level_catch_up:
+            current["levelUpCatchUp"] = True
 
         if transition or duplicate_level_catch_up:
             # The reset day and the following ranking-metadata catch-up are
@@ -91,6 +94,7 @@ def calculate_archive_history_changes(history):
         current["levelUp"] = False
         current["levelUpPreviousLevel"] = None
         current["levelUpCurrentLevel"] = None
+        current["levelUpCatchUp"] = False
 
         if index == 0:
             continue
@@ -118,7 +122,10 @@ def calculate_archive_history_changes(history):
             _mark_level_up(
                 current, previous.get("level"), current.get("level")
             )
-        elif not duplicate_level_catch_up:
+        elif duplicate_level_catch_up:
+            current["levelUpCatchUp"] = True
+
+        if not duplicate_level_catch_up and not transition:
             if (
                 current.get("experience") is not None
                 and previous.get("experience") is not None
