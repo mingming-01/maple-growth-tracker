@@ -70,6 +70,7 @@ function parseAnalysis(analysis) {
 
 function buildReportSignature(character, history, metrics, analysisContext = {}) {
   return stableStringify({
+    cacheVersion: 5,
     name:character.characterName,
     ocid:character.ocid,
     level:character.level,
@@ -102,13 +103,11 @@ export function AIReport({ character, history, analysisHistory = history, period
     setLoading(true);
     setError("");
     const analysisContext = { periodDays:[7,30,90].includes(Number(periodDays)) ? Number(periodDays) : 7, periodSummary:periodSummary || null };
-        // 같은 캐릭터·기간의 리포트는 정해진 보관 시간 동안 재사용한다.
-    // 매일 기록이 추가되는 7일 리포트도 6시간 안에는 같은 결과를 보여준다.
-    const signature = stableStringify({
-      cacheVersion: 4,
-      characterId: character.ocid || character.characterName,
-      periodDays: analysisContext.periodDays
-    });
+        // 캐릭터·기간뿐 아니라 실제 기록·계산 지표가 같을 때만 캐시를 재사용한다.
+    // 새 기록이나 레벨/진행률이 반영되면 기존 리포트가 아닌 새 분석으로 넘어간다.
+    const signature = buildReportSignature(
+      character, analysisHistory, metrics, analysisContext
+    );
     const cacheType = `growth-report-${analysisContext.periodDays}d`;
     const cached = !force ? getCachedAI(cacheType,signature) : null;
     if (cached?.analysis) {
