@@ -139,6 +139,22 @@ test("dashes only the daily EXP segment whose current day has zero growth", () =
   assert.deepEqual(dailyGrowthSegmentDash(context(80)), []);
 });
 
+test("keeps the daily EXP trend visible through trailing dates without confirmed deltas", () => {
+  const records = [
+    { date: "2026-11-13", recordStatus: "available", experienceChange: null },
+    { date: "2026-11-14", recordStatus: "available", experienceChange: 37_000_000_000_000 },
+    { date: "2026-11-15", recordStatus: "available", experienceChange: 8_000_000_000_000 },
+    { date: "2026-11-16", recordStatus: "available", experienceChange: 15_000_000_000_000 },
+    { date: "2026-11-17", recordStatus: "available", experienceChange: 10_000_000_000_000 },
+    { date: "2026-11-18", recordStatus: "available", experienceChange: null, levelUp: true },
+    { date: "2026-11-19", recordStatus: "available", experienceChange: null, levelUpCatchUp: true }
+  ];
+  const series = buildExperienceChartSeries(records);
+  assert.deepEqual(series.daily, [null, 37, 8, 15, 10, null, null]);
+  assert.deepEqual(series.dailyDisplay, [null, 37, 8, 15, 10, 10, 10]);
+  assert.equal(series.dailyLastObservedIndex, 4);
+});
+
 test("shows the confirmed November 18 event as a level-up marker even when the daily level lags", () => {
   const records = [
     { date: "2026-11-17", level: 298, experienceRate: 99.226, levelUp: false },
