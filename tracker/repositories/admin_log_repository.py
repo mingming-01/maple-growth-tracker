@@ -4,6 +4,7 @@ import os
 import sqlite3
 import time
 from datetime import datetime
+from urllib.parse import urlparse
 from zoneinfo import ZoneInfo
 
 import psycopg
@@ -26,10 +27,12 @@ class AdminLogRepository:
         started_at = time.perf_counter()
         try:
             if backend == "postgres":
+                host = urlparse(self.state.growth_database_url).hostname
+                sslmode = "disable" if host in ("localhost", "127.0.0.1", "::1") else "require"
                 return get_pooled_connection(
                     self.state.growth_database_url,
                     connect_timeout=3,
-                    sslmode="require",
+                    sslmode=sslmode,
                     prepare_threshold=None,
                     row_factory=dict_row,
                     store="admin_logs",
