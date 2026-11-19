@@ -7,6 +7,7 @@ from unittest.mock import Mock, patch
 import app as tracker
 from tracker import create_app
 from tracker.controller import history_controller
+from tracker.domain.growth_calculations import calculate_recent_history_changes, calculate_archive_history_changes
 from tracker.repositories.growth_history_store import GrowthHistoryStore
 from tracker.runtime import get_runtime_state
 from tracker.services.growth_history_service import GrowthHistoryService
@@ -96,6 +97,60 @@ class GrowthCalculationBehaviorTests(unittest.TestCase):
         self.assertEqual(history[6]["rankingChange"], 10)
         self.assertEqual(history[6]["experienceRate"], "23.4567")
         self.assertTrue(history[6]["experienceRateChecked"])
+
+    def test_experience_rate_reset_dates_level_up_before_ranking_level_catches_up(self):
+        history = [
+            {
+                "date": "2026-11-17", "recordStatus": "available",
+                "level": 298, "experience": 1129263590513928,
+                "experienceRate": 99.226,
+            },
+            {
+                "date": "2026-11-18", "recordStatus": "available",
+                "level": 298, "experience": 1156066685461973,
+                "experienceRate": 0.355,
+            },
+            {
+                "date": "2026-11-19", "recordStatus": "available",
+                "level": 299, "experience": 17096549681346,
+                "experienceRate": 0.984,
+            },
+        ]
+
+        calculate_recent_history_changes(history)
+
+        self.assertTrue(history[1]["levelUp"])
+        self.assertEqual(history[1]["levelUpPreviousLevel"], 298)
+        self.assertEqual(history[1]["levelUpCurrentLevel"], 299)
+        self.assertIsNone(history[1]["experienceChange"])
+        self.assertFalse(history[2]["levelUp"])
+        self.assertIsNone(history[2]["experienceChange"])
+
+    def test_archive_history_uses_experience_rate_reset_for_level_up(self):
+        history = [
+            {
+                "date": "2026-11-17", "recordStatus": "available",
+                "level": 298, "experience": 1129263590513928,
+                "experienceRate": 99.226,
+            },
+            {
+                "date": "2026-11-18", "recordStatus": "available",
+                "level": 298, "experience": 1156066685461973,
+                "experienceRate": 0.355,
+            },
+            {
+                "date": "2026-11-19", "recordStatus": "available",
+                "level": 299, "experience": 17096549681346,
+                "experienceRate": 0.984,
+            },
+        ]
+
+        calculate_archive_history_changes(history)
+
+        self.assertTrue(history[1]["levelUp"])
+        self.assertEqual(history[1]["levelUpCurrentLevel"], 299)
+        self.assertFalse(history[2]["levelUp"])
+        self.assertIsNone(history[2]["experienceChange"])
 
     def test_archive_history_does_not_calculate_changes_across_missing_records(self):
         start_date = self.today - timedelta(days=29)
