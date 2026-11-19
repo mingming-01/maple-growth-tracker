@@ -776,6 +776,17 @@ class GrowthHistoryApiTests(unittest.TestCase):
             "character_level": 280,
             "character_exp": 123456
         }
+        historical_basic = {
+            "character_level": 280,
+            "character_exp": 654321
+        }
+
+        def get_historical_basic(ocid, target_date=None, historical=False):
+            self.assertEqual(target_date, target_date_expected)
+            self.assertTrue(historical)
+            return historical_basic, Mock(status_code=200)
+
+        target_date_expected = target_date.isoformat()
         with patch.object(
             history_controller, "get_basic_character_snapshot",
             return_value=(current_basic, Mock(status_code=200))
@@ -783,7 +794,7 @@ class GrowthHistoryApiTests(unittest.TestCase):
             history_archive_service, "get_ranking_snapshot", return_value=(ranking, ranking_response)
         ) as get_ranking, patch.object(
             history_archive_service, "get_basic_character_snapshot",
-            return_value=(current_basic, Mock(status_code=200))
+            side_effect=get_historical_basic
         ) as get_basic:
             response = self.client.get(
                 "/api/history/archive?ocid=test-ocid&days=30&collect=1"
