@@ -1,6 +1,7 @@
 """격리된 PostgreSQL에서 저장·복원·공유 제한·동시성을 검증한다."""
 import os
 from pathlib import Path
+from types import SimpleNamespace
 
 import psycopg
 import unittest
@@ -9,6 +10,13 @@ from datetime import date
 from uuid import uuid4
 
 from tracker.repositories.growth_history_store import GrowthHistoryStore
+from tracker.repositories.admin_log_repository import AdminLogRepository
+from tracker.repositories.ai_provider_state_store import AIProviderStateStore
+from tracker.repositories.api_snapshot_repository import (
+    initialize_snapshot_db,
+    load_api_snapshot,
+    save_api_snapshot,
+)
 
 
 POSTGRES_URL = os.getenv("TEST_POSTGRES_URL")
@@ -100,6 +108,74 @@ class PostgreSQLIntegrationTests(unittest.TestCase):
 
         self.assertEqual(first_value, 1)
         self.assertEqual(second_value, 2)
+
+    def test_api_snapshot_repository_uses_pooled_postgres_connections(self):
+        backend, warning = initialize_snapshot_db(
+            "instance/postgres-snapshot-integration-unused.sqlite3",
+            POSTGRES_URL,
+        )
+        self.assertEqual(backend, "postgres")
+        self.assertEqual(warning, "")
+
+        cache_key = "integration:" + uuid4().hex
+        payload = {"characterName": "스냅샷통합", "level": 300}
+        saved_at = save_api_snapshot(
+            "instance/postgres-snapshot-integration-unused.sqlite3",
+            cache_key,
+            payload,
+            POSTGRES_URL,
+            "postgres",
+        )
+        restored, restored_at = load_api_snapshot(
+            "instance/postgres-snapshot-integration-unused.sqlite3",
+            cache_key,
+            POSTGRES_URL,
+            "postgres",
+        )
+
+        self.assertIsNotNone(saved_at)
+        self.assertEqual(restored, payload)
+        self.assertIsNotNone(restored_at)
+
+    def test_ai_provider_state_store_uses_pooled_postgres_connections(self):
+        store = AIProviderStateStore(
+            database_url=POSTGRES_URL,
+            sqlite_path="instance/postgres-provider-state-unused.sqlite3",
+        )
+        provider_key = "integration:" + uuid4().hex
+        cooldown_until = 1_900_000_000.0
+
+        store.set_cooldown_until(provider_key, cooldown_until)
+        self.assertEqual(store.get_cooldown_until(provider_key), cooldown_until)
+        store.clear_cooldown(provider_key)
+        self.assertEqual(store.get_cooldown_until(provider_key), 0.0)
+
+    def test_admin_log_repository_uses_dict_row_pooled_connections(self):
+        state = SimpleNamespace(
+            log_db_backend="postgres",
+            growth_database_url=POSTGRES_URL,
+            log_db_path="instance/postgres-admin-logs-unused.sqlite3",
+            log_storage_warning="",
+        )
+        repository = AdminLogRepository(state)
+        repository.initialize()
+        action = "pool-integration-" + uuid4().hex
+
+        repository.insert(
+            action=action,
+            character_name="풀링통합테스트",
+            world_name="테스트월드",
+            result="성공",
+            path="/pool-integration",
+            status_code=200,
+            duration_ms=12,
+        )
+        result = repository.search(search_text=action)
+
+        self.assertEqual(result["total_count"], 1)
+        self.assertEqual(len(result["rows"]), 1)
+        self.assertEqual(result["rows"][0]["action"], action)
+        self.assertIn(action, result["action_options"])
 
     def test_ai_daily_limits_are_shared_and_atomic_under_concurrency(self):
         client_key = uuid4().hex
