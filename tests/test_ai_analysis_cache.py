@@ -6,6 +6,58 @@ import requests
 import app as tracker
 from tracker import create_app
 from tracker.runtime import get_runtime_state
+from tracker.services import runtime_cache
+from tracker.services.runtime_cache import RuntimeCache
+
+
+class AIResponseCacheMetricsTests(unittest.TestCase):
+    def test_ai_cache_reports_hit_miss_write_and_expiration_metrics(self):
+        cache = RuntimeCache()
+        with patch("tracker.services.runtime_cache.increment_metric") as metric:
+            self.assertIsNone(cache.get_ai_response("missing"))
+            with patch("tracker.services.runtime_cache.time.time", return_value=1000):
+                cache.set_ai_response("prompt", "analysis")
+            with patch("tracker.services.runtime_cache.time.time", return_value=1001):
+                self.assertEqual(cache.get_ai_response("prompt"), "analysis")
+            with patch(
+                "tracker.services.runtime_cache.time.time",
+                return_value=1000 + runtime_cache.AI_RESPONSE_CACHE_TTL + 1,
+            ):
+                self.assertIsNone(cache.get_ai_response("prompt"))
+
+        metric.assert_any_call(
+            "cache.lookups", cache="ai_response", result="miss"
+        )
+        metric.assert_any_call(
+            "cache.lookups", cache="ai_response", result="hit"
+        )
+        metric.assert_any_call("cache.writes", cache="ai_response")
+        metric.assert_any_call("cache.expirations", cache="ai_response")
+
+    def test_ai_cache_removes_expired_entries_before_capacity_eviction(self):
+        cache = RuntimeCache()
+        with patch(
+            "tracker.services.runtime_cache.AI_RESPONSE_CACHE_MAX_ENTRIES", 2
+        ), patch("tracker.services.runtime_cache.increment_metric") as metric:
+            with patch("tracker.services.runtime_cache.time.time", return_value=100):
+                cache.set_ai_response("first", "one")
+            with patch("tracker.services.runtime_cache.time.time", return_value=101):
+                cache.set_ai_response("second", "two")
+            for item in cache.ai_response_cache.values():
+                item["cached_at"] = 0
+            with patch(
+                "tracker.services.runtime_cache.time.time",
+                return_value=runtime_cache.AI_RESPONSE_CACHE_TTL + 100,
+            ):
+                cache.set_ai_response("third", "three")
+
+        self.assertEqual(len(cache.ai_response_cache), 1)
+        self.assertEqual(cache.get_ai_response("third"), "three")
+        self.assertNotIn(
+            __import__("hashlib").sha256(b"first").hexdigest(),
+            cache.ai_response_cache,
+        )
+        metric.assert_any_call("cache.evictions", 2, cache="ai_response")
 
 
 class AIResponseCacheTests(unittest.TestCase):
