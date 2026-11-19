@@ -66,10 +66,40 @@ test("React preview loads profile data and refreshes only on explicit request", 
     body: JSON.stringify({
       history: [
         { date: "2026-11-04", level: 280, experience: 1000, experienceRate: "30.125", experienceChange: null, recordStatus: "available" },
-        { date: "2026-11-05", level: 280, experience: 1200, experienceRate: "30.500", experienceChange: 200, recordStatus: "available" },
+        { date: "2026-11-05", level: 280, experience: 1200, experienceRate: "30.500", experienceChange: 200, experienceRateChange: 0.375, recordStatus: "available" },
         { date: "2026-11-06", level: 280, experience: 1300, experienceRate: "30.250", experienceChange: 100, recordStatus: "available" }
       ],
       historyStatus: "complete",
+      metrics: {
+        observedChangeDays: 2,
+        recordedDays: 3,
+        latestDailyGrowth: 100,
+        averageDailyGrowth: 150,
+        sevenDayGrowth: 300,
+        rankingChange: null,
+        levelProgress: { currentRate: 35.6, remainingRate: 64.4, dailyProgressRate: 0.25 },
+        growthComparison: { direction: "stable", earlierAverage: null, recentAverage: null },
+        levelUps: [],
+        timeline: [
+          { type: "latest", date: "2026-11-06", title: "최근 정상 기록", description: "Lv. 280 · 경험치 1,300", priority: 3 }
+        ],
+        prediction: null
+      },
+      periodSummary: {
+        startDate: "2026-10-31",
+        endDate: "2026-11-06",
+        expectedSnapshots: 7,
+        availableDays: 3,
+        coveragePercent: 42.9,
+        confirmedChangeDays: 2,
+        averageGrowth: 150,
+        growth: 300,
+        notReadyDays: 0,
+        notCollectedDays: 4,
+        unavailableDays: 0,
+        levelUpCount: 0,
+        levelUpDates: []
+      },
       historyStorage: { backend: "postgres", status: "saved" }
     })
   }));
