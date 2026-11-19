@@ -115,6 +115,24 @@ test("period summary counts a level-up only across consecutive available dates",
     assert.deepEqual(summary.levelUpDates, ["2026-11-02"]);
 });
 
+test("period summary and timeline count an EXP reset and delayed level-field catch-up only once", async () => {
+    const { summarizeGrowthPeriod } = await import("../frontend/src/lib/growth.js");
+    const history = [
+        { date: "2026-11-17", recordStatus: "available", level: 298, experience: 1150000, experienceChange: 1000 },
+        { date: "2026-11-18", recordStatus: "available", level: 298, experience: 6500, experienceChange: null, levelUp: true, levelUpPreviousLevel: 298, levelUpCurrentLevel: 299 },
+        { date: "2026-11-19", recordStatus: "available", level: 299, experience: 17000, experienceChange: null, levelUp: true, levelUpCatchUp: true }
+    ];
+    const summary = summarizeGrowthPeriod(history, 3, "2026-11-19");
+    const metrics = calculateGrowthMetrics({ level: 299, experience: 17000, experienceRate: 0.984 }, history);
+    const timeline = buildGrowthTimeline(history).filter(event => event.type === "level-up");
+
+    assert.equal(summary.levelUpCount, 1);
+    assert.deepEqual(summary.levelUpDates, ["2026-11-18"]);
+    assert.equal(metrics.levelUps.length, 1);
+    assert.deepEqual(metrics.levelUps.map(event => event.date), ["2026-11-18"]);
+    assert.deepEqual(timeline.map(event => event.date), ["2026-11-18"]);
+});
+
 test("period summary ignores unverified rank observations", async () => {
     const { summarizeGrowthPeriod } = await import("../frontend/src/lib/growth.js");
     const summary = summarizeGrowthPeriod([
