@@ -35,8 +35,8 @@ class ApiSnapshotRepositoryTests(unittest.TestCase):
         self.assertEqual(loaded, payload)
         self.assertIsNotNone(saved_at)
 
-    @patch("tracker.repositories.api_snapshot_repository.psycopg.connect")
-    def test_postgres_snapshot_round_trip(self, connect):
+    @patch("tracker.repositories.api_snapshot_repository.get_pooled_connection")
+    def test_postgres_snapshot_round_trip(self, get_connection):
         init_connection = MagicMock()
         save_connection = MagicMock()
         save_connection.execute.return_value.rowcount = 1
@@ -49,7 +49,7 @@ class ApiSnapshotRepositoryTests(unittest.TestCase):
             json.dumps({"characterName": "Postgres", "level": 300}),
             saved_at,
         )
-        connect.side_effect = [init_connection, save_connection, load_connection]
+        get_connection.side_effect = [init_connection, save_connection, load_connection]
 
         backend, warning = initialize_snapshot_db(
             self.path, "postgresql://example.invalid/database"
@@ -72,7 +72,7 @@ class ApiSnapshotRepositoryTests(unittest.TestCase):
 
         self.assertEqual(loaded, {"characterName": "Postgres", "level": 300})
         self.assertEqual(loaded_at, saved_at.isoformat(timespec="seconds"))
-        self.assertEqual(connect.call_count, 3)
+        self.assertEqual(get_connection.call_count, 3)
 
     def test_sqlite_insert_only_snapshot_does_not_replace_existing_payload(self):
         initialize_snapshot_db(self.path)
@@ -105,12 +105,12 @@ class ApiSnapshotRepositoryTests(unittest.TestCase):
         self.assertEqual(loaded["level"], 281)
 
     @patch("tracker.repositories.api_snapshot_repository.psycopg.connect")
-    def test_postgres_insert_only_snapshot_uses_do_nothing_on_conflict(self, connect):
+    def test_postgres_insert_only_snapshot_uses_do_nothing_on_conflict(self, get_connection):
         connection = MagicMock()
         connection.__enter__.return_value = connection
         connection.__exit__.return_value = False
         connection.execute.return_value.rowcount = 0
-        connect.return_value = connection
+        get_connection.return_value = connection
 
         result = save_api_snapshot(
             self.path,
@@ -124,11 +124,11 @@ class ApiSnapshotRepositoryTests(unittest.TestCase):
         self.assertIsNone(result)
         query = connection.execute.call_args.args[0]
         self.assertIn("ON CONFLICT (cache_key) DO NOTHING", query)
-        self.assertEqual(connect.call_count, 1)
+        self.assertEqual(get_connection.call_count, 1)
 
     @patch("tracker.repositories.api_snapshot_repository.psycopg.connect")
-    def test_postgres_initialization_failure_falls_back_to_sqlite(self, connect):
-        connect.side_effect = psycopg.OperationalError("database unavailable")
+    def test_postgres_initialization_failure_falls_back_to_sqlite(self, get_connection):
+        get_connection.side_effect = psycopg.OperationalError("database unavailable")
         backend, warning = initialize_snapshot_db(
             self.path, "postgresql://example.invalid/database"
         )
