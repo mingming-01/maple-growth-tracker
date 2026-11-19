@@ -110,5 +110,65 @@ class BoundedJSONHTTPTests(unittest.TestCase):
         response.close.assert_called_once()
 
 
+
+    @patch("tracker.integrations.bounded_http.requests.post")
+    @patch("tracker.integrations.bounded_http.time.monotonic", return_value=10.0)
+    def test_sse_deltas_are_assembled_across_chunk_boundaries_and_done_is_required(self, _clock, post):
+        wire = (
+            'data: {"model":"vendor/free-route","provider":"route-a","choices":[{"delta":{"role":"assistant"},"finish_reason":null}]}\\r\\n\\r\\n'
+            'data: {"choices":[{"delta":{"content":"레벨업 "},"finish_reason":null}]}\\r\\n\\r\\n'
+            'data: {"choices":[{"delta":{"content":"분석"},"finish_reason":"stop"}]}\\r\\n\\r\\n'
+            'data: {"usage":{"prompt_tokens":12,"completion_tokens":8,"total_tokens":20}}\\r\\n\\r\\n'
+            'data: [DONE]\\r\\n\\r\\n'
+        ).encode("utf-8")
+        chunks = [wire[index:index + 11] for index in range(0, len(wire), 11)]
+        response = self.make_response(chunks)
+        response.headers = {
+            "Content-Type": "text/event-stream",
+            "Transfer-Encoding": "chunked",
+            "x-openrouter-request-id": "req-test-123",
+        }
+        post.return_value = response
+
+        result = post_json_with_deadline(
+            "https://provider.invalid",
+            headers={"Accept": "text/event-stream"},
+            json_body={"stream": True},
+            response_format="sse",
+        )
+
+        self.assertEqual(result["choices"][0]["message"]["content"], "레벨업 분석")
+        self.assertEqual(result["choices"][0]["finish_reason"], "stop")
+        self.assertEqual(result["model"], "vendor/free-route")
+        self.assertEqual(result["provider"], "route-a")
+        self.assertEqual(result["usage"]["total_tokens"], 20)
+        self.assertTrue(result.provider_metadata["stream_done"])
+        self.assertEqual(result.provider_metadata["stream_event_count"], 4)
+        self.assertEqual(result.provider_metadata["response_content_type"], "text/event-stream")
+        self.assertEqual(result.provider_metadata["response_request_id"], "req-test-123")
+        response.close.assert_called_once()
+
+    @patch("tracker.integrations.bounded_http.requests.post")
+    @patch("tracker.integrations.bounded_http.time.monotonic", return_value=10.0)
+    def test_sse_without_done_marker_is_rejected_as_incomplete(self, _clock, post):
+        response = self.make_response([
+            'data: {"choices":[{"delta":{"content":"partial"},"finish_reason":null}]}\\n\\n'.encode("utf-8")
+        ])
+        response.headers = {"Content-Type": "text/event-stream"}
+        post.return_value = response
+
+        with self.assertRaises(requests.RequestException) as caught:
+            post_json_with_deadline(
+                "https://provider.invalid",
+                headers={},
+                json_body={"stream": True},
+                response_format="sse",
+            )
+
+        self.assertEqual(caught.exception.provider_metadata["response_classification"], "stream_incomplete")
+        self.assertFalse(caught.exception.provider_metadata["stream_done"])
+        self.assertTrue(caught.exception.provider_metadata["body_complete"])
+        response.close.assert_called_once()
+
 if __name__ == "__main__":
     unittest.main()
