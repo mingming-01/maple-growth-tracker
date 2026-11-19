@@ -68,16 +68,17 @@ def _period_summary(by_date, start_date, end_date):
         if (level_changed or rate_reset) and not duplicate_level_catch_up:
             level_ups += 1
             detected_level_up_dates.add(current_date)
-            continue
-        if level_changed or duplicate_level_catch_up:
-            # The day after an EXP-rate reset may only be a delayed level field.
-            continue
-        if current_level != previous_level or current_exp < previous_exp:
+
+        # The event marker is independent from a measurable daily EXP delta.
+        # Keep positive source-to-source changes on the reset date; ignore a
+        # negative cross-level delta when the next day's EXP field has reset.
+        experience_change = current_exp - previous_exp
+        if experience_change < 0:
             continue
 
         changes.append({
             "date": current_date,
-            "experience": current_exp - previous_exp,
+            "experience": experience_change,
             "weekday": current_date.weekday(),
         })
 
