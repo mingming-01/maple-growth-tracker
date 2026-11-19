@@ -66,6 +66,24 @@ class AIAnalysisFallbackTests(unittest.TestCase):
         self.assertIn('"error_type": "provider_timeout"', captured.output[0])
         self.assertNotIn("temporary provider failure", captured.output[0])
 
+    def test_provider_failure_log_includes_safe_upstream_error_code_and_message(self):
+        response = type("Response", (), {
+            "status_code": 400,
+            "text": '{"error":{"code":"unsupported_parameter","message":"Bad request. Bearer secret-value"}}',
+        })()
+        error = requests.HTTPError("400 Bad Request", response=response)
+        started_at = time.monotonic()
+
+        with self.assertLogs(service.__name__, level="WARNING") as captured:
+            service._log_provider_failure(
+                "openrouter", error, started_at, started_at + 10
+            )
+
+        self.assertIn('"http_status": 400', captured.output[0])
+        self.assertIn('"provider_error_code": "unsupported_parameter"', captured.output[0])
+        self.assertIn("Bad request.", captured.output[0])
+        self.assertNotIn("secret-value", captured.output[0])
+
     @patch("tracker.services.ai_analysis_service.get_runtime_state")
     @patch("tracker.services.ai_analysis_service.get_ai_response_cache", return_value=None)
     @patch("tracker.services.ai_analysis_service.set_ai_response_cache")
