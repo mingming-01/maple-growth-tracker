@@ -165,7 +165,7 @@ class AIAnalysisFallbackTests(unittest.TestCase):
         "cache backend unavailable"
     ))
     def test_cache_write_failure_does_not_turn_successful_openrouter_report_into_failure(
-        self, openrouter, _gemini, _cooldown, _cache_write, _get_cache, get_state
+        self, _cache_write, openrouter, _gemini, _cooldown, get_state, _deadline
     ):
         get_state.return_value = self.state
 
@@ -193,7 +193,8 @@ class AIAnalysisFallbackTests(unittest.TestCase):
     @patch("tracker.services.ai_analysis_service.request_gemini")
     @patch("tracker.services.ai_analysis_service.request_openrouter", return_value=VALID_REPORT)
     def test_http_429_falls_back_successfully_with_same_prompt_and_deadline(
-        self, _set_cache, openrouter, gemini, _cooldown, get_state, _deadline
+        self, openrouter, gemini, _sanitize, _validate, _cooldown,
+        _set_cache, _get_cache, get_state, _deadline
     ):
         response = type("Response", (), {"status_code": 429, "headers": {}, "text": ""})()
         gemini.side_effect = requests.HTTPError("429 Too Many Requests", response=response)
