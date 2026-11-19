@@ -53,7 +53,8 @@ class AIProviderLimitTests(unittest.TestCase):
 
         self.assertEqual(ai_provider.request_openrouter("prompt", api_key="test-key"), "report")
         payload = post_json.call_args.kwargs["json_body"]
-        self.assertEqual(payload["max_tokens"], 4096)
+        self.assertEqual(payload["max_tokens"], 8192)
+        self.assertEqual(payload["reasoning"], {"effort": "low"})
 
 
 if __name__ == "__main__":
