@@ -77,6 +77,18 @@ class GrowthCalculationBehaviorTests(unittest.TestCase):
                 response_stub,
             )
 
+        def get_basic_for_date(ocid, target_date=None, historical=False):
+            # Historical basic snapshots must correspond to the requested date,
+            # rather than reusing today's resolve_character profile for every day.
+            ranking_data, _ = get_ranking(target_date)
+            return (
+                {
+                    **ranking_data,
+                    "character_exp_rate": basic["character_exp_rate"],
+                },
+                response_stub,
+            )
+
         with patch.object(
             history_controller,
             "resolve_character",
@@ -86,7 +98,7 @@ class GrowthCalculationBehaviorTests(unittest.TestCase):
         ), patch.object(
             history_controller,
             "get_basic_character_snapshot",
-            return_value=(basic, response_stub),
+            side_effect=get_basic_for_date,
         ):
             response = self.client.get(
                 "/api/history",
