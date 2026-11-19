@@ -6,6 +6,7 @@ import requests
 
 
 DEFAULT_MAX_RESPONSE_BYTES = 96 * 1024
+DEFAULT_MAX_SSE_RESPONSE_BYTES = 2 * 1024 * 1024
 
 
 class InvalidProviderResponse(requests.RequestException):
