@@ -279,7 +279,7 @@ function GoalPanel({ character, metrics, history }) {
   }
   const daysRemaining = goal ? daysBetween(today, goal.targetDate) : null;
   const requiredRate = daysRemaining > 0 && validRate ? Math.max(0,100-currentRate)/daysRemaining : null;
-  const observedRate = metrics.levelProgress?.dailyProgressRate;
+  const observedRate = metrics?.levelProgress?.dailyProgressRate;
 
   return (
     <section className="growth-goal-card" aria-labelledby="growth-goal-title">
