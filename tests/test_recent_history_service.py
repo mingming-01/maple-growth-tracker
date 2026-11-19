@@ -1,5 +1,5 @@
 """최근 성장 기록 수집 서비스 테스트."""
-from datetime import date, timedelta
+from datetime import date, datetime, timedelta
 import unittest
 from unittest.mock import Mock
 
@@ -51,6 +51,8 @@ class RecentHistoryServiceTests(unittest.TestCase):
                 "experience": 9876,
                 "experienceRate": 11.2,
                 "experienceRateChecked": True,
+                "growthSource": "ranking/overall",
+                "growthObservedAt": "2026-11-09T01:00:00+00:00",
                 "rankingScope": "overall",
                 "rankingSourceDate": "2026-11-09",
                 "recordStatus": "available",
@@ -78,6 +80,8 @@ class RecentHistoryServiceTests(unittest.TestCase):
 
         self.assertEqual(result[0]["recordStatus"], "available")
         self.assertEqual(result[0]["experienceRate"], 12.5)
+        self.assertEqual(result[0]["growthSource"], "ranking/overall")
+        self.assertIsNotNone(datetime.fromisoformat(result[0]["growthObservedAt"]))
         self.assertEqual(result[0]["rankingSourceDate"], "2026-11-09")
         self.ranking.assert_called_once_with(
             target_date="2026-11-09",
@@ -86,6 +90,46 @@ class RecentHistoryServiceTests(unittest.TestCase):
             world_type=0,
         )
         self.basic_lookup.assert_not_called()
+
+    def test_uses_one_basic_response_for_level_experience_and_rate(self):
+        self.ranking.return_value = ({
+            "ranking": 123,
+            "character_level": 298,
+            "character_exp": 1_156_066_685_461_973,
+            "character_exp_rate": None,
+        }, self.response)
+        self.basic_lookup.return_value = ({
+            "character_level": 299,
+            "character_exp": 17_096_549_681_346,
+            "character_exp_rate": 0.355,
+        }, self.response)
+
+        result = self.collect([self.yesterday])
+
+        self.assertEqual(result[0]["level"], 299)
+        self.assertEqual(result[0]["experience"], 17_096_549_681_346)
+        self.assertEqual(result[0]["experienceRate"], 0.355)
+        self.assertEqual(result[0]["growthSource"], "character/basic")
+        self.assertIsNotNone(datetime.fromisoformat(result[0]["growthObservedAt"]))
+
+    def test_does_not_mix_a_partial_basic_rate_with_ranking_growth_values(self):
+        self.ranking.return_value = ({
+            "ranking": 123,
+            "character_level": 298,
+            "character_exp": 1_156_066_685_461_973,
+            "character_exp_rate": None,
+        }, self.response)
+        self.basic_lookup.return_value = ({
+            "character_exp_rate": 0.355,
+        }, self.response)
+
+        result = self.collect([self.yesterday])
+
+        self.assertEqual(result[0]["level"], 298)
+        self.assertEqual(result[0]["experience"], 1_156_066_685_461_973)
+        self.assertIsNone(result[0]["experienceRate"])
+        self.assertTrue(result[0]["experienceRateChecked"])
+        self.assertEqual(result[0]["growthSource"], "ranking/overall")
 
     def test_uses_basic_snapshot_when_ranking_is_empty(self):
         self.ranking.return_value = (None, self.response)
@@ -100,6 +144,8 @@ class RecentHistoryServiceTests(unittest.TestCase):
         self.assertEqual(result[0]["recordStatus"], "available")
         self.assertEqual(result[0]["level"], 288)
         self.assertEqual(result[0]["experienceRate"], 8.5)
+        self.assertEqual(result[0]["growthSource"], "character/basic")
+        self.assertIsNotNone(datetime.fromisoformat(result[0]["growthObservedAt"]))
         self.assertEqual(result[0]["rankingSourceDate"], "2026-11-09")
         self.basic_lookup.assert_called_once_with(
             "test-ocid", target_date="2026-11-09", historical=True
@@ -148,6 +194,7 @@ class RecentHistoryServiceTests(unittest.TestCase):
         self.assertEqual(result[0]["level"], 291)
         self.assertEqual(result[0]["experience"], 987654321)
         self.assertEqual(result[0]["experienceRate"], 3.25)
+        self.assertEqual(result[0]["growthSource"], "character/basic")
         self.assertIsNone(result[0]["ranking"])
         self.assertIsNone(result[0]["rankingSourceDate"])
         self.assertFalse(result[0].get("retryable", False))
