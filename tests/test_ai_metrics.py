@@ -163,8 +163,13 @@ class ServerAIMetricsTests(unittest.TestCase):
         self.assertTrue(result["history"][1]["levelUp"])
         self.assertFalse(result["history"][2]["levelUp"])
         self.assertTrue(result["history"][2]["levelUpCatchUp"])
+        expected_level_up_day_change = 1156066685461973 - 1129263590513928
+        self.assertEqual(result["history"][1]["experienceChange"], expected_level_up_day_change)
+        self.assertIsNone(result["history"][2]["experienceChange"])
         self.assertEqual(result["periodSummary"]["levelUpIntervals"], 1)
-        self.assertEqual(result["metrics"]["observedChangeDays"], 0)
+        self.assertEqual(result["metrics"]["observedChangeDays"], 1)
+        self.assertEqual(result["periodSummary"]["validGrowthIntervals"], 1)
+        self.assertEqual(result["periodSummary"]["observedExperienceSum"], expected_level_up_day_change)
 
     def test_missing_dates_and_level_up_transitions_are_not_interpolated(self):
         today = date(2026, 11, 16)
