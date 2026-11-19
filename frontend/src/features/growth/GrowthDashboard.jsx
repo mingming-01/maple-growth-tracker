@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { detectLevelUpEvents, buildExperienceChartSeries, dailyGrowthSegmentDash } from "./growthChartData.js";
 import { fetchHistoryArchive } from "../../lib/historyCollection.js";
-import { sortHistoryDescending, formatLocalISODate } from "../../lib/growth.js";
+import { sortHistoryAscending, sortHistoryDescending, formatLocalISODate } from "../../lib/growth.js";
 import { readGrowthGoals, saveGrowthGoals, readTrackerState } from "../../lib/storage.js";
 
 function fmt(value) {
@@ -415,8 +415,8 @@ export default function GrowthDashboard({ character, history, metrics: serverMet
       .filter(item => item?.date && item.date <= today);
     if (!sorted.length) return undefined;
     const { daily, cumulative } = buildExperienceChartSeries(sorted);
-    // The history API provides daily levels rather than a levelUp flag.
-    // Detect level changes locally so the yellow star is drawn on actual events.
+    // 서버가 반환한 명시적 레벨업 플래그를 우선 사용하고,
+    // 레거시 응답에 플래그가 없을 때만 차트 모듈이 이전 레벨을 보완한다.
     const levelUpEvents = detectLevelUpEvents(sorted);
     // 레벨업 날짜는 누적 경험치 선의 기본 점을 별 모양으로 교체한다.
     import("chart.js/auto").then(({ default: Chart }) => {
