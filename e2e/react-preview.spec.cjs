@@ -743,22 +743,7 @@ test("React growth chart keeps the real level-up-day EXP delta and AI receives t
   await page.locator('.mgt-nav a[href="#/growth"]').click();
   await expect(page.locator("#growth-trend canvas[aria-label='기간별 성장 추이 그래프']")).toBeVisible();
   const chartCanvas = page.locator("#growth-trend canvas[aria-label='기간별 성장 추이 그래프']");
-  await expect.poll(async () => chartCanvas.evaluate(canvas => {
-    const context = canvas.getContext("2d");
-    const { data, width, height } = context.getImageData(0, 0, canvas.width, canvas.height);
-    let redPixels = 0;
-    let yellowPixels = 0;
-    for (let y = Math.floor(height * 0.18); y < Math.floor(height * 0.9); y += 1) {
-      for (let x = 0; x < width; x += 1) {
-        const offset = (y * width + x) * 4;
-        const [red, green, blue, alpha] = data.slice(offset, offset + 4);
-        if (alpha > 160 && red > 210 && green < 150 && blue > 90 && blue < 190) redPixels += 1;
-        if (alpha > 160 && red > 200 && green > 150 && blue < 100) yellowPixels += 1;
-      }
-    }
-    return { redPixels, yellowPixels };
-  })).toMatchObject({ redPixels: expect.any(Number), yellowPixels: expect.any(Number) });
-  const chartPixels = await chartCanvas.evaluate(canvas => {
+  const countChartPixels = () => chartCanvas.evaluate(canvas => {
     const context = canvas.getContext("2d");
     const { data, width, height } = context.getImageData(0, 0, canvas.width, canvas.height);
     let redPixels = 0;
@@ -773,7 +758,8 @@ test("React growth chart keeps the real level-up-day EXP delta and AI receives t
     }
     return { redPixels, yellowPixels };
   });
-  expect(chartPixels.redPixels).toBeGreaterThan(30);
+  await expect.poll(async () => (await countChartPixels()).redPixels).toBeGreaterThan(30);
+  const chartPixels = await countChartPixels();
   expect(chartPixels.yellowPixels).toBeGreaterThan(8);
   await expect(page.locator("#growth-timeline .growth-timeline-item.is-level-up")).toHaveCount(1);
   await expect(page.locator("#growth-timeline")).toContainText("2026.11.18");
