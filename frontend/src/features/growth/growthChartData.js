@@ -77,7 +77,19 @@ export function buildExperienceChartSeries(records) {
     cumulative.push(running / 1_000_000_000_000);
   });
 
-  return { daily, cumulative };
+  const dailyLastObservedIndex = daily.reduce(
+    (last, value, index) => value !== null ? index : last,
+    -1
+  );
+  const dailyDisplay = daily.map((value, index) =>
+    value !== null
+      ? value
+      : index > dailyLastObservedIndex && dailyLastObservedIndex >= 0
+        ? daily[dailyLastObservedIndex]
+        : null
+  );
+
+  return { daily, dailyDisplay, dailyLastObservedIndex, cumulative };
 }
 
 /**
