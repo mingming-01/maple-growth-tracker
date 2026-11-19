@@ -69,6 +69,49 @@ function daysBetween(start, end) {
   return first === null || last === null ? null : Math.round((last - first) / 86400000);
 }
 
+function createLevelUpStarPlugin(levelUpEvents) {
+  return {
+    id: "growthLevelUpStars",
+    afterDatasetsDraw(chart) {
+      const meta = chart.getDatasetMeta(0);
+      if (!meta?.data?.length) return;
+      const { ctx } = chart;
+      ctx.save();
+      levelUpEvents.forEach((isLevelUp, index) => {
+        if (!isLevelUp) return;
+        const point = meta.data[index];
+        if (!point) return;
+        const { x, y } = point.getProps(["x", "y"], true);
+        if (!Number.isFinite(x) || !Number.isFinite(y)) return;
+
+        // Draw the star at the exact cumulative-series point, replacing its circle.
+        const outerRadius = 9;
+        const innerRadius = 4;
+        ctx.save();
+        ctx.translate(x, y);
+        ctx.rotate(-Math.PI / 2);
+        ctx.beginPath();
+        for (let vertex = 0; vertex < 10; vertex += 1) {
+          const radius = vertex % 2 === 0 ? outerRadius : innerRadius;
+          const angle = vertex * Math.PI / 5;
+          const px = Math.cos(angle) * radius;
+          const py = Math.sin(angle) * radius;
+          if (vertex === 0) ctx.moveTo(px, py);
+          else ctx.lineTo(px, py);
+        }
+        ctx.closePath();
+        ctx.fillStyle = "#f5c542";
+        ctx.strokeStyle = "#805b00";
+        ctx.lineWidth = 1.25;
+        ctx.fill();
+        ctx.stroke();
+        ctx.restore();
+      });
+      ctx.restore();
+    }
+  };
+}
+
 export async function loadGrowthPeriod(character, days, onProgress = null) {
   const normalizedDays = [30, 90].includes(Number(days)) ? Number(days) : 7;
   if (!character?.ocid || normalizedDays === 7) {
@@ -393,11 +436,11 @@ export default function GrowthDashboard({ character, history, onHistoryChange, o
       if (cancelled || !canvasRef.current) return;
       chartRef.current = new Chart(canvasRef.current.getContext("2d"), {
       type: "line",
-      plugins: [],
+      plugins: [createLevelUpStarPlugin(levelUpEvents)],
       data: {
         labels: sorted.map(item => String(item.date || "").slice(5)),
         datasets: [
-          { label:"총 경험치 증가량",data:cumulative,yAxisID:"experience",borderColor:"#36a2eb",backgroundColor:"#36a2eb",borderWidth:3,tension:0,pointRadius:levelUpEvents.map(isLevelUp=>isLevelUp?8:3),pointHoverRadius:levelUpEvents.map(isLevelUp=>isLevelUp?10:6),pointStyle:levelUpEvents.map(isLevelUp=>isLevelUp?"star":"circle"),pointBackgroundColor:levelUpEvents.map(isLevelUp=>isLevelUp?"#f5c542":"#36a2eb"),pointBorderColor:levelUpEvents.map(isLevelUp=>isLevelUp?"#805b00":"#36a2eb"),pointBorderWidth:levelUpEvents.map(isLevelUp=>isLevelUp?1.5:0),fill:false },
+          { label:"총 경험치 증가량",data:cumulative,yAxisID:"experience",borderColor:"#36a2eb",backgroundColor:"#36a2eb",borderWidth:3,tension:0,pointRadius:levelUpEvents.map(isLevelUp=>isLevelUp?1:3),pointHoverRadius:levelUpEvents.map(isLevelUp=>isLevelUp?2:6),pointHitRadius:levelUpEvents.map(isLevelUp=>isLevelUp?12:8),pointStyle:"circle",pointBackgroundColor:"#36a2eb",pointBorderColor:"#36a2eb",pointBorderWidth:0,fill:false },
           { label:"일일 경험치 증가량",data:daily,yAxisID:"dailyGrowth",borderColor:"#ff6384",backgroundColor:"#ff6384",borderWidth:2,segment:{borderDash:dailyGrowthSegmentDash},spanGaps:false,tension:0,pointRadius:2,pointHoverRadius:5,fill:false }
         ]
       },
