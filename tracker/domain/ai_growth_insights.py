@@ -18,7 +18,7 @@ def _parse_date(value):
         return None
 
 
- def _is_available(record):
+def _is_available(record):
     if not isinstance(record, dict):
         return False
     if record.get("recordStatus") not in (None, "available"):
