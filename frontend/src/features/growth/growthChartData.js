@@ -53,8 +53,9 @@ export function buildExperienceChartSeries(records) {
       return;
     }
 
-    if (levelUpEvents[index]) {
-      // Nexon EXP resets at a level boundary; do not invent cross-level EXP.
+    if (levelUpEvents[index] || item?.levelUpCatchUp === true) {
+      // Carry the confirmed total across the reset day and the following
+      // delayed level-field update without drawing a second level-up marker.
       cumulative.push(running / 1_000_000_000_000);
       return;
     }
