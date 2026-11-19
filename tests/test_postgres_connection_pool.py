@@ -2,6 +2,9 @@
 import unittest
 from unittest.mock import MagicMock, patch
 
+from psycopg import OperationalError
+from psycopg_pool import PoolTimeout
+
 from tracker.repositories import postgres_connection_pool as pool_module
 
 
@@ -77,6 +80,41 @@ class PostgreSQLConnectionPoolTests(unittest.TestCase):
             second.close()
 
         self.assertEqual(pool_factory.call_count, 2)
+
+    def test_different_row_factories_use_separate_pools(self):
+        first_pool = MagicMock()
+        second_pool = MagicMock()
+        first_pool.getconn.return_value = MagicMock()
+        second_pool.getconn.return_value = MagicMock()
+
+        with patch.object(
+            pool_module,
+            "ConnectionPool",
+            side_effect=[first_pool, second_pool],
+        ) as pool_factory:
+            first = pool_module.get_pooled_connection(
+                "postgresql://example.invalid/database",
+                row_factory=dict,
+            )
+            first.close()
+            second = pool_module.get_pooled_connection(
+                "postgresql://example.invalid/database",
+                row_factory=list,
+            )
+            second.close()
+
+        self.assertEqual(pool_factory.call_count, 2)
+        self.assertIs(pool_factory.call_args_list[0].kwargs["kwargs"]["row_factory"], list)
+
+    def test_pool_checkout_timeout_is_reported_as_postgres_operational_error(self):
+        pool = MagicMock()
+        pool.getconn.side_effect = PoolTimeout("pool is busy")
+
+        with patch.object(pool_module, "ConnectionPool", return_value=pool):
+            with self.assertRaises(OperationalError):
+                pool_module.get_pooled_connection(
+                    "postgresql://example.invalid/database"
+                )
 
     def test_transaction_rolls_back_when_repository_operation_fails(self):
         raw_connection = MagicMock()
