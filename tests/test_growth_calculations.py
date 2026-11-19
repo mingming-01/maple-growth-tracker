@@ -124,6 +124,7 @@ class GrowthCalculationBehaviorTests(unittest.TestCase):
         self.assertEqual(history[1]["levelUpCurrentLevel"], 299)
         self.assertIsNone(history[1]["experienceChange"])
         self.assertFalse(history[2]["levelUp"])
+        self.assertTrue(history[2]["levelUpCatchUp"])
         self.assertIsNone(history[2]["experienceChange"])
 
     def test_archive_history_uses_experience_rate_reset_for_level_up(self):
@@ -150,6 +151,7 @@ class GrowthCalculationBehaviorTests(unittest.TestCase):
         self.assertTrue(history[1]["levelUp"])
         self.assertEqual(history[1]["levelUpCurrentLevel"], 299)
         self.assertFalse(history[2]["levelUp"])
+        self.assertTrue(history[2]["levelUpCatchUp"])
         self.assertIsNone(history[2]["experienceChange"])
 
     def test_archive_history_does_not_calculate_changes_across_missing_records(self):
