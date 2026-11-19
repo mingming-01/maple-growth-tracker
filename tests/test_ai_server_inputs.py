@@ -175,7 +175,8 @@ class AIServerInputTests(unittest.TestCase):
                     (self.today - timedelta(days=period_days - 1)).isoformat(),
                 )
                 self.assertEqual(summary["endDate"], self.today.isoformat())
-                self.assertEqual(storage.calls[0][1], self.today - timedelta(days=period_days - 1))
+                # DB 조회는 선택 기간 첫날의 레벨업 전환을 비교할 직전 스냅샷도 포함한다.
+                self.assertEqual(storage.calls[0][1], self.today - timedelta(days=period_days))
                 self.assertEqual(storage.calls[0][2], self.today)
 
     def test_analysis_includes_previous_day_to_detect_period_start_level_up(self):
