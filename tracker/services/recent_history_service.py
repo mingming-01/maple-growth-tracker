@@ -130,7 +130,6 @@ def _fetch_recent_record(
         }
 
     ranking_data = _get_cached_current_ranking(basic, target_date, today)
-    used_cached_profile = ranking_data is not None
     if ranking_data is not None:
         response = requests.Response()
         response.status_code = 200
@@ -175,7 +174,11 @@ def _fetch_recent_record(
                         if target_date == today
                         else _now_utc_iso()
                     )
-                experience_rate = rate_data.get("character_exp_rate")
+                    experience_rate = rate_data.get("character_exp_rate")
+                else:
+                    # 기본 정보 응답이 성장 스냅샷 전체를 제공하지 못하면
+                    # 해당 응답의 진행률만 랭킹 응답에 섞지 않는다.
+                    experience_rate = None
             rate_checked = bool(
                 rate_response is not None and rate_response.status_code == 200
             )
