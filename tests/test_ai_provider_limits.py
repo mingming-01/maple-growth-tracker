@@ -19,7 +19,7 @@ class AIProviderLimitTests(unittest.TestCase):
             "AI_OPENROUTER_TOTAL_TIMEOUT": 65.0,
         }
         with patch.object(ai_provider, "_setting", side_effect=lambda name, default=None: settings.get(name, default)):
-            self.assertEqual(ai_provider._provider_timeouts("openrouter"), (2.0, 43.0, 45.0))
+            self.assertEqual(ai_provider._provider_timeouts("openrouter"), (2.0, 45.0, 48.0))
 
     def test_gemini_timeout_reserves_time_for_openrouter_fallback(self):
         settings = {
