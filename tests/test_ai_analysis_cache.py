@@ -1,3 +1,4 @@
+import hashlib
 import unittest
 from unittest.mock import patch
 
@@ -52,11 +53,12 @@ class AIResponseCacheMetricsTests(unittest.TestCase):
                 cache.set_ai_response("third", "three")
 
         self.assertEqual(len(cache.ai_response_cache), 1)
-        self.assertEqual(cache.get_ai_response("third"), "three")
-        self.assertNotIn(
-            __import__("hashlib").sha256(b"first").hexdigest(),
-            cache.ai_response_cache,
-        )
+        with patch(
+            "tracker.services.runtime_cache.time.time",
+            return_value=runtime_cache.AI_RESPONSE_CACHE_TTL + 101,
+        ):
+            self.assertEqual(cache.get_ai_response("third"), "three")
+        self.assertNotIn(hashlib.sha256(b"first").hexdigest(), cache.ai_response_cache)
         metric.assert_any_call("cache.evictions", 2, cache="ai_response")
 
 
