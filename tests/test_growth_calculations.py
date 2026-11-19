@@ -122,7 +122,10 @@ class GrowthCalculationBehaviorTests(unittest.TestCase):
         self.assertTrue(history[1]["levelUp"])
         self.assertEqual(history[1]["levelUpPreviousLevel"], 298)
         self.assertEqual(history[1]["levelUpCurrentLevel"], 299)
-        self.assertIsNone(history[1]["experienceChange"])
+        self.assertEqual(
+            history[1]["experienceChange"],
+            1156066685461973 - 1129263590513928,
+        )
         self.assertFalse(history[2]["levelUp"])
         self.assertTrue(history[2]["levelUpCatchUp"])
         self.assertIsNone(history[2]["experienceChange"])
@@ -150,6 +153,10 @@ class GrowthCalculationBehaviorTests(unittest.TestCase):
 
         self.assertTrue(history[1]["levelUp"])
         self.assertEqual(history[1]["levelUpCurrentLevel"], 299)
+        self.assertEqual(
+            history[1]["experienceChange"],
+            1156066685461973 - 1129263590513928,
+        )
         self.assertFalse(history[2]["levelUp"])
         self.assertTrue(history[2]["levelUpCatchUp"])
         self.assertIsNone(history[2]["experienceChange"])
