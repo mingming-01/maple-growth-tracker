@@ -142,7 +142,11 @@ def calculate_recent_history_changes(history):
             if records_available else None
         )
 
-        if current.get("ranking") is not None and previous.get("ranking") is not None:
+        if (
+            consecutive
+            and current.get("ranking") is not None
+            and previous.get("ranking") is not None
+        ):
             current["rankingChange"] = previous["ranking"] - current["ranking"]
         else:
             current["rankingChange"] = None
@@ -191,7 +195,11 @@ def calculate_archive_history_changes(history):
             previous, current
         )
 
-        if current.get("ranking") is not None and previous.get("ranking") is not None:
+        if (
+            consecutive
+            and current.get("ranking") is not None
+            and previous.get("ranking") is not None
+        ):
             current["rankingChange"] = previous["ranking"] - current["ranking"]
 
     return history
