@@ -23,16 +23,22 @@ def build_server_growth_metrics(character, records, reference_date=None, period_
     today = reference_date if isinstance(reference_date, date) else date.today()
     period_days = max(1, int(period_days))
     by_date = {}
+    source_by_date = {}
     for record in records if isinstance(records, (list, tuple)) else []:
-        if not isinstance(record, dict) or record.get("recordStatus") != "available":
+        if not isinstance(record, dict):
             continue
         try:
             record_date = date.fromisoformat(str(record.get("date", "")))
         except (TypeError, ValueError):
             continue
+        if record_date > today:
+            continue
+        source_by_date[record_date] = record
+        if record.get("recordStatus") != "available":
+            continue
         level = to_exact_integer(record.get("level"))
         experience = to_exact_integer(record.get("experience"))
-        if record_date > today or level is None or experience is None:
+        if level is None or experience is None:
             continue
         raw_rank = _number(record.get("ranking"))
         try:
@@ -78,6 +84,19 @@ def build_server_growth_metrics(character, records, reference_date=None, period_
         item["experienceChange"] for item in period_records
         if item["experienceChange"] is not None
     ]
+    period_source_records = [
+        record for record_date, record in source_by_date.items()
+        if period_start <= record_date <= today
+    ]
+    not_ready_days = sum(
+        record.get("recordStatus") == "not_ready" for record in period_source_records
+    )
+    not_collected_days = sum(
+        record.get("recordStatus") == "not_collected" for record in period_source_records
+    )
+    unavailable_days = sum(
+        record.get("recordStatus") == "unavailable" for record in period_source_records
+    )
     all_changes = [
         {
             "date": date.fromisoformat(item["date"]),
@@ -136,6 +155,70 @@ def build_server_growth_metrics(character, records, reference_date=None, period_
         }
         for item in period_records if item["levelUp"]
     ]
+    verified_period_ranks = [
+        item for item in period_records if item["ranking"] is not None
+    ]
+    period_ranking_change = (
+        verified_period_ranks[0]["ranking"] - verified_period_ranks[-1]["ranking"]
+        if len(verified_period_ranks) >= 2 else None
+    )
+    positive_period_changes = [
+        (item["date"], item["experienceChange"])
+        for item in period_records
+        if item["experienceChange"] is not None and item["experienceChange"] > 0
+    ]
+    best_period_growth = max(positive_period_changes, key=lambda pair: pair[1]) if positive_period_changes else None
+
+    timeline = []
+    for item in period_records:
+        if item["levelUp"]:
+            timeline.append({
+                "type": "level-up", "date": item["date"],
+                "title": f"Lv. {item['levelUpCurrentLevel'] or item['level']} 달성",
+                "description": (
+                    f"Lv. {item['levelUpPreviousLevel']}에서 레벨업"
+                    if item["levelUpPreviousLevel"] is not None else "레벨업 기록 확인"
+                ),
+                "priority": 0,
+            })
+    if best_period_growth:
+        timeline.append({
+            "type": "best-growth", "date": best_period_growth[0],
+            "title": "기간 최고 성장일",
+            "description": f"+{best_period_growth[1] / 1_000_000_000_000:.2f}조 경험치",
+            "priority": 1,
+        })
+    ranking_records = [
+        item for item in period_records
+        if item["rankingChange"] is not None and item["rankingChange"] > 0
+    ]
+    if ranking_records:
+        best_ranking = max(ranking_records, key=lambda item: item["rankingChange"])
+        timeline.append({
+            "type": "ranking", "date": best_ranking["date"],
+            "title": "랭킹 최고 상승일",
+            "description": f"전일 대비 {best_ranking['rankingChange']:,}위 상승",
+            "priority": 2,
+        })
+    latest_available = period_records[-1] if period_records else None
+    if latest_available and not any(
+        event["date"] == latest_available["date"] and event["type"] == "level-up"
+        for event in timeline
+    ):
+        timeline.append({
+            "type": "latest", "date": latest_available["date"],
+            "title": "최근 정상 기록",
+            "description": (
+                f"Lv. {latest_available['level']} · 경험치 "
+                f"{latest_available['experience']:,}"
+            ),
+            "priority": 3,
+        })
+    timeline = sorted(
+        timeline,
+        key=lambda event: (event["date"], -event["priority"]),
+        reverse=True,
+    )[:8]
 
     period_summary = {
         "startDate": period_start.isoformat(),
@@ -150,6 +233,21 @@ def build_server_growth_metrics(character, records, reference_date=None, period_
         ),
         "observedExperienceSum": sum(period_changes) if period_changes else None,
         "levelUpIntervals": len(level_ups),
+        "growth": sum(period_changes) if period_changes else None,
+        "averageGrowth": sum(period_changes) / len(period_changes) if period_changes else None,
+        "confirmedChangeDays": len(period_changes),
+        "bestDailyGrowth": best_period_growth[1] if best_period_growth else None,
+        "bestDailyGrowthDate": best_period_growth[0] if best_period_growth else None,
+        "growthDays": sum(value > 0 for value in period_changes),
+        "zeroGrowthDays": sum(value == 0 for value in period_changes),
+        "negativeGrowthDays": sum(value < 0 for value in period_changes),
+        "levelUpCount": len(level_ups),
+        "levelUpDates": [item["date"] for item in level_ups],
+        "rankingChange": period_ranking_change,
+        "availableDays": len(period_records),
+        "notReadyDays": not_ready_days,
+        "notCollectedDays": not_collected_days,
+        "unavailableDays": unavailable_days,
     }
 
     period_values = period_changes
@@ -179,6 +277,7 @@ def build_server_growth_metrics(character, records, reference_date=None, period_
                 "direction": direction,
             },
             "levelUps": level_ups,
+            "timeline": timeline,
             "prediction": None,
         },
         "periodSummary": period_summary,

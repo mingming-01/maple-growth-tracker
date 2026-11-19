@@ -6,6 +6,31 @@ from tracker.domain.ai_metrics import build_server_growth_metrics
 
 
 class ServerAIMetricsTests(unittest.TestCase):
+
+    def test_server_metrics_include_period_summary_and_timeline_for_all_clients(self):
+        today = date(2026, 11, 16)
+        records = [
+            {"date": "2026-11-13", "level": 280, "experience": 1000, "experienceRate": 10.0, "ranking": 300, "rankingScope": "overall", "rankingSourceDate": "2026-11-13", "recordStatus": "available"},
+            {"date": "2026-11-14", "level": 280, "experience": 1200, "experienceRate": 12.0, "ranking": 280, "rankingScope": "overall", "rankingSourceDate": "2026-11-14", "recordStatus": "available"},
+            {"date": "2026-11-15", "level": 280, "experience": 1200, "experienceRate": 12.0, "ranking": None, "recordStatus": "not_ready"},
+            {"date": "2026-11-16", "level": None, "experience": None, "experienceRate": None, "recordStatus": "not_collected"},
+        ]
+        result = build_server_growth_metrics({"experienceRate": 12.0}, records, reference_date=today, period_days=4)
+        summary = result["periodSummary"]
+        self.assertEqual(result["metrics"]["averageDailyGrowth"], 200)
+        self.assertEqual(result["metrics"]["sevenDayGrowth"], 200)
+        self.assertEqual(result["metrics"]["rankingChange"], 20)
+        self.assertEqual(summary["growth"], 200)
+        self.assertEqual(summary["averageGrowth"], 200)
+        self.assertEqual(summary["confirmedChangeDays"], 1)
+        self.assertEqual(summary["availableDays"], 2)
+        self.assertEqual(summary["notReadyDays"], 1)
+        self.assertEqual(summary["notCollectedDays"], 1)
+        self.assertEqual(summary["coveragePercent"], 50.0)
+        self.assertEqual(result["metrics"]["timeline"][0]["type"], "latest")
+        self.assertEqual(result["metrics"]["timeline"][0]["date"], "2026-11-14")
+        self.assertIsNone(result["metrics"]["prediction"])
+
     def test_metrics_are_derived_from_contiguous_authoritative_records(self):
         today = date(2026, 11, 16)
         records = [

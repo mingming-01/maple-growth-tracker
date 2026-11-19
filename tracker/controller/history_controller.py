@@ -9,6 +9,7 @@ from tracker.domain.growth_calculations import (
     calculate_archive_history_changes,
     calculate_recent_history_changes,
 )
+from tracker.domain.ai_metrics import build_server_growth_metrics
 from tracker.services.history_archive_service import fetch_historical_record
 from tracker.services.recent_history_service import (
     _get_cached_current_ranking,
@@ -38,6 +39,28 @@ from tracker.runtime import (
 )
 
 history_bp = Blueprint("history", __name__, url_prefix="/api")
+
+
+def _attach_growth_metrics(payload, reference_date, period_days):
+    """이력 API에 모든 화면이 공유할 서버 계산 지표를 추가한다."""
+    records = payload.get("history") if isinstance(payload, dict) else None
+    records = records if isinstance(records, list) else []
+    latest = next(
+        (
+            item for item in reversed(records)
+            if isinstance(item, dict) and item.get("recordStatus") == "available"
+        ),
+        None,
+    )
+    calculated = build_server_growth_metrics(
+        {"experienceRate": latest.get("experienceRate") if latest else None},
+        records,
+        reference_date=reference_date,
+        period_days=period_days,
+    )
+    payload["metrics"] = calculated["metrics"]
+    payload["periodSummary"] = calculated["periodSummary"]
+    return payload
 
 
 def _load_recent_character_basic_snapshot(character_name, ocid, now=None):
@@ -111,9 +134,13 @@ def _stale_history_response(cache_key, character_name, error_message):
     """현재 형식 캐시를 우선 사용하고, 구형 캐시는 순위를 제거해 제공한다."""
     snapshot, saved_at = load_api_snapshot(cache_key)
     if snapshot is not None:
+        today = datetime.now(KOREA_TIMEZONE).date()
+        if "metrics" not in snapshot or "periodSummary" not in snapshot:
+            snapshot = _attach_growth_metrics(dict(snapshot), today, 7)
         return jsonify(with_data_status(snapshot, "stale", saved_at)), 200
 
     legacy_keys = (
+        f"history:rank-overall-v3:{character_name}",
         f"history:rank-overall-v2:{character_name}",
         f"history:{character_name}",
     )
@@ -138,6 +165,9 @@ def _stale_history_response(cache_key, character_name, error_message):
             safe_record["rankingChange"] = None
             sanitized_history.append(safe_record)
         sanitized["history"] = sanitized_history
+        sanitized = _attach_growth_metrics(
+            sanitized, datetime.now(KOREA_TIMEZONE).date(), 7
+        )
         return jsonify(with_data_status(
             sanitized, "stale", legacy_saved_at
         )), 200
@@ -162,7 +192,7 @@ def get_history():
 
     # 이전 캐시에는 과거 집계일의 프로필 랭킹이 오늘 순위로 섞였을 수 있어
     # 정합성 기준을 적용한 새 키로 분리한다.
-    cache_key = f"history:rank-overall-v3:{character_name}"
+    cache_key = f"history:rank-overall-v4:{character_name}"
     force_refresh = request.args.get("refresh") == "1"
     cached_history = None if force_refresh else get_cache(cache_key)
     cached_records = cached_history.get("history") if isinstance(cached_history, dict) else None
@@ -304,7 +334,7 @@ def get_history():
         else "today_not_ready" if latest_record and latest_record.get("recordStatus") == "not_ready"
         else "complete"
     )
-    result = {
+    result = _attach_growth_metrics({
         "characterName": basic["character_name"],
         "worldName": world_name,
         "level": basic["character_level"],
@@ -316,7 +346,7 @@ def get_history():
             "status": storage_status,
             "savedRecords": saved_record_count
         }
-    }
+    }, today, 7)
 
     saved_at = datetime.now().astimezone().isoformat(timespec="seconds")
     # 완전한 기록은 갱신하고, 부분 기록은 기존 스냅샷이 없을 때만 저장한다.
@@ -559,7 +589,7 @@ def get_history_archive():
     available_days = sum(item["recordStatus"] == "available" for item in history)
     not_ready_days = sum(item["recordStatus"] == "not_ready" for item in history)
     not_collected_days = sum(item["recordStatus"] == "not_collected" for item in history)
-    return jsonify({
+    response_payload = {
         "ocid": ocid,
         "days": days,
         "startDate": start_date.isoformat(),
@@ -571,4 +601,6 @@ def get_history_archive():
         "collection": collection,
         "storageBackend": growth_history_service.backend,
         "persistentStorage": growth_history_service.uses_postgres
-    })
+    }
+    response_payload = _attach_growth_metrics(response_payload, end_date, days)
+    return jsonify(response_payload)
