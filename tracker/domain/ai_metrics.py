@@ -2,6 +2,8 @@
 from datetime import date, timedelta
 from math import isfinite
 
+from tracker.domain.growth_calculations import is_experience_rate_reset
+
 
 def _number(value):
     if value is None or isinstance(value, bool):
@@ -46,6 +48,7 @@ def build_server_growth_metrics(character, records, reference_date=None, period_
             "date": record_date.isoformat(),
             "level": int(level),
             "experience": int(experience),
+            "experienceRate": _number(record.get("experienceRate")),
             "ranking": int(raw_rank) if rank_is_verified else None,
             "rankingScope": "overall" if rank_is_verified else None,
             "rankingSourceDate": record_date.isoformat() if rank_is_verified else None,
@@ -53,6 +56,8 @@ def build_server_growth_metrics(character, records, reference_date=None, period_
             "experienceChange": None,
             "rankingChange": None,
             "levelUp": False,
+            "levelUpPreviousLevel": None,
+            "levelUpCurrentLevel": None,
         }
 
     history = [by_date[key] for key in sorted(by_date)]
@@ -64,28 +69,38 @@ def build_server_growth_metrics(character, records, reference_date=None, period_
         previous = history[index - 1]
         previous_date = date.fromisoformat(previous["date"])
         current_date = date.fromisoformat(current["date"])
-        # A level/ranking transition can only be assigned to an exact date
-        # when both observations are from consecutive calendar days.
+        # Events are date-scoped and require consecutive daily snapshots.
         if (current_date - previous_date).days != 1:
             continue
 
         if current.get("ranking") is not None and previous.get("ranking") is not None:
             current["rankingChange"] = previous["ranking"] - current["ranking"]
 
-        if current["level"] > previous["level"]:
+        level_changed = current["level"] > previous["level"]
+        rate_reset = is_experience_rate_reset(
+            previous.get("experienceRate"), current.get("experienceRate")
+        )
+        duplicate_level_catch_up = previous.get("levelUp") is True and level_changed
+        if (level_changed or rate_reset) and not duplicate_level_catch_up:
             current["levelUp"] = True
+            current["levelUpPreviousLevel"] = previous["level"]
+            current["levelUpCurrentLevel"] = (
+                current["level"] if level_changed else previous["level"] + 1
+            )
             level_ups.append({
                 "date": current["date"],
-                "previousLevel": previous["level"],
-                "currentLevel": current["level"],
+                "previousLevel": current["levelUpPreviousLevel"],
+                "currentLevel": current["levelUpCurrentLevel"],
             })
             continue
-        if current["level"] != previous["level"] or current["experience"] < previous["experience"]:
+        if level_changed or duplicate_level_catch_up:
+            # Do not count a level-up reset or next-day ranking catch-up as EXP.
+            continue
+        if current["experience"] < previous["experience"]:
             continue
         change = current["experience"] - previous["experience"]
         current["experienceChange"] = change
         changes.append({"date": current_date, "experience": change})
-
     values = [item["experience"] for item in changes]
     midpoint = len(values) // 2
     earlier = values[:midpoint]
