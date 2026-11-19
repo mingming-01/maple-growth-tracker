@@ -123,13 +123,14 @@ def _provider_timeouts(provider, deadline=None):
         )
     else:
         read_timeout = min(
-            45.0, max(3.0, float(_setting("AI_OPENROUTER_READ_TIMEOUT", 40.0)))
+            60.0, max(3.0, float(_setting("AI_OPENROUTER_READ_TIMEOUT", 60.0)))
         )
-        # Keep enough of the request deadline for one bounded retry after a
-        # truncated free-model response instead of spending almost all 90s.
+        # The OpenRouter request is not retried after a transport timeout.
+        # Honor the configured fallback budget instead of reserving time for
+        # a retry that the timeout path never performs.
         total_timeout = min(
-            48.0,
-            max(2.0, float(_setting("AI_OPENROUTER_TOTAL_TIMEOUT", 45.0))),
+            65.0,
+            max(2.0, float(_setting("AI_OPENROUTER_TOTAL_TIMEOUT", 65.0))),
         )
     read_timeout = min(read_timeout, max(0.5, total_timeout - connect_timeout))
     if deadline is not None:
