@@ -175,8 +175,61 @@ class AIServerInputTests(unittest.TestCase):
                     (self.today - timedelta(days=period_days - 1)).isoformat(),
                 )
                 self.assertEqual(summary["endDate"], self.today.isoformat())
-                self.assertEqual(storage.calls[0][1], self.today - timedelta(days=period_days - 1))
+                # DB 조회는 선택 기간 첫날의 레벨업 전환을 비교할 직전 스냅샷도 포함한다.
+                self.assertEqual(storage.calls[0][1], self.today - timedelta(days=period_days))
                 self.assertEqual(storage.calls[0][2], self.today)
+
+    def test_analysis_includes_previous_day_to_detect_period_start_level_up(self):
+        captured = {}
+        period_start = self.today - timedelta(days=6)
+        records = [{
+            "date": (period_start - timedelta(days=1)).isoformat(),
+            "level": 280,
+            "experience": 9900,
+            "ranking": 200,
+            "recordStatus": "available",
+        }]
+        for offset in range(7):
+            record_date = period_start + timedelta(days=offset)
+            records.append({
+                "date": record_date.isoformat(),
+                "level": 281,
+                "experience": 100 + offset * 100,
+                "ranking": 190 - offset,
+                "recordStatus": "available",
+            })
+        storage = FakeGrowthStorage({"ocid-one": records})
+        snapshot = {
+            "ocid": "ocid-one",
+            "characterName": "테스트캐릭터",
+            "worldName": "테스트월드",
+            "job": "테스트직업",
+            "level": 281,
+            "experience": 700,
+            "experienceRate": 42.5,
+        }
+
+        def generate(character, history, metrics, insights, context, force_refresh):
+            captured.update(history=history, metrics=metrics)
+            return {"analysis": "테스트 분석"}
+
+        with (
+            patch.object(
+                ai_controller,
+                "load_api_snapshot",
+                return_value=(snapshot, datetime.now().astimezone().isoformat()),
+            ),
+            patch.object(ai_controller, "get_growth_history_service", return_value=storage),
+            patch.object(ai_controller, "generate_ai_analysis", side_effect=generate),
+        ):
+            response = self.client.post("/api/ai-analysis?name=테스트캐릭터", json={})
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(captured["metrics"]["levelUps"][0]["date"], period_start.isoformat())
+        self.assertEqual(captured["metrics"]["levelUps"][0]["previousLevel"], 280)
+        self.assertEqual(captured["metrics"]["levelUps"][0]["currentLevel"], 281)
+        self.assertEqual(captured["history"][0]["date"], (period_start - timedelta(days=1)).isoformat())
+
 
     def test_comparison_rebuilds_both_subjects_from_server_records(self):
         captured = {}

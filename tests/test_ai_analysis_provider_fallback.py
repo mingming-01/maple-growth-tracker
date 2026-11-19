@@ -1,5 +1,7 @@
 """Regression tests for AI provider fallback orchestration."""
+import logging
 import requests
+import time
 import unittest
 from types import SimpleNamespace
 from unittest.mock import patch
@@ -50,6 +52,18 @@ class AIAnalysisFallbackTests(unittest.TestCase):
             "level": 280,
             "experienceRate": 12.5,
         }
+
+    def test_provider_failure_logging_works_without_flask_app_context(self):
+        started_at = time.monotonic()
+        deadline = started_at + 10
+        error = ProviderError("temporary provider failure", "provider_timeout")
+
+        with self.assertLogs(service.__name__, level="WARNING") as captured:
+            service._log_provider_failure("gemini", error, started_at, deadline)
+
+        self.assertIn('"provider": "gemini"', captured.output[0])
+        self.assertIn('"error_type": "provider_timeout"', captured.output[0])
+        self.assertNotIn("temporary provider failure", captured.output[0])
 
     @patch("tracker.services.ai_analysis_service._request_deadline", return_value=12345.0)
     @patch("tracker.services.ai_analysis_service.get_runtime_state")
@@ -160,13 +174,10 @@ class AIAnalysisFallbackTests(unittest.TestCase):
     @patch("tracker.services.ai_analysis_service.get_ai_response_cache", return_value=None)
     @patch("tracker.services.ai_analysis_service.set_ai_response_cache")
     @patch("tracker.services.ai_analysis_service._gemini_cooldown_remaining", return_value=0)
-    @patch("tracker.services.ai_analysis_service.validate_growth_report", side_effect=[False, True])
-    @patch("tracker.services.ai_analysis_service.sanitize_ai_text", side_effect=lambda value, *_: value)
-    @patch("tracker.services.ai_analysis_service.request_gemini", return_value="불완전한 리포트")
+    @patch("tracker.services.ai_analysis_service.request_gemini", return_value="[AI 코멘트]\n주말 사냥이 평일보다 5% 효율적이에요.")
     @patch("tracker.services.ai_analysis_service.request_openrouter", return_value=VALID_REPORT)
-    def test_gemini_missing_required_report_sections_falls_back(
-        self, openrouter, _gemini, _sanitize, _validate, _cooldown,
-        _set_cache, _get_cache, get_state
+    def test_gemini_incomplete_five_section_report_falls_back(
+        self, openrouter, _gemini, _cooldown, _set_cache, _get_cache, get_state
     ):
         get_state.return_value = self.state
         result = service.generate_ai_analysis(
