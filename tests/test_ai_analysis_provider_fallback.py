@@ -194,7 +194,7 @@ class AIAnalysisFallbackTests(unittest.TestCase):
     @patch("tracker.services.ai_analysis_service.request_openrouter", return_value=VALID_REPORT)
     def test_http_429_falls_back_successfully_with_same_prompt_and_deadline(
         self, openrouter, gemini, _sanitize, _validate, _cooldown,
-        _set_cache, _get_cache, get_state, _deadline
+        _set_cache, _get_cache, get_state
     ):
         response = type("Response", (), {"status_code": 429, "headers": {}, "text": ""})()
         gemini.side_effect = requests.HTTPError("429 Too Many Requests", response=response)
