@@ -896,6 +896,8 @@ class GrowthHistoryApiTests(unittest.TestCase):
                 "ranking": 500 + offset,
                 "experienceRate": None if offset in (1, 2) else 12.345,
                 "experienceRateChecked": offset != 1,
+                "growthSource": "ranking/overall",
+                "growthObservedAt": "2026-11-10T03:00:00+00:00",
                 "rankingScope": "overall",
                 "rankingSourceDate": (today - timedelta(days=offset)).isoformat(),
             }
@@ -957,6 +959,8 @@ class GrowthHistoryApiTests(unittest.TestCase):
                 "experienceRate": 12.345,
                 # This test covers reuse of fully checked historical records.
                 "experienceRateChecked": True,
+                "growthSource": "ranking/overall",
+                "growthObservedAt": "2026-11-10T03:00:00+00:00",
                 "rankingScope": "overall",
                 "rankingSourceDate": (today - timedelta(days=offset)).isoformat(),
             }
