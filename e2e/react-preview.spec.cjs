@@ -682,3 +682,79 @@ test("React AI report restores evidence details from cache", async ({ page }) =>
   await expect(cachedEvidence).toBeVisible();
   await expect(cachedEvidence).toContainText("10 / 15일");
 });
+
+test("React growth chart keeps the real level-up-day EXP delta and AI receives the same history", async ({ page }) => {
+  const timestamp = "2026-11-19T08:45:00+09:00";
+  const character = {
+    characterName: "레벨업검증",
+    ocid: "level-up-chart-ai-e2e",
+    character_image: null,
+    worldName: "크로아",
+    job: "아델",
+    guildName: null,
+    level: 299,
+    experience: 17096549681346,
+    experienceRate: "0.984",
+    ranking: 12345,
+    rankingDataStatus: "available",
+    dataStatus: "current",
+    dataAsOf: timestamp
+  };
+  const history = [
+    { date: "2026-11-13", level: 298, experience: 1050000000000000, experienceRate: 91.228, experienceChange: null, levelUp: false, recordStatus: "available" },
+    { date: "2026-11-14", level: 298, experience: 108746142237141, experienceRate: 93.284, experienceChange: 37466142237141, levelUp: false, recordStatus: "available" },
+    { date: "2026-11-15", level: 298, experience: 1096165873797804, experienceRate: 94.825, experienceChange: 8704451426393, levelUp: false, recordStatus: "available" },
+    { date: "2026-11-16", level: 298, experience: 1111860276515938, experienceRate: 96.177, experienceChange: 15694402718134, levelUp: false, recordStatus: "available" },
+    { date: "2026-11-17", level: 298, experience: 1129263590513928, experienceRate: 99.226, experienceChange: 10515325881029, levelUp: false, recordStatus: "available" },
+    { date: "2026-11-18", level: 298, experience: 1156066685461973, experienceRate: 0.355, experienceChange: 26803094948045, levelUp: true, levelUpPreviousLevel: 298, levelUpCurrentLevel: 299, recordStatus: "available" },
+    { date: "2026-11-19", level: 299, experience: 17096549681346, experienceRate: 0.984, experienceChange: null, levelUp: false, levelUpCatchUp: true, recordStatus: "available" }
+  ];
+
+  await page.route("**/api/character?*", route => route.fulfill({
+    status: 200, contentType: "application/json", body: JSON.stringify(character)
+  }));
+  await page.route("**/api/history?*", route => route.fulfill({
+    status: 200, contentType: "application/json",
+    body: JSON.stringify({ characterName: character.characterName, worldName: character.worldName, history, historyStatus: "complete" })
+  }));
+  await page.route("**/api/character-details?*", route => route.fulfill({
+    status: 200, contentType: "application/json",
+    body: JSON.stringify({ section: "stats", status: "available", sources: [] })
+  }));
+
+  let submittedPayload = null;
+  await page.route("**/api/ai-analysis?*", async route => {
+    submittedPayload = route.request().postDataJSON();
+    await route.fulfill({
+      status: 200, contentType: "application/json",
+      body: JSON.stringify({
+        analysis: "[성장 패턴] 최근 기록에서 경험치 증가가 확인됐어요.\\n[성장 변화] 11월 18일의 경험치 증가량이 반영됐어요.\\n[레벨업 분석] 11월 18일에 298레벨에서 299레벨로 올라갔어요.\\n[성장 전망] 현재 진행률을 기준으로 확인해 주세요.\\n[AI 코멘트] 다음 기록도 계속 비교해 보세요.",
+        cacheHit: false,
+        growthInsights: {}
+      })
+    });
+  });
+
+  await page.goto("/preview/");
+  await page.getByLabel("캐릭터명").fill(character.characterName);
+  await page.getByRole("button", { name: /캐릭터 조회/ }).click();
+  await expect(page.getByRole("heading", { name: character.characterName })).toBeVisible();
+
+  await page.locator('.mgt-nav a[href="#/growth"]').click();
+  await expect(page.locator("#growth-trend canvas[aria-label='기간별 성장 추이 그래프']")).toBeVisible();
+  await expect(page.locator("#growth-timeline .growth-timeline-item.is-level-up")).toHaveCount(1);
+  await expect(page.locator("#growth-timeline")).toContainText("2026.11.18");
+  await expect(page.locator("#growth-timeline")).toContainText("Lv. 298에서 레벨업");
+  await expect(page.locator("#growth-timeline")).not.toContainText("2026.11.19\\n레벨업");
+
+  await page.locator('.mgt-nav a[href="#/analytics"]').click();
+  await page.getByRole("button", { name: "AI 분석 시작" }).click();
+  await expect(page.getByText("11월 18일에 298레벨에서 299레벨로 올라갔어요.")).toBeVisible();
+  expect(submittedPayload).not.toBeNull();
+  const resetDay = submittedPayload.history.find(item => item.date === "2026-11-18");
+  const catchUpDay = submittedPayload.history.find(item => item.date === "2026-11-19");
+  expect(resetDay.experienceChange).toBe(26803094948045);
+  expect(resetDay.levelUp).toBe(true);
+  expect(catchUpDay.experienceChange).toBeNull();
+  expect(catchUpDay.levelUpCatchUp).toBe(true);
+});
