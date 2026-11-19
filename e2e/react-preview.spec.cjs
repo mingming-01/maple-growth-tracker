@@ -715,7 +715,43 @@ test("React growth chart marks the level-up reset without inventing cross-level 
   }));
   await page.route("**/api/history?*", route => route.fulfill({
     status: 200, contentType: "application/json",
-    body: JSON.stringify({ characterName: character.characterName, worldName: character.worldName, history, historyStatus: "complete" })
+    body: JSON.stringify({
+      characterName: character.characterName,
+      worldName: character.worldName,
+      history,
+      historyStatus: "complete",
+      metrics: {
+        observedChangeDays: 4,
+        recordedDays: 7,
+        latestDailyGrowth: null,
+        averageDailyGrowth: 13201308690924.5,
+        sevenDayGrowth: 13201308690924.5,
+        rankingChange: null,
+        levelProgress: { currentRate: 0.984, remainingRate: 99.016 },
+        growthComparison: { direction: "increased", earlierAverage: 1000, recentAverage: 2000 },
+        levelUps: [{ date: "2026-11-18", previousLevel: 298, currentLevel: 299 }],
+        timeline: [
+          { type: "level-up", date: "2026-11-18", title: "Lv. 299 달성", description: "Lv. 298에서 레벨업", priority: 0 },
+          { type: "latest", date: "2026-11-19", title: "최근 정상 기록", description: "Lv. 299 · 경험치 17,096,549,681,346", priority: 3 }
+        ],
+        prediction: null
+      },
+      periodSummary: {
+        startDate: "2026-11-13",
+        endDate: "2026-11-19",
+        expectedSnapshots: 7,
+        availableDays: 7,
+        coveragePercent: 100,
+        confirmedChangeDays: 4,
+        averageGrowth: 13201308690924.5,
+        growth: 52805234763698,
+        notReadyDays: 0,
+        notCollectedDays: 0,
+        unavailableDays: 0,
+        levelUpCount: 1,
+        levelUpDates: ["2026-11-18"]
+      }
+    })
   }));
   await page.route("**/api/character-details?*", route => route.fulfill({
     status: 200, contentType: "application/json",

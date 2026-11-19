@@ -518,7 +518,6 @@ export default function GrowthDashboard({ character, history, metrics: serverMet
   const average = metrics?.averageDailyGrowth ?? null;
   const rankChange = metrics?.rankingChange ?? null;
   const percent = levelProgress?.currentRate ?? null;
-  const remaining = levelProgress?.remainingRate ?? (percent === null ? null : Math.max(0,100-Number(percent)));
 
   return (
     <div className="growth-dashboard">
@@ -591,8 +590,6 @@ export default function GrowthDashboard({ character, history, metrics: serverMet
 
 export function GrowthHistoryTable({ history }) {
   const records = Array.isArray(history) ? history : [];
-  const progressRateChanges = null;
-
   return (
     <section className="section growth-history-section" aria-labelledby="growth-history-title">
       <div className="section-header">

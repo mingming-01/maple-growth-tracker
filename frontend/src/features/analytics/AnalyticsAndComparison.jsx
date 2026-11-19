@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { getCharacter, getHistory, postAiAnalysis, postAiComparison } from "../../services/api.js";
 import { fetchHistoryArchive } from "../../lib/historyCollection.js";
 import { getCachedAI, saveCachedAI, stableStringify } from "../../lib/storage.js";
@@ -60,7 +60,7 @@ function parseAnalysis(analysis) {
 
 function buildReportSignature(character, history, metrics, analysisContext = {}) {
   return stableStringify({
-    cacheVersion: 5,
+    cacheVersion: 6,
     name:character.characterName,
     ocid:character.ocid,
     level:character.level,
