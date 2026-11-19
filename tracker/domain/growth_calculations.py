@@ -87,6 +87,39 @@ def calculate_observed_experience_change(previous, current):
     return current_experience - previous_experience
 
 
+
+def calculate_observed_experience_rate_change(previous, current):
+    """연속된 동일 레벨 스냅샷에서 확인된 진행률 차이(%p)를 반환한다."""
+    if not isinstance(previous, dict) or not isinstance(current, dict):
+        return None
+    if previous.get("recordStatus") not in (None, "available"):
+        return None
+    if current.get("recordStatus") not in (None, "available"):
+        return None
+    if not _are_consecutive_records(previous, current):
+        return None
+    previous_level = to_exact_integer(previous.get("level"))
+    current_level = to_exact_integer(current.get("level"))
+    if previous_level is None or current_level is None or previous_level != current_level:
+        return None
+    if is_experience_rate_reset(previous.get("experienceRate"), current.get("experienceRate")):
+        return None
+    try:
+        previous_rate = Decimal(str(previous.get("experienceRate")).replace("%", "").strip())
+        current_rate = Decimal(str(current.get("experienceRate")).replace("%", "").strip())
+    except (InvalidOperation, TypeError, ValueError):
+        return None
+    if (
+        not previous_rate.is_finite()
+        or not current_rate.is_finite()
+        or not Decimal("0") <= previous_rate <= Decimal("100")
+        or not Decimal("0") <= current_rate <= Decimal("100")
+    ):
+        return None
+    change = current_rate - previous_rate
+    return float(change) if change >= 0 else None
+
+
 def _mark_level_up(current, previous_level, current_level):
     """이벤트 날짜와 실제 레벨 전환을 분리해 기록한다."""
     current["levelUp"] = True
@@ -109,6 +142,7 @@ def calculate_recent_history_changes(history):
         current["levelUpCatchUp"] = False
         if index == 0:
             current["experienceChange"] = None
+            current["experienceRateChange"] = None
             current["rankingChange"] = None
             continue
 
@@ -141,6 +175,10 @@ def calculate_recent_history_changes(history):
             calculate_observed_experience_change(previous, current)
             if records_available else None
         )
+        current["experienceRateChange"] = (
+            calculate_observed_experience_rate_change(previous, current)
+            if records_available else None
+        )
 
         if (
             consecutive
@@ -158,6 +196,7 @@ def calculate_archive_history_changes(history):
     """30일·90일 기록에서 연속으로 확인된 날짜 사이의 변화만 계산한다."""
     for index, current in enumerate(history):
         current["experienceChange"] = None
+        current["experienceRateChange"] = None
         current["rankingChange"] = None
         current["levelUp"] = False
         current["levelUpPreviousLevel"] = None
@@ -192,6 +231,9 @@ def calculate_archive_history_changes(history):
             current["levelUpCatchUp"] = True
 
         current["experienceChange"] = calculate_observed_experience_change(
+            previous, current
+        )
+        current["experienceRateChange"] = calculate_observed_experience_rate_change(
             previous, current
         )
 

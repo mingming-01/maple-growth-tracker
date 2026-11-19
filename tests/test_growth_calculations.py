@@ -53,6 +53,24 @@ class GrowthCalculationBehaviorTests(unittest.TestCase):
             self.state.cache.clear()
         self.temp_dir.cleanup()
 
+
+    def test_experience_rate_change_is_server_calculated_only_for_same_level_consecutive_days(self):
+        history = [
+            {"date": "2026-11-16", "recordStatus": "available", "level": 280, "experience": 1000, "experienceRate": "10.100"},
+            {"date": "2026-11-17", "recordStatus": "available", "level": 280, "experience": 1200, "experienceRate": "10.350"},
+            {"date": "2026-11-18", "recordStatus": "available", "level": 280, "experience": 1400, "experienceRate": "10.350"},
+            {"date": "2026-11-19", "recordStatus": "available", "level": 280, "experience": 1500, "experienceRate": "0.500"},
+            {"date": "2026-11-20", "recordStatus": "available", "level": 281, "experience": 100, "experienceRate": "0.600"},
+        ]
+
+        calculate_recent_history_changes(history)
+
+        self.assertIsNone(history[0]["experienceRateChange"])
+        self.assertEqual(history[1]["experienceRateChange"], 0.25)
+        self.assertEqual(history[2]["experienceRateChange"], 0.0)
+        self.assertIsNone(history[3]["experienceRateChange"])
+        self.assertIsNone(history[4]["experienceRateChange"])
+
     def test_recent_history_does_not_invent_daily_change_across_level_up(self):
         response_stub = Mock(status_code=200)
         basic = {
