@@ -1,6 +1,6 @@
 """최근·과거 성장 기록 HTTP 라우트."""
 from concurrent.futures import ThreadPoolExecutor
-from datetime import date, datetime, timedelta
+from datetime import date, datetime, timedelta, timezone
 
 import requests
 from flask import Blueprint, jsonify, request
@@ -80,6 +80,8 @@ def _load_recent_character_basic_snapshot(character_name, ocid, now=None):
         "character_level": snapshot.get("level"),
         "character_exp": snapshot.get("experience"),
         "character_exp_rate": snapshot.get("experienceRate"),
+        "_growthSource": "character/basic",
+        "_growthObservedAt": saved_at,
         "ranking": snapshot.get("ranking"),
         "ranking_scope": "overall",
         "ranking_date": snapshot.get("rankingDate"),
@@ -213,6 +215,14 @@ def get_history():
                 )
             return jsonify({"error": "캐릭터 정보를 확인할 수 없습니다."}), response.status_code
 
+        # 기본 프로필의 세 성장 필드는 동일한 character/basic 응답에서 왔다.
+        # 캐시를 재사용한 경우에는 원래 API 스냅샷 저장 시각을 유지한다.
+        basic = dict(basic)
+        basic.setdefault("_growthSource", "character/basic")
+        basic.setdefault(
+            "_growthObservedAt",
+            datetime.now(timezone.utc).isoformat(timespec="milliseconds"),
+        )
         world_name = basic["world_name"]
         today = datetime.now(KOREA_TIMEZONE).date()
         stored_recent = {}
