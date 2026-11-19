@@ -748,7 +748,7 @@ test("React growth chart keeps the real level-up-day EXP delta and AI receives t
     const { data, width, height } = context.getImageData(0, 0, canvas.width, canvas.height);
     let redPixels = 0;
     let yellowPixels = 0;
-    for (let y = Math.floor(height * 0.18); y < Math.floor(height * 0.9); y += 1) {
+    for (let y = 0; y < height; y += 1) {
       for (let x = 0; x < width; x += 1) {
         const offset = (y * width + x) * 4;
         const red = data[offset], green = data[offset + 1], blue = data[offset + 2], alpha = data[offset + 3];
