@@ -192,7 +192,7 @@ class AIServerInputTests(unittest.TestCase):
                 "experienceRate": 0.984,
                 "recordStatus": "available",
             },
-        ]}
+        ]})
         report = (
             "[성장 패턴] 확인된 성장 기록을 바탕으로 최근 변화를 살펴봤어요.\n"
             "[성장 변화] 레벨업 당일의 실제 경험치 증가량도 분석에 반영됐어요.\n"
