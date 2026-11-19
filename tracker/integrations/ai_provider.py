@@ -7,7 +7,7 @@ import requests
 from flask import current_app, has_app_context
 
 from tracker.config import Config
-from tracker.integrations.bounded_http import post_json_with_deadline
+from tracker.integrations.bounded_http import DEFAULT_MAX_SSE_RESPONSE_BYTES, post_json_with_deadline
 
 
 GEMINI_URL = "https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent"
@@ -266,6 +266,7 @@ def request_openrouter(prompt, api_key=None, deadline=None):
         read_timeout=read_timeout,
         total_timeout=total_timeout,
         deadline=deadline,
+        max_response_bytes=DEFAULT_MAX_SSE_RESPONSE_BYTES,
         response_format="sse",
     )
     metadata = _http_metadata(payload, "openrouter", model_alias)
