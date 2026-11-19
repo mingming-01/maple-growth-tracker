@@ -172,31 +172,26 @@ def ai_analysis():
         timings["history_db_ms"] = round((time.perf_counter() - stage_started) * 1000, 1)
         stage = "calculation"
         stage_started = time.perf_counter()
-        stored_records = [
-            item for item in combined_records
-            if str(item.get("date") or "") >= period_start.isoformat()
-        ]
-        insight_records = [
-            item for item in combined_records
-            if str(item.get("date") or "") >= insight_start.isoformat()
-        ]
-
-        # 선택 기간 첫날의 레벨업/경험치 변화도 직전 날짜와 비교할 수 있도록
-        # 기준 스냅샷 하루를 추가하되, periodSummary 자체는 선택 기간만 집계한다.
+        # 하나의 원본 구간을 공통 백엔드 계산기로 정규화한다.
+        # 최근 성장 이력, 기간 통계, AI 비교 인사이트는 모두 이 결과에서 파생한다.
         calculation_start = period_start - timedelta(days=1)
-        calculation_records = [
-            item for item in combined_records
+        calculated = build_server_growth_metrics(
+            character, combined_records, reference_date=today, period_days=period_days
+        )
+        normalized_history = calculated["history"]
+        recent_history = [
+            item for item in normalized_history
             if str(item.get("date") or "") >= calculation_start.isoformat()
         ]
-        calculated = build_server_growth_metrics(
-            character, calculation_records, reference_date=today, period_days=period_days
-        )
-        recent_history = calculated["history"]
         analysis_context = {
             "periodDays": period_days,
             "periodSummary": calculated["periodSummary"],
         }
-        growth_insights = build_growth_insights(insight_records, reference_date=today)
+        growth_insights = build_growth_insights(
+            normalized_history,
+            reference_date=today,
+            already_calculated=True,
+        )
         timings["calculation_ms"] = round((time.perf_counter() - stage_started) * 1000, 1)
         stage = "provider"
         stage_started = time.perf_counter()

@@ -67,7 +67,7 @@ class AIServerInputTests(unittest.TestCase):
         storage = FakeGrowthStorage({"ocid-one": self.make_records(1000)})
 
         def generate(character, history, metrics, insights, context, force_refresh):
-            captured.update(history=history, metrics=metrics, context=context)
+            captured.update(history=history, metrics=metrics, insights=insights, context=context)
             return {"analysis": "테스트 분석"}
 
         with (
@@ -93,6 +93,10 @@ class AIServerInputTests(unittest.TestCase):
         self.assertEqual(len(captured["history"]), 2)
         self.assertNotEqual(captured["history"][0]["date"], "2099-01-01")
         self.assertEqual(captured["context"]["periodSummary"]["averageDailyExperience"], 150)
+        self.assertEqual(
+            captured["insights"]["recentPeriod"]["observedExperienceSum"],
+            captured["context"]["periodSummary"]["observedExperienceSum"],
+        )
         resolve.assert_called_once_with(
             "테스트캐릭터",
             timeout_override=(1.5, 2.5),

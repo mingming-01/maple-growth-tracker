@@ -1,10 +1,9 @@
-"""서버가 보관한 성장 기록으로 AI 입력 지표를 다시 계산한다."""
+"""서버가 보관한 성장 기록으로 AI 입력 지표를 계산한다."""
 from datetime import date, timedelta
 from math import isfinite
 
 from tracker.domain.growth_calculations import (
-    calculate_observed_experience_change,
-    is_experience_rate_reset,
+    calculate_recent_history_changes,
     to_exact_integer,
 )
 
@@ -20,8 +19,9 @@ def _number(value):
 
 
 def build_server_growth_metrics(character, records, reference_date=None, period_days=7):
-    """클라이언트가 보낸 계산 결과를 사용하지 않고 저장된 관측 기록만 계산한다."""
+    """저장된 스냅샷을 한 번 정규화한 뒤 기간별 통계를 파생한다."""
     today = reference_date if isinstance(reference_date, date) else date.today()
+    period_days = max(1, int(period_days))
     by_date = {}
     for record in records if isinstance(records, (list, tuple)) else []:
         if not isinstance(record, dict) or record.get("recordStatus") != "available":
@@ -50,8 +50,8 @@ def build_server_growth_metrics(character, records, reference_date=None, period_
         )
         by_date[record_date] = {
             "date": record_date.isoformat(),
-            "level": int(level),
-            "experience": int(experience),
+            "level": level,
+            "experience": experience,
             "experienceRate": _number(record.get("experienceRate")),
             "ranking": int(raw_rank) if rank_is_verified else None,
             "rankingScope": "overall" if rank_is_verified else None,
@@ -65,51 +65,37 @@ def build_server_growth_metrics(character, records, reference_date=None, period_
             "levelUpCatchUp": False,
         }
 
+    # /api/history와 동일한 정규화 함수를 사용해 날짜 간 변화를 한 번만 계산한다.
     history = [by_date[key] for key in sorted(by_date)]
-    changes = []
-    level_ups = []
-    for index, current in enumerate(history):
-        if index == 0:
-            continue
-        previous = history[index - 1]
-        previous_date = date.fromisoformat(previous["date"])
-        current_date = date.fromisoformat(current["date"])
-        # Events are date-scoped and require consecutive daily snapshots.
-        if (current_date - previous_date).days != 1:
-            continue
+    calculate_recent_history_changes(history)
 
-        if current.get("ranking") is not None and previous.get("ranking") is not None:
-            current["rankingChange"] = previous["ranking"] - current["ranking"]
+    period_start = today - timedelta(days=period_days - 1)
+    period_records = [
+        item for item in history
+        if period_start <= date.fromisoformat(item["date"]) <= today
+    ]
+    period_changes = [
+        item["experienceChange"] for item in period_records
+        if item["experienceChange"] is not None
+    ]
+    all_changes = [
+        {
+            "date": date.fromisoformat(item["date"]),
+            "experience": item["experienceChange"],
+        }
+        for item in history
+        if item["experienceChange"] is not None
+    ]
 
-        level_changed = current["level"] > previous["level"]
-        rate_reset = is_experience_rate_reset(
-            previous.get("experienceRate"), current.get("experienceRate")
-        )
-        duplicate_level_catch_up = previous.get("levelUp") is True and level_changed
-        if duplicate_level_catch_up:
-            current["levelUpCatchUp"] = True
-        if (level_changed or rate_reset) and not duplicate_level_catch_up:
-            current["levelUp"] = True
-            current["levelUpPreviousLevel"] = previous["level"]
-            current["levelUpCurrentLevel"] = (
-                current["level"] if level_changed else previous["level"] + 1
-            )
-            level_ups.append({
-                "date": current["date"],
-                "previousLevel": current["levelUpPreviousLevel"],
-                "currentLevel": current["levelUpCurrentLevel"],
-            })
-
-        # 레벨업 경계에서는 레벨별 필요 EXP 원본이 없으면 일일 획득량을 계산하지 않는다.
-        change = calculate_observed_experience_change(previous, current)
-        if change is None:
-            continue
-        current["experienceChange"] = change
-        changes.append({"date": current_date, "experience": change})
-    values = [item["experience"] for item in changes]
-    midpoint = len(values) // 2
-    earlier = values[:midpoint]
-    recent = values[midpoint:]
+    # 성장 흐름 비교는 최근 14일의 정규화된 변화량을 앞뒤 기간으로 나눈다.
+    comparison_start = today - timedelta(days=13)
+    comparison_values = [
+        item["experience"] for item in all_changes
+        if comparison_start <= item["date"] <= today
+    ]
+    midpoint = len(comparison_values) // 2
+    earlier = comparison_values[:midpoint]
+    recent = comparison_values[midpoint:]
     earlier_average = sum(earlier) / len(earlier) if earlier else None
     recent_average = sum(recent) / len(recent) if recent else None
     if earlier_average is None or recent_average is None:
@@ -137,44 +123,51 @@ def build_server_growth_metrics(character, records, reference_date=None, period_
     if current_rate is not None and not 0 <= current_rate <= 100:
         current_rate = None
 
-    period_start = today - timedelta(days=max(1, int(period_days)) - 1)
-    period_records = [
-        item for item in history
-        if period_start <= date.fromisoformat(item["date"]) <= today
+    seven_day_start = today - timedelta(days=6)
+    seven_day_changes = [
+        item["experience"] for item in all_changes
+        if seven_day_start <= item["date"] <= today
     ]
-    period_changes = [
-        item["experienceChange"] for item in period_records
-        if item["experienceChange"] is not None
+    level_ups = [
+        {
+            "date": item["date"],
+            "previousLevel": item["levelUpPreviousLevel"],
+            "currentLevel": item["levelUpCurrentLevel"],
+        }
+        for item in period_records if item["levelUp"]
     ]
-    expected_days = (today - period_start).days + 1
+
     period_summary = {
         "startDate": period_start.isoformat(),
         "endDate": today.isoformat(),
-        "expectedSnapshots": expected_days,
+        "expectedSnapshots": period_days,
         "availableSnapshots": len(period_records),
-        "coveragePercent": round(len(period_records) / expected_days * 100, 1) if expected_days else 0,
+        "coveragePercent": round(len(period_records) / period_days * 100, 1),
         "validGrowthIntervals": len(period_changes),
-        "averageDailyExperience": round(sum(period_changes) / len(period_changes), 2) if period_changes else None,
+        "averageDailyExperience": (
+            round(sum(period_changes) / len(period_changes), 2)
+            if period_changes else None
+        ),
         "observedExperienceSum": sum(period_changes) if period_changes else None,
-        "levelUpIntervals": sum(1 for item in period_records if item["levelUp"]),
+        "levelUpIntervals": len(level_ups),
     }
 
+    period_values = period_changes
     return {
         "history": history,
         "metrics": {
-            "validGrowthDays": sum(1 for value in values if value > 0),
-            "observedChangeDays": len(values),
-            "zeroGrowthDays": sum(1 for value in values if value == 0),
-            "negativeGrowthDays": sum(1 for value in values if value < 0),
-            "recordedDays": len(history),
-            "latestDailyGrowth": values[-1] if values else None,
-            "averageDailyGrowth": sum(values) / len(values) if values else None,
-            "highestDailyGrowth": max(values) if values else None,
-            "lowestDailyGrowth": min(values) if values else None,
-            "sevenDayGrowth": sum(
-                item["experience"] for item in changes
-                if item["date"] >= today - timedelta(days=6)
-            ) if changes else None,
+            "validGrowthDays": sum(1 for value in period_values if value > 0),
+            "observedChangeDays": len(period_values),
+            "zeroGrowthDays": sum(1 for value in period_values if value == 0),
+            "negativeGrowthDays": sum(1 for value in period_values if value < 0),
+            "recordedDays": len(period_records),
+            "latestDailyGrowth": period_values[-1] if period_values else None,
+            "averageDailyGrowth": (
+                sum(period_values) / len(period_values) if period_values else None
+            ),
+            "highestDailyGrowth": max(period_values) if period_values else None,
+            "lowestDailyGrowth": min(period_values) if period_values else None,
+            "sevenDayGrowth": sum(seven_day_changes) if seven_day_changes else None,
             "rankingChange": ranking_change,
             "levelProgress": {
                 "currentRate": current_rate,

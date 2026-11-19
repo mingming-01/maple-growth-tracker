@@ -1,12 +1,8 @@
-"""Deterministic growth insights for AI reports.
-
-All values in this module are derived from observed daily snapshots. Missing
-calendar days and level-up transitions are never interpolated or estimated.
-"""
+"""Deterministic growth insights derived from normalized backend history."""
 from datetime import date, timedelta
+
 from tracker.domain.growth_calculations import (
-    calculate_observed_experience_change,
-    is_experience_rate_reset,
+    calculate_recent_history_changes,
     to_exact_integer,
 )
 
@@ -30,6 +26,7 @@ def _is_available(record):
 
 
 def _period_summary(by_date, start_date, end_date):
+    """이미 정규화된 날짜별 결과에서 기간 통계만 집계한다."""
     expected_days = (end_date - start_date).days + 1
     available_snapshots = sum(
         _is_available(by_date.get(start_date + timedelta(days=offset), {}))
@@ -37,30 +34,17 @@ def _period_summary(by_date, start_date, end_date):
     )
     changes = []
     level_ups = 0
-    detected_level_up_dates = set()
 
     for offset in range(expected_days):
         current_date = start_date + timedelta(days=offset)
-        previous_date = current_date - timedelta(days=1)
         current = by_date.get(current_date)
-        previous = by_date.get(previous_date)
-        if not _is_available(current) or not _is_available(previous):
+        if not _is_available(current):
             continue
 
-        current_level = to_exact_integer(current.get("level"))
-        previous_level = to_exact_integer(previous.get("level"))
-
-        level_changed = current_level > previous_level
-        rate_reset = is_experience_rate_reset(
-            previous.get("experienceRate"), current.get("experienceRate")
-        )
-        duplicate_level_catch_up = previous_date in detected_level_up_dates
-        if (level_changed or rate_reset) and not duplicate_level_catch_up:
+        if current.get("levelUp") is True:
             level_ups += 1
-            detected_level_up_dates.add(current_date)
 
-        # 레벨업 경계에서는 레벨별 필요 EXP 원본이 없으면 일일 획득량을 계산하지 않는다.
-        experience_change = calculate_observed_experience_change(previous, current)
+        experience_change = to_exact_integer(current.get("experienceChange"))
         if experience_change is None:
             continue
 
@@ -82,18 +66,23 @@ def _period_summary(by_date, start_date, end_date):
         "validGrowthIntervals": len(changes),
         "levelUpIntervals": level_ups,
         "averageDailyExperience": round(average, 2) if average is not None else None,
-        "observedExperienceSum": round(
-            sum(item["experience"] for item in changes), 2
-        ) if changes else None,
+        "observedExperienceSum": sum(item["experience"] for item in changes) if changes else None,
         "_changes": changes,
     }
 
 
-def build_growth_insights(records, reference_date=None, window_days=7):
-    """Build a comparable recent/prior period summary from saved snapshots.
+def build_growth_insights(
+    records,
+    reference_date=None,
+    window_days=7,
+    *,
+    already_calculated=False,
+):
+    """정규화된 백엔드 이력에서 최근/직전 기간 비교 지표를 집계한다.
 
-    A complete pair of seven-day windows requires fifteen snapshots: the
-    snapshot immediately before the comparison window plus fourteen days.
+    일반 호출은 공통 백엔드 계산 함수를 한 번 적용한다. AI 라우트처럼
+    이미 같은 계산 함수가 만든 이력을 전달하는 호출은 already_calculated=True로
+    지정해 경험치 변화나 레벨업 이벤트를 다시 계산하지 않는다.
     """
     if window_days != 7:
         raise ValueError("Only seven-day comparison windows are supported.")
@@ -109,13 +98,27 @@ def build_growth_insights(records, reference_date=None, window_days=7):
         current = by_date.get(record_date)
         # Prefer a confirmed record over an empty/unavailable duplicate.
         if current is None or (_is_available(record) and not _is_available(current)):
-            by_date[record_date] = record
+            by_date[record_date] = dict(record)
 
+    normalized_records = [
+        by_date[record_date] for record_date in sorted(by_date)
+    ]
+    if not already_calculated:
+        calculate_recent_history_changes(normalized_records)
+
+    by_date = {
+        _parse_date(record.get("date")): record
+        for record in normalized_records
+        if _parse_date(record.get("date")) is not None
+    }
     available_dates = [
         record_date for record_date, record in by_date.items()
         if _is_available(record)
     ]
-    effective_reference = min(requested_reference, max(available_dates)) if available_dates else requested_reference
+    effective_reference = (
+        min(requested_reference, max(available_dates))
+        if available_dates else requested_reference
+    )
 
     recent_end = effective_reference
     recent_start = recent_end - timedelta(days=window_days - 1)
