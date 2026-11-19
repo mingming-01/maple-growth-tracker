@@ -77,10 +77,10 @@ def _log_provider_failure(provider, error, started_at, deadline):
             response_error_message = response_body
     safe_message = str(response_error_message or "")[:400]
     # 공급자 오류 메시지에 인증 문자열이 섞이는 경우 로그에 남기지 않는다.
-    safe_message = re.sub(r"(?i)bearer\\s+[^\\s,;]+", "Bearer [REDACTED]", safe_message)
+    safe_message = re.sub(r"(?i)bearer\s+[^\s,;]+", "Bearer [REDACTED]", safe_message)
     safe_message = re.sub(
-        r"(?i)(api[_-]?key|access[_-]?token|secret|authorization)(\\s*[:=]\\s*)[^,;\\s]+",
-        r"\\1\\2[REDACTED]",
+        r"(?i)(api[_-]?key|access[_-]?token|secret|authorization)(\s*[:=]\s*)[^,;\s]+",
+        r"\1\2[REDACTED]",
         safe_message,
     )
     details = {
