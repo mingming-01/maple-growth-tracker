@@ -218,7 +218,7 @@ class GrowthCalculationBehaviorTests(unittest.TestCase):
         self.assertIsNone(history[3]["experienceChange"])
         self.assertIsNone(history[3]["rankingChange"])
         self.assertTrue(history[4]["levelUp"])
-        self.assertIsNone(history[4]["experienceChange"])
+        self.assertEqual(history[4]["experienceChange"], 100)
         self.assertEqual(history[4]["rankingChange"], 10)
 
 
