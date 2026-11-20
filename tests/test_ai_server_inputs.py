@@ -258,9 +258,9 @@ class AIServerInputTests(unittest.TestCase):
         gemini_request.assert_called_once()
         openrouter_request.assert_called_once()
         prompt = openrouter_request.call_args.args[0]
-        self.assertIn('"experienceChange": null', prompt)
-        self.assertIn(f'"date": "{event_date.isoformat()}"', prompt)
-        self.assertIn('"levelUp": true', prompt)
+        self.assertIn("레벨업 전환이 확인됨", prompt)
+        self.assertNotIn('"experienceChange"', prompt)
+        self.assertNotIn('"date":', prompt)
         self.assertNotIn(str(reset_experience), prompt)
         self.assertNotIn(
             str(17096549681346 - reset_experience),
