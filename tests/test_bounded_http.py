@@ -162,8 +162,8 @@ class BoundedJSONHTTPTests(unittest.TestCase):
             }]
         }
         wire = (
-            f"data: {json.dumps(event)}\\n\\n"
-            "data: [DONE]\\n\\n"
+            f"data: {json.dumps(event)}\n\n"
+            "data: [DONE]\n\n"
         ).encode("utf-8")
         chunks = [wire[index:index + 4096] for index in range(0, len(wire), 4096)]
         response = self.make_response(chunks)
