@@ -324,55 +324,126 @@ def _apply_deterministic_growth_forecast(analysis, character, metrics):
     return re.sub(pattern, append_server_forecast, analysis, count=1)
 
 
-def _build_growth_report_prompt(source_data):
-    prompt_data = dict(source_data)
-    selected_period = prompt_data.get("selectedPeriod") or {}
-    period_days = selected_period.get("periodDays", 7)
-    if period_days in (30, 90):
-        # 장기 리포트에는 7일 기준 평균/증감 지표를 섞지 않는다.
-        # 장기 기간 통계는 periodSummary, 전망은 최근 7일 기준 prediction으로 분리한다.
-        original_metrics = prompt_data.get("metrics") or {}
-        level_progress = original_metrics.get("levelProgress") or {}
-        prompt_data["metrics"] = {
-            "recentSevenDayPrediction": original_metrics.get("prediction"),
-            "currentLevelProgress": {
-                key: level_progress.get(key)
-                for key in ("currentRate", "remainingRate")
-                if key in level_progress
-            },
-        }
-        prompt_data["growthInsights"] = None
+def _build_ai_commentary_context(source_data):
+    """서버 계산 결과를 숫자가 없는 정성 신호로 변환해 AI에 전달한다."""
+    source_data = source_data if isinstance(source_data, dict) else {}
+    metrics = source_data.get("metrics") or {}
+    insights = source_data.get("growthInsights") or {}
+    selected_period = source_data.get("selectedPeriod") or {}
+    summary = selected_period.get("periodSummary") or {}
+    basis = insights.get("basis") or {}
 
+    comparison = insights.get("weekOverWeek") or {}
+    direction = comparison.get("direction")
+    change_percent = comparison.get("averageDailyGrowthChangePercent")
+    try:
+        magnitude = abs(float(change_percent))
+    except (TypeError, ValueError):
+        magnitude = None
+
+    if comparison.get("status") != "available" or direction in (None, "insufficient", "insufficient_data"):
+        growth_comparison = "비교할 이전 성장 기록이 충분하지 않음"
+    elif direction == "increase":
+        growth_comparison = (
+            "이전보다 성장 속도가 뚜렷하게 높아짐" if magnitude is not None and magnitude >= 20
+            else "이전보다 성장 속도가 완만하게 높아짐" if magnitude is not None and magnitude >= 5
+            else "이전보다 성장 속도가 소폭 높아짐"
+        )
+    elif direction == "decrease":
+        growth_comparison = (
+            "이전보다 성장 속도가 뚜렷하게 낮아짐" if magnitude is not None and magnitude >= 20
+            else "이전보다 성장 속도가 완만하게 낮아짐" if magnitude is not None and magnitude >= 5
+            else "이전보다 성장 속도가 소폭 낮아짐"
+        )
+    else:
+        growth_comparison = "이전 기간과 비슷한 성장 흐름"
+
+    coverage = summary.get("coveragePercent")
+    if coverage is None:
+        coverage = basis.get("coveragePercent")
+    try:
+        coverage_value = float(coverage)
+    except (TypeError, ValueError):
+        coverage_value = None
+    if coverage_value is None:
+        record_coverage = "기록 충실도를 판단할 자료가 부족함"
+    elif coverage_value >= 85:
+        record_coverage = "분석 기간의 기록이 비교적 충실함"
+    elif coverage_value >= 60:
+        record_coverage = "분석 기간 중 일부 날짜의 기록이 비어 있음"
+    else:
+        record_coverage = "분석 기간의 기록이 충분하지 않음"
+
+    level_ups = metrics.get("levelUps")
+    if isinstance(level_ups, list) and level_ups:
+        level_transition = "분석 기간 중 레벨업 전환이 확인됨"
+    elif summary.get("levelUpIntervals"):
+        level_transition = "레벨업 전환은 관찰됐지만 날짜나 전후 레벨을 확정할 수 없음"
+    elif summary.get("validGrowthIntervals") is None:
+        level_transition = "레벨업 여부를 판단할 연속 기록이 부족함"
+    else:
+        level_transition = "분석 기간의 확인된 기록에서 레벨업 전환이 나타나지 않음"
+
+    progress = (metrics.get("levelProgress") or {}).get("currentRate")
+    try:
+        progress_value = float(progress)
+    except (TypeError, ValueError):
+        progress_value = None
+    if progress_value is None:
+        current_progress = "현재 레벨 진행 단계를 판단할 자료가 부족함"
+    elif progress_value >= 80:
+        current_progress = "현재 레벨의 후반 진행 구간"
+    elif progress_value >= 35:
+        current_progress = "현재 레벨의 중간 진행 구간"
+    else:
+        current_progress = "현재 레벨의 초반 진행 구간"
+
+    prediction = metrics.get("prediction")
+    forecast = (
+        "서버에서 참고 가능한 성장 전망을 계산함"
+        if isinstance(prediction, dict) and prediction.get("estimatedDate")
+        else "기록만으로 신뢰할 수 있는 성장 전망을 계산하기 어려움"
+    )
+
+    period_days = selected_period.get("periodDays", 7)
+    period_scope = "장기 성장 기록의 흐름" if period_days in (30, 90) else "최근 성장 기록의 흐름"
+    return {
+        "분석 범위": period_scope,
+        "이전 기간 대비 성장 흐름": growth_comparison,
+        "기록 충실도": record_coverage,
+        "레벨업 관찰": level_transition,
+        "현재 레벨 진행 단계": current_progress,
+        "성장 전망 자료": forecast,
+    }
+
+
+def _build_growth_report_prompt(source_data):
+    """수치 원문 대신 백엔드가 분류한 정성 신호만 AI 코멘트에 제공한다."""
+    commentary_context = _build_ai_commentary_context(source_data)
     return f"""
 너는 메이플스토리 캐릭터의 성장 기록을 읽고 플레이어에게 통찰을 전하는 성장 코치야.
-친근하고 자연스러운 해요체를 사용하고, 메이플스토리에서 익숙한 경험치·레벨업·월드 랭킹 표현을 우선해.
+친근하고 자연스러운 def _build_growth_report_cache_key(prompt, source_data):
+    """정성 신호 프롬프트와 해당 캐릭터의 실제 계산 데이터로 캐시를 구분한다."""
+    return (
+        prompt
+        + "\\n[리포트 형식 버전] 5\\n"
+        + "[캐시 식별 데이터]\\n"
+        + json.dumps(source_data, ensure_ascii=False, sort_keys=True)
+    )
 
-[역할]
-- 서버가 계산한 성장 수치와 기록을 읽고, 숫자를 다시 나열하기보다 그 흐름에서 플레이어가 알아둘 만한 점을 설명해.
-- 기록이 충분한 부분은 최근과 이전 기간의 차이, 성장 흐름의 특징, 레벨업 전후에 주의해 볼 점을 구체적으로 해석해.
-- 기록이 부족하거나 레벨업으로 경험치 증가량을 확정할 수 없는 구간은 그 한계를 자연스럽게 밝혀.
-- 과도한 칭찬이나 상투적인 격려 대신, 실제 기록에 연결되는 유용한 관찰과 다음에 살펴볼 점을 제안해.
 
-[정확성 규칙]
-- 아래 자료에 있는 사실만 사용해. 수치·날짜·평균·비율·원인·행동을 새로 계산하거나 추측하지 마.
-- AI 코멘트에는 숫자·날짜·퍼센트·레벨 번호·경험치 단위·횟수 등 수치 표현을 넣지 마. 이 사실들은 서버가 보고서 본문에 별도로 작성하므로, 숫자 없이 성장 흐름의 의미와 관찰만 설명해.
-- 경험치 증가량과 현재 레벨 진행률을 혼동하지 마. experienceRate는 현재 레벨 진행률이야.
-- 7일 분석은 growthInsights의 최근/직전 7일 비교를 참고해. 비교할 기록이 부족하면 증가·감소를 단정하지 마.
-- 30일·90일 분석은 selectedPeriod.periodSummary를 기준으로 해. metrics의 전망과 진행률은 최근 7일 기준이므로 장기 기간 통계처럼 설명하지 마.
-- 예상 레벨업은 metrics.prediction 또는 metrics.recentSevenDayPrediction에 날짜가 있을 때만 참고 전망으로 언급해. 서버 계산값을 바꾸거나 새로운 날짜를 만들지 마.
-- 사냥 방식, 플레이 시간, 접속 습관, 장비의 영향처럼 자료에 없는 원인을 만들어내지 마.
+없는 성장 방향이나 원인을 만들어내지 마.
+- 숫자·날짜·퍼센트·레벨 번호·경험치 단위·횟수는 쓰지 마. 정확한 수치와 날짜는 백엔드가 리포트에 별도로 작성해.
+- 서로 다른 레벨의 경험치 진행률을 직접 비교하거나 레벨업 당일의 경험치 획득량을 추정하지 마.
 
 [출력 형식]
-- 최종 리포트 전체가 아니라 AI 코멘트 본문만 작성해.
-- 자연스러운 한국어 2~4문장으로 작성하고, 제목·목록·표·마크다운·코드·영어 상태값은 쓰지 마.
-- 숫자, 날짜, 퍼센트, 레벨 번호, 경험치 단위, 횟수 표현을 절대로 쓰지 마. 수치가 필요한 내용은 서버 본문에 있으므로 코멘트에서는 정성적인 의미만 설명해.
-- 보고서의 성장 수치와 레벨업 날짜는 서버가 별도로 정확하게 구성하므로, 여기서는 해석과 주의점에 집중해.
-- 분석 자료가 부족하다면 부족한 점과 어떤 기록이 더 쌓이면 판단할 수 있는지 간결하게 설명해.
+- AI 코멘트 본문만 작성해. 제목, 구분 표시, 목록, 표, 마크다운, 코드, 영어 상태값은 쓰지 마.
+- 자연스럽고 구체적인 한국어 해요체로 두세 문장을 작성해.
+- 숫자를 반복하지 말고, 플레이어가 성장 흐름을 이해하는 데 도움이 되는 해석과 다음에 살펴볼 점을 제안해.
 
-[분석 자료]
-{json.dumps(prompt_data, ensure_ascii=False)}
+[백엔드가 계산한 정성 신호]
+{json.dumps(commentary_context, ensure_ascii=False)}
 """
-
 
 
 def _format_experience_korean(value):
@@ -570,18 +641,14 @@ def _remove_numeric_comment_sentences(comment):
 
 
 def _prepare_ai_comment(value, expected_date, source_data):
-    """Sanitize and validate AI-only prose without allowing it to replace server facts."""
+    """Keep usable qualitative prose; numeric facts remain exclusively server-owned."""
     sanitized = sanitize_ai_text(value, expected_date)
     comment = _extract_ai_comment(sanitized)
     comment, removed_numeric_sentences = _remove_numeric_comment_sentences(comment)
-    compact = re.sub(r"[\s.!?…·]", "", comment)
+    compact = re.sub(r"[\\s.!?…·]", "", comment)
     if len(compact) < 8:
         reason = "numeric_claim_only" if removed_numeric_sentences else "empty_comment"
         return None, reason
-
-    fact_error = _growth_report_fact_error(comment, source_data)
-    if fact_error is not True:
-        return None, fact_error
     return comment, None
 
 
