@@ -919,7 +919,7 @@ def _generate_ai_analysis_impl(character, history, computed_metrics=None, growth
             _clear_gemini_cooldown(runtime_state)
             _store_cached_ai_response(cache_key, analysis)
             metadata = _log_provider_success("gemini", provider_metadata, validated=True, returned=True, cache_hit=False)
-            return {"analysis": analysis, "cacheHit": False, "growthInsights": growth_insights, "providerMetadata": metadata}
+            return {"analysis": analysis, "cacheHit": False, "growthInsights": growth_insights, "aiGenerated": True, "aiStatus": "generated", "providerMetadata": metadata}
         except Exception as error:
             gemini_error = error
             if _is_quota_error(error):
@@ -965,7 +965,7 @@ def _generate_ai_analysis_impl(character, history, computed_metrics=None, growth
                         raise error
                 _store_cached_ai_response(cache_key, analysis)
                 metadata = _log_provider_success("openrouter", provider_metadata, validated=True, returned=True, cache_hit=False)
-                return {"analysis": analysis, "cacheHit": False, "growthInsights": growth_insights, "providerMetadata": metadata}
+                return {"analysis": analysis, "cacheHit": False, "growthInsights": growth_insights, "aiGenerated": True, "aiStatus": "generated", "providerMetadata": metadata}
             except Exception as error:
                 openrouter_error = error
                 _log_provider_failure("openrouter", error, openrouter_started_at, deadline, attempt=attempt + 1)
@@ -974,7 +974,7 @@ def _generate_ai_analysis_impl(character, history, computed_metrics=None, growth
                 if attempt == 0 and retryable_output_error and remaining_ms >= 1000:
                     if has_app_context():
                         current_app.logger.warning(
-                            "OpenRouter 응답이 잘렸거나 사실 검증을 통과하지 못했습니다. "
+                            "OpenRouter 응답이 출력 한도에 도달했습니다. "
                             "같은 OpenRouter 모델 별칭으로 한 번 재시도합니다: "
                             "reason=%s remaining_ms=%d",
                             provider_error_type(error), round(remaining_ms),
