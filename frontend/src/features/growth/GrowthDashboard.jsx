@@ -550,12 +550,12 @@ export default function GrowthDashboard({ character, history, metrics: serverMet
         <div className="growth-prediction-layout">
           <div className="prediction-card">
           <div className="prediction-grid">
-            <div className="prediction-item"><div className="prediction-label">다음 레벨까지</div><div className="prediction-value">{prediction?.requiredExp != null ? fmt(prediction.requiredExp) : Number.isFinite(prediction?.remainingRate) ? prediction.remainingRate.toFixed(3) + "% 남음" : "자료 부족"}</div></div>
+            <div className="prediction-item"><div className="prediction-label">다음 레벨까지</div><div className="prediction-value">{prediction?.requiredExp != null ? fmt(prediction.requiredExp) + (prediction.requiredExpEstimated ? " (추정)" : "") : "자료 부족"}</div></div>
             <div className="prediction-item"><div className="prediction-label">예상 소요</div><div className="prediction-value">{Number.isFinite(prediction?.days) ? "약 "+prediction.days.toFixed(1)+"일" : "자료 부족"}</div></div>
             <div className="prediction-item"><div className="prediction-label">예상 레벨업</div><div className="prediction-value">{prediction?.date ? localDate(prediction.date) : "자료 부족"}</div></div>
             <div className="prediction-item"><div className="prediction-label">최근 평균</div><div className="prediction-value">{(prediction?.averageGrowth ?? average) == null ? "자료 부족" : fmt(prediction?.averageGrowth ?? average)}</div></div>
           </div>
-          <p className="prediction-note">{Number.isFinite(prediction?.averageDailyProgressRate) ? `최근 동일 레벨의 ${prediction.progressSamples}개 연속 일일 기록에서 평균 진행률 ${prediction.averageDailyProgressRate.toFixed(3)}%p/일을 확인했어요. 이 관측 속도를 적용한 초기 예상이며, 절대 필요 EXP는 정확한 레벨별 기준표가 확인되지 않아 표시하지 않아요.` : "동일 레벨의 연속 일일 진행률 기록이 더 쌓이면 예상 소요와 날짜를 계산해요. 절대 필요 EXP는 정확한 레벨별 기준표가 확인된 경우에만 표시해요."}</p>
+          <p className="prediction-note">{prediction?.requiredExpEstimated ? "현재 보유 EXP와 넥슨 API의 경험치 진행률을 이용해 다음 레벨까지 남은 EXP를 역산한 추정치입니다. 진행률 반올림으로 인게임 수치와 소폭 차이가 날 수 있어요." : "현재 경험치와 진행률을 확인하면 다음 레벨까지 남은 EXP를 역산할 수 있어요."}{Number.isFinite(prediction?.averageGrowth) ? ` 최근 동일 레벨의 ${prediction.experienceSamples}개 실제 일일 EXP 변화량 평균 ${fmt(prediction.averageGrowth)}를 기준으로 예상 날짜를 계산했어요.` : " 동일 레벨의 일일 EXP 기록이 더 쌓이면 예상 날짜를 계산할 수 있어요."}</p>
         </div>
           <div id="growth-goal"><GoalPanel character={character} metrics={metrics} history={history || []} /></div>
         </div>
