@@ -641,10 +641,17 @@ def get_history_archive():
         "storageBackend": growth_history_service.backend,
         "persistentStorage": growth_history_service.uses_postgres
     }
+    # 집계 입력에는 선택 기간의 모든 날짜 상태(not_collected 포함)와
+    # 기간 첫날의 변화량 계산에 필요한 전날 스냅샷만 포함한다.
+    boundary_records = [
+        item for item in stored_records
+        if item.get("date") == (start_date - timedelta(days=1)).isoformat()
+    ]
+    calculation_records = boundary_records + history
     response_payload = _attach_growth_metrics(
         response_payload,
         end_date,
         days,
-        calculation_records=stored_records,
+        calculation_records=calculation_records,
     )
     return jsonify(response_payload)
