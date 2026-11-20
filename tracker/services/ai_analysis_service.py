@@ -355,7 +355,7 @@ def _build_growth_report_prompt(source_data):
 
 [정확성 규칙]
 - 아래 자료에 있는 사실만 사용해. 수치·날짜·평균·비율·원인·행동을 새로 계산하거나 추측하지 마.
-- 수치나 날짜를 언급해야 한다면 자료에 있는 값을 그대로 사용해. 필요하지 않으면 숫자를 반복하지 말고 의미를 설명해.
+- AI 코멘트에는 숫자·날짜·퍼센트·레벨 번호·경험치 단위·횟수 등 수치 표현을 넣지 마. 이 사실들은 서버가 보고서 본문에 별도로 작성하므로, 숫자 없이 성장 흐름의 의미와 관찰만 설명해.
 - 경험치 증가량과 현재 레벨 진행률을 혼동하지 마. experienceRate는 현재 레벨 진행률이야.
 - 7일 분석은 growthInsights의 최근/직전 7일 비교를 참고해. 비교할 기록이 부족하면 증가·감소를 단정하지 마.
 - 30일·90일 분석은 selectedPeriod.periodSummary를 기준으로 해. metrics의 전망과 진행률은 최근 7일 기준이므로 장기 기간 통계처럼 설명하지 마.
@@ -365,6 +365,7 @@ def _build_growth_report_prompt(source_data):
 [출력 형식]
 - 최종 리포트 전체가 아니라 AI 코멘트 본문만 작성해.
 - 자연스러운 한국어 2~4문장으로 작성하고, 제목·목록·표·마크다운·코드·영어 상태값은 쓰지 마.
+- 숫자, 날짜, 퍼센트, 레벨 번호, 경험치 단위, 횟수 표현을 절대로 쓰지 마. 수치가 필요한 내용은 서버 본문에 있으므로 코멘트에서는 정성적인 의미만 설명해.
 - 보고서의 성장 수치와 레벨업 날짜는 서버가 별도로 정확하게 구성하므로, 여기서는 해석과 주의점에 집중해.
 - 분석 자료가 부족하다면 부족한 점과 어떤 기록이 더 쌓이면 판단할 수 있는지 간결하게 설명해.
 
@@ -552,13 +553,31 @@ def _extract_ai_comment(value):
     return text.strip()
 
 
+def _remove_numeric_comment_sentences(comment):
+    """AI 코멘트의 숫자 포함 문장만 제거하고 서버가 제공할 사실과 분리한다."""
+    sentences = re.split(r"(?<=[.!?])\\s+|\\n+", str(comment or ""))
+    kept = []
+    removed = False
+    for sentence in sentences:
+        text = sentence.strip()
+        if not text:
+            continue
+        if re.search(r"\\d", text):
+            removed = True
+            continue
+        kept.append(text)
+    return " ".join(kept), removed
+
+
 def _prepare_ai_comment(value, expected_date, source_data):
-    """Sanitize and validate the AI-only prose without allowing it to replace server facts."""
+    """Sanitize and validate AI-only prose without allowing it to replace server facts."""
     sanitized = sanitize_ai_text(value, expected_date)
     comment = _extract_ai_comment(sanitized)
-    compact = re.sub(r"[\s.!?…·]", "", comment)
+    comment, removed_numeric_sentences = _remove_numeric_comment_sentences(comment)
+    compact = re.sub(r"[\\s.!?…·]", "", comment)
     if len(compact) < 8:
-        return None, "empty_comment"
+        reason = "numeric_claim_only" if removed_numeric_sentences else "empty_comment"
+        return None, reason
 
     fact_error = _growth_report_fact_error(comment, source_data)
     if fact_error is not True:
