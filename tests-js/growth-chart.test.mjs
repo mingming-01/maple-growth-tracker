@@ -36,7 +36,7 @@ test("does not turn missing experience records into zero", () => {
     { date: "2026-11-18", recordStatus: "not_collected", experience: null, experienceChange: null },
     { date: "2026-11-19", recordStatus: "available", experience: 1500, experienceChange: null }
   ]);
-  assert.deepEqual(series.experience, [0.000000000001, null, 0.0000000000015]);
+  assert.deepEqual(series.experience, [0.000000001, null, 0.0000000015]);
   assert.deepEqual(series.daily, [null, null, null]);
 });
 
