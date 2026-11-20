@@ -347,9 +347,74 @@ class AIServerInputTests(unittest.TestCase):
                     (self.today - timedelta(days=period_days - 1)).isoformat(),
                 )
                 self.assertEqual(summary["endDate"], self.today.isoformat())
-                # DB 조회는 선택 기간 첫날의 레벨업 전환을 비교할 직전 스냅샷도 포함한다.
-                self.assertEqual(storage.calls[0][1], self.today - timedelta(days=period_days))
+                # 장기 분석은 직전 동일 기간의 첫날 변화량을 계산할 경계 스냅샷까지 읽는다.
+                self.assertEqual(storage.calls[0][1], self.today - timedelta(days=period_days * 2))
                 self.assertEqual(storage.calls[0][2], self.today)
+                previous = captured["context"]["previousPeriodSummary"]
+                self.assertEqual(
+                    previous["startDate"],
+                    (self.today - timedelta(days=period_days * 2 - 1)).isoformat(),
+                )
+                self.assertEqual(
+                    previous["endDate"],
+                    (self.today - timedelta(days=period_days)).isoformat(),
+                )
+
+    def test_long_ai_report_uses_same_length_previous_period_from_server_records(self):
+        period_days = 30
+        boundary = self.today - timedelta(days=period_days * 2)
+        records = []
+        experience = 100000
+
+        for offset in range(period_days * 2 + 1):
+            record_date = boundary + timedelta(days=offset)
+            if offset:
+                experience += 100 if offset <= period_days else 200
+            records.append({
+                "date": record_date.isoformat(),
+                "level": 280,
+                "experience": experience,
+                "experienceRate": None,
+                "ranking": None,
+                "recordStatus": "available",
+            })
+
+        storage = FakeGrowthStorage({"ocid-one": records})
+        captured = {}
+
+        def generate(character, history, metrics, insights, context, force_refresh):
+            captured.update(
+                history=history, metrics=metrics, insights=insights, context=context
+            )
+            return {"analysis": "테스트 분석"}
+
+        with (
+            patch.object(
+                ai_controller,
+                "resolve_character",
+                return_value=("ocid-one", self.make_basic("테스트캐릭터"), Mock(status_code=200)),
+            ),
+            patch.object(ai_controller, "get_growth_history_service", return_value=storage),
+            patch.object(ai_controller, "generate_ai_analysis", side_effect=generate),
+        ):
+            response = self.client.post(
+                "/api/ai-analysis?name=테스트캐릭터",
+                json={"analysisContext": {"periodDays": period_days}},
+            )
+
+        self.assertEqual(response.status_code, 200, response.get_json())
+        self.assertEqual(storage.calls[0][1], boundary)
+        current = captured["context"]["periodSummary"]
+        previous = captured["context"]["previousPeriodSummary"]
+        self.assertEqual(current["validGrowthIntervals"], 30)
+        self.assertEqual(current["observedExperienceSum"], 6000)
+        self.assertEqual(current["averageDailyExperience"], 200)
+        self.assertEqual(previous["validGrowthIntervals"], 30)
+        self.assertEqual(previous["observedExperienceSum"], 3000)
+        self.assertEqual(previous["averageDailyExperience"], 100)
+        payload = response.get_json()
+        self.assertEqual(payload["periodSummary"]["observedExperienceSum"], 6000)
+        self.assertEqual(payload["previousPeriodSummary"]["observedExperienceSum"], 3000)
 
     def test_analysis_includes_previous_day_to_detect_period_start_level_up(self):
         captured = {}
