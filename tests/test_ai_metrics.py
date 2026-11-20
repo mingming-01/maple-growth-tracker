@@ -129,7 +129,7 @@ class ServerAIMetricsTests(unittest.TestCase):
         self.assertEqual(trend["direction"], "decrease")
         self.assertEqual(trend["strength"], "strong")
 
-    def test_long_period_trend_does_not_fill_missing_days_or_level_up_reset(self):
+    def test_long_period_trend_keeps_missing_days_empty_and_includes_level_up_gain(self):
         today = date(2026, 11, 21)
         period_start = today - timedelta(days=29)
         records = []
@@ -172,13 +172,15 @@ class ServerAIMetricsTests(unittest.TestCase):
         )
 
         self.assertTrue(level_up_record["levelUp"])
-        self.assertIsNone(level_up_record["experienceChange"])
-        self.assertEqual(trend["firstHalf"]["validGrowthIntervals"], 12)
+        self.assertIsNotNone(level_up_record["experienceChange"])
+        self.assertEqual(level_up_record["experienceChangeKind"], "level_up_reconstructed")
+        self.assertEqual(trend["firstHalf"]["validGrowthIntervals"], 13)
         self.assertEqual(trend["firstHalf"]["observedExperienceSum"], 1200)
+        self.assertEqual(trend["firstHalf"]["experienceGainSum"], 10394)
+        self.assertEqual(trend["firstHalf"]["reconstructedLevelUpIntervals"], 1)
         self.assertEqual(trend["secondHalf"]["validGrowthIntervals"], 15)
-        self.assertEqual(trend["secondHalf"]["observedExperienceSum"], 3000)
-        self.assertEqual(trend["direction"], "increase")
-        self.assertEqual(trend["changePercent"], 100.0)
+        self.assertEqual(trend["secondHalf"]["experienceGainSum"], 3000)
+        self.assertEqual(trend["direction"], "decrease")
 
     def test_long_period_trend_requires_enough_observed_changes_in_both_halves(self):
         today = date(2026, 11, 21)
