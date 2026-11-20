@@ -404,7 +404,6 @@ def _build_ai_commentary_context(source_data):
         if isinstance(prediction, dict) and prediction.get("estimatedDate")
         else "기록만으로 신뢰할 수 있는 성장 전망을 계산하기 어려움"
     )
-
     period_days = selected_period.get("periodDays", 7)
     period_scope = "장기 성장 기록의 흐름" if period_days in (30, 90) else "최근 성장 기록의 흐름"
     return {
@@ -422,17 +421,17 @@ def _build_growth_report_prompt(source_data):
     commentary_context = _build_ai_commentary_context(source_data)
     return f"""
 너는 메이플스토리 캐릭터의 성장 기록을 읽고 플레이어에게 통찰을 전하는 성장 코치야.
-친근하고 자연스러운 def _build_growth_report_cache_key(prompt, source_data):
-    """정성 신호 프롬프트와 해당 캐릭터의 실제 계산 데이터로 캐시를 구분한다."""
-    return (
-        prompt
-        + "\\n[리포트 형식 버전] 5\\n"
-        + "[캐시 식별 데이터]\\n"
-        + json.dumps(source_data, ensure_ascii=False, sort_keys=True)
-    )
+친근하고 자연스러운 해요체를 사용하고, 과도한 칭찬이나 상투적인 격려는 피해야 해.
 
+[역할]
+- 백엔드가 계산한 사실을 다시 계산하지 말고, 제공된 정성 신호를 읽어 플레이어가 알아둘 만한 의미를 설명해.
+- 성장 흐름의 변화, 기록의 한계, 레벨업 전후에 살펴볼 점을 자연스럽게 연결해.
+- 기록에 없는 사냥 방식, 플레이 시간, 접속 습관, 장비 효과, 원인을 추측하지 마.
+- 신호가 부족하면 단정하지 말고 어떤 점을 판단하기 어려운지 솔직하게 밝혀.
 
-없는 성장 방향이나 원인을 만들어내지 마.
+[정확성 규칙]
+- 제공된 정성 신호에 없는 성장 방향이나 원인을 만들어내지 마.
+- 수치·날짜·평균·비율·원인·행동을 새로 계산하거나 추측하지 마.
 - 숫자·날짜·퍼센트·레벨 번호·경험치 단위·횟수는 쓰지 마. 정확한 수치와 날짜는 백엔드가 리포트에 별도로 작성해.
 - 서로 다른 레벨의 경험치 진행률을 직접 비교하거나 레벨업 당일의 경험치 획득량을 추정하지 마.
 
@@ -492,11 +491,11 @@ def _format_period_date_range(start_value, end_value):
 
 
 def _build_growth_report_cache_key(prompt, source_data):
-    """같은 정성 신호라도 서로 다른 캐릭터/기록의 결과가 섞이지 않게 한다."""
+    """정성 신호 프롬프트와 해당 캐릭터의 실제 계산 데이터로 캐시를 구분한다."""
     return (
         prompt
-        + "\n[리포트 형식 버전] 4\n"
-        + "[캐시 식별 데이터]\n"
+        + "\\n[리포트 형식 버전] 5\\n"
+        + "[캐시 식별 데이터]\\n"
         + json.dumps(source_data, ensure_ascii=False, sort_keys=True)
     )
 
