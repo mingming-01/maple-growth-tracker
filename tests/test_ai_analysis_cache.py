@@ -1,5 +1,8 @@
 import hashlib
+import time
 import unittest
+from concurrent.futures import ThreadPoolExecutor
+from threading import Event, Lock
 from unittest.mock import patch
 
 import requests
@@ -242,6 +245,72 @@ class AIResponseCacheTests(unittest.TestCase):
         self.assertEqual(result["primaryErrorType"], "provider_quota")
         self.assertEqual(result["fallbackErrorType"], "provider_timeout")
         self.assertNotIn("retryAfterSeconds", result)
+
+
+    def test_concurrent_identical_reports_share_one_provider_request(self):
+        generated_text = (
+            "[성장 패턴] 동일한 기록을 분석했습니다.\\n"
+            "[성장 변화] 확인된 변화입니다.\\n"
+            "[레벨업 분석] 확인된 레벨업은 없습니다.\\n"
+            "[성장 전망] 기록을 이어가세요.\\n"
+            "[AI 코멘트] 꾸준히 기록하세요."
+        )
+        character = {
+            "characterName": "동시요청캐릭터", "worldName": "크로아",
+            "job": "히어로", "level": 280, "experienceRate": 42.5,
+        }
+        history = [{
+            "date": "2026-10-26", "level": 280, "experienceChange": 12345,
+            "ranking": 500, "rankingChange": 4, "levelUp": False,
+        }]
+        metrics = {
+            "latestDailyGrowth": 12345, "averageDailyGrowth": 12345,
+            "prediction": {"estimatedDate": "2026-11-01"},
+        }
+        started = Event()
+        release = Event()
+        calls_lock = Lock()
+        provider_calls = 0
+
+        def provider(*_args, **_kwargs):
+            nonlocal provider_calls
+            with calls_lock:
+                provider_calls += 1
+            started.set()
+            release.wait(timeout=3)
+            return generated_text
+
+        def generate():
+            with self.app.app_context():
+                return tracker.generate_ai_analysis(character, history, metrics)
+
+        with (
+            patch(
+                "tracker.services.ai_analysis_service.request_gemini",
+                side_effect=provider,
+            ),
+            patch(
+                "tracker.services.ai_analysis_service._gemini_cooldown_remaining",
+                return_value=0,
+            ),
+        ):
+            with ThreadPoolExecutor(max_workers=2) as executor:
+                first = executor.submit(generate)
+                self.assertTrue(started.wait(timeout=1))
+                second = executor.submit(generate)
+                time.sleep(0.1)
+                calls_before_release = provider_calls
+                release.set()
+                first_result = first.result(timeout=3)
+                second_result = second.result(timeout=3)
+
+        self.assertEqual(
+            calls_before_release,
+            1,
+            "동일한 AI 성장 리포트가 동시에 요청되면 공급자 호출을 공유해야 합니다.",
+        )
+        self.assertEqual(provider_calls, 1)
+        self.assertEqual(first_result["analysis"], second_result["analysis"])
 
 
 if __name__ == "__main__":
