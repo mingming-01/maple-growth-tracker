@@ -389,6 +389,8 @@ class ServerAIMetricsTests(unittest.TestCase):
 
         summary = result["periodSummary"]
         self.assertEqual(summary["experienceGainSum"], 40_000_000_000_000)
+        self.assertEqual(summary["experienceGainSumLowerBound"], 39_990_234_476_724)
+        self.assertEqual(summary["experienceGainSumUpperBound"], 40_009_765_726_727)
         self.assertIsNone(summary["observedExperienceSum"])
         self.assertEqual(summary["reconstructedLevelUpExperienceSum"], 40_000_000_000_000)
         self.assertEqual(summary["reconstructedLevelUpIntervals"], 1)
