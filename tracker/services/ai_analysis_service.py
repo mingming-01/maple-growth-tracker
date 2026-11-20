@@ -193,7 +193,7 @@ def _build_generation_metadata(provider, provider_metadata=None, *, fallback_use
     """실제 생성 제공자·모델과 폴백 여부만 응답 및 캐시에 보존한다."""
     safe = _safe_provider_metadata(provider_metadata)
     requested_model = safe.get("model_alias")
-    selected_model = safe.get("selected_model") or requested_model
+    selected_model = safe.get("selected_model")
     return {
         "provider": str(provider or "unknown"),
         "requestedModel": str(requested_model)[:120] if requested_model else None,

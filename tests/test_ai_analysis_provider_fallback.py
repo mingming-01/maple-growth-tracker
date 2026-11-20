@@ -558,5 +558,16 @@ class AIAnalysisFallbackTests(unittest.TestCase):
             result["generation"],
         )
 
+    def test_missing_openrouter_route_model_is_not_mislabeled_as_selected_model(self):
+        generation = service._build_generation_metadata(
+            "openrouter",
+            {"model_alias": "openrouter/free"},
+            fallback_used=True,
+            fallback_reason="provider_timeout",
+        )
+        self.assertEqual(generation["requestedModel"], "openrouter/free")
+        self.assertIsNone(generation["selectedModel"])
+        self.assertTrue(generation["fallbackUsed"])
+
 if __name__ == "__main__":
     unittest.main()

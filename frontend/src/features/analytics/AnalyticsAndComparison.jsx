@@ -96,14 +96,18 @@ function describeAIReportGeneration(generation, deliverySource) {
   }
   const providerLabels = { gemini: "Gemini", openrouter: "OpenRouter" };
   const provider = providerLabels[generation.provider] || generation.provider || "제공자 확인 불가";
-  const selectedModel = generation.selectedModel || generation.requestedModel;
+  const selectedModel = generation.selectedModel;
+  const requestedModel = generation.requestedModel;
   const modelLabel = selectedModel
-    ? "모델: " + selectedModel + (
-      generation.requestedModel && generation.requestedModel !== selectedModel
-        ? " (요청: " + generation.requestedModel + ")"
+    ? "응답 모델: " + selectedModel + (
+      requestedModel && requestedModel !== selectedModel
+        ? " (요청: " + requestedModel + ")"
         : ""
     )
-    : "모델 정보 없음";
+    : requestedModel
+      ? (generation.provider === "openrouter" ? "요청 모델 별칭: " : "요청 모델: ")
+        + requestedModel + " (실제 응답 모델 정보 없음)"
+      : "모델 정보 없음";
   const details = ["생성: " + provider, modelLabel];
   if (generation.selectedProvider) details.push("라우팅 제공자: " + generation.selectedProvider);
   if (generation.fallbackUsed) {
