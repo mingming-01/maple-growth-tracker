@@ -115,32 +115,27 @@ def _provider_timeouts(provider, deadline=None):
     )
     if provider == "gemini":
         read_timeout = min(
-            20.0, max(2.0, float(_setting("AI_GEMINI_READ_TIMEOUT", 15.0)))
+            14.0, max(2.0, float(_setting("AI_GEMINI_READ_TIMEOUT", 14.0)))
         )
         total_timeout = min(
-            22.0,
-            max(1.0, float(_setting("AI_GEMINI_TOTAL_TIMEOUT", 18.0))),
+            16.0,
+            max(1.0, float(_setting("AI_GEMINI_TOTAL_TIMEOUT", 16.0))),
         )
     else:
         read_timeout = min(
-            20.0, max(3.0, float(_setting("AI_OPENROUTER_READ_TIMEOUT", 20.0)))
+            12.0, max(3.0, float(_setting("AI_OPENROUTER_READ_TIMEOUT", 12.0)))
         )
-        # The OpenRouter request is not retried after a transport timeout.
-        # Honor the configured fallback budget instead of reserving time for
-        # a retry that the timeout path never performs.
         total_timeout = min(
-            65.0,
-            max(2.0, float(_setting("AI_OPENROUTER_TOTAL_TIMEOUT", 22.0))),
+            14.0,
+            max(2.0, float(_setting("AI_OPENROUTER_TOTAL_TIMEOUT", 14.0))),
         )
     read_timeout = min(read_timeout, max(0.5, total_timeout - connect_timeout))
     if deadline is not None:
         remaining = float(deadline) - time.monotonic()
         if provider == "gemini" and _setting("OPENROUTER_API_KEY", ""):
-            # Preserve a useful window for the fallback instead of allowing a
-            # slow primary request to consume the entire request deadline.
             reserve = max(
                 1.0,
-                float(_setting("AI_OPENROUTER_MIN_REMAINING_SECONDS", 24.0)),
+                float(_setting("AI_OPENROUTER_MIN_REMAINING_SECONDS", 15.0)),
             )
             remaining -= reserve
         if remaining <= 0:
@@ -242,33 +237,35 @@ def _log_openrouter_empty_response(**details):
 
 
 def request_openrouter(prompt, api_key=None, deadline=None):
-    """Call the dynamic free router without model-specific optional controls."""
+    """OpenRouter 자유 라우터의 일반 JSON 응답을 짧은 예산으로 한 번 요청한다."""
     key = api_key or _setting("OPENROUTER_API_KEY", "")
     if not key:
         return None
 
     model_alias = _setting("OPENROUTER_MODEL", "openrouter/free")
-    connect_timeout, read_timeout, total_timeout = _provider_timeouts("openrouter", deadline=deadline)
+    connect_timeout, read_timeout, total_timeout = _provider_timeouts(
+        "openrouter", deadline=deadline
+    )
     payload = post_json_with_deadline(
         OPENROUTER_URL,
         headers={
             "Authorization": f"Bearer {key}",
             "Content-Type": "application/json",
-            "Accept": "text/event-stream",
         },
         json_body={
             "model": model_alias,
             "messages": [{"role": "user", "content": prompt}],
             "temperature": 0.35,
-            "max_tokens": max(256, min(2048, int(_setting("AI_OPENROUTER_MAX_OUTPUT_TOKENS", 2048)))),
-            "stream": True,
+            "max_tokens": max(
+                128,
+                min(1024, int(_setting("AI_OPENROUTER_MAX_OUTPUT_TOKENS", 1024))),
+            ),
+            "stream": False,
         },
         connect_timeout=connect_timeout,
         read_timeout=read_timeout,
         total_timeout=total_timeout,
         deadline=deadline,
-        max_response_bytes=DEFAULT_MAX_SSE_RESPONSE_BYTES,
-        response_format="sse",
     )
     metadata = _http_metadata(payload, "openrouter", model_alias)
     metadata.update({
@@ -277,20 +274,22 @@ def request_openrouter(prompt, api_key=None, deadline=None):
     })
     choices = payload.get("choices")
     if not isinstance(choices, list) or not choices or not isinstance(choices[0], dict):
-        metadata.update({"has_choices": isinstance(choices, list) and bool(choices), "response_classification": "unknown_response_error"})
+        metadata.update({
+            "has_choices": isinstance(choices, list) and bool(choices),
+            "response_classification": "unknown_response_error",
+        })
         _log_openrouter_empty_response(**metadata)
-        raise ProviderError("OpenRouter returned no usable choice", "provider_invalid_response", provider_metadata=metadata)
+        raise ProviderError(
+            "OpenRouter returned no usable choice",
+            "provider_invalid_response",
+            provider_metadata=metadata,
+        )
 
     choice = choices[0]
     message = choice.get("message")
     message = message if isinstance(message, dict) else {}
     raw_content = message.get("content")
     content = _extract_text_parts(raw_content) if isinstance(raw_content, list) else raw_content
-    reasoning = message.get("reasoning") or message.get("reasoning_content")
-    reasoning_length = message.get("reasoning_length")
-    reasoning_present = bool(reasoning) or (
-        isinstance(reasoning_length, (int, float)) and reasoning_length > 0
-    )
     finish_reason = choice.get("finish_reason") or choice.get("native_finish_reason")
     metadata.update({
         "has_choices": True,
@@ -299,21 +298,32 @@ def request_openrouter(prompt, api_key=None, deadline=None):
         "content_present": isinstance(content, str) and bool(content.strip()),
         "content_length": len(content) if isinstance(content, str) else 0,
         "content_type": type(raw_content).__name__,
-        "reasoning_present": reasoning_present,
-        "reasoning_length": len(reasoning) if isinstance(reasoning, str) else reasoning_length,
         "finish_reason": finish_reason,
         "native_finish_reason": choice.get("native_finish_reason"),
-        "response_classification": "content_present",
     })
     if finish_reason == "length":
         metadata["response_classification"] = "truncated_output"
         _log_openrouter_empty_response(**metadata)
-        raise ProviderError("OpenRouter output reached its completion limit", "provider_output_truncated", finish_reason=finish_reason, provider_metadata=metadata)
+        raise ProviderError(
+            "OpenRouter output reached its completion limit",
+            "provider_output_truncated",
+            finish_reason=finish_reason,
+            provider_metadata=metadata,
+        )
     if not isinstance(content, str) or not content.strip():
-        classification = "reasoning_only" if reasoning_present else "empty_content"
-        metadata["response_classification"] = classification
+        reasoning = message.get("reasoning") or message.get("reasoning_content")
+        metadata.update({
+            "reasoning_present": bool(reasoning),
+            "reasoning_length": len(reasoning) if isinstance(reasoning, str) else None,
+            "response_classification": "reasoning_only" if reasoning else "empty_content",
+        })
         _log_openrouter_empty_response(**metadata)
-        raise ProviderError("OpenRouter response contained no report text", "provider_empty_response", finish_reason=finish_reason, provider_metadata=metadata)
+        raise ProviderError(
+            "OpenRouter response contained no report text",
+            "provider_empty_response",
+            finish_reason=finish_reason,
+            provider_metadata=metadata,
+        )
     return ProviderText(content.strip(), metadata)
 
 
