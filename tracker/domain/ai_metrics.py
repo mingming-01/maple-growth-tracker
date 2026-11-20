@@ -1,5 +1,6 @@
 """서버가 보관한 성장 기록으로 AI 입력 지표를 계산한다."""
 from datetime import date, timedelta
+from decimal import Decimal, ROUND_HALF_UP
 from math import isfinite
 
 from tracker.domain.growth_calculations import (
@@ -17,7 +18,6 @@ def _number(value):
     except (TypeError, ValueError, OverflowError):
         return None
     return result if isfinite(result) else None
-
 
 
 def _build_long_period_growth_trend(period_records, period_start, period_end):
