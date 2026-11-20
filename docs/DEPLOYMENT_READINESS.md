@@ -47,10 +47,19 @@ Render 계정에서 관리되는 PostgreSQL 인스턴스는 조회되지 않았�
 이는 실제 사용량이 아니라 풀 설정에서 계산한 상한이다. 실제로 항상 8개 연결을 여는 것은 아니다. 인스턴스나 워커를 늘리면 상한도 프로세스 수만큼 증가한다.
 
 배포 승인 전 확인:
-- [ ] \`GROWTH_DATABASE_URL\`의 실제 제공자와 연결 방식 확인(직접 연결 또는 풀러)
-- [ ] 해당 DB 플랜의 최대 연결 수와 현재 다른 서비스의 사용량 확인
+- [x] `GROWTH_DATABASE_URL`은 Supabase Shared Pooler Session Mode로 확인됨(호스트 `aws-0-us-east-1.pooler.supabase.com`, 포트 `5432`; 자격 증명은 기록하지 않음)
+- [x] Supabase Free 프로젝트의 `max_connections=60`, reserved 3, 현재 관측 연결 8개를 읽기 전용으로 확인함. 비예약 57개는 앱 전용이 아니라 Supabase 내부 서비스와 공유하는 슬롯임
 - [ ] 예상 워커·인스턴스 수를 곱한 뒤 여유 연결 수 확보
 - [ ] 필요할 때만 풀 크기를 조정하고 PostgreSQL 통합 테스트 재실행
+
+## Supabase 연결 방식 확인
+
+`GROWTH_DATABASE_URL`의 호스트와 포트만 확인한 결과, 현재 연결은 Supabase Shared Pooler의 Session Mode다(포트 `5432`). 전체 연결 문자열이나 비밀번호는 저장하지 않는다.
+
+- 애플리케이션은 `psycopg_pool`을 사용하며 프로세스별 풀 상한은 기본 풀 4개와 관리자 로그 풀 4개다.
+- 풀 생성 시 `prepare_threshold=None`을 지정해 자동 prepared statement 사용을 비활성화한다.
+- Session Mode는 연결 세션을 유지하므로 현재 저장소의 트랜잭션 및 연결 컨텍스트 사용 방식과 부합한다.
+- 현재 정보만으로 풀 크기나 연결 방식을 변경할 근거는 없다.
 
 ## 운영 환경변수 경고
 
