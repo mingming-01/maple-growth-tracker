@@ -19,6 +19,101 @@ def _number(value):
     return result if isfinite(result) else None
 
 
+
+def _build_long_period_growth_trend(period_records, period_start, period_end):
+    """선택 기간을 달력 기준 앞·뒤 절반으로 나누고 실제 일별 변화만 비교한다."""
+    total_days = (period_end - period_start).days + 1
+    first_half_days = total_days // 2
+    if first_half_days < 1 or total_days - first_half_days < 1:
+        return None
+
+    first_start = period_start
+    first_end = first_start + timedelta(days=first_half_days - 1)
+    second_start = first_end + timedelta(days=1)
+    second_end = period_end
+
+    def summarize(start_date, end_date):
+        changes = []
+        for record in period_records:
+            try:
+                record_date = date.fromisoformat(str(record.get("date", "")))
+            except (TypeError, ValueError):
+                continue
+            if not start_date <= record_date <= end_date:
+                continue
+            change = to_exact_integer(record.get("experienceChange"))
+            if change is not None and change >= 0:
+                changes.append(change)
+
+        expected_intervals = (end_date - start_date).days + 1
+        # 각 구간의 달력 일수 중 40% 이상, 최소 4개의 실제 변화가 있어야
+        # 초반·후반의 평균을 비교 가능한 표본으로 취급한다.
+        minimum_samples = max(4, (expected_intervals * 2 + 4) // 5)
+        return {
+            "startDate": start_date.isoformat(),
+            "endDate": end_date.isoformat(),
+            "expectedIntervals": expected_intervals,
+            "minimumRequiredIntervals": minimum_samples,
+            "validGrowthIntervals": len(changes),
+            "observedExperienceSum": sum(changes) if changes else None,
+        }
+
+    first_half = summarize(first_start, first_end)
+    second_half = summarize(second_start, second_end)
+    first_count = first_half["validGrowthIntervals"]
+    second_count = second_half["validGrowthIntervals"]
+    first_sum = first_half["observedExperienceSum"] or 0
+    second_sum = second_half["observedExperienceSum"] or 0
+
+    result = {
+        "status": "insufficient_data",
+        "comparisonMethod": "calendar_halves",
+        "firstHalf": first_half,
+        "secondHalf": second_half,
+        "direction": "insufficient_data",
+        "strength": None,
+        "changePercent": None,
+    }
+    if (
+        first_count < first_half["minimumRequiredIntervals"]
+        or second_count < second_half["minimumRequiredIntervals"]
+    ):
+        return result
+
+    # 분모를 곱해 평균끼리 비교하므로 큰 경험치 값을 float로 바꾸지 않는다.
+    difference = second_sum * first_count - first_sum * second_count
+    if difference == 0:
+        direction = "stable"
+        strength = None
+    elif first_sum == 0:
+        direction = "increase" if difference > 0 else "decrease"
+        strength = "unknown"
+    else:
+        change_percent = (
+            Decimal(difference) * Decimal("100")
+            / Decimal(first_sum * second_count)
+        )
+        if change_percent > Decimal("5"):
+            direction = "increase"
+            strength = "strong" if change_percent >= Decimal("20") else "moderate"
+        elif change_percent < Decimal("-5"):
+            direction = "decrease"
+            strength = "strong" if change_percent <= Decimal("-20") else "moderate"
+        else:
+            direction = "stable"
+            strength = None
+        result["changePercent"] = float(
+            change_percent.quantize(Decimal("0.1"), rounding=ROUND_HALF_UP)
+        )
+
+    result.update({
+        "status": "available",
+        "direction": direction,
+        "strength": strength,
+    })
+    return result
+
+
 def build_server_growth_metrics(character, records, reference_date=None, period_days=7):
     """저장된 스냅샷을 한 번 정규화한 뒤 기간별 통계를 파생한다."""
     today = reference_date if isinstance(reference_date, date) else date.today()
@@ -233,6 +328,11 @@ def build_server_growth_metrics(character, records, reference_date=None, period_
         reverse=True,
     )[:8]
 
+    period_trend = (
+        _build_long_period_growth_trend(period_records, period_start, today)
+        if period_days in (30, 90) else None
+    )
+
     period_summary = {
         "startDate": period_start.isoformat(),
         "endDate": today.isoformat(),
@@ -293,6 +393,7 @@ def build_server_growth_metrics(character, records, reference_date=None, period_
                 "recentAverage": recent_average,
                 "direction": direction,
             },
+            "periodTrend": period_trend,
             "levelUps": level_ups,
             "timeline": timeline,
             "prediction": prediction,
