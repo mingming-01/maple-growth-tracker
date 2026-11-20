@@ -344,30 +344,32 @@ def _build_growth_report_prompt(source_data):
         prompt_data["growthInsights"] = None
 
     return f"""
-너는 메이플스토리 캐릭터의 성장 기록을 읽고 플레이어가 편하게 이해할 수 있는 리포트를 쓰는 도우미야.
-친근하고 담백한 해요체를 사용해. 메이플스토리에서 익숙한 경험치, 레벨업, 월드 랭킹 표현을 우선해.
+너는 메이플스토리 캐릭터의 성장 기록을 읽고 플레이어에게 통찰을 전하는 성장 코치야.
+친근하고 자연스러운 해요체를 사용하고, 메이플스토리에서 익숙한 경험치·레벨업·월드 랭킹 표현을 우선해.
 
-[작성 규칙]
-- 아래 분석 자료에 있는 사실만 사용해. 수치·날짜·평균·비율·원인·행동을 새로 계산하거나 추측하지 마.
-- 경험치 증가량과 현재 레벨 진행률을 구분해. experienceRate는 현재 레벨 진행률이야. 남은 비율은 currentLevelProgress.remainingRate가 있을 때만 말해.
-- 7일 리포트는 growthInsights의 최근/직전 7일 비교를 참고해. 비교할 기록이 부족하면 증가·감소를 단정하지 마.
-- 30일·90일 리포트는 selectedPeriod.periodSummary가 선택 기간의 핵심 근거야. metrics의 전망과 진행률은 최근 7일 기준이므로 장기 기간 통계처럼 설명하지 마.
-- 예상 레벨업은 metrics.prediction 또는 metrics.recentSevenDayPrediction에 날짜가 있을 때만, 참고값임을 밝혀 말해. 서버가 계산한 정확한 전망 문장도 함께 제공되므로, 그 의미와 전제 조건을 자연스럽게 설명해.
-- 기록이 적으면 흐름이 꾸준하다거나 안정적이라고 말하지 마. 근거 없는 칭찬, 사냥 방식, 플레이 시간, 접속 습관을 만들지 마.
-- 하루 평균 경험치는 확인된 경험치 변화의 평균으로 설명하고, 큰 경험치는 '17.8조'처럼 한국어 단위로 써. 과학적 표기, 개발 용어, 데이터 필드명, 모델명, API, null, undefined, 영어 상태값은 본문에 쓰지 마.
-- '관측 구간', '표본', '결측', '기록 충실도', '유효 구간', '메트릭' 같은 말 대신 '확인된 날짜', '하루 평균 경험치', '지난 기간과 비교'처럼 자연스럽게 표현해.
-- [성장 패턴]은 선택 기간의 전체 흐름, [성장 변화]는 확인된 구체적 차이, [레벨업 분석]은 실제 레벨 변화와 현재 진행 상황, [성장 전망]은 주어진 전망, [AI 코멘트]는 유의할 점 한 가지를 설명해.
-- 각 항목은 근거가 있는 자연스러운 한국어 1~2문장으로 작성해. 근거가 없으면 짧게 밝혀.
-- 아래 다섯 제목을 정확히 한 번씩 순서대로 사용해. 마크다운·목록·표·별도 제목은 쓰지 마.
+[역할]
+- 서버가 계산한 성장 수치와 기록을 읽고, 숫자를 다시 나열하기보다 그 흐름에서 플레이어가 알아둘 만한 점을 설명해.
+- 기록이 충분한 부분은 최근과 이전 기간의 차이, 성장 흐름의 특징, 레벨업 전후에 주의해 볼 점을 구체적으로 해석해.
+- 기록이 부족하거나 레벨업으로 경험치 증가량을 확정할 수 없는 구간은 그 한계를 자연스럽게 밝혀.
+- 과도한 칭찬이나 상투적인 격려 대신, 실제 기록에 연결되는 유용한 관찰과 다음에 살펴볼 점을 제안해.
+
+[정확성 규칙]
+- 아래 자료에 있는 사실만 사용해. 수치·날짜·평균·비율·원인·행동을 새로 계산하거나 추측하지 마.
+- 수치나 날짜를 언급해야 한다면 자료에 있는 값을 그대로 사용해. 필요하지 않으면 숫자를 반복하지 말고 의미를 설명해.
+- 경험치 증가량과 현재 레벨 진행률을 혼동하지 마. experienceRate는 현재 레벨 진행률이야.
+- 7일 분석은 growthInsights의 최근/직전 7일 비교를 참고해. 비교할 기록이 부족하면 증가·감소를 단정하지 마.
+- 30일·90일 분석은 selectedPeriod.periodSummary를 기준으로 해. metrics의 전망과 진행률은 최근 7일 기준이므로 장기 기간 통계처럼 설명하지 마.
+- 예상 레벨업은 metrics.prediction 또는 metrics.recentSevenDayPrediction에 날짜가 있을 때만 참고 전망으로 언급해. 서버 계산값을 바꾸거나 새로운 날짜를 만들지 마.
+- 사냥 방식, 플레이 시간, 접속 습관, 장비의 영향처럼 자료에 없는 원인을 만들어내지 마.
+
+[출력 형식]
+- 최종 리포트 전체가 아니라 AI 코멘트 본문만 작성해.
+- 자연스러운 한국어 2~4문장으로 작성하고, 제목·목록·표·마크다운·코드·영어 상태값은 쓰지 마.
+- 보고서의 성장 수치와 레벨업 날짜는 서버가 별도로 정확하게 구성하므로, 여기서는 해석과 주의점에 집중해.
+- 분석 자료가 부족하다면 부족한 점과 어떤 기록이 더 쌓이면 판단할 수 있는지 간결하게 설명해.
 
 [분석 자료]
 {json.dumps(prompt_data, ensure_ascii=False)}
-
-[성장 패턴]
-[성장 변화]
-[레벨업 분석]
-[성장 전망]
-[AI 코멘트]
 """
 
 
@@ -421,7 +423,7 @@ def _build_growth_report_cache_key(prompt, source_data):
     """같은 정성 신호라도 서로 다른 캐릭터/기록의 결과가 섞이지 않게 한다."""
     return (
         prompt
-        + "\n[리포트 형식 버전] 3\n"
+        + "\n[리포트 형식 버전] 4\n"
         + "[캐시 식별 데이터]\n"
         + json.dumps(source_data, ensure_ascii=False, sort_keys=True)
     )
@@ -523,6 +525,99 @@ def _validate_growth_report_facts(report, source_data):
     return _growth_report_fact_error(report, source_data) is True
 
 
+def _extract_ai_comment(value):
+    """Extract only the AI commentary; factual report sections are always server-owned."""
+    text = str(value or "").strip()
+    if not text:
+        return ""
+
+    ai_heading = re.search(r"(?im)^\s*\[AI\s*코멘트\]\s*", text)
+    if ai_heading:
+        text = text[ai_heading.end():]
+        next_heading = re.search(
+            r"(?im)^\s*\[(?:성장\s*패턴|성장\s*변화|성장\s*분석|레벨업\s*분석|레벨업|성장\s*전망)\]\s*",
+            text,
+        )
+        if next_heading:
+            text = text[:next_heading.start()]
+    elif re.search(
+        r"(?im)^\s*\[(?:성장\s*패턴|성장\s*변화|성장\s*분석|레벨업\s*분석|레벨업|성장\s*전망)\]\s*",
+        text,
+    ):
+        # A full model-written report without an explicit AI-comment section is not commentary.
+        return ""
+
+    return text.strip()
+
+
+def _prepare_ai_comment(value, expected_date, source_data):
+    """Sanitize and validate the AI-only prose without allowing it to replace server facts."""
+    sanitized = sanitize_ai_text(value, expected_date)
+    comment = _extract_ai_comment(sanitized)
+    compact = re.sub(r"[\s.!?…·]", "", comment)
+    if len(compact) < 8:
+        return None, "empty_comment"
+
+    fact_error = _growth_report_fact_error(comment, source_data)
+    if fact_error is not True:
+        return None, fact_error
+    return comment, None
+
+
+def _server_fallback_growth_report(
+    character, metrics, growth_insights, analysis_context, reason="provider_unavailable"
+):
+    """Return a clearly-labelled deterministic report when no AI commentary is usable."""
+    fallback_comment = (
+        "이번 요청에서는 AI 코멘트를 생성하지 못했어요. "
+        "아래 성장 수치와 레벨업 정보는 저장된 기록을 바탕으로 서버가 계산한 내용이에요."
+    )
+    report = _build_deterministic_growth_report(
+        character, metrics, growth_insights, analysis_context, fallback_comment
+    )
+    metadata = _log_provider_success(
+        "server_fallback",
+        {"response_classification": "deterministic_fallback"},
+        validated=True,
+        returned=True,
+        cache_hit=False,
+    )
+    return {
+        "analysis": report,
+        "cacheHit": False,
+        "growthInsights": growth_insights,
+        "aiGenerated": False,
+        "aiStatus": "fallback",
+        "aiFallbackReason": str(reason or "provider_unavailable")[:80],
+        "providerMetadata": metadata,
+    }
+
+
+def _compose_growth_report_from_ai(
+    response_text, character, metrics, growth_insights, analysis_context,
+    source_data, expected_date, provider,
+):
+    """Keep AI prose, while the backend supplies every measured fact and section."""
+    comment, validation_reason = _prepare_ai_comment(
+        response_text, expected_date, source_data
+    )
+    if validation_reason:
+        error = ProviderError(
+            f"{provider} AI commentary failed validation.",
+            "provider_invalid_output",
+        )
+        error.validation_reason = validation_reason
+        error.provider_metadata = {
+            **dict(getattr(response_text, "provider_metadata", {}) or {}),
+            "response_classification": "comment_validation_failed",
+        }
+        raise error
+
+    return _build_deterministic_growth_report(
+        character, metrics, growth_insights, analysis_context, comment
+    )
+
+
 def _build_deterministic_growth_report(character, metrics, growth_insights, analysis_context, ai_comment):
     """수치·날짜·레벨 진행률은 서버 계산값으로만 리포트에 작성한다."""
     metrics = metrics or {}
@@ -530,7 +625,12 @@ def _build_deterministic_growth_report(character, metrics, growth_insights, anal
     period_days = (analysis_context or {}).get("periodDays", 7)
     recent = insights.get("recentPeriod") if period_days == 7 else None
     previous = insights.get("previousPeriod") if period_days == 7 else None
-    summary = recent or metrics.get("periodSummary") or {}
+    summary = (
+        recent
+        or (analysis_context or {}).get("periodSummary")
+        or metrics.get("periodSummary")
+        or {}
+    )
 
     period_label = _format_period_date_range(
         summary.get("startDate"), summary.get("endDate")
@@ -778,7 +878,7 @@ def _generate_ai_analysis_impl(character, history, computed_metrics=None, growth
         if cached_analysis is not None:
             print("저장된 AI 성장 리포트를 재사용했습니다.")
             metadata = _log_provider_success("cache", {"response_body_present": True}, validated=True, returned=True, cache_hit=True)
-            return {"analysis": cached_analysis, "cacheHit": True, "growthInsights": growth_insights, "providerMetadata": metadata}
+            return {"analysis": cached_analysis, "cacheHit": True, "growthInsights": growth_insights, "aiGenerated": True, "aiStatus": "generated", "providerMetadata": metadata}
 
     gemini_error = None
     if gemini_api_key and cooldown_remaining > 0:
@@ -798,25 +898,24 @@ def _generate_ai_analysis_impl(character, history, computed_metrics=None, growth
             gemini_text = _require_provider_text(getattr(response, "text", None), "Gemini")
             provider_metadata = dict(getattr(gemini_text, "provider_metadata", {}) or {})
             provider_metadata["attempt"] = 1
-            analysis = sanitize_ai_text(gemini_text, expected_date)
             if computed_metrics is not None:
-                analysis = _apply_deterministic_growth_forecast(
-                    analysis, character, computed_metrics
+                analysis = _compose_growth_report_from_ai(
+                    gemini_text,
+                    character,
+                    computed_metrics,
+                    growth_insights,
+                    analysis_context,
+                    source_data,
+                    expected_date,
+                    "Gemini",
                 )
-                fact_error = _growth_report_fact_error(analysis, source_data)
-                if fact_error is not True:
-                    error = ProviderError(
-                        "Gemini analysis contained unsupported facts.",
-                        "provider_invalid_output",
-                    )
-                    error.validation_reason = fact_error
-                    error.provider_metadata = {**provider_metadata, "response_classification": "fact_validation_failed"}
+            else:
+                analysis = sanitize_ai_text(gemini_text, expected_date)
+                if not validate_growth_report(analysis):
+                    error = ProviderError("Gemini report format validation failed.", "provider_invalid_output")
+                    error.validation_reason = "report_format"
+                    error.provider_metadata = {**provider_metadata, "response_classification": "report_format_failed"}
                     raise error
-            if not validate_growth_report(analysis):
-                error = ProviderError("Gemini report format validation failed.", "provider_invalid_output")
-                error.validation_reason = "report_format"
-                error.provider_metadata = {**provider_metadata, "response_classification": "report_format_failed"}
-                raise error
             _clear_gemini_cooldown(runtime_state)
             _store_cached_ai_response(cache_key, analysis)
             metadata = _log_provider_success("gemini", provider_metadata, validated=True, returned=True, cache_hit=False)
@@ -827,7 +926,7 @@ def _generate_ai_analysis_impl(character, history, computed_metrics=None, growth
                 delay = _set_gemini_cooldown(runtime_state, error)
                 print(f"Gemini 쿼터 제한으로 {delay}초 쿨다운을 적용했습니다.")
             _log_provider_failure("gemini", error, gemini_started_at, deadline)
-            if not should_use_openrouter(error):
+            if not should_use_openrouter(error) and not openrouter_api_key and computed_metrics is None:
                 return _error_result(error, "AI 분석을 불러오지 못했습니다.")
 
     if openrouter_api_key:
@@ -846,35 +945,31 @@ def _generate_ai_analysis_impl(character, history, computed_metrics=None, growth
                 provider_metadata = dict(getattr(response_text, "provider_metadata", {}) or {})
                 provider_metadata["attempt"] = attempt + 1
                 print("OpenRouter로 성장 리포트를 처리했습니다.")
-                analysis = sanitize_ai_text(response_text, expected_date)
                 if computed_metrics is not None:
-                    analysis = _apply_deterministic_growth_forecast(
-                        analysis, character, computed_metrics
+                    analysis = _compose_growth_report_from_ai(
+                        response_text,
+                        character,
+                        computed_metrics,
+                        growth_insights,
+                        analysis_context,
+                        source_data,
+                        expected_date,
+                        "OpenRouter",
                     )
-                    fact_error = _growth_report_fact_error(analysis, source_data)
-                    if fact_error is not True:
-                        error = ProviderError(
-                            "OpenRouter analysis contained unsupported facts.",
-                            "provider_invalid_output",
-                        )
-                        error.validation_reason = fact_error
-                        error.provider_metadata = {**provider_metadata, "response_classification": "fact_validation_failed"}
+                else:
+                    analysis = sanitize_ai_text(response_text, expected_date)
+                    if not validate_growth_report(analysis):
+                        error = ProviderError("OpenRouter report format validation failed.", "provider_invalid_output")
+                        error.validation_reason = "report_format"
+                        error.provider_metadata = {**provider_metadata, "response_classification": "report_format_failed"}
                         raise error
-                if not validate_growth_report(analysis):
-                    error = ProviderError("OpenRouter report format validation failed.", "provider_invalid_output")
-                    error.validation_reason = "report_format"
-                    error.provider_metadata = {**provider_metadata, "response_classification": "report_format_failed"}
-                    raise error
                 _store_cached_ai_response(cache_key, analysis)
                 metadata = _log_provider_success("openrouter", provider_metadata, validated=True, returned=True, cache_hit=False)
                 return {"analysis": analysis, "cacheHit": False, "growthInsights": growth_insights, "providerMetadata": metadata}
             except Exception as error:
                 openrouter_error = error
                 _log_provider_failure("openrouter", error, openrouter_started_at, deadline, attempt=attempt + 1)
-                retryable_output_error = provider_error_type(error) in {
-                    "provider_output_truncated",
-                    "provider_invalid_output",
-                }
+                retryable_output_error = provider_error_type(error) == "provider_output_truncated"
                 remaining_ms = max(0, (deadline - time.monotonic()) * 1000)
                 if attempt == 0 and retryable_output_error and remaining_ms >= 1000:
                     if has_app_context():
@@ -886,10 +981,31 @@ def _generate_ai_analysis_impl(character, history, computed_metrics=None, growth
                         )
                     continue
                 break
+        if computed_metrics is not None:
+            failed_error = openrouter_error or gemini_error
+            return _server_fallback_growth_report(
+                character,
+                computed_metrics,
+                growth_insights,
+                analysis_context,
+                provider_error_type(failed_error) if failed_error else "provider_unavailable",
+            )
         return _fallback_failure_result(gemini_error, openrouter_error)
 
     if gemini_error:
+        if computed_metrics is not None:
+            return _server_fallback_growth_report(
+                character,
+                computed_metrics,
+                growth_insights,
+                analysis_context,
+                provider_error_type(gemini_error),
+            )
         return _fallback_failure_result(gemini_error)
+    if computed_metrics is not None:
+        return _server_fallback_growth_report(
+            character, computed_metrics, growth_insights, analysis_context
+        )
     return {"error": "AI 분석을 사용할 수 없습니다.", "statusCode": 503, "errorType": "provider_unavailable"}
 
 
