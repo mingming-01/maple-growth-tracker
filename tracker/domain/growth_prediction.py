@@ -73,7 +73,7 @@ def build_growth_prediction(records, character=None, reference_date=None, window
         else latest[3] if latest else None
     )
     observation_date = (
-        reference if profile_experience is not None or profile_rate is not None
+        reference if profile_experience is not None
         else latest[0] if latest else reference
     )
 
