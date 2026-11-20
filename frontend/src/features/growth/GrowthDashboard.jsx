@@ -446,7 +446,7 @@ export default function GrowthDashboard({ character, history, metrics: serverMet
         labels: sorted.map(item => String(item.date || "").slice(5)),
         datasets: [
           { label:"현재 레벨 EXP",data:experience,yAxisID:"experience",borderColor:"#36a2eb",backgroundColor:"#36a2eb",borderWidth:3,tension:0,spanGaps:false,segment:{borderDash:context=>levelExperienceSegmentDash(context,levelUpEvents)},pointRadius:levelUpEvents.map(isLevelUp=>isLevelUp?5:3),pointHoverRadius:levelUpEvents.map(isLevelUp=>isLevelUp?7:5),fill:false },
-          { label:"일일 경험치 증가량",data:daily,yAxisID:"dailyGrowth",borderColor:"#ff6384",backgroundColor:"#ff6384",borderWidth:2,segment:{borderDash:dailyGrowthSegmentDash},spanGaps:false,tension:0,pointRadius:2,pointHoverRadius:5,fill:false },
+          { label:"일일 경험치 증가량",data:daily,yAxisID:"dailyGrowth",borderColor:"#ff6384",backgroundColor:"#ff6384",borderWidth:2,segment:{borderDash:dailyGrowthSegmentDash},spanGaps:false,tension:0,pointRadius:sorted.map(item=>item.experienceChangeKind === "level_up_reconstructed" ? 4 : 2),pointHoverRadius:5,pointStyle:sorted.map(item=>item.experienceChangeKind === "level_up_reconstructed" ? "rectRot" : "circle"),fill:false },
         ]
       },
       options: {
@@ -462,8 +462,16 @@ export default function GrowthDashboard({ character, history, metrics: serverMet
               return "⭐ 레벨업 · Lv. " + previousLevel + " → " + currentLevel +
                 " · 새 레벨 EXP " + context.parsed.y.toFixed(3) + "조";
             }
+            if (context.dataset.label === "일일 경험치 증가량" && current?.experienceChangeKind === "level_up_reconstructed" && context.parsed.y !== null) {
+              const lower = Number(current.experienceChangeLowerBound);
+              const upper = Number(current.experienceChangeUpperBound);
+              const rangeText = Number.isFinite(lower) && Number.isFinite(upper)
+                ? " · 계산 범위 " + (lower / 1_000_000_000_000).toFixed(3) + "~" + (upper / 1_000_000_000_000).toFixed(3) + "조"
+                : "";
+              return "일일 경험치 증가량: " + context.parsed.y.toFixed(2) + "조 · 레벨업 당일 합산" + rangeText;
+            }
             if (context.dataset.label === "일일 경험치 증가량" && levelUpEvents[context.dataIndex] && context.parsed.y === null) {
-              return "일일 경험치 증가량: 레벨업 경계 · 당일 증가량 미확인";
+              return "일일 경험치 증가량: 계산에 필요한 직전 진행률 기록이 부족해요";
             }
             return context.parsed.y === null ? "" : context.dataset.label + ": " + context.parsed.y.toFixed(2) + "조";
           }
