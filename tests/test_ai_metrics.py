@@ -98,6 +98,37 @@ class ServerAIMetricsTests(unittest.TestCase):
         self.assertEqual(trend["direction"], "increase")
         self.assertEqual(trend["strength"], "strong")
 
+    def test_ninety_day_trend_compares_first_and_second_calendar_halves(self):
+        today = date(2026, 11, 21)
+        period_start = today - timedelta(days=89)
+        records = []
+        experience = 100000
+
+        for offset in range(-1, 90):
+            current_date = period_start + timedelta(days=offset)
+            if offset >= 0:
+                experience += 200 if offset < 45 else 100
+            records.append({
+                "date": current_date.isoformat(),
+                "level": 280,
+                "experience": experience,
+                "recordStatus": "available",
+            })
+
+        result = build_server_growth_metrics(
+            {"level": 280}, records, reference_date=today, period_days=90
+        )
+        trend = result["metrics"]["periodTrend"]
+
+        self.assertEqual(trend["status"], "available")
+        self.assertEqual(trend["firstHalf"]["validGrowthIntervals"], 45)
+        self.assertEqual(trend["firstHalf"]["observedExperienceSum"], 9000)
+        self.assertEqual(trend["secondHalf"]["validGrowthIntervals"], 45)
+        self.assertEqual(trend["secondHalf"]["observedExperienceSum"], 4500)
+        self.assertEqual(trend["changePercent"], -50.0)
+        self.assertEqual(trend["direction"], "decrease")
+        self.assertEqual(trend["strength"], "strong")
+
     def test_long_period_trend_does_not_fill_missing_days_or_level_up_reset(self):
         today = date(2026, 11, 21)
         period_start = today - timedelta(days=29)
@@ -154,7 +185,7 @@ class ServerAIMetricsTests(unittest.TestCase):
         period_start = today - timedelta(days=29)
         records = []
         experience = 1000
-        offsets = [-1, 0, 1, 2, 3, 4, 15, 16, 17, 18, 19]
+        offsets = [-1, 0, 1, 2, 3, 4, 14, 15, 16, 17, 18, 19]
 
         for offset in offsets:
             current_date = period_start + timedelta(days=offset)
