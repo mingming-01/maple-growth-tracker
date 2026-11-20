@@ -159,7 +159,16 @@ def ai_analysis():
         storage = get_growth_history_service()
         period_start = today - timedelta(days=period_days - 1)
         insight_start = today - timedelta(days=14)
-        query_start = min(period_start - timedelta(days=1), insight_start)
+        previous_period_end = period_start - timedelta(days=1)
+        previous_period_start = previous_period_end - timedelta(days=period_days - 1)
+        # 장기 분석은 직전 동일 기간과 첫날 경계 계산에 필요한 스냅샷도
+        # 서버 저장소에서 직접 조회한다. 클라이언트가 전달한 요약값은 신뢰하지 않는다.
+        comparison_start = (
+            previous_period_start - timedelta(days=1)
+            if period_days in (30, 90)
+            else period_start - timedelta(days=1)
+        )
+        query_start = min(comparison_start, insight_start)
         try:
             # 선택 기간과 14일 인사이트를 하나의 DB 조회로 확보한다.
             combined_records = storage.get_records(ocid, query_start, today)
@@ -183,9 +192,20 @@ def ai_analysis():
             item for item in normalized_history
             if str(item.get("date") or "") >= calculation_start.isoformat()
         ]
+        previous_period_summary = None
+        if period_days in (30, 90):
+            previous_calculated = build_server_growth_metrics(
+                character,
+                combined_records,
+                reference_date=previous_period_end,
+                period_days=period_days,
+            )
+            previous_period_summary = previous_calculated["periodSummary"]
+
         analysis_context = {
             "periodDays": period_days,
             "periodSummary": calculated["periodSummary"],
+            "previousPeriodSummary": previous_period_summary,
         }
         growth_insights = build_growth_insights(
             normalized_history,
@@ -215,6 +235,10 @@ def ai_analysis():
                 total_ms,
             )
             return _service_error_response(result)
+
+        # 화면의 기간 요약과 AI 리포트 본문이 동일한 서버 집계값을 사용하도록 반환한다.
+        result["periodSummary"] = calculated["periodSummary"]
+        result["previousPeriodSummary"] = previous_period_summary
 
         current_app.logger.info(
             "AI 리포트 응답 완료: ai_generated=%s ai_status=%s cache_hit=%s timings=%s total_ms=%s",
