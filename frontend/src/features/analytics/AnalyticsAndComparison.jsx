@@ -60,7 +60,7 @@ function parseAnalysis(analysis) {
 
 function buildReportSignature(character, history, metrics, analysisContext = {}) {
   return stableStringify({
-    cacheVersion: 7,
+    cacheVersion: 8,
     name:character.characterName,
     ocid:character.ocid,
     level:character.level,
@@ -139,8 +139,9 @@ export function AIReport({ character, history, analysisHistory = history, period
     setGrowthInsights(null);
     setAiGenerated(null);
     setError("");
-    // 모든 기간은 보관 시간 안의 결과만 확인한다. 새 분석은 버튼을 눌렀을 때만 실행한다.
-    run({ allowGenerate: false });
+    // 리포트 화면 진입 시 브라우저 캐시를 먼저 보고, 없으면 서버 캐시를 확인한 뒤 필요한 경우 생성한다.
+    // 캐릭터 검색 자체에서는 AI 공급자 호출을 하지 않는다.
+    run({ allowGenerate: true });
   },[run,periodDays]);
 
   async function handlePeriodChange(event) {
