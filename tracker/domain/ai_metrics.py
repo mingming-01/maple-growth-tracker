@@ -6,6 +6,7 @@ from tracker.domain.growth_calculations import (
     calculate_recent_history_changes,
     to_exact_integer,
 )
+from tracker.domain.growth_prediction import build_growth_prediction
 
 
 def _number(value):
@@ -138,7 +139,16 @@ def build_server_growth_metrics(character, records, reference_date=None, period_
         ).days == 1
         else None
     )
-    current_rate = _number((character or {}).get("experienceRate"))
+    prediction = build_growth_prediction(
+        history,
+        character=character,
+        reference_date=today,
+        window_days=7,
+    )
+    current_rate = (
+        prediction.get("currentRate") if prediction is not None
+        else _number((character or {}).get("experienceRate"))
+    )
     if current_rate is not None and not 0 <= current_rate <= 100:
         current_rate = None
 
@@ -273,6 +283,10 @@ def build_server_growth_metrics(character, records, reference_date=None, period_
             "levelProgress": {
                 "currentRate": current_rate,
                 "remainingRate": round(100 - current_rate, 4) if current_rate is not None else None,
+                "dailyProgressRate": (
+                    prediction.get("averageDailyProgressRate")
+                    if prediction is not None else None
+                ),
             },
             "growthComparison": {
                 "earlierAverage": earlier_average,
@@ -281,7 +295,7 @@ def build_server_growth_metrics(character, records, reference_date=None, period_
             },
             "levelUps": level_ups,
             "timeline": timeline,
-            "prediction": None,
+            "prediction": prediction,
         },
         "periodSummary": period_summary,
     }

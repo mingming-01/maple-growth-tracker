@@ -54,12 +54,23 @@ def _are_consecutive_records(previous, current):
     )
 
 
-def calculate_observed_experience_change(previous, current):
-    """연속된 동일 레벨 스냅샷의 원본 EXP 차이를 정확히 반환한다.
+def _effective_level(record):
+    """진행률 초기화로 확인된 레벨업을 랭킹 레벨 필드 지연보다 우선한다."""
+    level = to_exact_integer(record.get("level")) if isinstance(record, dict) else None
+    if isinstance(record, dict) and record.get("levelUp") is True:
+        event_level = to_exact_integer(record.get("levelUpCurrentLevel"))
+        if event_level is not None and (level is None or event_level >= level):
+            return event_level
+    return level
 
-    진행률 초기화는 레벨업 이벤트 감지에 사용하지만, 그것만으로 원본 EXP
-    차이를 폐기하지 않는다. 같은 레벨이고 양쪽 정수 EXP가 확인되며 감소하지
-    않았다면 그 차이는 그대로 관측값이다. 레벨이 실제로 달라진 경계는 제외한다.
+
+def calculate_observed_experience_change(previous, current):
+    """연속된 동일 유효 레벨 스냅샷의 원본 EXP 차이를 반환한다.
+
+    레벨업 당일에는 EXP 기준이 바뀌므로 그 날짜의 차이는 산출하지 않는다.
+    다만 직전 날짜가 레벨업 이벤트이고 랭킹의 level 필드만 하루 늦게 갱신됐다면,
+    직전 날짜의 levelUpCurrentLevel을 사용해 다음 날부터 새 레벨 내부의 증가량을
+    계산한다.
     """
     if not isinstance(previous, dict) or not isinstance(current, dict):
         return None
@@ -70,12 +81,14 @@ def calculate_observed_experience_change(previous, current):
     if not _are_consecutive_records(previous, current):
         return None
 
-    previous_level = to_exact_integer(previous.get("level"))
-    current_level = to_exact_integer(current.get("level"))
+    if is_experience_rate_reset(
+        previous.get("experienceRate"), current.get("experienceRate")
+    ):
+        return None
+    previous_level = _effective_level(previous)
+    current_level = _effective_level(current)
     if previous_level is None or current_level is None or previous_level != current_level:
         return None
-    # 진행률 초기화 여부와 EXP 차이의 유효성은 별개다. 진행률 초기화는
-    # 레벨업 이벤트로 기록하되, 같은 레벨의 원본 EXP 차이는 보존한다.
     previous_experience = to_exact_integer(previous.get("experience"))
     current_experience = to_exact_integer(current.get("experience"))
     if previous_experience is None or current_experience is None:

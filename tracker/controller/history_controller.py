@@ -140,6 +140,7 @@ def _stale_history_response(cache_key, character_name, error_message):
         return jsonify(with_data_status(snapshot, "stale", saved_at)), 200
 
     legacy_keys = (
+        f"history:rank-overall-v4:{character_name}",
         f"history:rank-overall-v3:{character_name}",
         f"history:rank-overall-v2:{character_name}",
         f"history:{character_name}",
@@ -192,7 +193,7 @@ def get_history():
 
     # 이전 캐시에는 과거 집계일의 프로필 랭킹이 오늘 순위로 섞였을 수 있어
     # 정합성 기준을 적용한 새 키로 분리한다.
-    cache_key = f"history:rank-overall-v4:{character_name}"
+    cache_key = f"history:rank-overall-v5:{character_name}"
     force_refresh = request.args.get("refresh") == "1"
     cached_history = None if force_refresh else get_cache(cache_key)
     cached_records = cached_history.get("history") if isinstance(cached_history, dict) else None
