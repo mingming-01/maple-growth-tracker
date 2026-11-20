@@ -1,5 +1,6 @@
 """Tests for serving usable recent history when one or more dates fail."""
 import unittest
+from datetime import timedelta, datetime
 from unittest.mock import patch
 
 from flask import Flask
@@ -16,6 +17,25 @@ class _HistoryService:
 
     def save_records(self, ocid, character_name, world_name, records):
         return 0
+
+
+class _ArchiveHistoryService:
+    backend = "sqlite"
+    uses_postgres = False
+
+    def __init__(self, records):
+        self.records = records
+        self.calls = []
+
+    def get_records(self, ocid, start_date, end_date):
+        self.calls.append((ocid, start_date, end_date))
+        return [
+            dict(item) for item in self.records
+            if start_date <= datetime.fromisoformat(item["date"]).date() <= end_date
+        ]
+
+    def save_records(self, ocid, character_name, world_name, records):
+        return len(records)
 
 
 class HistoryControllerPartialResponseTests(unittest.TestCase):
@@ -47,6 +67,44 @@ class HistoryControllerPartialResponseTests(unittest.TestCase):
         self.assertEqual(payload["metrics"]["rankingChange"], 10)
         self.assertEqual(payload["periodSummary"]["averageGrowth"], 200)
         self.assertEqual(payload["periodSummary"]["availableDays"], 2)
+
+    def test_archive_summary_uses_previous_day_boundary_without_returning_it(self):
+        today = datetime.now(history_controller.KOREA_TIMEZONE).date()
+        period_start = today - timedelta(days=29)
+        boundary_date = period_start - timedelta(days=1)
+        records = []
+        for offset in range(31):
+            record_date = boundary_date + timedelta(days=offset)
+            records.append({
+                "date": record_date.isoformat(),
+                "level": 280,
+                "experience": 1000 + offset * 100,
+                "experienceRate": None,
+                "ranking": None,
+                "rankingScope": None,
+                "rankingSourceDate": None,
+                "recordStatus": "available",
+            })
+        storage = _ArchiveHistoryService(records)
+
+        with patch.object(
+            history_controller, "get_growth_history_service", return_value=storage
+        ):
+            response = self.client.get("/api/history/archive?ocid=test-ocid&days=30")
+
+        self.assertEqual(response.status_code, 200, response.get_json())
+        payload = response.get_json()
+        self.assertEqual(
+            storage.calls,
+            [("test-ocid", boundary_date, today)],
+        )
+        self.assertEqual(len(payload["history"]), 30)
+        self.assertEqual(payload["history"][0]["date"], period_start.isoformat())
+        self.assertEqual(payload["history"][0]["experienceChange"], 100)
+        self.assertEqual(payload["periodSummary"]["validGrowthIntervals"], 30)
+        self.assertEqual(payload["periodSummary"]["growthDays"], 30)
+        self.assertEqual(payload["periodSummary"]["observedExperienceSum"], 3000)
+        self.assertEqual(payload["periodSummary"]["averageGrowth"], 100)
 
     def test_keeps_available_days_when_another_day_is_unavailable(self):
         history = [
