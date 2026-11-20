@@ -65,6 +65,119 @@ class ServerAIMetricsTests(unittest.TestCase):
         self.assertIsNone(result["metrics"]["prediction"])
         self.assertEqual(len(result["history"]), 7)
 
+    def test_thirty_day_trend_compares_calendar_halves_using_exact_observed_changes(self):
+        today = date(2026, 11, 21)
+        period_start = today - timedelta(days=29)
+        records = []
+        experience = 999900
+
+        # 기간 시작일의 변화량도 구할 수 있도록 직전 날짜 스냅샷을 포함한다.
+        for offset in range(-1, 30):
+            current_date = period_start + timedelta(days=offset)
+            if offset >= 0:
+                experience += 100 if offset < 15 else 200
+            records.append({
+                "date": current_date.isoformat(),
+                "level": 280,
+                "experience": experience,
+                "recordStatus": "available",
+            })
+
+        result = build_server_growth_metrics(
+            {"level": 280}, records, reference_date=today, period_days=30
+        )
+        trend = result["metrics"]["periodTrend"]
+
+        self.assertEqual(trend["status"], "available")
+        self.assertEqual(trend["comparisonMethod"], "calendar_halves")
+        self.assertEqual(trend["firstHalf"]["validGrowthIntervals"], 15)
+        self.assertEqual(trend["firstHalf"]["observedExperienceSum"], 1500)
+        self.assertEqual(trend["secondHalf"]["validGrowthIntervals"], 15)
+        self.assertEqual(trend["secondHalf"]["observedExperienceSum"], 3000)
+        self.assertEqual(trend["changePercent"], 100.0)
+        self.assertEqual(trend["direction"], "increase")
+        self.assertEqual(trend["strength"], "strong")
+
+    def test_long_period_trend_does_not_fill_missing_days_or_level_up_reset(self):
+        today = date(2026, 11, 21)
+        period_start = today - timedelta(days=29)
+        records = []
+        experience = 999900
+
+        for offset in range(-1, 30):
+            if offset == 5:
+                # 빠진 날짜는 보간하지 않는다.
+                continue
+            current_date = period_start + timedelta(days=offset)
+            if offset < 14:
+                if offset >= 0:
+                    experience += 100
+                level = 280
+                rate = 90.0 + offset * 0.7
+            elif offset == 14:
+                # 진행률 초기화가 확인된 레벨업 날짜의 EXP 차이는 미확정으로 유지한다.
+                experience = 100
+                level = 280
+                rate = 0.5
+            else:
+                experience = 100 + (offset - 14) * 200
+                level = 281
+                rate = 0.5 + (offset - 14) * 0.2
+            records.append({
+                "date": current_date.isoformat(),
+                "level": level,
+                "experience": experience,
+                "experienceRate": rate,
+                "recordStatus": "available",
+            })
+
+        result = build_server_growth_metrics(
+            {"level": 281}, records, reference_date=today, period_days=30
+        )
+        trend = result["metrics"]["periodTrend"]
+        level_up_record = next(
+            item for item in result["history"]
+            if item["date"] == (period_start + timedelta(days=14)).isoformat()
+        )
+
+        self.assertTrue(level_up_record["levelUp"])
+        self.assertIsNone(level_up_record["experienceChange"])
+        self.assertEqual(trend["firstHalf"]["validGrowthIntervals"], 12)
+        self.assertEqual(trend["firstHalf"]["observedExperienceSum"], 1200)
+        self.assertEqual(trend["secondHalf"]["validGrowthIntervals"], 15)
+        self.assertEqual(trend["secondHalf"]["observedExperienceSum"], 3000)
+        self.assertEqual(trend["direction"], "increase")
+        self.assertEqual(trend["changePercent"], 100.0)
+
+    def test_long_period_trend_requires_enough_observed_changes_in_both_halves(self):
+        today = date(2026, 11, 21)
+        period_start = today - timedelta(days=29)
+        records = []
+        experience = 1000
+        offsets = [-1, 0, 1, 2, 3, 4, 15, 16, 17, 18, 19]
+
+        for offset in offsets:
+            current_date = period_start + timedelta(days=offset)
+            if offset >= 0:
+                experience += 100 if offset < 15 else 200
+            records.append({
+                "date": current_date.isoformat(),
+                "level": 280,
+                "experience": experience,
+                "recordStatus": "available",
+            })
+
+        result = build_server_growth_metrics(
+            {"level": 280}, records, reference_date=today, period_days=30
+        )
+        trend = result["metrics"]["periodTrend"]
+
+        self.assertEqual(trend["status"], "insufficient_data")
+        self.assertEqual(trend["firstHalf"]["validGrowthIntervals"], 5)
+        self.assertEqual(trend["secondHalf"]["validGrowthIntervals"], 5)
+        self.assertEqual(trend["direction"], "insufficient_data")
+        self.assertIsNone(trend["changePercent"])
+
     def test_unverified_legacy_rank_is_excluded_from_ai_inputs(self):
         today = date(2026, 11, 16)
         records = [
