@@ -162,7 +162,7 @@ export function AIReport({ character, history, analysisHistory = history, period
   const sections = useMemo(() => parseAnalysis(analysis),[analysis]);
 
   return (
-    <section className="section">
+    <section className="section" data-ai-generated={aiGenerated === null ? "unknown" : String(aiGenerated)}>
       <div className="section-header">
         <h2 className="section-title">AI 성장 리포트</h2>
         <p className="section-description">최근 {periodDays}일 동안의 경험치와 레벨 변화를 정리해요.</p>
