@@ -1,81 +1,35 @@
 /**
- * Build calendar-anchored cumulative EXP and daily EXP chart series.
- *
- * The first observed EXP is the baseline. A level-up date carries the last
- * confirmed cumulative value because the cross-level delta is unknown; later
- * confirmed same-level daily deltas continue from that baseline.
+ * Build chart series from Nexon's daily level-local EXP snapshots.
+ * EXP naturally resets when the character levels up; that boundary is marked
+ * with a dashed segment so the reset is visible without implying lost EXP.
  */
 export function buildExperienceChartSeries(records) {
   const rows = Array.isArray(records) ? records : [];
+  const available = item => !!item && (!item.recordStatus || item.recordStatus === "available");
+
+  const experience = rows.map(item => {
+    if (!available(item) || item.experience === null || item.experience === undefined || item.experience === "") return null;
+    const value = Number(item.experience);
+    return Number.isFinite(value) ? value / 1_000_000_000_000 : null;
+  });
+
   const daily = rows.map((item, index) => {
-    if (item?.recordStatus && item.recordStatus !== "available") return null;
-    if (index === 0) return null;
-    const value = item?.experienceChange;
+    if (!available(item) || index === 0) return null;
+    const value = item.experienceChange;
     if (value === null || value === undefined || value === "") return null;
     const number = Number(value);
     return Number.isFinite(number) ? number / 1_000_000_000_000 : null;
   });
 
-  const cumulative = [];
-  let running = null;
-  let baselineEstablished = false;
-  let cumulativeIsComplete = true;
-  const levelUpEvents = detectLevelUpEvents(rows);
+  return { daily, experience };
+}
 
-  rows.forEach((item, index) => {
-    const available = !!item &&
-      (!item.recordStatus || item.recordStatus === "available");
-    if (!available) {
-      cumulative.push(null);
-      if (index === 0 || baselineEstablished) cumulativeIsComplete = false;
-      return;
-    }
-
-    if (index === 0) {
-      const startingExperience = item.experience;
-      const parsed = startingExperience === null || startingExperience === undefined || startingExperience === ""
-        ? null
-        : Number(startingExperience);
-      if (!Number.isFinite(parsed)) {
-        cumulative.push(null);
-        cumulativeIsComplete = false;
-        return;
-      }
-      running = parsed;
-      baselineEstablished = true;
-      cumulative.push(running / 1_000_000_000_000);
-      return;
-    }
-
-    if (!baselineEstablished || !cumulativeIsComplete || running === null) {
-      cumulative.push(null);
-      return;
-    }
-
-    if (levelUpEvents[index]) {
-      // Nexon EXP resets at a level boundary; never invent the missing delta.
-      cumulative.push(running / 1_000_000_000_000);
-      return;
-    }
-
-    const change = item.experienceChange;
-    if (change === null || change === undefined || change === "") {
-      cumulative.push(null);
-      cumulativeIsComplete = false;
-      return;
-    }
-    const delta = Number(change);
-    if (!Number.isFinite(delta)) {
-      cumulative.push(null);
-      cumulativeIsComplete = false;
-      return;
-    }
-
-    running += delta;
-    cumulative.push(running / 1_000_000_000_000);
-  });
-
-  return { daily, cumulative };
+/** Dash only the blue EXP segment that enters a confirmed level-up day. */
+export function levelExperienceSegmentDash(context, levelUpEvents) {
+  const index = context?.p1DataIndex;
+  return Array.isArray(levelUpEvents) && levelUpEvents[index] === true
+    ? [6, 4]
+    : [];
 }
 
 /**
@@ -108,18 +62,5 @@ export function detectLevelUpEvents(records) {
       : !delayedLevelCatchUp && previousAvailableLevel !== null && currentLevel > previousAvailableLevel;
     previousAvailableLevel = currentLevel;
     return detected;
-  });
-}
-
-/** Place a distinct level-up star at the last confirmed cumulative EXP value. */
-export function buildLevelUpMarkers(records, cumulative) {
-  let lastKnownCumulative = null;
-  const events = detectLevelUpEvents(records);
-  return (Array.isArray(records) ? records : []).map((item, index) => {
-    const value = cumulative?.[index];
-    if (value !== null && value !== undefined && Number.isFinite(Number(value))) {
-      lastKnownCumulative = Number(value);
-    }
-    return events[index] ? lastKnownCumulative : null;
   });
 }
