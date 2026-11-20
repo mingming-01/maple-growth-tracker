@@ -81,6 +81,14 @@ def _period_summary(by_date, start_date, end_date):
         "levelUpIntervals": level_ups,
         "averageDailyExperience": round(average, 2) if average is not None else None,
         "experienceGainSum": sum(item["experience"] for item in changes) if changes else None,
+        "experienceGainSumLowerBound": (
+            sum(item["lowerBound"] if item["lowerBound"] is not None else item["experience"] for item in changes)
+            if changes else None
+        ),
+        "experienceGainSumUpperBound": (
+            sum(item["upperBound"] if item["upperBound"] is not None else item["experience"] for item in changes)
+            if changes else None
+        ),
         "observedExperienceSum": (
             sum(item["experience"] for item in changes if item["kind"] != "level_up_reconstructed")
             if len(changes) > len(reconstructed_level_up_changes) else None
