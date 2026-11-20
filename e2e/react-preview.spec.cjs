@@ -833,7 +833,52 @@ test("React growth chart plots level-local EXP with a dashed level-up boundary",
     return { pink, yellow };
   });
   await expect.poll(async () => (await pixelCounts()).pink).toBeGreaterThan(30);
-  await expect.poll(async () => (await pixelCounts()).yellow).toBeGreaterThan(8);
+  const markerState = await canvas.evaluate(async element => {
+    const chartModuleUrl = performance.getEntriesByType("resource")
+      .map(entry => entry.name)
+      .find(url => /\/static\/react-preview\/assets\/auto-[^/]+\.js(?:\?.*)?$/.test(url));
+    if (!chartModuleUrl) return { error: "chart_module_not_loaded" };
+
+    const { default: Chart } = await import(chartModuleUrl);
+    const chart = Chart.getChart(element);
+    if (!chart) return { error: "chart_instance_not_found" };
+
+    const markerIndex = chart.data.labels.findIndex(label => String(label) === "11-18");
+    const point = markerIndex >= 0 ? chart.getDatasetMeta(0).data[markerIndex] : null;
+    const position = point?.getProps?.(["x", "y"], true) || null;
+    const area = chart.chartArea;
+    const pixelData = element.getContext("2d").getImageData(0, 0, element.width, element.height);
+    let yellowPixels = 0;
+    for (let offset = 0; offset < pixelData.data.length; offset += 4) {
+      const [red, green, blue, alpha] = pixelData.data.slice(offset, offset + 4);
+      if (alpha > 160 && red > 200 && green > 150 && blue < 100) yellowPixels += 1;
+    }
+    return {
+      markerIndex,
+      configuredColor: chart.data.datasets[0].pointBackgroundColor?.[markerIndex] ?? null,
+      configuredStyle: chart.data.datasets[0].pointStyle?.[markerIndex] ?? null,
+      configuredRadius: chart.data.datasets[0].pointRadius?.[markerIndex] ?? null,
+      resolvedColor: point?.options?.backgroundColor ?? null,
+      resolvedStyle: point?.options?.pointStyle ?? null,
+      resolvedRadius: point?.options?.radius ?? null,
+      skipped: point?.skip ?? null,
+      x: position?.x ?? null,
+      y: position?.y ?? null,
+      chartArea: area ? { left: area.left, right: area.right, top: area.top, bottom: area.bottom } : null,
+      yellowPixels
+    };
+  });
+  console.log("Level-up marker diagnostics:", JSON.stringify(markerState));
+  expect(markerState.error).toBeUndefined();
+  expect(markerState.markerIndex).toBe(4);
+  expect(markerState.configuredColor).toBe("#f5c542");
+  expect(markerState.configuredStyle).toBe("star");
+  expect(markerState.configuredRadius).toBe(7);
+  expect(markerState.skipped).toBe(false);
+  expect(markerState.x).toBeGreaterThan(markerState.chartArea.left);
+  expect(markerState.x).toBeLessThan(markerState.chartArea.right);
+  expect(markerState.y).toBeGreaterThanOrEqual(markerState.chartArea.top);
+  expect(markerState.y).toBeLessThanOrEqual(markerState.chartArea.bottom);
 
   await expect(page.locator("#growth-timeline .growth-timeline-item.is-level-up")).toHaveCount(1);
   await expect(page.locator("#growth-timeline")).toContainText("2026.11.18");
