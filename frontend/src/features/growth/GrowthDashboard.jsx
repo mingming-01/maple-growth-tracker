@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { detectLevelUpEvents, buildLevelUpMarkers, buildExperienceChartSeries, dailyGrowthSegmentDash } from "./growthChartData.js";
+import { detectLevelUpEvents, buildExperienceChartSeries, dailyGrowthSegmentDash } from "./growthChartData.js";
 import { fetchHistoryArchive } from "../../lib/historyCollection.js";
 import { sortHistoryAscending, sortHistoryDescending, formatLocalISODate } from "../../lib/growth.js";
 import { readGrowthGoals, saveGrowthGoals, readTrackerState } from "../../lib/storage.js";
@@ -53,6 +53,58 @@ function daysBetween(start, end) {
   const first = parseDate(start);
   const last = parseDate(end);
   return first === null || last === null ? null : Math.round((last - first) / 86400000);
+}
+
+function createLevelUpStarPlugin(levelUpEvents) {
+  return {
+    id: "growthLevelUpStars",
+    afterDatasetsDraw(chart) {
+      const meta = chart.getDatasetMeta(0);
+      const xScale = chart.scales.x;
+      if (!meta?.data?.length || !xScale) return;
+      const { ctx } = chart;
+      let lastKnownY = null;
+      ctx.save();
+      levelUpEvents.forEach((isLevelUp, index) => {
+        const point = meta.data[index];
+        if (!point) return;
+        const position = point.getProps(["x", "y"], true);
+        const pointIsKnown = !point.skip && Number.isFinite(position.y);
+        if (!isLevelUp) {
+          if (pointIsKnown) lastKnownY = position.y;
+          return;
+        }
+
+        const x = xScale.getPixelForValue(index);
+        const y = pointIsKnown ? position.y : lastKnownY;
+        if (!Number.isFinite(x) || !Number.isFinite(y)) return;
+
+        const outerRadius = 9;
+        const innerRadius = 4;
+        ctx.save();
+        ctx.translate(x, y);
+        ctx.rotate(-Math.PI / 2);
+        ctx.beginPath();
+        for (let vertex = 0; vertex < 10; vertex += 1) {
+          const radius = vertex % 2 === 0 ? outerRadius : innerRadius;
+          const angle = vertex * Math.PI / 5;
+          const px = Math.cos(angle) * radius;
+          const py = Math.sin(angle) * radius;
+          if (vertex === 0) ctx.moveTo(px, py);
+          else ctx.lineTo(px, py);
+        }
+        ctx.closePath();
+        ctx.fillStyle = "#f5c542";
+        ctx.strokeStyle = "#805b00";
+        ctx.lineWidth = 1.25;
+        ctx.fill();
+        ctx.stroke();
+        ctx.restore();
+        if (pointIsKnown) lastKnownY = position.y;
+      });
+      ctx.restore();
+    }
+  };
 }
 
 export async function loadGrowthPeriod(character, days, onProgress = null) {
@@ -385,17 +437,16 @@ export default function GrowthDashboard({ character, history, metrics: serverMet
     if (!sorted.length) return undefined;
     const { daily, cumulative } = buildExperienceChartSeries(sorted);
     const levelUpEvents = detectLevelUpEvents(sorted);
-    const levelUps = buildLevelUpMarkers(sorted, cumulative);
     import("chart.js/auto").then(({ default: Chart }) => {
       if (cancelled || !canvasRef.current) return;
       chartRef.current = new Chart(canvasRef.current.getContext("2d"), {
       type: "line",
+      plugins: [createLevelUpStarPlugin(levelUpEvents)],
       data: {
         labels: sorted.map(item => String(item.date || "").slice(5)),
         datasets: [
           { label:"총 경험치 증가량",data:cumulative,yAxisID:"experience",borderColor:"#36a2eb",backgroundColor:"#36a2eb",borderWidth:3,tension:0,pointRadius:3,pointHoverRadius:6,fill:false },
           { label:"일일 경험치 증가량",data:daily,yAxisID:"dailyGrowth",borderColor:"#ff6384",backgroundColor:"#ff6384",borderWidth:2,segment:{borderDash:dailyGrowthSegmentDash},tension:0,pointRadius:2,pointHoverRadius:5,fill:false },
-          { label:"레벨업",data:levelUps,yAxisID:"experience",showLine:false,pointStyle:"star",pointRadius:8,pointHoverRadius:10,pointBackgroundColor:"#f5c542",borderWidth:0 }
         ]
       },
       options: {
@@ -403,7 +454,7 @@ export default function GrowthDashboard({ character, history, metrics: serverMet
         plugins:{legend:{display:true},tooltip:{callbacks:{
           label(context) {
             const current = sorted[context.dataIndex];
-            if (context.dataset.label === "레벨업") {
+            if (context.dataset.label === "총 경험치 증가량" && levelUpEvents[context.dataIndex]) {
               const previous = sorted.slice(0, context.dataIndex).reverse()
                 .find(item => item?.level !== null && item?.level !== undefined && Number.isFinite(Number(item.level)));
               const previousLevel = current?.levelUpPreviousLevel ?? previous?.level ?? "—";
@@ -412,7 +463,8 @@ export default function GrowthDashboard({ character, history, metrics: serverMet
               const rawLabel = Number.isFinite(rawExperience)
                 ? " · 새 레벨 EXP " + (rawExperience / 1_000_000_000_000).toFixed(3) + "조"
                 : "";
-              return "⭐ 레벨업 · Lv. " + previousLevel + " → " + currentLevel + rawLabel;
+              return "⭐ 레벨업 · Lv. " + previousLevel + " → " + currentLevel + rawLabel +
+                " · 누적 확인값 " + context.parsed.y.toFixed(2) + "조";
             }
             if (context.dataset.label === "일일 경험치 증가량" && levelUpEvents[context.dataIndex] && context.parsed.y === null) {
               return "일일 경험치 증가량: 레벨업 경계 · 당일 증가량 미확인";
