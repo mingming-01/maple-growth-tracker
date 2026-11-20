@@ -96,11 +96,11 @@ def calculate_observed_experience_rate_change(previous, current):
         return None
     if not _are_consecutive_records(previous, current):
         return None
-    previous_level = to_exact_integer(previous.get("level"))
-    current_level = to_exact_integer(current.get("level"))
-    if previous_level is None or current_level is None or previous_level != current_level:
-        return None
     if is_experience_rate_reset(previous.get("experienceRate"), current.get("experienceRate")):
+        return None
+    previous_level = _effective_level(previous)
+    current_level = _effective_level(current)
+    if previous_level is None or current_level is None or previous_level != current_level:
         return None
     try:
         previous_rate = Decimal(str(previous.get("experienceRate")).replace("%", "").strip())
