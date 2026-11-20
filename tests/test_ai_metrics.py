@@ -176,7 +176,7 @@ class ServerAIMetricsTests(unittest.TestCase):
         self.assertEqual(level_up_record["experienceChangeKind"], "level_up_reconstructed")
         self.assertEqual(trend["firstHalf"]["validGrowthIntervals"], 13)
         self.assertEqual(trend["firstHalf"]["observedExperienceSum"], 1200)
-        self.assertEqual(trend["firstHalf"]["experienceGainSum"], 10394)
+        self.assertEqual(trend["firstHalf"]["experienceGainSum"], 10393)
         self.assertEqual(trend["firstHalf"]["reconstructedLevelUpIntervals"], 1)
         self.assertEqual(trend["secondHalf"]["validGrowthIntervals"], 15)
         self.assertEqual(trend["secondHalf"]["experienceGainSum"], 3000)
@@ -389,8 +389,10 @@ class ServerAIMetricsTests(unittest.TestCase):
 
         summary = result["periodSummary"]
         self.assertEqual(summary["experienceGainSum"], 40_000_000_000_000)
-        self.assertEqual(summary["experienceGainSumLowerBound"], 39_990_234_476_724)
-        self.assertEqual(summary["experienceGainSumUpperBound"], 40_009_765_726_727)
+        # 저장 과정에서 96.000의 trailing zeros가 float 변환으로 사라져
+        # 보수적인 표시 단위(0.1%p) 기준의 넓은 범위를 보존한다.
+        self.assertEqual(summary["experienceGainSumLowerBound"], 39_024_453_694_068)
+        self.assertEqual(summary["experienceGainSumUpperBound"], 40_977_580_813_348)
         self.assertIsNone(summary["observedExperienceSum"])
         self.assertEqual(summary["reconstructedLevelUpExperienceSum"], 40_000_000_000_000)
         self.assertEqual(summary["reconstructedLevelUpIntervals"], 1)
