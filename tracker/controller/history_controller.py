@@ -358,9 +358,15 @@ def get_history():
     if snapshot_saved_at:
         saved_at = snapshot_saved_at
 
-    # 오늘 랭킹이 준비되지 않았다면 30분 대신 5분 후 다시 확인한다.
-    cache_ttl = HISTORY_CACHE_TTL if history_status == "complete" else 300
-    set_cache(cache_key, result, cache_ttl)
+    # 정상적으로 수집된 기록은 캐시하되, 일시적인 Nexon 오류가 포함된
+    # partial 응답은 캐시하지 않아 다음 요청에서 실패 날짜를 다시 확인한다.
+    retryable_partial = history_status == "partial" and any(
+        item.get("retryable") for item in failed_records
+    )
+    if not retryable_partial:
+        # 오늘 랭킹이 준비되지 않았다면 30분 대신 5분 후 다시 확인한다.
+        cache_ttl = HISTORY_CACHE_TTL if history_status == "complete" else 300
+        set_cache(cache_key, result, cache_ttl)
     return jsonify(with_data_status(result, "current", saved_at))
 
 
