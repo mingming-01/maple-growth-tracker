@@ -71,6 +71,11 @@ def _attach_growth_metrics(
         }
         calculated_fields = (
             "experienceChange",
+            "experienceChangeKind",
+            "experienceChangeLowerBound",
+            "experienceChangeUpperBound",
+            "experienceChangeMethod",
+            "experienceChangeRateResolution",
             "experienceRateChange",
             "rankingChange",
             "levelUp",
