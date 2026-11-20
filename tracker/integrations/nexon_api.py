@@ -1,5 +1,8 @@
 """넥슨 Open API 요청과 응답 처리를 담당한다."""
+import hashlib
+import json
 import time
+from concurrent.futures import Future
 from threading import Lock
 
 import requests
@@ -16,6 +19,8 @@ _fallback_rate_limit_lock = Lock()
 _fallback_last_request_at = 0.0
 _shared_repository = None
 _shared_repository_lock = Lock()
+_inflight_requests = {}
+_inflight_requests_lock = Lock()
 
 
 def _setting(name, default=None):
@@ -92,7 +97,7 @@ def _throttle_nexon_request():
 
 
 def request_nexon_api(endpoint, params, historical=False, timeout_override=None, max_attempts_override=None):
-    """넥슨 API 요청에 공통 호출 간격 제한과 일시적 오류 재시도를 적용한다."""
+    """넥슨 API 요청에 공통 호출 간격 제한·재시도와 동일 진행 요청 병합을 적용한다."""
     api_key = _setting("NEXON_API_KEY", "")
     headers = {"x-nxopen-api-key": api_key} if api_key else {}
     timeout = timeout_override or (
@@ -110,7 +115,56 @@ def request_nexon_api(endpoint, params, historical=False, timeout_override=None,
     except (TypeError, ValueError):
         backoff = 0.35
 
+    max_attempts = retries + 1
+    if max_attempts_override is not None:
+        try:
+            max_attempts = max(1, int(max_attempts_override))
+        except (TypeError, ValueError):
+            max_attempts = retries + 1
+    max_retry_after_wait = max(
+        0.0,
+        float(_setting("EXTERNAL_API_MAX_RETRY_AFTER_WAIT_SECONDS", 5.0)),
+    )
+
+    # API 키 자체는 메모리의 병합 키에 보관하지 않는다. 요청 결과를 공유할 수 있는
+    # 동일 인증·파라미터·timeout·재시도 설정만 같은 진행 요청으로 취급한다.
+    request_key = (
+        str(endpoint),
+        json.dumps(params or {}, ensure_ascii=False, sort_keys=True, default=str),
+        hashlib.sha256(str(api_key).encode("utf-8")).hexdigest(),
+        repr(timeout),
+        bool(historical),
+        max_attempts,
+        max(0.0, backoff),
+        max_retry_after_wait,
+    )
     started_at = time.perf_counter()
+    increment_metric("nexon.logical_requests", endpoint=endpoint)
+
+    with _inflight_requests_lock:
+        future = _inflight_requests.get(request_key)
+        is_leader = future is None
+        if is_leader:
+            future = Future()
+            _inflight_requests[request_key] = future
+
+    if not is_leader:
+        increment_metric("nexon.coalesced_requests", endpoint=endpoint)
+        try:
+            response = future.result()
+        except BaseException:
+            observe_metric(
+                "nexon.logical_request_ms",
+                (time.perf_counter() - started_at) * 1000,
+                endpoint=endpoint,
+            )
+            raise
+        observe_metric(
+            "nexon.logical_request_ms",
+            (time.perf_counter() - started_at) * 1000,
+            endpoint=endpoint,
+        )
+        return response
 
     def on_attempt(attempt):
         increment_metric("nexon.attempts", endpoint=endpoint)
@@ -126,14 +180,6 @@ def request_nexon_api(endpoint, params, historical=False, timeout_override=None,
         increment_metric("nexon.errors", endpoint=endpoint, error=type(error).__name__)
         observe_metric("nexon.attempt_ms", elapsed_ms, endpoint=endpoint)
 
-    max_attempts = retries + 1
-    if max_attempts_override is not None:
-        try:
-            max_attempts = max(1, int(max_attempts_override))
-        except (TypeError, ValueError):
-            max_attempts = retries + 1
-
-    increment_metric("nexon.logical_requests", endpoint=endpoint)
     try:
         response = request_with_retries(
             "get",
@@ -143,25 +189,32 @@ def request_nexon_api(endpoint, params, historical=False, timeout_override=None,
             timeout=timeout,
             max_attempts=max_attempts,
             backoff_factor=max(0.0, backoff),
-            max_retry_after_wait=max(0.0, float(_setting("EXTERNAL_API_MAX_RETRY_AFTER_WAIT_SECONDS", 5.0))),
+            max_retry_after_wait=max_retry_after_wait,
             before_attempt=_throttle_nexon_request,
             on_attempt=on_attempt,
             on_response=on_response,
             on_error=on_error,
         )
-    except requests.RequestException:
+    except BaseException as error:
+        future.set_exception(error)
         observe_metric(
             "nexon.logical_request_ms",
             (time.perf_counter() - started_at) * 1000,
             endpoint=endpoint,
         )
         raise
-    observe_metric(
-        "nexon.logical_request_ms",
-        (time.perf_counter() - started_at) * 1000,
-        endpoint=endpoint,
-    )
-    return response
+    else:
+        future.set_result(response)
+        observe_metric(
+            "nexon.logical_request_ms",
+            (time.perf_counter() - started_at) * 1000,
+            endpoint=endpoint,
+        )
+        return response
+    finally:
+        with _inflight_requests_lock:
+            if _inflight_requests.get(request_key) is future:
+                _inflight_requests.pop(request_key, None)
 
 
 def get_ocid(character_name, timeout_override=None, max_attempts_override=None):
