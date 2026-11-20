@@ -49,9 +49,9 @@ export default function GrowthInsight({ character, metrics }) {
   const rankingChange = authoritativeMetrics.rankingChange;
   const prediction = authoritativeMetrics.prediction || null;
   const predictionDate = prediction?.estimatedDate || prediction?.date || null;
-  const predictionDetail = prediction?.requiredExpEstimated && prediction?.requiredExp != null
-    ? `남은 EXP 약 ${formatTrillion(prediction.requiredExp)} (역산 추정)`
-    : "현재 EXP와 진행률을 확인하면 다음 레벨까지 남은 EXP를 역산할 수 있어요.";
+  const predictionDetail = prediction?.requiredExp != null
+    ? `다음 레벨까지 남은 EXP ${formatTrillion(prediction.requiredExp)}`
+    : "현재 레벨의 경험치와 진행률이 확인되면 남은 EXP를 표시할 수 있어요.";
 
   return (
     <aside className="mgt-growth-insight" aria-labelledby="mgt-growth-insight-title" data-testid="growth-insight">
