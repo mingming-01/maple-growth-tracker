@@ -193,8 +193,8 @@ class AIServerInputTests(unittest.TestCase):
             {
                 "date": self.today.isoformat(),
                 "level": 299,
-                "experience": 17096549681346,
-                "experienceRate": 0.984,
+                "experience": 34219899249572,
+                "experienceRate": 1.969,
                 "recordStatus": "available",
             },
         ]})

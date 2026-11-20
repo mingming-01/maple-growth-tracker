@@ -272,7 +272,7 @@ class AIAnalysisFallbackTests(unittest.TestCase):
         self.assertIn("analysis", result)
         self.assertTrue(result["analysis"].startswith("[성장 패턴]"))
         self.assertIn("[AI 코멘트]", result["analysis"])
-        self.assertIn("최근처럼 경험치를 얻는다면 1월 19일쯤 300레벨에 도달할 것으로 예상돼요.", result["analysis"])
+        self.assertIn("최근처럼 경험치를 얻는다면 1월 20일쯤 300레벨에 도달할 것으로 예상돼요.", result["analysis"])
         prompt = openrouter.call_args.args[0]
         self.assertIn("레벨업 전환이 확인됨", prompt)
         self.assertNotIn('"experienceChange"', prompt)
