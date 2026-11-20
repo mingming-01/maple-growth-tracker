@@ -7,6 +7,7 @@ from tracker.services.ai_analysis_service import (
     _deterministic_growth_forecast,
     _error_result,
     _build_deterministic_growth_report,
+    _extract_ai_comment,
     _validate_growth_report_facts,
     _growth_report_fact_error,
     _format_experience_korean,
@@ -57,10 +58,11 @@ class AIAnalysisQualityTests(unittest.TestCase):
     def test_growth_report_prompt_prefers_everyday_maple_language(self):
         prompt = _build_growth_report_prompt(self.make_source_data(30))
 
-        self.assertIn("친근하고 담백한 해요체", prompt)
-        self.assertIn("하루 평균 경험치", prompt)
-        self.assertIn("관측 구간", prompt)
+        self.assertIn("친근하고 자연스러운 해요체", prompt)
         self.assertIn("메이플스토리에서 익숙한", prompt)
+        self.assertIn("AI 코멘트 본문만 작성해", prompt)
+        self.assertIn("2~4문장", prompt)
+        self.assertNotIn("관측 구간", prompt)
 
     def test_ninety_day_prompt_also_omits_seven_day_comparison(self):
         prompt = _build_growth_report_prompt(self.make_source_data(90))
@@ -214,16 +216,55 @@ class AIAnalysisQualityTests(unittest.TestCase):
 
         self.assertEqual([item["date"] for item in filtered], ["2026-11-13", "2026-11-19"])
 
-    def test_growth_report_prompt_gives_ai_all_five_sections_and_server_facts(self):
+    def test_growth_report_prompt_sends_server_facts_but_requests_only_ai_commentary(self):
         source = self.make_source_data(7)
         source["history"] = [{"date": "2026-11-18", "level": 299, "experienceChange": 16530569535123}]
         prompt = _build_growth_report_prompt(source)
 
-        for section in ("[성장 패턴]", "[성장 변화]", "[레벨업 분석]", "[성장 전망]", "[AI 코멘트]"):
-            self.assertIn(section, prompt)
         self.assertIn("16530569535123", prompt)
-        self.assertIn("친근하고 담백한 해요체", prompt)
-        self.assertNotIn("숫자, 숫자, 날짜", prompt)
+        self.assertIn("AI 코멘트 본문만 작성해", prompt)
+        self.assertIn("수치·날짜·평균·비율·원인·행동을 새로 계산하거나 추측하지 마", prompt)
+        for section in ("[성장 패턴]", "[성장 변화]", "[레벨업 분석]", "[성장 전망]"):
+            self.assertNotIn(section, prompt)
+
+    def test_ai_comment_extraction_discards_model_written_factual_sections(self):
+        response = (
+            "[성장 패턴] 잘못된 수치 999조를 생성했어요.\\n"
+            "[성장 변화] 다른 가공 수치예요.\\n"
+            "[AI 코멘트] 저장된 기록을 이어서 확인하는 것이 좋아요."
+        )
+        self.assertEqual(
+            _extract_ai_comment(response),
+            "저장된 기록을 이어서 확인하는 것이 좋아요.",
+        )
+
+    def test_ai_comment_extraction_rejects_full_report_without_comment_section(self):
+        response = "[성장 패턴] 내용\\n[성장 변화] 내용"
+        self.assertEqual(_extract_ai_comment(response), "")
+
+    def test_deterministic_report_uses_selected_period_summary_for_long_period(self):
+        summary = {
+            "startDate": "2026-10-22",
+            "endDate": "2026-11-20",
+            "observedExperienceSum": 126000000000000,
+            "averageDailyExperience": 4200000000000,
+            "validGrowthIntervals": 30,
+            "levelUpIntervals": 2,
+        }
+        report = _build_deterministic_growth_report(
+            {"level": 299},
+            {"levelProgress": {"currentRate": 67.4, "remainingRate": 32.6}},
+            {},
+            {"periodDays": 30, "periodSummary": summary},
+            "기록이 쌓이는 흐름을 계속 살펴보면 좋아요.",
+        )
+
+        self.assertIn("선택한 30일", report)
+        self.assertIn("126.0조", report)
+        self.assertIn("4.2조", report)
+        self.assertIn("10월 22일~11월 20일", report)
+        self.assertIn("레벨업 전환 2회", report)
+        self.assertIn("67.4%", report)
 
     def test_growth_report_fact_validator_accepts_server_numbers_and_dates(self):
         source = {
