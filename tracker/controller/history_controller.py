@@ -51,7 +51,11 @@ def _attach_growth_metrics(payload, reference_date, period_days, character=None)
             if isinstance(item, dict) and item.get("recordStatus") == "available"
         ]
         latest = max(available, key=lambda item: str(item.get("date") or ""), default=None)
-        character = {"experienceRate": latest.get("experienceRate") if latest else None}
+        character = {
+            "level": latest.get("level") if latest else None,
+            "experience": latest.get("experience") if latest else None,
+            "experienceRate": latest.get("experienceRate") if latest else None,
+        }
     calculated = build_server_growth_metrics(
         character,
         records,
@@ -347,7 +351,11 @@ def get_history():
             "status": storage_status,
             "savedRecords": saved_record_count
         }
-    }, today, 7, {"experienceRate": basic.get("character_exp_rate")})
+    }, today, 7, {
+        "level": basic.get("character_level"),
+        "experience": basic.get("character_exp"),
+        "experienceRate": basic.get("character_exp_rate"),
+    })
 
     saved_at = datetime.now().astimezone().isoformat(timespec="seconds")
     # 완전한 기록은 갱신하고, 부분 기록은 기존 스냅샷이 없을 때만 저장한다.
