@@ -64,6 +64,9 @@ class AIAnalysisQualityTests(unittest.TestCase):
         self.assertIn("메이플스토리에서 익숙한", prompt)
         self.assertIn("AI 코멘트 본문만 작성해", prompt)
         self.assertIn("두세 문장", prompt)
+        self.assertIn("확인된 흐름", prompt)
+        self.assertIn("기록 공백을 성장 정체", prompt)
+        self.assertIn("짧고 구체적인 표현", prompt)
         self.assertNotIn("관측 구간", prompt)
 
     def test_ninety_day_prompt_uses_long_period_signal_without_numeric_payload(self):
