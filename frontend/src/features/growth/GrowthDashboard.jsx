@@ -406,22 +406,25 @@ export default function GrowthDashboard({ character, history, metrics: serverMet
           labelPointStyle(context) {
             return { pointStyle:"circle", rotation:0 };
           },
+          afterTitle(items) {
+            const index = items?.[0]?.dataIndex;
+            if (!Number.isInteger(index) || !levelUpEvents[index]) return [];
+            const current = sorted[index];
+            const previous = sorted.slice(0, index).reverse()
+              .find(item => item?.level !== null && item?.level !== undefined && Number.isFinite(Number(item.level)));
+            const previousLevel = current?.levelUpPreviousLevel ?? previous?.level ?? "—";
+            const currentLevel = current?.levelUpCurrentLevel ?? current?.level ?? "—";
+            return "⭐ 레벨업 · Lv. " + previousLevel + " → " + currentLevel;
+          },
           label(context) {
             const current = sorted[context.dataIndex];
-            if (context.dataset.label === "총 경험치량" && levelUpEvents[context.dataIndex]) {
-              const previous = sorted.slice(0, context.dataIndex).reverse()
-                .find(item => item?.level !== null && item?.level !== undefined && Number.isFinite(Number(item.level)));
-              const previousLevel = current?.levelUpPreviousLevel ?? previous?.level ?? "—";
-              const currentLevel = current?.levelUpCurrentLevel ?? current?.level ?? "—";
-              return [
-                "레벨업 · Lv. " + previousLevel + " → " + currentLevel,
-                "총 경험치량: " + context.parsed.y.toFixed(2) + "조"
-              ];
+            if (context.datasetIndex === 0) {
+              return context.parsed.y === null ? "" : "총 경험치량: " + context.parsed.y.toFixed(2) + "조";
             }
-            if (context.dataset.label === "일일 경험치 증가량" && current?.experienceChangeKind === "level_up_reconstructed" && context.parsed.y !== null) {
+            if (current?.experienceChangeKind === "level_up_reconstructed" && context.parsed.y !== null) {
               return "일일 경험치 증가량: " + context.parsed.y.toFixed(2) + "조";
             }
-            if (context.dataset.label === "일일 경험치 증가량" && levelUpEvents[context.dataIndex] && context.parsed.y === null) {
+            if (levelUpEvents[context.dataIndex] && context.parsed.y === null) {
               return "일일 경험치 증가량: 계산에 필요한 직전 진행률 기록이 부족해요";
             }
             return context.parsed.y === null ? "" : context.dataset.label + ": " + context.parsed.y.toFixed(2) + "조";
