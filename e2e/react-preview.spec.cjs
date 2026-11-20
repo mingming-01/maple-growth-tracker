@@ -716,7 +716,7 @@ test("React AI report restores evidence details from cache", async ({ page }) =>
   await expect(cachedEvidence).toContainText("10 / 15일");
 });
 
-test("React growth chart shows raw level EXP and estimates the next level from observed progress", async ({ page }) => {
+test("React growth chart preserves cumulative EXP and reverse-estimates the next level", async ({ page }) => {
   const timestamp = "2026-11-20T08:45:00+09:00";
   const character = {
     characterName: "레벨업검증", ocid: "level-up-chart-ai-e2e",
@@ -755,11 +755,15 @@ test("React growth chart shows raw level EXP and estimates the next level from o
           { type: "latest", date: "2026-11-20", title: "최근 정상 기록", description: "Lv. 299 · 경험치 50,805,631,039,495", priority: 3 }
         ],
         prediction: {
-          currentLevel: 299, nextLevel: 300, currentRate: 2.924, remainingRate: 97.076,
-          requiredExp: null, averageDailyProgressRate: 1.2845, progressSamples: 2,
-          confidence: "initial", days: 75.57493188010899, date: "2027-02-04",
-          estimatedDays: 75.57493188010899, estimatedDate: "2027-02-04",
-          observationDate: "2026-11-20", method: "same_level_observed_progress_rate"
+          currentLevel: 299, nextLevel: 300, currentExperience: 50805631039495,
+          currentRate: 2.924, remainingRate: 97.076,
+          estimatedTotalExp: 1737538681241279, requiredExp: 1686733050201784,
+          requiredExpEstimated: true, requiredExpMethod: "experience_rate_reverse_estimate",
+          averageGrowth: 22315025562674, experienceSamples: 2,
+          averageDailyProgressRate: 1.2845, progressSamples: 2,
+          confidence: "initial", days: 75.5873232349398, date: "2027-02-04",
+          estimatedDays: 75.5873232349398, estimatedDate: "2027-02-04",
+          observationDate: "2026-11-20", method: "experience_rate_reverse_estimate"
         }
       },
       periodSummary: {
@@ -817,11 +821,11 @@ test("React growth chart shows raw level EXP and estimates the next level from o
   await expect(page.locator("#growth-timeline")).toContainText("2026.11.18");
   await expect(page.locator("#growth-timeline")).toContainText("당일 경험치 증가량 미확인");
   await expect(page.locator("#growth-trend .history-range-notice")).toContainText("레벨업 1일 · 당일 일일 EXP 증가량 미확인");
-  await expect(page.locator("#growth-prediction .prediction-item").nth(0).locator(".prediction-value")).toHaveText("97.076% 남음");
+  await expect(page.locator("#growth-prediction .prediction-item").nth(0).locator(".prediction-value")).toHaveText("1687조 (추정)");
   await expect(page.locator("#growth-prediction .prediction-item").nth(1).locator(".prediction-value")).toHaveText("약 75.6일");
   await expect(page.locator("#growth-prediction .prediction-item").nth(2).locator(".prediction-value")).toHaveText("2027.02.04");
-  await expect(page.locator("#growth-prediction .prediction-item").nth(3).locator(".prediction-value")).toHaveText("15.9조");
-  await expect(page.locator("#growth-prediction .prediction-note")).toContainText("2개 연속 일일 기록");
+  await expect(page.locator("#growth-prediction .prediction-item").nth(3).locator(".prediction-value")).toHaveText("22.3조");
+  await expect(page.locator("#growth-prediction .prediction-note")).toContainText("2개 실제 일일 EXP 변화량 평균");
 
   await page.locator('.mgt-nav a[href="#/analytics"]').click();
   await expect(page.getByText("11월 18일에 298레벨에서 299레벨로 올라갔어요.")).toBeVisible();
