@@ -399,6 +399,10 @@ export default function GrowthDashboard({ character, history, metrics: serverMet
       options: {
         responsive:true,maintainAspectRatio:false,interaction:{intersect:false,mode:"index"},
         plugins:{legend:{display:true},tooltip:{callbacks:{
+          labelColor(context) {
+            const color = context.dataset.label === "총 경험치 증가량" ? "#36a2eb" : "#ff6384";
+            return { borderColor:color, backgroundColor:color };
+          },
           label(context) {
             const current = sorted[context.dataIndex];
             if (context.dataset.label === "총 경험치 증가량" && levelUpEvents[context.dataIndex]) {
