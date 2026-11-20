@@ -228,7 +228,7 @@ class AIAnalysisQualityTests(unittest.TestCase):
 
         self.assertNotIn("16530569535123", prompt)
         self.assertNotIn("2026-11-18", prompt)
-        self.assertIn("이전보다 성장 속도가 완만하게 높아짐", prompt)
+        self.assertIn("이전보다 성장 속도가 뚜렷하게 높아짐", prompt)
         self.assertIn("AI 코멘트 본문만 작성해", prompt)
         self.assertIn("수치·날짜·평균·비율·원인·행동을 새로 계산하거나 추측하지 마", prompt)
         for section in ("[성장 패턴]", "[성장 변화]", "[레벨업 분석]", "[성장 전망]"):
