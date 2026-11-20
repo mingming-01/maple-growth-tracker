@@ -59,22 +59,21 @@ def build_growth_prediction(records, character=None, reference_date=None, window
     profile_rate = _valid_rate(profile.get("experienceRate"))
 
     latest_level = latest[1] if latest else None
-    current_level = profile_level if profile_level is not None else latest_level
-    if profile_level is not None and latest_level is not None:
-        # The ranking snapshot can lag a confirmed progress reset by one day.
-        current_level = max(profile_level, latest_level)
 
-    # EXP and rate must come from the same snapshot. Never combine a
+    # EXP, rate, and level must come from the same snapshot. Never combine a
     # current profile rate with an older history EXP (or vice versa).
     if profile_experience is not None and profile_rate is not None:
+        current_level = profile_level if profile_level is not None else latest_level
         current_experience = profile_experience
         current_rate = profile_rate
         observation_date = reference
     elif latest is not None:
+        current_level = latest_level
         current_experience = latest[2]
         current_rate = latest[3]
         observation_date = latest[0]
     else:
+        current_level = profile_level
         current_experience = profile_experience
         current_rate = profile_rate
         observation_date = reference
