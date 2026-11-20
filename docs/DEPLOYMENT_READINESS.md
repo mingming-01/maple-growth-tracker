@@ -61,6 +61,15 @@ Render 계정에서 관리되는 PostgreSQL 인스턴스는 조회되지 않았�
 
 운영 환경변수는 대시보드에서 직접 확인한다. 비밀값을 채팅·커밋·로그에 복사하지 않는다. 세션 키 변경은 기존 세션을 무효화할 수 있으므로 변경 시점을 고려한다.
 
+코드 기준 동작도 확인했다(`tracker/application.py`, `tracker/controller/admin_controller.py`, `tracker/services/request_limits.py`).
+
+- `FLASK_SECRET_KEY`: 운영에서 값이 없으면 임의 키로 실행되므로 재시작 후 기존 세션이 유지되지 않는다. 고정된 32자 이상의 비밀값이 필요하다.
+- `ADMIN_PASSWORD_HASH`: 운영 관리자 로그인은 해시 값을 사용한다. 개발용 `ADMIN_PASSWORD` 평문 fallback은 운영에서 허용되지 않는다. 값이 없으면 관리자 로그인이 비활성화된다.
+- `TRUSTED_PROXY_HOPS`: 운영에서 0이면 `ProxyFix`가 적용되지 않고, 공개 데이터 API의 IP별 요청 제한 함수는 프록시 IP를 사용자 IP로 오인하지 않도록 해당 제한을 우회한다. 실제 프록시 hop 수를 확인한 뒤에만 설정해야 한다.
+- 운영 환경에서는 `SESSION_COOKIE_SECURE`가 자동으로 활성화된다.
+
+이 항목들은 설정값 확인과 운영자 결정이 필요한 사항이다. 이 작업에서는 비밀값 생성·등록이나 proxy hop 수 추측을 하지 않았다.
+
 ## 범위와 안전장치
 
 - GitHub PR #101의 작업 브랜치에서만 코드·테스트·문서를 변경한다.
