@@ -828,7 +828,7 @@ test("React growth chart preserves cumulative EXP and reverse-estimates the next
   await expect(page.locator("#growth-prediction .prediction-note")).toContainText("2개 일일 EXP 변화량 평균");
   await expect(page.locator("#growth-prediction .prediction-note")).not.toContainText("추정");
   await expect(page.locator("#growth-prediction .prediction-note")).not.toContainText("역산");
-  await expect(page.locator("#growth-insight")).not.toContainText("추정");
+  await expect(page.locator('[data-testid="growth-insight"]')).not.toContainText("추정");
   await expect(page.locator("#growth-insight")).not.toContainText("역산");
 
   await page.locator('.mgt-nav a[href="#/analytics"]').click();
