@@ -394,7 +394,7 @@ test("React admin panel renders and filters session-protected operations logs", 
 });
 
 
-test("30-day AI report reuses cache without automatic LLM calls and only regenerates on demand", async ({ page }) => {
+test("AI report loads the server cache on entry and regenerates only on explicit refresh", async ({ page }) => {
   const character = {
     characterName: "기간캐시테스트",
     ocid: "period-cache-test-ocid",
@@ -478,45 +478,49 @@ test("30-day AI report reuses cache without automatic LLM calls and only regener
   await page.getByLabel("캐릭터명").fill("기간캐시테스트");
   await page.getByRole("button", { name: /캐릭터 조회/ }).click();
   await expect(page.getByRole("heading", { name: "기간캐시테스트" })).toBeVisible();
-  // Opening the 7-day report checks only the local cache; it must not call the AI provider.
+  // Opening the AI report checks browser cache, then the server cache; a miss starts generation.
   await page.locator('.mgt-nav a[href="#/analytics"]').click();
-  await expect(page.getByTestId("ai-analysis-empty")).toContainText("AI 분석 시작");
-  expect(aiCalls).toBe(0);
+  await expect(page.getByText("기간 분석 테스트 결과입니다.")).toBeVisible();
+  expect(aiCalls).toBe(1);
+  expect(submittedPayload.analysisContext.periodDays).toBe(7);
+  expect(submittedPayload.forceRefresh).toBe(false);
 
   await page.locator('.mgt-nav a[href="#/growth"]').click();
   await page.locator(".history-range-control select").selectOption("30");
   await page.locator('.mgt-nav a[href="#/analytics"]').click();
   const aiReportSection = page.locator(".section").filter({ has: page.getByRole("heading", { name: "AI 성장 리포트" }) });
   await expect(aiReportSection.locator(".section-description")).toContainText("최근 30일");
-  expect(aiCalls).toBe(0);
+  await expect(page.getByText("기간 분석 테스트 결과입니다.")).toBeVisible();
+  expect(aiCalls).toBe(2);
+  expect(submittedPayload.analysisContext.periodDays).toBe(30);
+  expect(submittedPayload.forceRefresh).toBe(false);
+  expect(submittedPayload.history).toHaveLength(30);
 
   await page.locator('.mgt-nav a[href="#/history"]').click();
   await expect(page.locator("#history .history-table tbody tr")).toHaveCount(30);
   await expect(page.locator("#history .history-table tbody tr").first()).toContainText("2026.11.06");
 
+  // Re-entering the same report reuses the browser cache.
   await page.locator('.mgt-nav a[href="#/analytics"]').click();
-  await page.getByRole("button", { name: "AI 분석 시작" }).click();
   await expect(page.getByText("기간 분석 테스트 결과입니다.")).toBeVisible();
-  expect(aiCalls).toBe(1);
-  expect(submittedPayload.analysisContext.periodDays).toBe(30);
-  // First generation should allow the server-side AI response cache to be reused.
-  expect(submittedPayload.forceRefresh).toBe(false);
-  expect(submittedPayload.history).toHaveLength(30);
+  expect(aiCalls).toBe(2);
 
   await page.getByRole("button", { name: "다시 분석" }).click();
   await expect(page.getByText("기간 분석 테스트 결과입니다.")).toBeVisible();
-  expect(aiCalls).toBe(2);
+  expect(aiCalls).toBe(3);
   expect(submittedPayload.forceRefresh).toBe(true);
 
   await page.reload();
   await expect(page.getByText("기간 분석 테스트 결과입니다.")).toBeVisible();
-  expect(aiCalls).toBe(2);
+  expect(aiCalls).toBe(3);
 
-  // Changing the period on the AI page updates the same shared period used by Growth.
+  // Changing the period on the AI page updates the shared period and creates only the missing report.
   await page.locator('.mgt-nav a[href="#/analytics"]').click();
   await page.getByLabel("AI 분석 기간").selectOption("90");
   await expect(aiReportSection.locator(".section-description")).toContainText("최근 90일");
-  expect(aiCalls).toBe(2);
+  await expect(page.getByText("기간 분석 테스트 결과입니다.")).toBeVisible();
+  expect(aiCalls).toBe(4);
+  expect(submittedPayload.analysisContext.periodDays).toBe(90);
   await page.locator('.mgt-nav a[href="#/history"]').click();
   await expect(page.locator("#history .history-table tbody tr")).toHaveCount(90);
   await page.locator('.mgt-nav a[href="#/growth"]').click();
@@ -690,7 +694,6 @@ test("React AI report restores evidence details from cache", async ({ page }) =>
   await page.getByLabel("캐릭터명").fill("근거테스트");
   await page.getByRole("button", { name: /캐릭터 조회/ }).click();
   await page.locator('.mgt-nav a[href="#/analytics"]').click();
-  await page.getByRole("button", { name: "AI 분석 시작" }).click();
 
   const evidence = page.getByTestId("ai-analysis-evidence");
   await expect(evidence).toBeVisible();
@@ -833,7 +836,6 @@ test("React growth chart marks the level-up reset without inventing cross-level 
   await expect(page.locator("#growth-timeline")).not.toContainText("2026.11.19\\n레벨업");
 
   await page.locator('.mgt-nav a[href="#/analytics"]').click();
-  await page.getByRole("button", { name: "AI 분석 시작" }).click();
   await expect(page.getByText("11월 18일에 298레벨에서 299레벨로 올라갔어요.")).toBeVisible();
   expect(submittedPayload).not.toBeNull();
   const resetDay = submittedPayload.history.find(item => item.date === "2026-11-18");
