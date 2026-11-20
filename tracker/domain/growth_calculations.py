@@ -238,7 +238,6 @@ def calculate_recent_history_changes(history):
         _set_experience_change_metadata(current, None, "unavailable")
         if index == 0:
             current["experienceRateChange"] = None
-            current["experienceRateChange"] = None
             current["rankingChange"] = None
             continue
 
