@@ -759,14 +759,16 @@ def _build_deterministic_growth_report(character, metrics, growth_insights, anal
     )
     period_name = "최근 7일" if period_days == 7 else f"선택한 {period_days}일"
 
-    total_text = _format_experience_korean(summary.get("observedExperienceSum"))
+    total_text = _format_experience_korean(
+        summary.get("experienceGainSum", summary.get("observedExperienceSum"))
+    )
     average_text = _format_experience_korean(summary.get("averageDailyExperience"))
     valid_intervals = summary.get("validGrowthIntervals")
 
     if total_text and average_text and isinstance(valid_intervals, int):
         date_prefix = f"{period_label} 동안 " if period_label else ""
         growth_pattern = (
-            f"{date_prefix}확인된 {valid_intervals}회의 일일 경험치 변화 합계는 "
+            f"{date_prefix}집계된 {valid_intervals}회의 일일 경험치 변화 합계는 "
             f"{total_text}이며, 변화가 확인된 날의 하루 평균은 {average_text}예요."
         )
     elif average_text:
@@ -813,8 +815,12 @@ def _build_deterministic_growth_report(character, metrics, growth_insights, anal
         previous_summary = (analysis_context or {}).get("previousPeriodSummary") or {}
         current_count = summary.get("validGrowthIntervals")
         previous_count = previous_summary.get("validGrowthIntervals")
-        current_sum = summary.get("observedExperienceSum")
-        previous_sum = previous_summary.get("observedExperienceSum")
+        current_sum = summary.get(
+            "experienceGainSum", summary.get("observedExperienceSum")
+        )
+        previous_sum = previous_summary.get(
+            "experienceGainSum", previous_summary.get("observedExperienceSum")
+        )
         minimum_intervals = max(4, (period_days * 2 + 4) // 5)
 
         enough_period_comparison = (
