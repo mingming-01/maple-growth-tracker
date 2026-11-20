@@ -425,7 +425,7 @@ export default function GrowthDashboard({ character, history, metrics: serverMet
               const isLevelUp = levelUpEvents[index] === true;
               if (index % 3 !== 0 && !isLevelUp) return "";
               const label = String(item?.date || "").slice(5);
-              return isLevelUp ? label + " ★" : label;
+              return label;
             }
           }},
           experience:{type:"linear",position:"left",title:{display:true,text:"총 경험치 증가량"},ticks:{callback:value=>Number(value).toFixed(0)+"조"}},
