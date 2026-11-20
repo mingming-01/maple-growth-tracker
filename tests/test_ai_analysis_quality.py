@@ -335,6 +335,83 @@ class AIAnalysisQualityTests(unittest.TestCase):
         self.assertIn("레벨업 전환 2회", report)
         self.assertIn("67.4%", report)
 
+    def test_long_period_report_compares_selected_window_with_previous_same_length_window(self):
+        current_summary = {
+            "startDate": "2026-10-23",
+            "endDate": "2026-11-21",
+            "expectedSnapshots": 30,
+            "validGrowthIntervals": 30,
+            "observedExperienceSum": 80000000000000,
+            "averageDailyExperience": 2666666666666.67,
+            "levelUpIntervals": 1,
+        }
+        previous_summary = {
+            "startDate": "2026-09-23",
+            "endDate": "2026-10-22",
+            "expectedSnapshots": 30,
+            "validGrowthIntervals": 30,
+            "observedExperienceSum": 120000000000000,
+            "averageDailyExperience": 4000000000000,
+            "levelUpIntervals": 0,
+        }
+
+        report = _build_deterministic_growth_report(
+            {"level": 299},
+            {"levelProgress": {"currentRate": 3.3}, "periodTrend": {
+                "status": "available",
+                "direction": "decrease",
+                "changePercent": -10.0,
+            }},
+            {},
+            {
+                "periodDays": 30,
+                "periodSummary": current_summary,
+                "previousPeriodSummary": previous_summary,
+            },
+            "최근 흐름을 계속 살펴보면 좋겠어요.",
+        )
+
+        self.assertIn("직전 30일의 하루 평균은 4.0조", report)
+        self.assertIn("선택한 30일은 2.7조", report)
+        self.assertIn("이전 기간보다 33.3% 줄었어요.", report)
+        self.assertNotIn("비교할 이전 기간의 기록은 충분하지 않아요", report)
+
+    def test_long_period_report_uses_in_period_trend_when_previous_period_is_insufficient(self):
+        current_summary = {
+            "startDate": "2026-10-23",
+            "endDate": "2026-11-21",
+            "expectedSnapshots": 30,
+            "validGrowthIntervals": 25,
+            "observedExperienceSum": 250000000000000,
+            "averageDailyExperience": 10000000000000,
+            "levelUpIntervals": 1,
+        }
+
+        report = _build_deterministic_growth_report(
+            {"level": 299},
+            {
+                "levelProgress": {"currentRate": 3.3},
+                "periodTrend": {
+                    "status": "available",
+                    "direction": "decrease",
+                    "changePercent": -12.5,
+                },
+            },
+            {},
+            {
+                "periodDays": 30,
+                "periodSummary": current_summary,
+                "previousPeriodSummary": {
+                    "validGrowthIntervals": 2,
+                    "observedExperienceSum": 1000,
+                },
+            },
+            "최근 흐름을 계속 살펴보면 좋겠어요.",
+        )
+
+        self.assertIn("후반부의 하루 평균 경험치 증가량이 초반부보다 12.5% 낮았어요.", report)
+        self.assertNotIn("비교할 이전 기간의 기록은 충분하지 않아요", report)
+
     def test_growth_report_fact_validator_accepts_server_numbers_and_dates(self):
         source = {
             "metrics": {
