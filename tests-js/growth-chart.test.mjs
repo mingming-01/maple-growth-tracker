@@ -174,6 +174,21 @@ test("shows the confirmed November 18 event as a level-up marker even when the d
   );
 });
 
+test("keeps post-level-up daily EXP while leaving an unknown level-up day out of cumulative totals", () => {
+  const records = [
+    { date: "2026-11-17", level: 298, recordStatus: "available", experience: 1_100_000_000_000_000, experienceChange: null },
+    { date: "2026-11-18", level: 299, recordStatus: "available", experience: 6_175_579_914_147, experienceChange: null, levelUp: true },
+    { date: "2026-11-19", level: 299, recordStatus: "available", experience: 34_219_899_249_572, experienceChange: 28_044_319_335_425 },
+    { date: "2026-11-20", level: 299, recordStatus: "available", experience: 50_805_631_039_495, experienceChange: 16_585_731_789_923 }
+  ];
+
+  const series = buildExperienceChartSeries(records);
+
+  assert.deepEqual(series.daily, [null, null, 28.044319335425, 16.585731789923]);
+  assert.deepEqual(series.cumulative, [1100, null, 1128.044319335425, 1144.630051125348]);
+  assert.equal(series.cumulativeHasUnknownGaps, true);
+});
+
 test("adds observed new-level EXP to the cumulative total after a level-up", () => {
   const records = [
     { date: "2026-11-02", level: 280, recordStatus: "available", experience: 1_000_000_000_000, experienceChange: null },
