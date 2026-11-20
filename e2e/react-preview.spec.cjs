@@ -821,11 +821,15 @@ test("React growth chart preserves cumulative EXP and reverse-estimates the next
   await expect(page.locator("#growth-timeline")).toContainText("2026.11.18");
   await expect(page.locator("#growth-timeline")).toContainText("당일 경험치 증가량 미확인");
   await expect(page.locator("#growth-trend .history-range-notice")).toContainText("레벨업 1일 · 당일 일일 EXP 증가량 미확인");
-  await expect(page.locator("#growth-prediction .prediction-item").nth(0).locator(".prediction-value")).toHaveText("1687조 (추정)");
+  await expect(page.locator("#growth-prediction .prediction-item").nth(0).locator(".prediction-value")).toHaveText("1687조");
   await expect(page.locator("#growth-prediction .prediction-item").nth(1).locator(".prediction-value")).toHaveText("약 75.6일");
   await expect(page.locator("#growth-prediction .prediction-item").nth(2).locator(".prediction-value")).toHaveText("2027.02.04");
   await expect(page.locator("#growth-prediction .prediction-item").nth(3).locator(".prediction-value")).toHaveText("22.3조");
-  await expect(page.locator("#growth-prediction .prediction-note")).toContainText("2개 실제 일일 EXP 변화량 평균");
+  await expect(page.locator("#growth-prediction .prediction-note")).toContainText("2개 일일 EXP 변화량 평균");
+  await expect(page.locator("#growth-prediction .prediction-note")).not.toContainText("추정");
+  await expect(page.locator("#growth-prediction .prediction-note")).not.toContainText("역산");
+  await expect(page.locator("#growth-insight")).not.toContainText("추정");
+  await expect(page.locator("#growth-insight")).not.toContainText("역산");
 
   await page.locator('.mgt-nav a[href="#/analytics"]').click();
   await expect(page.getByText("11월 18일에 298레벨에서 299레벨로 올라갔어요.")).toBeVisible();
