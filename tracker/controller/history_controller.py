@@ -45,17 +45,6 @@ def _attach_growth_metrics(payload, reference_date, period_days, character=None)
     """이력 API에 모든 화면이 공유할 서버 계산 지표를 추가한다."""
     records = payload.get("history") if isinstance(payload, dict) else None
     records = records if isinstance(records, list) else []
-    if character is None:
-        available = [
-            item for item in records
-            if isinstance(item, dict) and item.get("recordStatus") == "available"
-        ]
-        latest = max(available, key=lambda item: str(item.get("date") or ""), default=None)
-        character = {
-            "level": latest.get("level") if latest else None,
-            "experience": latest.get("experience") if latest else None,
-            "experienceRate": latest.get("experienceRate") if latest else None,
-        }
     calculated = build_server_growth_metrics(
         character,
         records,
