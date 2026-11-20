@@ -25,6 +25,7 @@ class GunicornRuntimeConfigTests(unittest.TestCase):
         self.assertGreater(config["timeout"], Config.AI_REQUEST_TOTAL_TIMEOUT)
         self.assertEqual(config["timeout"], 120)
 
+    @unittest.skipUnless(sys.platform != "win32", "Gunicorn requires Unix; Render runs Linux.")
     def test_render_start_command_loads_project_gunicorn_config_by_default(self):
         """Render configured gunicorn app:app must resolve the repository config."""
         result = subprocess.run(
