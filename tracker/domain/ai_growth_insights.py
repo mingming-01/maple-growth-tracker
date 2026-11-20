@@ -34,6 +34,7 @@ def _period_summary(by_date, start_date, end_date):
     )
     changes = []
     level_ups = 0
+    reconstructed_level_up_changes = []
 
     for offset in range(expected_days):
         current_date = start_date + timedelta(days=offset)
@@ -48,11 +49,21 @@ def _period_summary(by_date, start_date, end_date):
         if experience_change is None:
             continue
 
-        changes.append({
+        change_item = {
             "date": current_date,
             "experience": experience_change,
             "weekday": current_date.weekday(),
-        })
+            "kind": current.get("experienceChangeKind"),
+            "lowerBound": to_exact_integer(
+                current.get("experienceChangeLowerBound")
+            ),
+            "upperBound": to_exact_integer(
+                current.get("experienceChangeUpperBound")
+            ),
+        }
+        changes.append(change_item)
+        if change_item["kind"] == "level_up_reconstructed":
+            reconstructed_level_up_changes.append(change_item)
 
     average = (
         sum(item["experience"] for item in changes) / len(changes)
@@ -64,9 +75,30 @@ def _period_summary(by_date, start_date, end_date):
         "expectedSnapshots": expected_days,
         "availableSnapshots": available_snapshots,
         "validGrowthIntervals": len(changes),
+        "calculatedChangeDays": len(changes),
+        "observedGrowthIntervals": len(changes) - len(reconstructed_level_up_changes),
+        "reconstructedLevelUpIntervals": len(reconstructed_level_up_changes),
         "levelUpIntervals": level_ups,
         "averageDailyExperience": round(average, 2) if average is not None else None,
-        "observedExperienceSum": sum(item["experience"] for item in changes) if changes else None,
+        "experienceGainSum": sum(item["experience"] for item in changes) if changes else None,
+        "observedExperienceSum": (
+            sum(item["experience"] for item in changes if item["kind"] != "level_up_reconstructed")
+            if len(changes) > len(reconstructed_level_up_changes) else None
+        ),
+        "reconstructedLevelUpExperienceSum": (
+            sum(item["experience"] for item in reconstructed_level_up_changes)
+            if reconstructed_level_up_changes else None
+        ),
+        "reconstructedLevelUpExperienceLowerBoundSum": (
+            sum(item["lowerBound"] if item["lowerBound"] is not None else item["experience"]
+                for item in reconstructed_level_up_changes)
+            if reconstructed_level_up_changes else None
+        ),
+        "reconstructedLevelUpExperienceUpperBoundSum": (
+            sum(item["upperBound"] if item["upperBound"] is not None else item["experience"]
+                for item in reconstructed_level_up_changes)
+            if reconstructed_level_up_changes else None
+        ),
         "_changes": changes,
     }
 
