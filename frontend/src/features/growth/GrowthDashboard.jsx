@@ -425,7 +425,8 @@ export default function GrowthDashboard({ character, history, metrics: serverMet
     const sorted = sortHistoryAscending(displayHistory)
       .filter(item => item?.date && item.date <= today);
     if (!sorted.length) return undefined;
-    const { daily, cumulative, cumulativeHasUnknownGaps } = buildExperienceChartSeries(sorted);\n    const cumulativeLabel = cumulativeHasUnknownGaps ? "확인된 누적 경험치 증가량" : "총 경험치 증가량";
+    const { daily, cumulative, cumulativeHasUnknownGaps } = buildExperienceChartSeries(sorted);
+    const cumulativeLabel = cumulativeHasUnknownGaps ? "확인된 누적 경험치 증가량" : "총 경험치 증가량";
     // 서버가 반환한 명시적 레벨업 플래그를 우선 사용하고,
     // 레거시 응답에 플래그가 없을 때만 차트 모듈이 이전 레벨을 보완한다.
     const levelUpEvents = detectLevelUpEvents(sorted);
