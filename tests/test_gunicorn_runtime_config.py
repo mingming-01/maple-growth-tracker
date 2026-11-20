@@ -46,8 +46,9 @@ class GunicornRuntimeConfigTests(unittest.TestCase):
             for line in result.stdout.splitlines()
             if " = " in line
         )
-        self.assertEqual(settings.get("timeout"), "120")
-        self.assertEqual(settings.get("config"), "./gunicorn.conf.py")
+        output = result.stdout + "\\n" + result.stderr
+        self.assertEqual(settings.get("timeout"), "120", msg=output[-4000:])
+        self.assertEqual(settings.get("config"), "./gunicorn.conf.py", msg=output[-4000:])
 
 
 if __name__ == "__main__":
