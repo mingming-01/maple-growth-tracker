@@ -123,14 +123,14 @@ def _provider_timeouts(provider, deadline=None):
         )
     else:
         read_timeout = min(
-            60.0, max(3.0, float(_setting("AI_OPENROUTER_READ_TIMEOUT", 60.0)))
+            20.0, max(3.0, float(_setting("AI_OPENROUTER_READ_TIMEOUT", 20.0)))
         )
         # The OpenRouter request is not retried after a transport timeout.
         # Honor the configured fallback budget instead of reserving time for
         # a retry that the timeout path never performs.
         total_timeout = min(
             65.0,
-            max(2.0, float(_setting("AI_OPENROUTER_TOTAL_TIMEOUT", 65.0))),
+            max(2.0, float(_setting("AI_OPENROUTER_TOTAL_TIMEOUT", 22.0))),
         )
     read_timeout = min(read_timeout, max(0.5, total_timeout - connect_timeout))
     if deadline is not None:
@@ -140,7 +140,7 @@ def _provider_timeouts(provider, deadline=None):
             # slow primary request to consume the entire request deadline.
             reserve = max(
                 1.0,
-                float(_setting("AI_OPENROUTER_MIN_REMAINING_SECONDS", 65.0)),
+                float(_setting("AI_OPENROUTER_MIN_REMAINING_SECONDS", 24.0)),
             )
             remaining -= reserve
         if remaining <= 0:
@@ -260,7 +260,7 @@ def request_openrouter(prompt, api_key=None, deadline=None):
             "model": model_alias,
             "messages": [{"role": "user", "content": prompt}],
             "temperature": 0.35,
-            "max_tokens": max(512, min(8192, int(_setting("AI_OPENROUTER_MAX_OUTPUT_TOKENS", 8192)))),
+            "max_tokens": max(256, min(2048, int(_setting("AI_OPENROUTER_MAX_OUTPUT_TOKENS", 2048)))),
             "stream": True,
         },
         connect_timeout=connect_timeout,
