@@ -1,7 +1,7 @@
 """성장 기록의 날짜 간 변화 계산을 담당한다."""
 
 from datetime import date
-from decimal import Decimal, InvalidOperation
+from decimal import Decimal, InvalidOperation, ROUND_CEILING, ROUND_FLOOR, ROUND_HALF_UP
 
 
 def to_exact_integer(value):
@@ -99,6 +99,90 @@ def calculate_observed_experience_change(previous, current):
 
 
 
+
+def calculate_level_up_experience_change(previous, current):
+    """레벨업 당일 총 획득량을 진행률 반올림 범위와 함께 계산한다.
+
+    이전 레벨 잔여 EXP와 새 레벨의 현재 EXP를 합친다.
+    진행률의 표시 정밀도는 원본 JSON에서 별도로 보존되지 않으므로,
+    확인 가능한 소수 자릿수의 반 단위를 적용해 하한·상한을 계산한다.
+    """
+    if not isinstance(previous, dict) or not isinstance(current, dict):
+        return None
+    if previous.get("recordStatus") not in (None, "available"):
+        return None
+    if current.get("recordStatus") not in (None, "available"):
+        return None
+    if not _are_consecutive_records(previous, current):
+        return None
+
+    previous_level = _effective_level(previous)
+    current_level = _effective_level(current)
+    rate_reset = is_experience_rate_reset(
+        previous.get("experienceRate"), current.get("experienceRate")
+    )
+    level_difference = (
+        current_level - previous_level
+        if previous_level is not None and current_level is not None else None
+    )
+    if not rate_reset and level_difference != 1:
+        return None
+    if level_difference is not None and level_difference not in (0, 1):
+        return None
+
+    try:
+        previous_rate = Decimal(
+            str(previous.get("experienceRate")).replace("%", "").replace(",", "").strip()
+        )
+    except (InvalidOperation, TypeError, ValueError):
+        return None
+    if not previous_rate.is_finite() or not Decimal("0") < previous_rate <= Decimal("100"):
+        return None
+
+    previous_experience = to_exact_integer(previous.get("experience"))
+    current_experience = to_exact_integer(current.get("experience"))
+    if (
+        previous_experience is None or previous_experience < 0
+        or current_experience is None or current_experience < 0
+    ):
+        return None
+
+    # JSON 숫자 파싱과 저장 과정에서 끝의 0은 보존되지 않는다.
+    # 보이는 소수 자릿수보다 더 높은 정밀도를 가정하지 않는다.
+    visible_resolution = Decimal(1).scaleb(previous_rate.as_tuple().exponent)
+    rate_resolution = max(visible_resolution, Decimal("0.001"))
+    half_resolution = rate_resolution / Decimal("2")
+    minimum_rate = max(Decimal("0.000001"), previous_rate - half_resolution)
+    maximum_rate = min(Decimal("100"), previous_rate + half_resolution)
+
+    previous_exp = Decimal(previous_experience)
+    new_level_exp = Decimal(current_experience)
+
+    def daily_gain(rate):
+        return previous_exp * Decimal("100") / rate - previous_exp + new_level_exp
+
+    point = daily_gain(previous_rate)
+    lower = max(Decimal("0"), daily_gain(maximum_rate))
+    upper = max(lower, daily_gain(minimum_rate))
+
+    return {
+        "value": int(point.to_integral_value(rounding=ROUND_HALF_UP)),
+        "lowerBound": int(lower.to_integral_value(rounding=ROUND_FLOOR)),
+        "upperBound": int(upper.to_integral_value(rounding=ROUND_CEILING)),
+        "rateResolution": str(rate_resolution),
+        "method": "previous_level_remaining_plus_new_level_exp",
+    }
+
+
+def _set_experience_change_metadata(record, result, kind):
+    record["experienceChange"] = result["value"] if result else None
+    record["experienceChangeKind"] = kind if result else "unavailable"
+    record["experienceChangeLowerBound"] = result["lowerBound"] if result else None
+    record["experienceChangeUpperBound"] = result["upperBound"] if result else None
+    record["experienceChangeMethod"] = result["method"] if result else None
+    record["experienceChangeRateResolution"] = result["rateResolution"] if result else None
+
+
 def calculate_observed_experience_rate_change(previous, current):
     """연속된 동일 레벨 스냅샷에서 확인된 진행률 차이(%p)를 반환한다."""
     if not isinstance(previous, dict) or not isinstance(current, dict):
@@ -151,8 +235,9 @@ def calculate_recent_history_changes(history):
         current["levelUpPreviousLevel"] = None
         current["levelUpCurrentLevel"] = None
         current["levelUpCatchUp"] = False
+        _set_experience_change_metadata(current, None, "unavailable")
         if index == 0:
-            current["experienceChange"] = None
+            current["experienceRateChange"] = None
             current["experienceRateChange"] = None
             current["rankingChange"] = None
             continue
@@ -182,10 +267,22 @@ def calculate_recent_history_changes(history):
         elif duplicate_level_catch_up:
             current["levelUpCatchUp"] = True
 
-        current["experienceChange"] = (
-            calculate_observed_experience_change(previous, current)
-            if records_available else None
-        )
+        if records_available and current.get("levelUp"):
+            boundary_change = calculate_level_up_experience_change(previous, current)
+            _set_experience_change_metadata(current, boundary_change, "level_up_reconstructed")
+        elif records_available:
+            observed_change = calculate_observed_experience_change(previous, current)
+            observed_result = ({
+                "value": observed_change,
+                "lowerBound": observed_change,
+                "upperBound": observed_change,
+                "method": "same_level_snapshot_delta",
+                "rateResolution": None,
+            } if observed_change is not None else None)
+            _set_experience_change_metadata(current, observed_result, "same_level_snapshot")
+        else:
+            _set_experience_change_metadata(current, None, "unavailable")
+
         current["experienceRateChange"] = (
             calculate_observed_experience_rate_change(previous, current)
             if records_available else None
@@ -213,6 +310,7 @@ def calculate_archive_history_changes(history):
         current["levelUpPreviousLevel"] = None
         current["levelUpCurrentLevel"] = None
         current["levelUpCatchUp"] = False
+        _set_experience_change_metadata(current, None, "unavailable")
 
         if index == 0:
             continue
@@ -241,9 +339,20 @@ def calculate_archive_history_changes(history):
         elif duplicate_level_catch_up:
             current["levelUpCatchUp"] = True
 
-        current["experienceChange"] = calculate_observed_experience_change(
-            previous, current
-        )
+        if current.get("levelUp"):
+            boundary_change = calculate_level_up_experience_change(previous, current)
+            _set_experience_change_metadata(current, boundary_change, "level_up_reconstructed")
+        else:
+            observed_change = calculate_observed_experience_change(previous, current)
+            observed_result = ({
+                "value": observed_change,
+                "lowerBound": observed_change,
+                "upperBound": observed_change,
+                "method": "same_level_snapshot_delta",
+                "rateResolution": None,
+            } if observed_change is not None else None)
+            _set_experience_change_metadata(current, observed_result, "same_level_snapshot")
+
         current["experienceRateChange"] = calculate_observed_experience_rate_change(
             previous, current
         )
