@@ -291,6 +291,7 @@ def request_openrouter(prompt, api_key=None, deadline=None):
     raw_content = message.get("content")
     content = _extract_text_parts(raw_content) if isinstance(raw_content, list) else raw_content
     finish_reason = choice.get("finish_reason") or choice.get("native_finish_reason")
+    reasoning = message.get("reasoning") or message.get("reasoning_content")
     metadata.update({
         "has_choices": True,
         "choice_count": len(choices),
@@ -300,6 +301,8 @@ def request_openrouter(prompt, api_key=None, deadline=None):
         "content_type": type(raw_content).__name__,
         "finish_reason": finish_reason,
         "native_finish_reason": choice.get("native_finish_reason"),
+        "reasoning_present": bool(reasoning),
+        "reasoning_length": len(reasoning) if isinstance(reasoning, str) else None,
     })
     if finish_reason == "length":
         metadata["response_classification"] = "truncated_output"
@@ -311,12 +314,7 @@ def request_openrouter(prompt, api_key=None, deadline=None):
             provider_metadata=metadata,
         )
     if not isinstance(content, str) or not content.strip():
-        reasoning = message.get("reasoning") or message.get("reasoning_content")
-        metadata.update({
-            "reasoning_present": bool(reasoning),
-            "reasoning_length": len(reasoning) if isinstance(reasoning, str) else None,
-            "response_classification": "reasoning_only" if reasoning else "empty_content",
-        })
+        metadata["response_classification"] = "reasoning_only" if reasoning else "empty_content"
         _log_openrouter_empty_response(**metadata)
         raise ProviderError(
             "OpenRouter response contained no report text",
