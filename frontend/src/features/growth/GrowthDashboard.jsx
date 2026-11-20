@@ -422,10 +422,9 @@ export default function GrowthDashboard({ character, history, metrics: serverMet
             autoSkip:false,maxRotation:0,minRotation:0,
             callback(value,index) {
               const item = sorted[index];
-              const isLevelUp = levelUpEvents[index] === true;
-              if (index % 3 !== 0 && !isLevelUp) return "";
-              const label = String(item?.date || "").slice(5);
-              return label;
+              const labelInterval = range === 7 ? 1 : range === 30 ? 3 : 10;
+              if (index % labelInterval !== 0) return "";
+              return String(item?.date || "").slice(5);
             }
           }},
           experience:{type:"linear",position:"left",title:{display:true,text:"총 경험치 증가량"},ticks:{callback:value=>Number(value).toFixed(0)+"조"}},
