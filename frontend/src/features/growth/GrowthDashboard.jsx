@@ -406,7 +406,10 @@ export default function GrowthDashboard({ character, history, metrics: serverMet
                 .find(item => item?.level !== null && item?.level !== undefined && Number.isFinite(Number(item.level)));
               const previousLevel = current?.levelUpPreviousLevel ?? previous?.level ?? "—";
               const currentLevel = current?.levelUpCurrentLevel ?? current?.level ?? "—";
-              return "레벨업 · Lv. " + previousLevel + " → " + currentLevel;
+              return [
+                "레벨업 · Lv. " + previousLevel + " → " + currentLevel,
+                "총 경험치 증가량: " + context.parsed.y.toFixed(2) + "조"
+              ];
             }
             if (context.dataset.label === "일일 경험치 증가량" && current?.experienceChangeKind === "level_up_reconstructed" && context.parsed.y !== null) {
               return "일일 경험치 증가량: " + context.parsed.y.toFixed(2) + "조";
