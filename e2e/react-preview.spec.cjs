@@ -854,6 +854,17 @@ test("React growth chart plots level-local EXP with a dashed level-up boundary",
       const [red, green, blue, alpha] = pixelData.data.slice(offset, offset + 4);
       if (alpha > 160 && red > 200 && green > 150 && blue < 100) yellowPixels += 1;
     }
+    const probeCanvas = document.createElement("canvas");
+    probeCanvas.width = element.width;
+    probeCanvas.height = element.height;
+    const probeContext = probeCanvas.getContext("2d");
+    point?.draw?.(probeContext, area);
+    const probePixels = probeContext.getImageData(0, 0, probeCanvas.width, probeCanvas.height);
+    let probeYellowPixels = 0;
+    for (let offset = 0; offset < probePixels.data.length; offset += 4) {
+      const [red, green, blue, alpha] = probePixels.data.slice(offset, offset + 4);
+      if (alpha > 160 && red > 200 && green > 150 && blue < 100) probeYellowPixels += 1;
+    }
     return {
       markerIndex,
       configuredColor: chart.data.datasets[0].pointBackgroundColor?.[markerIndex] ?? null,
@@ -864,6 +875,9 @@ test("React growth chart plots level-local EXP with a dashed level-up boundary",
       resolvedRadius: point?.options?.radius ?? null,
       datasetClip: chart.data.datasets[0].clip ?? null,
       metaClip: datasetMeta?._clip ?? null,
+      liveX: point?.x ?? null,
+      liveY: point?.y ?? null,
+      manualProbeYellowPixels: probeYellowPixels,
       canvasSize: { width: element.width, height: element.height },
       skipped: point?.skip ?? null,
       x: position?.x ?? null,
