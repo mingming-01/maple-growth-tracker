@@ -59,7 +59,7 @@ def build_growth_prediction(records, character=None, reference_date=None, window
         if observation_date == reference and character_rate is not None:
             current_rate = character_rate
 
-    if current_rate is None:
+    if current_rate is None or current_level is None:
         return None
 
     remaining_rate = max(Decimal("0"), Decimal("100") - current_rate)
@@ -111,6 +111,8 @@ def build_growth_prediction(records, character=None, reference_date=None, window
         "confidence": confidence,
         "days": days,
         "date": expected_date,
+        "estimatedDays": days,
+        "estimatedDate": expected_date,
         "observationDate": observation_date.isoformat(),
         "method": "same_level_observed_progress_rate",
     }

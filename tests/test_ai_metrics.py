@@ -34,7 +34,10 @@ class ServerAIMetricsTests(unittest.TestCase):
              "description": "Lv. 280 · 경험치 1,200", "priority": 3},
             result["metrics"]["timeline"],
         )
-        self.assertIsNone(result["metrics"]["prediction"])
+        self.assertEqual(result["metrics"]["prediction"]["progressSamples"], 1)
+        self.assertEqual(result["metrics"]["prediction"]["averageDailyProgressRate"], 2.0)
+        self.assertEqual(result["metrics"]["prediction"]["days"], 44.0)
+        self.assertEqual(result["metrics"]["prediction"]["date"], "2026-12-28")
 
     def test_metrics_are_derived_from_contiguous_authoritative_records(self):
         today = date(2026, 11, 16)
@@ -161,28 +164,17 @@ class ServerAIMetricsTests(unittest.TestCase):
 
         self.assertEqual([item["ranking"] for item in result["history"]], [None, None])
 
-    def test_experience_rate_reset_uses_level_up_date_before_ranking_metadata_catches_up(self):
-        today = date(2026, 11, 19)
+    def test_level_up_boundary_stays_unknown_and_delayed_level_catch_up_drives_metrics_and_forecast(self):
+        today = date(2026, 11, 20)
         records = [
-            {
-                "date": "2026-11-17", "level": 298,
-                "experience": 1129263590513928, "experienceRate": 99.226,
-                "recordStatus": "available",
-            },
-            {
-                "date": "2026-11-18", "level": 298,
-                "experience": 1156066685461973, "experienceRate": 0.355,
-                "recordStatus": "available",
-            },
-            {
-                "date": "2026-11-19", "level": 299,
-                "experience": 17096549681346, "experienceRate": 0.984,
-                "recordStatus": "available",
-            },
+            {"date": "2026-11-17", "level": 298, "experience": 1129263590513928, "experienceRate": 99.226, "recordStatus": "available"},
+            {"date": "2026-11-18", "level": 298, "experience": 6175579914147, "experienceRate": 0.355, "recordStatus": "available"},
+            {"date": "2026-11-19", "level": 299, "experience": 34219899249572, "experienceRate": 1.969, "recordStatus": "available"},
+            {"date": "2026-11-20", "level": 299, "experience": 50805631039495, "experienceRate": 2.924, "recordStatus": "available"},
         ]
 
         result = build_server_growth_metrics(
-            {"level": 299, "experienceRate": 0.984},
+            {"level": 299, "experienceRate": 2.924},
             records, reference_date=today, period_days=7
         )
 
@@ -191,21 +183,26 @@ class ServerAIMetricsTests(unittest.TestCase):
             [{"date": "2026-11-18", "previousLevel": 298, "currentLevel": 299}],
         )
         self.assertTrue(result["history"][1]["levelUp"])
-        level_up_event = next(
-            event for event in result["metrics"]["timeline"]
-            if event["type"] == "level-up"
-        )
-        self.assertEqual(level_up_event["date"], "2026-11-18")
-        self.assertNotIn("당일 경험치 증가량 미확인", level_up_event["description"])
-        self.assertFalse(result["history"][2]["levelUp"])
+        self.assertIsNone(result["history"][1]["experienceChange"])
         self.assertTrue(result["history"][2]["levelUpCatchUp"])
-        self.assertEqual(result["history"][1]["experienceChange"], 26803094948045)
-        self.assertIsNone(result["history"][2]["experienceChange"])
-        self.assertEqual(result["periodSummary"]["levelUpIntervals"], 1)
-        self.assertEqual(result["metrics"]["observedChangeDays"], 1)
-        self.assertEqual(result["metrics"]["averageDailyGrowth"], 26803094948045)
-        self.assertEqual(result["periodSummary"]["validGrowthIntervals"], 1)
-        self.assertEqual(result["periodSummary"]["observedExperienceSum"], 26803094948045)
+        self.assertEqual(result["history"][2]["experienceChange"], 28044319335425)
+        self.assertEqual(result["history"][3]["experienceChange"], 16585731789923)
+        self.assertEqual(result["metrics"]["observedChangeDays"], 2)
+        expected_average = (28044319335425 + 16585731789923) / 2
+        self.assertEqual(result["metrics"]["averageDailyGrowth"], expected_average)
+        self.assertEqual(result["periodSummary"]["validGrowthIntervals"], 2)
+        self.assertEqual(result["periodSummary"]["observedExperienceSum"], 44630051125348)
+
+        prediction = result["metrics"]["prediction"]
+        self.assertEqual(prediction["currentLevel"], 299)
+        self.assertEqual(prediction["nextLevel"], 300)
+        self.assertEqual(prediction["remainingRate"], 97.076)
+        self.assertEqual(prediction["progressSamples"], 2)
+        self.assertAlmostEqual(prediction["averageDailyProgressRate"], 1.2845)
+        self.assertAlmostEqual(prediction["days"], 75.5749318801, places=8)
+        self.assertEqual(prediction["date"], "2027-02-04")
+        self.assertEqual(prediction["estimatedDate"], "2027-02-04")
+        self.assertIsNone(prediction["requiredExp"])
 
     def test_missing_dates_and_level_up_transitions_are_not_interpolated(self):
         today = date(2026, 11, 16)
