@@ -21,6 +21,7 @@ export function buildExperienceChartSeries(records) {
   let running = null;
   let baselineEstablished = false;
   let cumulativeIsComplete = true;
+  let cumulativeHasUnknownGaps = false;
   const levelUpEvents = detectLevelUpEvents(rows);
 
   rows.forEach((item, index) => {
@@ -54,8 +55,8 @@ export function buildExperienceChartSeries(records) {
     }
 
     if (levelUpEvents[index] || item?.levelUpCatchUp === true) {
-      // A marker must not erase a valid positive source EXP delta. Only a
-      // negative/reset or missing delta is excluded from the cumulative line.
+      // Keep a verified transition delta. If the daily amount is unknown,
+      // leave a visible gap rather than drawing a flat segment that implies zero.
       const transitionChange = Number(item?.experienceChange);
       if (
         item?.experienceChange !== null &&
@@ -65,8 +66,11 @@ export function buildExperienceChartSeries(records) {
         transitionChange >= 0
       ) {
         running += transitionChange;
+        cumulative.push(running / 1_000_000_000_000);
+      } else {
+        cumulative.push(null);
+        cumulativeHasUnknownGaps = true;
       }
-      cumulative.push(running / 1_000_000_000_000);
       return;
     }
 
@@ -74,12 +78,14 @@ export function buildExperienceChartSeries(records) {
     if (change === null || change === undefined || change === "") {
       cumulative.push(null);
       cumulativeIsComplete = false;
+      cumulativeHasUnknownGaps = true;
       return;
     }
     const delta = Number(change);
     if (!Number.isFinite(delta)) {
       cumulative.push(null);
       cumulativeIsComplete = false;
+      cumulativeHasUnknownGaps = true;
       return;
     }
 
@@ -87,7 +93,7 @@ export function buildExperienceChartSeries(records) {
     cumulative.push(running / 1_000_000_000_000);
   });
 
-  return { daily, cumulative };
+  return { daily, cumulative, cumulativeHasUnknownGaps };
 }
 
 /**
