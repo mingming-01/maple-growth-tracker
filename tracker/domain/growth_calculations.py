@@ -104,8 +104,8 @@ def calculate_level_up_experience_change(previous, current):
     """레벨업 당일 총 획득량을 진행률 반올림 범위와 함께 계산한다.
 
     이전 레벨 잔여 EXP와 새 레벨의 현재 EXP를 합친다.
-    진행률의 표시 정밀도는 원본 JSON에서 별도로 보존되지 않으므로,
-    확인 가능한 소수 자릿수의 반 단위를 적용해 하한·상한을 계산한다.
+    진행률의 표시 정밀도와 반올림·절삭 방식이 원본 JSON에서 보존되지 않으므로,
+    확인 가능한 소수 자릿수 한 단위만큼 넓혀 보수적인 하한·상한을 계산한다.
     """
     if not isinstance(previous, dict) or not isinstance(current, dict):
         return None
@@ -148,12 +148,11 @@ def calculate_level_up_experience_change(previous, current):
         return None
 
     # JSON 숫자 파싱과 저장 과정에서 끝의 0은 보존되지 않는다.
-    # 보이는 소수 자릿수보다 더 높은 정밀도를 가정하지 않는다.
+    # 반올림·절삭 방식을 단정하지 않도록 표시 단위 전체를 범위 여유로 사용한다.
     visible_resolution = Decimal(1).scaleb(previous_rate.as_tuple().exponent)
     rate_resolution = max(visible_resolution, Decimal("0.001"))
-    half_resolution = rate_resolution / Decimal("2")
-    minimum_rate = max(Decimal("0.000001"), previous_rate - half_resolution)
-    maximum_rate = min(Decimal("100"), previous_rate + half_resolution)
+    minimum_rate = max(Decimal("0.000001"), previous_rate - rate_resolution)
+    maximum_rate = min(Decimal("100"), previous_rate + rate_resolution)
 
     previous_exp = Decimal(previous_experience)
     new_level_exp = Decimal(current_experience)
