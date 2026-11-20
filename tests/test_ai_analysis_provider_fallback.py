@@ -241,7 +241,7 @@ class AIAnalysisFallbackTests(unittest.TestCase):
         ]
         today = __import__("datetime").date(2026, 11, 19)
         calculated = build_server_growth_metrics(
-            {"level": 299, "experienceRate": 0.984},
+            {"level": 299, "experience": 34219899249572, "experienceRate": 1.969},
             records,
             reference_date=today,
             period_days=7,
@@ -257,7 +257,7 @@ class AIAnalysisFallbackTests(unittest.TestCase):
         result = service.generate_ai_analysis(
             {
                 "characterName": "밍득", "worldName": "크로아", "job": "아델",
-                "level": 299, "experienceRate": 0.984,
+                "level": 299, "experience": 34219899249572, "experienceRate": 1.969,
             },
             calculated["history"],
             computed_metrics=calculated["metrics"],
@@ -272,7 +272,7 @@ class AIAnalysisFallbackTests(unittest.TestCase):
         self.assertIn("analysis", result)
         self.assertTrue(result["analysis"].startswith("[성장 패턴]"))
         self.assertIn("[AI 코멘트]", result["analysis"])
-        self.assertIn("최근처럼 경험치를 얻는다면 1월 20일쯤 300레벨에 도달할 것으로 예상돼요.", result["analysis"])
+        self.assertIn("최근처럼 경험치를 얻는다면 1월 19일쯤 300레벨에 도달할 것으로 예상돼요.", result["analysis"])
         prompt = openrouter.call_args.args[0]
         self.assertIn("레벨업 전환이 확인됨", prompt)
         self.assertNotIn('"experienceChange"', prompt)
