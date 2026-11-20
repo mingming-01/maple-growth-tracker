@@ -77,6 +77,8 @@ function buildReportSignature(character, history, metrics, analysisContext = {})
 export function AIReport({ character, history, analysisHistory = history, periodDays = 7, periodSummary = null, metrics: serverMetrics, onPeriodSelect }) {
   const [analysis,setAnalysis] = useState("");
   const [growthInsights,setGrowthInsights] = useState(null);
+  const [serverPeriodSummary,setServerPeriodSummary] = useState(null);
+  const [serverPreviousPeriodSummary,setServerPreviousPeriodSummary] = useState(null);
   const [aiGenerated,setAiGenerated] = useState(null);
   const [loading,setLoading] = useState(false);
   const [error,setError] = useState("");
@@ -98,6 +100,8 @@ export function AIReport({ character, history, analysisHistory = history, period
     const cacheType = `growth-report-${analysisContext.periodDays}d`;
     const cached = !force ? getCachedAI(cacheType,signature) : null;
     if (cached?.analysis) {
+      setServerPeriodSummary(null);
+      setServerPreviousPeriodSummary(null);
       setAnalysis(cached.analysis);
       setGrowthInsights(cached.growthInsights || null);
       setAiGenerated(true);
@@ -106,6 +110,8 @@ export function AIReport({ character, history, analysisHistory = history, period
       return;
     }
     if (!allowGenerate && !force) {
+      setServerPeriodSummary(null);
+      setServerPreviousPeriodSummary(null);
       setAnalysis("");
       setGrowthInsights(null);
       setAiGenerated(null);
@@ -119,6 +125,8 @@ export function AIReport({ character, history, analysisHistory = history, period
       if (!result.analysis) throw new Error("AI 분석 결과가 비어 있습니다.");
       setAnalysis(result.analysis);
       setGrowthInsights(result.growthInsights || null);
+      setServerPeriodSummary(result.periodSummary || null);
+      setServerPreviousPeriodSummary(result.previousPeriodSummary || null);
       const generatedByAI = result.aiGenerated !== false;
       setAiGenerated(generatedByAI);
       setNotice(generatedByAI
@@ -137,6 +145,8 @@ export function AIReport({ character, history, analysisHistory = history, period
   useEffect(() => {
     setAnalysis("");
     setGrowthInsights(null);
+    setServerPeriodSummary(null);
+    setServerPreviousPeriodSummary(null);
     setAiGenerated(null);
     setError("");
     // 리포트 화면 진입 시 브라우저 캐시를 먼저 보고, 없으면 서버 캐시를 확인한 뒤 필요한 경우 생성한다.
@@ -161,6 +171,10 @@ export function AIReport({ character, history, analysisHistory = history, period
   }
 
   const sections = useMemo(() => parseAnalysis(analysis),[analysis]);
+  const evidencePeriodSummary = serverPeriodSummary || periodSummary;
+  const evidencePreviousSummary = serverPeriodSummary
+    ? serverPreviousPeriodSummary
+    : periodSummary?.previousSummary || null;
 
   return (
     <section className="section" data-ai-generated={aiGenerated === null ? "unknown" : String(aiGenerated)}>
@@ -179,13 +193,13 @@ export function AIReport({ character, history, analysisHistory = history, period
             {growthInsights.weekdayWeekend?.status === "available" && <div className="ai-analysis-evidence-item"><span>주말 성장 비중</span><strong>{Number(growthInsights.weekdayWeekend.weekendSharePercent).toFixed(1)}%</strong></div>}
           </div>
         </div>}
-        {periodDays > 7 && periodSummary && <div className="ai-analysis-period-evidence" data-testid="ai-analysis-period-evidence">
+        {periodDays > 7 && evidencePeriodSummary && <div className="ai-analysis-period-evidence" data-testid="ai-analysis-period-evidence">
           <strong>최근 {periodDays}일 성장 기록</strong>
           <div className="ai-analysis-period-grid">
-            <span>기록이 남은 날짜 <b>{Number.isFinite(Number(periodSummary.coveragePercent)) ? Number(periodSummary.coveragePercent).toFixed(1)+"%" : "자료 부족"}</b></span>
-            <span>경험치가 늘어난 날 <b>{periodSummary.confirmedChangeDays ?? 0}일</b></span>
-            <span>하루 평균 경험치 <b>{periodSummary.averageGrowth == null ? "자료 부족" : (Number(periodSummary.averageGrowth)/1_000_000_000_000).toFixed(2)+"조"}</b></span>
-            <span>지난 기간 하루 평균 <b>{periodSummary.previousSummary?.averageGrowth == null ? "자료 부족" : (Number(periodSummary.previousSummary.averageGrowth)/1_000_000_000_000).toFixed(2)+"조"}</b></span>
+            <span>기록이 남은 날짜 <b>{Number.isFinite(Number(evidencePeriodSummary.coveragePercent)) ? Number(evidencePeriodSummary.coveragePercent).toFixed(1)+"%" : "자료 부족"}</b></span>
+            <span>경험치가 늘어난 날 <b>{evidencePeriodSummary.growthDays ?? 0}일</b></span>
+            <span>하루 평균 경험치 <b>{evidencePeriodSummary.averageGrowth == null ? "자료 부족" : (Number(evidencePeriodSummary.averageGrowth)/1_000_000_000_000).toFixed(2)+"조"}</b></span>
+            <span>지난 기간 하루 평균 <b>{evidencePreviousSummary?.averageGrowth == null ? "자료 부족" : (Number(evidencePreviousSummary.averageGrowth)/1_000_000_000_000).toFixed(2)+"조"}</b></span>
           </div>
         </div>}
         <div className="ai-analysis-actions">
