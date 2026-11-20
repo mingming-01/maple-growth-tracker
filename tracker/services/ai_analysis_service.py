@@ -530,7 +530,7 @@ def _extract_ai_comment(value):
     """Extract only the AI commentary; factual report sections are always server-owned."""
     text = str(value or "")
     # Some providers/test doubles emit escaped line breaks as literal \n sequences.
-    text = text.replace("\\r\\n", "\n").replace("\\n", "\n").replace("\\r", "\n").strip()
+    text = text.replace("\\r\n", "\n").replace("\n", "\n").replace("\\r", "\n").strip()
     if not text:
         return ""
 
@@ -555,14 +555,14 @@ def _extract_ai_comment(value):
 
 def _remove_numeric_comment_sentences(comment):
     """AI 코멘트의 숫자 포함 문장만 제거하고 서버가 제공할 사실과 분리한다."""
-    sentences = re.split(r"(?<=[.!?])\\s+|\\n+", str(comment or ""))
+    sentences = re.split(r"(?<=[.!?])\s+|\n+", str(comment or ""))
     kept = []
     removed = False
     for sentence in sentences:
         text = sentence.strip()
         if not text:
             continue
-        if re.search(r"\\d", text):
+        if re.search(r"\d", text):
             removed = True
             continue
         kept.append(text)
@@ -574,7 +574,7 @@ def _prepare_ai_comment(value, expected_date, source_data):
     sanitized = sanitize_ai_text(value, expected_date)
     comment = _extract_ai_comment(sanitized)
     comment, removed_numeric_sentences = _remove_numeric_comment_sentences(comment)
-    compact = re.sub(r"[\\s.!?…·]", "", comment)
+    compact = re.sub(r"[\s.!?…·]", "", comment)
     if len(compact) < 8:
         reason = "numeric_claim_only" if removed_numeric_sentences else "empty_comment"
         return None, reason
