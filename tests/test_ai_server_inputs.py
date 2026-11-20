@@ -262,7 +262,8 @@ class AIServerInputTests(unittest.TestCase):
         payload = response.get_json()
         self.assertFalse(payload["cacheHit"])
         self.assertIn("[성장 패턴]", payload["analysis"])
-        self.assertIn("28.0조", payload["analysis"])
+        self.assertIn("43.0조", payload["analysis"])
+        self.assertIn("21.5조", payload["analysis"])
         self.assertIn("[AI 코멘트]", payload["analysis"])
         self.assertIn(
             f"{event_date.month}월 {event_date.day}일에 298레벨에서 299레벨로 올라갔어요.",
