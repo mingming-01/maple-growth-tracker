@@ -529,7 +529,7 @@ def _build_growth_report_cache_key(prompt, source_data):
     """정성 신호 프롬프트와 해당 캐릭터의 실제 계산 데이터로 캐시를 구분한다."""
     return (
         prompt
-        + "\n[리포트 형식 버전] 7\n"
+        + "\n[리포트 형식 버전] 8\n"
         + "[캐시 식별 데이터]\n"
         + json.dumps(source_data, ensure_ascii=False, sort_keys=True)
     )
