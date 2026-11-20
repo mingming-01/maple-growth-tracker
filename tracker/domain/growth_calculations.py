@@ -67,10 +67,12 @@ def _effective_level(record):
 def calculate_observed_experience_change(previous, current):
     """연속된 동일 유효 레벨 스냅샷의 원본 EXP 차이를 반환한다.
 
-    레벨업 당일에는 EXP 기준이 바뀌므로 그 날짜의 차이는 산출하지 않는다.
-    다만 직전 날짜가 레벨업 이벤트이고 랭킹의 level 필드만 하루 늦게 갱신됐다면,
-    직전 날짜의 levelUpCurrentLevel을 사용해 다음 날부터 새 레벨 내부의 증가량을
-    계산한다.
+    레벨업 당일에는 EXP 기준이 바뀌므로 두 원본 EXP를 직접 빼지 않는다.
+    공통 이력 계산 함수는 이 결과가 None인 레벨업 경계에 대해 별도 함수로
+    이전 레벨 잔여 EXP와 새 레벨 현재 EXP를 합산한다.
+    다만 직전 날짜가 레벨업 이벤트이고 랭킹 level 필드만 늦게 갱신됐다면,
+    직전 날짜의 levelUpCurrentLevel을 사용해 다음 날부터 새 레벨 내부의
+    원본 EXP 차이를 계산한다.
     """
     if not isinstance(previous, dict) or not isinstance(current, dict):
         return None
@@ -299,7 +301,7 @@ def calculate_recent_history_changes(history):
 
 
 def calculate_archive_history_changes(history):
-    """30일·90일 기록에서 연속으로 확인된 날짜 사이의 변화만 계산한다."""
+    """30일·90일 기록의 동일 레벨 차이와 레벨업 경계 획득량을 계산한다."""
     for index, current in enumerate(history):
         current["experienceChange"] = None
         current["experienceRateChange"] = None
