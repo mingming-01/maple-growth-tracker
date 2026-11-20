@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { detectLevelUpEvents, buildExperienceChartSeries, dailyGrowthSegmentDash } from "./growthChartData.js";
+import { detectLevelUpEvents, buildExperienceChartSeries, levelExperienceSegmentDash, dailyGrowthSegmentDash } from "./growthChartData.js";
 import { fetchHistoryArchive } from "../../lib/historyCollection.js";
 import { sortHistoryAscending, sortHistoryDescending, formatLocalISODate } from "../../lib/growth.js";
 import { readGrowthGoals, saveGrowthGoals, readTrackerState } from "../../lib/storage.js";
@@ -435,7 +435,7 @@ export default function GrowthDashboard({ character, history, metrics: serverMet
     const sorted = sortHistoryAscending(displayHistory)
       .filter(item => item?.date && item.date <= today);
     if (!sorted.length) return undefined;
-    const { daily, cumulative } = buildExperienceChartSeries(sorted);
+    const { daily, experience } = buildExperienceChartSeries(sorted);
     const levelUpEvents = detectLevelUpEvents(sorted);
     import("chart.js/auto").then(({ default: Chart }) => {
       if (cancelled || !canvasRef.current) return;
@@ -445,8 +445,8 @@ export default function GrowthDashboard({ character, history, metrics: serverMet
       data: {
         labels: sorted.map(item => String(item.date || "").slice(5)),
         datasets: [
-          { label:"총 경험치 증가량",data:cumulative,yAxisID:"experience",borderColor:"#36a2eb",backgroundColor:"#36a2eb",borderWidth:3,tension:0,pointRadius:3,pointHoverRadius:6,fill:false },
-          { label:"일일 경험치 증가량",data:daily,yAxisID:"dailyGrowth",borderColor:"#ff6384",backgroundColor:"#ff6384",borderWidth:2,segment:{borderDash:dailyGrowthSegmentDash},tension:0,pointRadius:2,pointHoverRadius:5,fill:false },
+          { label:"현재 레벨 EXP",data:experience,yAxisID:"experience",borderColor:"#36a2eb",backgroundColor:"#36a2eb",borderWidth:3,tension:0,spanGaps:false,segment:{borderDash:context=>levelExperienceSegmentDash(context,levelUpEvents)},pointRadius:levelUpEvents.map(isLevelUp=>isLevelUp?5:3),pointHoverRadius:levelUpEvents.map(isLevelUp=>isLevelUp?7:5),fill:false },
+          { label:"일일 경험치 증가량",data:daily,yAxisID:"dailyGrowth",borderColor:"#ff6384",backgroundColor:"#ff6384",borderWidth:2,segment:{borderDash:dailyGrowthSegmentDash},spanGaps:false,tension:0,pointRadius:2,pointHoverRadius:5,fill:false },
         ]
       },
       options: {
@@ -454,17 +454,13 @@ export default function GrowthDashboard({ character, history, metrics: serverMet
         plugins:{legend:{display:true},tooltip:{callbacks:{
           label(context) {
             const current = sorted[context.dataIndex];
-            if (context.dataset.label === "총 경험치 증가량" && levelUpEvents[context.dataIndex]) {
+            if (context.dataset.label === "현재 레벨 EXP" && levelUpEvents[context.dataIndex]) {
               const previous = sorted.slice(0, context.dataIndex).reverse()
                 .find(item => item?.level !== null && item?.level !== undefined && Number.isFinite(Number(item.level)));
               const previousLevel = current?.levelUpPreviousLevel ?? previous?.level ?? "—";
               const currentLevel = current?.levelUpCurrentLevel ?? current?.level ?? "—";
-              const rawExperience = Number(current?.experience);
-              const rawLabel = Number.isFinite(rawExperience)
-                ? " · 새 레벨 EXP " + (rawExperience / 1_000_000_000_000).toFixed(3) + "조"
-                : "";
-              return "⭐ 레벨업 · Lv. " + previousLevel + " → " + currentLevel + rawLabel +
-                " · 누적 확인값 " + context.parsed.y.toFixed(2) + "조";
+              return "⭐ 레벨업 · Lv. " + previousLevel + " → " + currentLevel +
+                " · 새 레벨 EXP " + context.parsed.y.toFixed(3) + "조";
             }
             if (context.dataset.label === "일일 경험치 증가량" && levelUpEvents[context.dataIndex] && context.parsed.y === null) {
               return "일일 경험치 증가량: 레벨업 경계 · 당일 증가량 미확인";
@@ -483,7 +479,7 @@ export default function GrowthDashboard({ character, history, metrics: serverMet
               return isLevelUp ? label + " ★" : label;
             }
           }},
-          experience:{type:"linear",position:"left",title:{display:true,text:"총 경험치 증가량"},ticks:{callback:value=>Number(value).toFixed(0)+"조"}},
+          experience:{type:"linear",position:"left",title:{display:true,text:"현재 레벨 EXP"},ticks:{callback:value=>Number(value).toFixed(0)+"조"}},
           dailyGrowth:{type:"linear",position:"right",beginAtZero:true,title:{display:true,text:"일일 경험치 증가량"},grid:{drawOnChartArea:false},ticks:{callback:value=>Number(value).toFixed(0)+"조"}}
         }
       }
@@ -562,7 +558,7 @@ export default function GrowthDashboard({ character, history, metrics: serverMet
 
       <section className="section" id="growth-trend">
         <div className="section-header history-chart-header">
-          <div><h2 className="section-title">성장 추이</h2><p className="section-description">기준일 이후 확인된 누적 경험치 변화와 하루 단위 증가량, 레벨업 기록을 보여줍니다.</p></div>
+          <div><h2 className="section-title">성장 추이</h2><p className="section-description">현재 레벨의 경험치 변화와 하루 단위 증가량, 레벨업 기록을 보여줍니다.</p></div>
           <label className="history-range-control">기록 범위
             <select className="history-range-select" value={range} onChange={event => changeRange(Number(event.target.value))} disabled={busy}>
               <option value="7">최근 7일</option><option value="30">저장 기록 30일</option><option value="90">저장 기록 90일</option>
@@ -602,12 +598,12 @@ export default function GrowthDashboard({ character, history, metrics: serverMet
         <div className="growth-prediction-layout">
           <div className="prediction-card">
           <div className="prediction-grid">
-            <div className="prediction-item"><div className="prediction-label">다음 레벨까지</div><div className="prediction-value">{prediction?.requiredExp != null ? fmt(prediction.requiredExp) + (prediction.requiredExpEstimated ? " (추정)" : "") : "자료 부족"}</div></div>
+            <div className="prediction-item"><div className="prediction-label">다음 레벨까지</div><div className="prediction-value">{prediction?.requiredExp != null ? fmt(prediction.requiredExp) : "자료 부족"}</div></div>
             <div className="prediction-item"><div className="prediction-label">예상 소요</div><div className="prediction-value">{Number.isFinite(prediction?.days) ? "약 "+prediction.days.toFixed(1)+"일" : "자료 부족"}</div></div>
             <div className="prediction-item"><div className="prediction-label">예상 레벨업</div><div className="prediction-value">{prediction?.date ? localDate(prediction.date) : "자료 부족"}</div></div>
             <div className="prediction-item"><div className="prediction-label">최근 평균</div><div className="prediction-value">{(prediction?.averageGrowth ?? average) == null ? "자료 부족" : fmt(prediction?.averageGrowth ?? average)}</div></div>
           </div>
-          <p className="prediction-note">{prediction?.requiredExpEstimated ? "현재 보유 EXP와 넥슨 API의 경험치 진행률을 이용해 다음 레벨까지 남은 EXP를 역산한 추정치입니다. 진행률 반올림으로 인게임 수치와 소폭 차이가 날 수 있어요." : "현재 경험치와 진행률을 확인하면 다음 레벨까지 남은 EXP를 역산할 수 있어요."}{Number.isFinite(prediction?.averageGrowth) ? ` 최근 동일 레벨의 ${prediction.experienceSamples}개 실제 일일 EXP 변화량 평균 ${fmt(prediction.averageGrowth)}를 기준으로 예상 날짜를 계산했어요.` : " 동일 레벨의 일일 EXP 기록이 더 쌓이면 예상 날짜를 계산할 수 있어요."}</p>
+          <p className="prediction-note">{Number.isFinite(prediction?.requiredExp) ? "현재 레벨 경험치와 진행률을 기준으로 다음 레벨까지 남은 경험치를 계산했어요." : "현재 레벨의 경험치와 진행률을 확인하면 다음 레벨까지 남은 경험치를 표시할 수 있어요."}{Number.isFinite(prediction?.averageGrowth) ? ` 최근 동일 레벨의 ${prediction.experienceSamples}개 일일 EXP 변화량 평균 ${fmt(prediction.averageGrowth)}를 기준으로 예상 날짜를 계산했어요.` : " 동일 레벨의 일일 EXP 기록이 더 쌓이면 예상 날짜를 계산할 수 있어요."}</p>
         </div>
           <div id="growth-goal"><GoalPanel character={character} metrics={metrics} history={history || []} /></div>
         </div>
