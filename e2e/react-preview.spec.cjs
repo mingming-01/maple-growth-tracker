@@ -716,7 +716,7 @@ test("React AI report restores evidence details from cache", async ({ page }) =>
   await expect(cachedEvidence).toContainText("10 / 15일");
 });
 
-test("React growth chart preserves cumulative EXP and reverse-estimates the next level", async ({ page }) => {
+test("React growth chart plots level-local EXP with a dashed level-up boundary", async ({ page }) => {
   const timestamp = "2026-11-20T08:45:00+09:00";
   const character = {
     characterName: "레벨업검증", ocid: "level-up-chart-ai-e2e",
@@ -828,8 +828,6 @@ test("React growth chart preserves cumulative EXP and reverse-estimates the next
   await expect(page.locator("#growth-prediction .prediction-note")).toContainText("2개 일일 EXP 변화량 평균");
   await expect(page.locator("#growth-prediction .prediction-note")).not.toContainText("추정");
   await expect(page.locator("#growth-prediction .prediction-note")).not.toContainText("역산");
-  await expect(page.locator('[data-testid="growth-insight"]')).not.toContainText("추정");
-  await expect(page.locator("#growth-insight")).not.toContainText("역산");
 
   await page.locator('.mgt-nav a[href="#/analytics"]').click();
   await expect(page.getByText("11월 18일에 298레벨에서 299레벨로 올라갔어요.")).toBeVisible();
