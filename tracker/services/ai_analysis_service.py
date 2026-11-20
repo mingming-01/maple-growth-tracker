@@ -408,7 +408,8 @@ def _build_ai_commentary_context(source_data):
         else "기록만으로 신뢰할 수 있는 성장 전망을 계산하기 어려움"
     )
     period_scope = "장기 성장 기록의 흐름" if period_days in (30, 90) else "최근 성장 기록의 흐름"
-    return {
+
+    commentary_context = {
         "분석 범위": period_scope,
         "이전 기간 대비 성장 흐름": growth_comparison,
         "기록 충실도": record_coverage,
@@ -416,6 +417,30 @@ def _build_ai_commentary_context(source_data):
         "현재 레벨 진행 단계": current_progress,
         "성장 전망 자료": forecast,
     }
+    if period_days in (30, 90):
+        period_trend = metrics.get("periodTrend") or {}
+        if period_trend.get("status") != "available":
+            long_period_signal = "기간 초반과 후반을 비교할 만큼 확인된 경험치 변화 기록이 충분하지 않음"
+        else:
+            direction = period_trend.get("direction")
+            strength = period_trend.get("strength")
+            if direction == "increase" and strength == "strong":
+                long_period_signal = "기간 후반의 하루 평균 경험치 증가량이 초반보다 뚜렷하게 높아짐"
+            elif direction == "increase" and strength == "moderate":
+                long_period_signal = "기간 후반의 하루 평균 경험치 증가량이 초반보다 완만하게 높아짐"
+            elif direction == "increase":
+                long_period_signal = "기간 후반의 경험치 증가량이 초반보다 높지만 초반 기준값이 작아 변화 폭을 단정하기 어려움"
+            elif direction == "decrease" and strength == "strong":
+                long_period_signal = "기간 후반의 하루 평균 경험치 증가량이 초반보다 뚜렷하게 낮아짐"
+            elif direction == "decrease" and strength == "moderate":
+                long_period_signal = "기간 후반의 하루 평균 경험치 증가량이 초반보다 완만하게 낮아짐"
+            elif direction == "decrease":
+                long_period_signal = "기간 후반의 경험치 증가량이 초반보다 낮지만 변화 폭은 크지 않음"
+            else:
+                long_period_signal = "기간 초반과 후반의 하루 평균 경험치 증가량이 대체로 비슷함"
+        commentary_context["선택 기간 내 초반과 후반의 성장 흐름"] = long_period_signal
+
+    return commentary_context
 
 
 def _build_growth_report_prompt(source_data):
@@ -428,6 +453,7 @@ def _build_growth_report_prompt(source_data):
 [역할]
 - 백엔드가 계산한 사실을 다시 계산하지 말고, 제공된 정성 신호를 바탕으로 성장 과정에서 눈에 띄는 양상과 그 의미를 설명해.
 - 성장 흐름, 기록의 충실도, 레벨업 전후의 상황을 서로 자연스럽게 연결해. 신호를 그대로 나열하거나 앞의 리포트 내용을 반복하지 마.
+- 30일·90일 분석에서 '선택 기간 내 초반과 후반의 성장 흐름' 신호가 있으면 이를 핵심 해석에 반영해. 이는 선택 기간 내부 비교이며, 선택 기간 이전의 기록과 비교했다는 뜻으로 바꾸지 마.
 - 기록에 없는 사냥 방식, 플레이 시간, 접속 습관, 장비 효과, 성장 원인을 추측하지 마.
 - 신호가 부족하면 단정하지 말고 무엇을 판단하기 어려운지 솔직하게 밝혀.
 
