@@ -11,7 +11,7 @@ import {
 test("plots level-local EXP and daily EXP independently across a level-up reset", () => {
   const records = [
     { date: "2026-11-17", level: 298, experience: 1129263590513928, experienceRate: 99.226, experienceChange: null, levelUp: false, recordStatus: "available" },
-    { date: "2026-11-18", level: 298, experience: 6175579914147, experienceRate: 0.355, experienceChange: 14984259283040, experienceChangeKind: "level_up_reconstructed", experienceChangeLowerBound: 14978524563636, experienceChangeUpperBound: 14989994060239, levelUp: true, levelUpPreviousLevel: 298, levelUpCurrentLevel: 299, recordStatus: "available" },
+    { date: "2026-11-18", level: 298, experience: 6175579914147, experienceRate: 0.355, experienceChange: 14984259283040, experienceChangeKind: "level_up_reconstructed", experienceChangeLowerBound: 14972789902025, experienceChangeUpperBound: 14995728895234, levelUp: true, levelUpPreviousLevel: 298, levelUpCurrentLevel: 299, recordStatus: "available" },
     { date: "2026-11-19", level: 299, experience: 34219899249572, experienceRate: 1.969, experienceChange: 28044319335425, levelUp: false, levelUpCatchUp: true, recordStatus: "available" },
     { date: "2026-11-20", level: 299, experience: 50805631039495, experienceRate: 2.924, experienceChange: 16585731789923, levelUp: false, recordStatus: "available" }
   ];
