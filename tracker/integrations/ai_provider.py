@@ -7,7 +7,7 @@ import requests
 from flask import current_app, has_app_context
 
 from tracker.config import Config
-from tracker.integrations.bounded_http import DEFAULT_MAX_SSE_RESPONSE_BYTES, post_json_with_deadline
+from tracker.integrations.bounded_http import post_json_with_deadline
 
 
 GEMINI_URL = "https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent"
