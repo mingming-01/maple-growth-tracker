@@ -111,12 +111,22 @@ class AIGrowthInsightsTests(unittest.TestCase):
         result = build_growth_insights(records, reference_date="2026-11-19")
 
         self.assertEqual(result["recentPeriod"]["levelUpIntervals"], 1)
-        # The reset date remains unknown. The following day is comparable
-        # after the ranking level catches up and contributes its exact EXP delta.
-        self.assertEqual(result["recentPeriod"]["validGrowthIntervals"], 6)
+        # The reset date is reconstructed from the previous-level remainder
+        # plus the new-level EXP, while the exact snapshot deltas stay separate.
+        self.assertEqual(result["recentPeriod"]["validGrowthIntervals"], 7)
+        self.assertEqual(result["recentPeriod"]["observedGrowthIntervals"], 6)
+        self.assertEqual(result["recentPeriod"]["reconstructedLevelUpIntervals"], 1)
         self.assertEqual(
             result["recentPeriod"]["observedExperienceSum"],
             122938851151768,
+        )
+        self.assertEqual(
+            result["recentPeriod"]["reconstructedLevelUpExperienceSum"],
+            14984259283040,
+        )
+        self.assertEqual(
+            result["recentPeriod"]["experienceGainSum"],
+            137923110434808,
         )
 
     def test_already_calculated_history_is_aggregated_without_recomputing(self):
