@@ -176,10 +176,56 @@ def build_server_growth_metrics(character, records, reference_date=None, period_
         item for item in history
         if period_start <= date.fromisoformat(item["date"]) <= today
     ]
-    period_changes = [
-        item["experienceChange"] for item in period_records
-        if item["experienceChange"] is not None
+    period_change_records = [
+        item for item in period_records
+        if item.get("experienceChange") is not None
     ]
+    period_changes = [item["experienceChange"] for item in period_change_records]
+    exact_period_changes = [
+        item for item in period_change_records
+        if item.get("experienceChangeKind") != "level_up_reconstructed"
+    ]
+    level_up_reconstructed_changes = [
+        item for item in period_change_records
+        if item.get("experienceChangeKind") == "level_up_reconstructed"
+    ]
+    exact_experience_sum = (
+        sum(item["experienceChange"] for item in exact_period_changes)
+        if exact_period_changes else None
+    )
+    reconstructed_experience_sum = (
+        sum(item["experienceChange"] for item in level_up_reconstructed_changes)
+        if level_up_reconstructed_changes else None
+    )
+    reconstructed_lower_sum = (
+        sum(
+            item.get("experienceChangeLowerBound", item["experienceChange"])
+            for item in level_up_reconstructed_changes
+        )
+        if level_up_reconstructed_changes else None
+    )
+    reconstructed_upper_sum = (
+        sum(
+            item.get("experienceChangeUpperBound", item["experienceChange"])
+            for item in level_up_reconstructed_changes
+        )
+        if level_up_reconstructed_changes else None
+    )
+    total_experience_gain = sum(period_changes) if period_changes else None
+    total_gain_lower_bound = (
+        sum(
+            item.get("experienceChangeLowerBound", item["experienceChange"])
+            for item in period_change_records
+        )
+        if period_change_records else None
+    )
+    total_gain_upper_bound = (
+        sum(
+            item.get("experienceChangeUpperBound", item["experienceChange"])
+            for item in period_change_records
+        )
+        if period_change_records else None
+    )
     period_source_records = [
         record for record_date, record in source_by_date.items()
         if period_start <= record_date <= today
@@ -340,15 +386,26 @@ def build_server_growth_metrics(character, records, reference_date=None, period_
         "availableSnapshots": len(period_records),
         "coveragePercent": round(len(period_records) / period_days * 100, 1),
         "validGrowthIntervals": len(period_changes),
+        "calculatedChangeDays": len(period_changes),
+        "observedGrowthIntervals": len(exact_period_changes),
+        "reconstructedLevelUpIntervals": len(level_up_reconstructed_changes),
         "averageDailyExperience": (
             round(sum(period_changes) / len(period_changes), 2)
             if period_changes else None
         ),
-        "observedExperienceSum": sum(period_changes) if period_changes else None,
+        # 경험치 합계의 기본값은 레벨업 경계 계산값까지 포함한 기간 총 획득량이다.
+        "experienceGainSum": total_experience_gain,
+        "experienceGainSumLowerBound": total_gain_lower_bound,
+        "experienceGainSumUpperBound": total_gain_upper_bound,
+        # 기존 관측 합계 필드는 동일 레벨 스냅샷의 직접 차이만 보존한다.
+        "observedExperienceSum": exact_experience_sum,
+        "reconstructedLevelUpExperienceSum": reconstructed_experience_sum,
+        "reconstructedLevelUpExperienceLowerBoundSum": reconstructed_lower_sum,
+        "reconstructedLevelUpExperienceUpperBoundSum": reconstructed_upper_sum,
         "levelUpIntervals": len(level_ups),
-        "growth": sum(period_changes) if period_changes else None,
+        "growth": total_experience_gain,
         "averageGrowth": sum(period_changes) / len(period_changes) if period_changes else None,
-        "confirmedChangeDays": len(period_changes),
+        "confirmedChangeDays": len(exact_period_changes),
         "bestDailyGrowth": best_period_growth[1] if best_period_growth else None,
         "bestDailyGrowthDate": best_period_growth[0] if best_period_growth else None,
         "growthDays": sum(value > 0 for value in period_changes),
@@ -368,7 +425,12 @@ def build_server_growth_metrics(character, records, reference_date=None, period_
         "history": history,
         "metrics": {
             "validGrowthDays": sum(1 for value in period_values if value > 0),
-            "observedChangeDays": len(period_values),
+            "observedChangeDays": len(exact_period_changes),
+            "calculatedChangeDays": len(period_values),
+            "reconstructedLevelUpDays": len(level_up_reconstructed_changes),
+            "reconstructedLevelUpExperienceSum": reconstructed_experience_sum,
+            "reconstructedLevelUpExperienceLowerBoundSum": reconstructed_lower_sum,
+            "reconstructedLevelUpExperienceUpperBoundSum": reconstructed_upper_sum,
             "zeroGrowthDays": sum(1 for value in period_values if value == 0),
             "negativeGrowthDays": sum(1 for value in period_values if value < 0),
             "recordedDays": len(period_records),
