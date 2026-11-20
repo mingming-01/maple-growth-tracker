@@ -3,6 +3,8 @@ from concurrent.futures import ThreadPoolExecutor
 from threading import Event, Lock
 import time
 import unittest
+
+import requests
 from unittest.mock import Mock, patch
 
 from tracker.integrations import nexon_api
@@ -73,10 +75,10 @@ class NexonRequestCoalescingTests(unittest.TestCase):
             patch.object(
                 nexon_api,
                 "request_with_retries",
-                side_effect=[__import__("requests").Timeout("upstream timeout"), response],
+                side_effect=[requests.Timeout("upstream timeout"), response],
             ) as upstream,
         ):
-            with self.assertRaises(__import__("requests").Timeout):
+            with self.assertRaises(requests.Timeout):
                 nexon_api.request_nexon_api(
                     "character/basic", {"ocid": "retry-ocid"},
                     timeout_override=(1, 1), max_attempts_override=1,
