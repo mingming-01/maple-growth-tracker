@@ -55,10 +55,11 @@ def _are_consecutive_records(previous, current):
 
 
 def calculate_observed_experience_change(previous, current):
-    """동일 레벨의 연속 스냅샷에서만 확인 가능한 EXP 차이를 반환한다.
+    """연속된 동일 레벨 스냅샷의 원본 EXP 차이를 정확히 반환한다.
 
-    레벨업 경계는 서로 다른 레벨의 EXP 기준을 가로지른다. 레벨별 필요 EXP
-    원본이 없으면 경계 전후 획득량을 복원할 수 없으므로 추정하지 않고 None을 반환한다.
+    진행률 초기화는 레벨업 이벤트 감지에 사용하지만, 그것만으로 원본 EXP
+    차이를 폐기하지 않는다. 같은 레벨이고 양쪽 정수 EXP가 확인되며 감소하지
+    않았다면 그 차이는 그대로 관측값이다. 레벨이 실제로 달라진 경계는 제외한다.
     """
     if not isinstance(previous, dict) or not isinstance(current, dict):
         return None
@@ -73,11 +74,8 @@ def calculate_observed_experience_change(previous, current):
     current_level = to_exact_integer(current.get("level"))
     if previous_level is None or current_level is None or previous_level != current_level:
         return None
-    if is_experience_rate_reset(
-        previous.get("experienceRate"), current.get("experienceRate")
-    ):
-        return None
-
+    # 진행률 초기화 여부와 EXP 차이의 유효성은 별개다. 진행률 초기화는
+    # 레벨업 이벤트로 기록하되, 같은 레벨의 원본 EXP 차이는 보존한다.
     previous_experience = to_exact_integer(previous.get("experience"))
     current_experience = to_exact_integer(current.get("experience"))
     if previous_experience is None or current_experience is None:

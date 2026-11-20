@@ -739,7 +739,7 @@ test("React growth chart marks the level-up reset without inventing cross-level 
     { date: "2026-11-15", level: 298, experience: 1103053861914765, experienceRate: 96.177, experienceChange: 8704451426393, levelUp: false, recordStatus: "available" },
     { date: "2026-11-16", level: 298, experience: 1118748264632899, experienceRate: 97.143, experienceChange: 15694402718134, levelUp: false, recordStatus: "available" },
     { date: "2026-11-17", level: 298, experience: 1129263590513928, experienceRate: 99.226, experienceChange: 10515325881029, levelUp: false, recordStatus: "available" },
-    { date: "2026-11-18", level: 298, experience: 1156066685461973, experienceRate: 0.355, experienceChange: null, levelUp: true, levelUpPreviousLevel: 298, levelUpCurrentLevel: 299, recordStatus: "available" },
+    { date: "2026-11-18", level: 298, experience: 1156066685461973, experienceRate: 0.355, experienceChange: 26803094948045, levelUp: true, levelUpPreviousLevel: 298, levelUpCurrentLevel: 299, recordStatus: "available" },
     { date: "2026-11-19", level: 299, experience: 17096549681346, experienceRate: 0.984, experienceChange: null, levelUp: false, levelUpCatchUp: true, recordStatus: "available" }
   ];
 
@@ -754,17 +754,17 @@ test("React growth chart marks the level-up reset without inventing cross-level 
       history,
       historyStatus: "complete",
       metrics: {
-        observedChangeDays: 4,
+        observedChangeDays: 5,
         recordedDays: 7,
         latestDailyGrowth: null,
-        averageDailyGrowth: 13201308690924.5,
-        sevenDayGrowth: 13201308690924.5,
+        averageDailyGrowth: 19836683442148.4,
+        sevenDayGrowth: 99183417210742,
         rankingChange: null,
         levelProgress: { currentRate: 0.984, remainingRate: 99.016 },
         growthComparison: { direction: "increased", earlierAverage: 1000, recentAverage: 2000 },
         levelUps: [{ date: "2026-11-18", previousLevel: 298, currentLevel: 299 }],
         timeline: [
-          { type: "level-up", date: "2026-11-18", title: "Lv. 299 달성", description: "Lv. 298에서 레벨업 · 당일 경험치 증가량 미확인", priority: 0 },
+          { type: "level-up", date: "2026-11-18", title: "Lv. 299 달성", description: "Lv. 298에서 레벨업", priority: 0 },
           { type: "latest", date: "2026-11-19", title: "최근 정상 기록", description: "Lv. 299 · 경험치 17,096,549,681,346", priority: 3 }
         ],
         prediction: null
@@ -775,9 +775,9 @@ test("React growth chart marks the level-up reset without inventing cross-level 
         expectedSnapshots: 7,
         availableDays: 7,
         coveragePercent: 100,
-        confirmedChangeDays: 4,
-        averageGrowth: 13201308690924.5,
-        growth: 52805234763698,
+        confirmedChangeDays: 5,
+        averageGrowth: 19836683442148.4,
+        growth: 99183417210742,
         notReadyDays: 0,
         notCollectedDays: 0,
         unavailableDays: 0,
@@ -797,7 +797,7 @@ test("React growth chart marks the level-up reset without inventing cross-level 
     await route.fulfill({
       status: 200, contentType: "application/json",
       body: JSON.stringify({
-        analysis: "[성장 패턴] 최근 기록에서 경험치 증가가 확인됐어요.\\n[성장 변화] 레벨업 당일의 비교 가능한 증가량은 확인되지 않아요.\\n[레벨업 분석] 11월 18일에 298레벨에서 299레벨로 올라갔어요.\\n[성장 전망] 현재 진행률을 기준으로 확인해 주세요.\\n[AI 코멘트] 다음 기록도 계속 비교해 보세요.",
+        analysis: "[성장 패턴] 최근 기록에서 경험치 증가가 확인됐어요.\\n[성장 변화] 레벨업 기록이 있는 날에도 같은 레벨 기준의 원본 경험치 증가량을 확인했어요.\\n[레벨업 분석] 11월 18일에 298레벨에서 299레벨로 올라갔어요.\\n[성장 전망] 현재 진행률을 기준으로 확인해 주세요.\\n[AI 코멘트] 다음 기록도 계속 비교해 보세요.",
         cacheHit: false,
         growthInsights: {}
       })
@@ -833,9 +833,9 @@ test("React growth chart marks the level-up reset without inventing cross-level 
   await expect(page.locator("#growth-timeline .growth-timeline-item.is-level-up")).toHaveCount(1);
   await expect(page.locator("#growth-timeline")).toContainText("2026.11.18");
   await expect(page.locator("#growth-timeline")).toContainText("Lv. 298에서 레벨업");
-  await expect(page.locator("#growth-timeline")).toContainText("당일 경험치 증가량 미확인");
-  await expect(page.locator("#growth-trend .history-range-notice")).toContainText("레벨업 1일 · 당일 일일 EXP 증가량 미확인");
-  await expect(page.locator("#growth-prediction .prediction-item").nth(3).locator(".prediction-value")).toHaveText("13.2조");
+  await expect(page.locator("#growth-timeline")).not.toContainText("당일 경험치 증가량 미확인");
+  await expect(page.locator("#growth-trend .history-range-notice")).not.toContainText("당일 일일 EXP 증가량 미확인");
+  await expect(page.locator("#growth-prediction .prediction-item").nth(3).locator(".prediction-value")).toHaveText("19.8조");
   await expect(page.locator("#growth-timeline")).not.toContainText("2026.11.19\\n레벨업");
 
   await page.locator('.mgt-nav a[href="#/analytics"]').click();
@@ -843,7 +843,7 @@ test("React growth chart marks the level-up reset without inventing cross-level 
   expect(submittedPayload).not.toBeNull();
   const resetDay = submittedPayload.history.find(item => item.date === "2026-11-18");
   const catchUpDay = submittedPayload.history.find(item => item.date === "2026-11-19");
-  expect(resetDay.experienceChange).toBeNull();
+  expect(resetDay.experienceChange).toBe(26803094948045);
   expect(resetDay.levelUp).toBe(true);
   expect(catchUpDay.experienceChange).toBeNull();
   expect(catchUpDay.levelUpCatchUp).toBe(true);
