@@ -36,6 +36,9 @@ class ServerAIMetricsTests(unittest.TestCase):
         )
         self.assertEqual(result["metrics"]["prediction"]["progressSamples"], 1)
         self.assertEqual(result["metrics"]["prediction"]["averageDailyProgressRate"], 2.0)
+        self.assertEqual(result["metrics"]["prediction"]["averageGrowth"], 200.0)
+        self.assertEqual(result["metrics"]["prediction"]["requiredExp"], 8800)
+        self.assertTrue(result["metrics"]["prediction"]["requiredExpEstimated"])
         self.assertEqual(result["metrics"]["prediction"]["days"], 44.0)
         self.assertEqual(result["metrics"]["prediction"]["date"], "2026-12-28")
 
@@ -59,7 +62,11 @@ class ServerAIMetricsTests(unittest.TestCase):
         self.assertEqual(result["metrics"]["averageDailyGrowth"], 100)
         self.assertEqual(result["metrics"]["levelProgress"]["currentRate"], 42.5)
         self.assertEqual(result["metrics"]["levelProgress"]["remainingRate"], 57.5)
-        self.assertIsNone(result["metrics"]["prediction"])
+        prediction = result["metrics"]["prediction"]
+        self.assertEqual(prediction["requiredExp"], 2165)
+        self.assertEqual(prediction["averageGrowth"], 100.0)
+        self.assertAlmostEqual(prediction["days"], 21.65)
+        self.assertEqual(prediction["date"], "2026-12-08")
         self.assertEqual(len(result["history"]), 7)
 
     def test_unverified_legacy_rank_is_excluded_from_ai_inputs(self):
@@ -198,11 +205,14 @@ class ServerAIMetricsTests(unittest.TestCase):
         self.assertEqual(prediction["nextLevel"], 300)
         self.assertEqual(prediction["remainingRate"], 97.076)
         self.assertEqual(prediction["progressSamples"], 2)
+        self.assertEqual(prediction["experienceSamples"], 2)
+        self.assertEqual(prediction["averageGrowth"], 22315025562674.0)
         self.assertAlmostEqual(prediction["averageDailyProgressRate"], 1.2845)
-        self.assertAlmostEqual(prediction["days"], 75.5749318801, places=8)
+        self.assertEqual(prediction["requiredExp"], 1686733050201784)
+        self.assertTrue(prediction["requiredExpEstimated"])
+        self.assertAlmostEqual(prediction["days"], 75.5873232349, places=8)
         self.assertEqual(prediction["date"], "2027-02-04")
         self.assertEqual(prediction["estimatedDate"], "2027-02-04")
-        self.assertIsNone(prediction["requiredExp"])
 
     def test_missing_dates_and_level_up_transitions_are_not_interpolated(self):
         today = date(2026, 11, 16)
