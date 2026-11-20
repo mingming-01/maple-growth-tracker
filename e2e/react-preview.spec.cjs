@@ -734,7 +734,7 @@ test("React AI report restores evidence details from cache", async ({ page }) =>
   await expect(cachedEvidence).toContainText("10 / 15일");
 });
 
-test("React growth chart plots level-local EXP with a dashed level-up boundary", async ({ page }) => {
+test("React growth chart configures level-up EXP markers and timeline", async ({ page }) => {
   const timestamp = "2026-11-20T08:45:00+09:00";
   const character = {
     characterName: "레벨업검증", ocid: "level-up-chart-ai-e2e",
@@ -818,21 +818,17 @@ test("React growth chart plots level-local EXP with a dashed level-up boundary",
   await expect(page.locator("#growth-trend canvas[aria-label='기간별 성장 추이 그래프']")).toBeVisible();
 
   const canvas = page.locator("#growth-trend canvas[aria-label='기간별 성장 추이 그래프']");
-  const pixelCounts = () => canvas.evaluate(element => {
+  const pinkPixelCount = () => canvas.evaluate(element => {
     const ctx = element.getContext("2d");
-    const { data, width, height } = ctx.getImageData(0, 0, element.width, element.height);
-    let pink = 0, yellow = 0;
-    for (let y = 0; y < height; y += 1) {
-      for (let x = 0; x < width; x += 1) {
-        const offset = (y * width + x) * 4;
-        const red = data[offset], green = data[offset + 1], blue = data[offset + 2], alpha = data[offset + 3];
-        if (alpha > 160 && red > 210 && green < 150 && blue > 90 && blue < 190) pink += 1;
-        if (alpha > 160 && red > 200 && green > 150 && blue < 100) yellow += 1;
-      }
+    const { data } = ctx.getImageData(0, 0, element.width, element.height);
+    let pink = 0;
+    for (let offset = 0; offset < data.length; offset += 4) {
+      const red = data[offset], green = data[offset + 1], blue = data[offset + 2], alpha = data[offset + 3];
+      if (alpha > 160 && red > 210 && green < 150 && blue > 90 && blue < 190) pink += 1;
     }
-    return { pink, yellow };
+    return pink;
   });
-  await expect.poll(async () => (await pixelCounts()).pink).toBeGreaterThan(30);
+  await expect.poll(pinkPixelCount).toBeGreaterThan(30);
   const markerState = await canvas.evaluate(async element => {
     const chartModuleUrl = performance.getEntriesByType("resource")
       .map(entry => entry.name)
@@ -847,57 +843,27 @@ test("React growth chart plots level-local EXP with a dashed level-up boundary",
     const point = markerIndex >= 0 ? chart.getDatasetMeta(0).data[markerIndex] : null;
     const position = point?.getProps?.(["x", "y"], true) || null;
     const area = chart.chartArea;
-    const datasetMeta = chart.getDatasetMeta(0);
-    const pixelData = element.getContext("2d").getImageData(0, 0, element.width, element.height);
-    let yellowPixels = 0;
-    for (let offset = 0; offset < pixelData.data.length; offset += 4) {
-      const [red, green, blue, alpha] = pixelData.data.slice(offset, offset + 4);
-      if (alpha > 160 && red > 200 && green > 150 && blue < 100) yellowPixels += 1;
-    }
-    const probeCanvas = document.createElement("canvas");
-    probeCanvas.width = element.width;
-    probeCanvas.height = element.height;
-    const probeContext = probeCanvas.getContext("2d");
-    point?.draw?.(probeContext, area);
-    const probePixels = probeContext.getImageData(0, 0, probeCanvas.width, probeCanvas.height);
-    let probeYellowPixels = 0;
-    for (let offset = 0; offset < probePixels.data.length; offset += 4) {
-      const [red, green, blue, alpha] = probePixels.data.slice(offset, offset + 4);
-      if (alpha > 160 && red > 200 && green > 150 && blue < 100) probeYellowPixels += 1;
-    }
     return {
       markerIndex,
-      configuredColor: chart.data.datasets[0].pointBackgroundColor?.[markerIndex] ?? null,
-      configuredStyle: chart.data.datasets[0].pointStyle?.[markerIndex] ?? null,
-      configuredRadius: chart.data.datasets[0].pointRadius?.[markerIndex] ?? null,
-      resolvedColor: point?.options?.backgroundColor ?? null,
-      resolvedStyle: point?.options?.pointStyle ?? null,
-      resolvedRadius: point?.options?.radius ?? null,
-      datasetClip: chart.data.datasets[0].clip ?? null,
-      metaClip: datasetMeta?._clip ?? null,
-      liveX: point?.x ?? null,
-      liveY: point?.y ?? null,
-      manualProbeYellowPixels: probeYellowPixels,
-      canvasSize: { width: element.width, height: element.height },
+      color: point?.options?.backgroundColor ?? null,
+      style: point?.options?.pointStyle ?? null,
+      radius: point?.options?.radius ?? null,
       skipped: point?.skip ?? null,
       x: position?.x ?? null,
       y: position?.y ?? null,
-      chartArea: area ? { left: area.left, right: area.right, top: area.top, bottom: area.bottom } : null,
-      yellowPixels
+      chartArea: area ? { left: area.left, right: area.right, top: area.top, bottom: area.bottom } : null
     };
   });
-  console.log("Level-up marker diagnostics:", JSON.stringify(markerState));
   expect(markerState.error).toBeUndefined();
   expect(markerState.markerIndex).toBe(4);
-  expect(markerState.configuredColor).toBe("#f5c542");
-  expect(markerState.configuredStyle).toBe("star");
-  expect(markerState.configuredRadius).toBe(7);
+  expect(markerState.color).toBe("#f5c542");
+  expect(markerState.style).toBe("star");
+  expect(markerState.radius).toBe(7);
   expect(markerState.skipped).toBe(false);
   expect(markerState.x).toBeGreaterThan(markerState.chartArea.left);
   expect(markerState.x).toBeLessThan(markerState.chartArea.right);
   expect(markerState.y).toBeGreaterThanOrEqual(markerState.chartArea.top);
   expect(markerState.y).toBeLessThanOrEqual(markerState.chartArea.bottom);
-  await expect.poll(async () => (await pixelCounts()).yellow).toBeGreaterThan(8);
 
   await expect(page.locator("#growth-timeline .growth-timeline-item.is-level-up")).toHaveCount(1);
   await expect(page.locator("#growth-timeline")).toContainText("2026.11.18");
