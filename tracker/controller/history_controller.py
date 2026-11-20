@@ -41,18 +41,50 @@ from tracker.runtime import (
 history_bp = Blueprint("history", __name__, url_prefix="/api")
 
 
-def _attach_growth_metrics(payload, reference_date, period_days, character=None):
+def _attach_growth_metrics(
+    payload, reference_date, period_days, character=None, calculation_records=None
+):
     """이력 API에 모든 화면이 공유할 서버 계산 지표를 추가한다."""
     records = payload.get("history") if isinstance(payload, dict) else None
     records = records if isinstance(records, list) else []
+    source_records = (
+        calculation_records
+        if isinstance(calculation_records, (list, tuple))
+        else records
+    )
     calculated = build_server_growth_metrics(
         character,
-        records,
+        source_records,
         reference_date=reference_date,
         period_days=period_days,
     )
     payload["metrics"] = calculated["metrics"]
     payload["periodSummary"] = calculated["periodSummary"]
+
+    # 선택 기간 첫날의 일일 변화량을 계산할 수 있도록 직전 스냅샷을
+    # 집계에 포함하되, 화면에 반환하는 날짜 범위는 그대로 유지한다.
+    if source_records is not records:
+        calculated_by_date = {
+            item.get("date"): item
+            for item in calculated.get("history", [])
+            if isinstance(item, dict)
+        }
+        calculated_fields = (
+            "experienceChange",
+            "experienceRateChange",
+            "rankingChange",
+            "levelUp",
+            "levelUpPreviousLevel",
+            "levelUpCurrentLevel",
+            "levelUpCatchUp",
+        )
+        for record in records:
+            computed = calculated_by_date.get(record.get("date"))
+            if computed is None:
+                continue
+            for field in calculated_fields:
+                record[field] = computed.get(field)
+
     return payload
 
 
@@ -397,8 +429,12 @@ def get_history_archive():
             return jsonify({"error": "조회 종료일은 최근 비교 가능한 기간 안에서 선택해주세요."}), 400
 
     start_date = end_date - timedelta(days=days - 1)
+    # 선택 기간 첫날의 변화량도 계산할 수 있도록 전날 스냅샷을 함께 읽는다.
+    calculation_start = start_date - timedelta(days=1)
     try:
-        stored_records = growth_history_service.get_records(ocid, start_date, end_date)
+        stored_records = growth_history_service.get_records(
+            ocid, calculation_start, end_date
+        )
     except Exception:
         print("날짜별 성장 기록을 조회하지 못했습니다.")
         return jsonify({"error": "저장된 성장 기록을 조회할 수 없습니다. 저장소 연결을 확인해주세요."}), 503
@@ -605,5 +641,10 @@ def get_history_archive():
         "storageBackend": growth_history_service.backend,
         "persistentStorage": growth_history_service.uses_postgres
     }
-    response_payload = _attach_growth_metrics(response_payload, end_date, days)
+    response_payload = _attach_growth_metrics(
+        response_payload,
+        end_date,
+        days,
+        calculation_records=stored_records,
+    )
     return jsonify(response_payload)
