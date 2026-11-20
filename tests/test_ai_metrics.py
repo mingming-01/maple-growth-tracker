@@ -313,7 +313,7 @@ class ServerAIMetricsTests(unittest.TestCase):
 
         self.assertEqual([item["ranking"] for item in result["history"]], [None, None])
 
-    def test_level_up_boundary_stays_unknown_and_delayed_level_catch_up_drives_metrics_and_forecast(self):
+    def test_level_up_boundary_gain_is_included_and_delayed_catch_up_drives_forecast(self):
         today = date(2026, 11, 20)
         records = [
             {"date": "2026-11-17", "level": 298, "experience": 1129263590513928, "experienceRate": 99.226, "recordStatus": "available"},
@@ -332,15 +332,20 @@ class ServerAIMetricsTests(unittest.TestCase):
             [{"date": "2026-11-18", "previousLevel": 298, "currentLevel": 299}],
         )
         self.assertTrue(result["history"][1]["levelUp"])
-        self.assertIsNone(result["history"][1]["experienceChange"])
+        self.assertEqual(result["history"][1]["experienceChange"], 14984259283040)
+        self.assertEqual(result["history"][1]["experienceChangeKind"], "level_up_reconstructed")
         self.assertTrue(result["history"][2]["levelUpCatchUp"])
         self.assertEqual(result["history"][2]["experienceChange"], 28044319335425)
         self.assertEqual(result["history"][3]["experienceChange"], 16585731789923)
         self.assertEqual(result["metrics"]["observedChangeDays"], 2)
-        expected_average = (28044319335425 + 16585731789923) / 2
+        self.assertEqual(result["metrics"]["calculatedChangeDays"], 3)
+        expected_average = (14984259283040 + 28044319335425 + 16585731789923) / 3
         self.assertEqual(result["metrics"]["averageDailyGrowth"], expected_average)
-        self.assertEqual(result["periodSummary"]["validGrowthIntervals"], 2)
+        self.assertEqual(result["periodSummary"]["validGrowthIntervals"], 3)
         self.assertEqual(result["periodSummary"]["observedExperienceSum"], 44630051125348)
+        self.assertEqual(result["periodSummary"]["experienceGainSum"], 59614310408388)
+        self.assertEqual(result["periodSummary"]["reconstructedLevelUpExperienceSum"], 14984259283040)
+        self.assertEqual(result["periodSummary"]["reconstructedLevelUpIntervals"], 1)
 
         prediction = result["metrics"]["prediction"]
         self.assertEqual(prediction["currentLevel"], 299)
