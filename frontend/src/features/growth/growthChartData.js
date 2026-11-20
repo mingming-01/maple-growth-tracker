@@ -106,6 +106,22 @@ export function dailyGrowthSegmentDash(context) {
 }
 
 /**
+ * Bridge a confirmed cumulative series across missing days with a dashed line.
+ * The dashed segment communicates an unknown interval; it does not fill the
+ * missing daily EXP value or claim that the gap contained zero growth.
+ */
+export function cumulativeGrowthSegmentDash(context, values) {
+  const start = context?.p0DataIndex;
+  const end = context?.p1DataIndex;
+  if (!Array.isArray(values) || !Number.isInteger(start) || !Number.isInteger(end) || end <= start) {
+    return [];
+  }
+  return values.slice(start + 1, end).some(value => value === null || value === undefined)
+    ? [6, 4]
+    : [];
+}
+
+/**
  * Detect level-up days from explicit flags or an increase in the observed level.
  */
 export function detectLevelUpEvents(records) {

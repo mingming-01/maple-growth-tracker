@@ -172,13 +172,16 @@ def build_server_growth_metrics(character, records, reference_date=None, period_
     timeline = []
     for item in period_records:
         if item["levelUp"]:
+            level_up_description = (
+                f"Lv. {item['levelUpPreviousLevel']}에서 레벨업"
+                if item["levelUpPreviousLevel"] is not None else "레벨업 기록 확인"
+            )
+            if item["experienceChange"] is None:
+                level_up_description += " · 당일 경험치 증가량 미확인"
             timeline.append({
                 "type": "level-up", "date": item["date"],
                 "title": f"Lv. {item['levelUpCurrentLevel'] or item['level']} 달성",
-                "description": (
-                    f"Lv. {item['levelUpPreviousLevel']}에서 레벨업"
-                    if item["levelUpPreviousLevel"] is not None else "레벨업 기록 확인"
-                ),
+                "description": level_up_description,
                 "priority": 0,
             })
     if best_period_growth:

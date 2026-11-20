@@ -764,7 +764,7 @@ test("React growth chart marks the level-up reset without inventing cross-level 
         growthComparison: { direction: "increased", earlierAverage: 1000, recentAverage: 2000 },
         levelUps: [{ date: "2026-11-18", previousLevel: 298, currentLevel: 299 }],
         timeline: [
-          { type: "level-up", date: "2026-11-18", title: "Lv. 299 달성", description: "Lv. 298에서 레벨업", priority: 0 },
+          { type: "level-up", date: "2026-11-18", title: "Lv. 299 달성", description: "Lv. 298에서 레벨업 · 당일 경험치 증가량 미확인", priority: 0 },
           { type: "latest", date: "2026-11-19", title: "최근 정상 기록", description: "Lv. 299 · 경험치 17,096,549,681,346", priority: 3 }
         ],
         prediction: null
@@ -833,6 +833,9 @@ test("React growth chart marks the level-up reset without inventing cross-level 
   await expect(page.locator("#growth-timeline .growth-timeline-item.is-level-up")).toHaveCount(1);
   await expect(page.locator("#growth-timeline")).toContainText("2026.11.18");
   await expect(page.locator("#growth-timeline")).toContainText("Lv. 298에서 레벨업");
+  await expect(page.locator("#growth-timeline")).toContainText("당일 경험치 증가량 미확인");
+  await expect(page.locator("#growth-trend .history-range-notice")).toContainText("레벨업 1일 · 당일 일일 EXP 증가량 미확인");
+  await expect(page.locator("#growth-prediction .prediction-item").nth(3).locator(".prediction-value")).toHaveText("13.2조");
   await expect(page.locator("#growth-timeline")).not.toContainText("2026.11.19\\n레벨업");
 
   await page.locator('.mgt-nav a[href="#/analytics"]').click();

@@ -5,8 +5,22 @@ import {
   detectLevelUpEvents,
   buildLevelUpMarkers,
   buildExperienceChartSeries,
-  dailyGrowthSegmentDash
+  dailyGrowthSegmentDash,
+  cumulativeGrowthSegmentDash
 } from "../frontend/src/features/growth/growthChartData.js";
+
+test("dashes cumulative line segments that bridge an unknown level-up day", () => {
+  const values = [1100, null, 1128.044319335425, 1144.630051125348];
+
+  assert.deepEqual(
+    cumulativeGrowthSegmentDash({ p0DataIndex: 0, p1DataIndex: 2 }, values),
+    [6, 4]
+  );
+  assert.deepEqual(
+    cumulativeGrowthSegmentDash({ p0DataIndex: 2, p1DataIndex: 3 }, values),
+    []
+  );
+});
 
 test("places level-up marker on the last known cumulative value when event EXP is missing", () => {
   const records = [
