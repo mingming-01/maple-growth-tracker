@@ -1,8 +1,12 @@
 """AI 성장 분석과 캐릭터 비교의 프롬프트·모델 호출을 담당한다."""
+import hashlib
 import json
 import logging
 import re
 import time
+from concurrent.futures import Future
+from threading import Lock
+
 import requests
 from decimal import Decimal, InvalidOperation, ROUND_HALF_UP
 
@@ -24,6 +28,7 @@ from tracker.services.ai_text_service import (
     sanitize_ai_text,
     validate_growth_report,
 )
+from tracker.services.performance_metrics import increment_metric
 from tracker.runtime import (
     get_ai_response_cache,
     get_gemini_client,
@@ -676,7 +681,7 @@ def _filter_growth_history_to_selected_period(history, analysis_context):
     return filtered
 
 
-def generate_ai_analysis(character, history, computed_metrics=None, growth_insights=None, analysis_context=None, force_refresh=False):
+def _generate_ai_analysis_impl(character, history, computed_metrics=None, growth_insights=None, analysis_context=None, force_refresh=False):
     runtime_state = get_runtime_state()
     gemini_api_key = getattr(runtime_state, "gemini_api_key", "")
     openrouter_api_key = getattr(runtime_state, "openrouter_api_key", "")
@@ -888,7 +893,7 @@ def generate_ai_analysis(character, history, computed_metrics=None, growth_insig
     return {"error": "AI 분석을 사용할 수 없습니다.", "statusCode": 503, "errorType": "provider_unavailable"}
 
 
-def generate_ai_comparison(primary, comparison):
+def _generate_ai_comparison_impl(primary, comparison):
     runtime_state = get_runtime_state()
     gemini_api_key = getattr(runtime_state, "gemini_api_key", "")
     openrouter_api_key = getattr(runtime_state, "openrouter_api_key", "")
@@ -979,3 +984,109 @@ def generate_ai_comparison(primary, comparison):
     if gemini_error:
         return _fallback_failure_result(gemini_error)
     return {"error": "AI 성장 분석을 사용할 수 없습니다.", "statusCode": 503, "errorType": "provider_unavailable"}
+
+
+# Same-process single-flight for identical AI requests. Completed results continue to
+# use the validated response cache above; this registry only shares work while a
+# provider request is still in progress.
+_AI_INFLIGHT_REQUESTS = {}
+_AI_INFLIGHT_LOCK = Lock()
+
+
+def _ai_singleflight_key(kind, payload):
+    runtime_state = get_runtime_state()
+    provider_identity = {
+        "gemini_key": hashlib.sha256(
+            str(getattr(runtime_state, "gemini_api_key", "")).encode("utf-8")
+        ).hexdigest(),
+        "openrouter_key": hashlib.sha256(
+            str(getattr(runtime_state, "openrouter_api_key", "")).encode("utf-8")
+        ).hexdigest(),
+        "openrouter_model": getattr(runtime_state, "openrouter_model", "openrouter/free"),
+    }
+    serialized = json.dumps(
+        {"kind": kind, "payload": payload, "providers": provider_identity},
+        ensure_ascii=False,
+        sort_keys=True,
+        default=str,
+    )
+    return hashlib.sha256(serialized.encode("utf-8")).hexdigest()
+
+
+def _coalesce_ai_operation(kind, payload, operation):
+    """동일한 AI 작업의 동시 cache miss를 하나의 공급자 호출로 합친다."""
+    request_key = _ai_singleflight_key(kind, payload)
+    increment_metric("ai.logical_requests", kind=kind)
+    with _AI_INFLIGHT_LOCK:
+        future = _AI_INFLIGHT_REQUESTS.get(request_key)
+        is_leader = future is None
+        if is_leader:
+            future = Future()
+            _AI_INFLIGHT_REQUESTS[request_key] = future
+
+    if not is_leader:
+        increment_metric("ai.coalesced_requests", kind=kind)
+        result = future.result()
+        if not isinstance(result, dict):
+            return result
+        shared_result = dict(result)
+        if shared_result.get("analysis") is not None:
+            shared_result["cacheHit"] = True
+            provider_metadata = shared_result.get("providerMetadata")
+            if isinstance(provider_metadata, dict):
+                provider_metadata = dict(provider_metadata)
+                provider_metadata["cache_hit"] = True
+                provider_metadata["coalesced"] = True
+                shared_result["providerMetadata"] = provider_metadata
+        return shared_result
+
+    try:
+        result = operation()
+    except BaseException as error:
+        future.set_exception(error)
+        raise
+    else:
+        future.set_result(result)
+        return result
+    finally:
+        with _AI_INFLIGHT_LOCK:
+            if _AI_INFLIGHT_REQUESTS.get(request_key) is future:
+                _AI_INFLIGHT_REQUESTS.pop(request_key, None)
+
+
+def generate_ai_analysis(
+    character,
+    history,
+    computed_metrics=None,
+    growth_insights=None,
+    analysis_context=None,
+    force_refresh=False,
+):
+    payload = {
+        "character": character,
+        "history": history,
+        "computed_metrics": computed_metrics,
+        "growth_insights": growth_insights,
+        "analysis_context": analysis_context,
+        "force_refresh": force_refresh,
+    }
+    return _coalesce_ai_operation(
+        "growth_report",
+        payload,
+        lambda: _generate_ai_analysis_impl(
+            character,
+            history,
+            computed_metrics,
+            growth_insights,
+            analysis_context,
+            force_refresh,
+        ),
+    )
+
+
+def generate_ai_comparison(primary, comparison):
+    return _coalesce_ai_operation(
+        "comparison",
+        {"primary": primary, "comparison": comparison},
+        lambda: _generate_ai_comparison_impl(primary, comparison),
+    )
