@@ -217,7 +217,9 @@ def ai_analysis():
             return _service_error_response(result)
 
         current_app.logger.info(
-            "AI 리포트 생성 완료: cache_hit=%s timings=%s total_ms=%s",
+            "AI 리포트 응답 완료: ai_generated=%s ai_status=%s cache_hit=%s timings=%s total_ms=%s",
+            result.get("aiGenerated", True),
+            result.get("aiStatus", "generated"),
             bool(result.get("cacheHit")),
             timings,
             total_ms,
