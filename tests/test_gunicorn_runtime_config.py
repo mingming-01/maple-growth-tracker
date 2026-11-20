@@ -36,8 +36,8 @@ class GunicornRuntimeConfigTests(unittest.TestCase):
             timeout=15,
         )
 
-        timeout_match = re.search(r"(?m)^timeout\\s*=\\s*(\\d+)\\s*$", result.stdout)
-        config_match = re.search(r"(?m)^config\\s*=\\s*(.+?)\\s*$", result.stdout)
+        timeout_match = re.search(r"(?m)^timeout\s*=\s*(\d+)\s*$", result.stdout)
+        config_match = re.search(r"(?m)^config\s*=\s*(.+?)\s*$", result.stdout)
         self.assertIsNotNone(timeout_match, msg=result.stdout[-4000:])
         self.assertIsNotNone(config_match, msg=result.stdout[-4000:])
         self.assertEqual(timeout_match.group(1), "120")
