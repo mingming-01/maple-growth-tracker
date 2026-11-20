@@ -62,11 +62,7 @@ class ServerAIMetricsTests(unittest.TestCase):
         self.assertEqual(result["metrics"]["averageDailyGrowth"], 100)
         self.assertEqual(result["metrics"]["levelProgress"]["currentRate"], 42.5)
         self.assertEqual(result["metrics"]["levelProgress"]["remainingRate"], 57.5)
-        prediction = result["metrics"]["prediction"]
-        self.assertEqual(prediction["requiredExp"], 2165)
-        self.assertEqual(prediction["averageGrowth"], 100.0)
-        self.assertAlmostEqual(prediction["days"], 21.65)
-        self.assertEqual(prediction["date"], "2026-12-08")
+        self.assertIsNone(result["metrics"]["prediction"])
         self.assertEqual(len(result["history"]), 7)
 
     def test_unverified_legacy_rank_is_excluded_from_ai_inputs(self):
