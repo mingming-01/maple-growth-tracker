@@ -47,14 +47,15 @@ class AIAnalysisQualityTests(unittest.TestCase):
             "history": [],
         }
 
-    def test_long_period_prompt_separates_period_metrics_from_seven_day_metrics(self):
+    def test_long_period_prompt_uses_only_long_period_qualitative_context(self):
         prompt = _build_growth_report_prompt(self.make_source_data(30))
 
-        self.assertIn('"averageGrowth": 12000000000000', prompt)
-        self.assertIn('"recentSevenDayPrediction"', prompt)
-        self.assertNotIn('"averageDailyGrowth"', prompt)
-        self.assertNotIn('"weekOverWeek"', prompt)
-        self.assertIn('"remainingRate": 14.65', prompt)
+        self.assertIn("장기 성장 기록의 흐름", prompt)
+        self.assertIn("선택한 장기 구간의 전체 성장 기록을 중심으로 해석", prompt)
+        self.assertNotIn("12000000000000", prompt)
+        self.assertNotIn("averageDailyGrowth", prompt)
+        self.assertNotIn("weekOverWeek", prompt)
+        self.assertNotIn("remainingRate", prompt)
 
     def test_growth_report_prompt_prefers_everyday_maple_language(self):
         prompt = _build_growth_report_prompt(self.make_source_data(30))
@@ -62,20 +63,31 @@ class AIAnalysisQualityTests(unittest.TestCase):
         self.assertIn("친근하고 자연스러운 해요체", prompt)
         self.assertIn("메이플스토리에서 익숙한", prompt)
         self.assertIn("AI 코멘트 본문만 작성해", prompt)
-        self.assertIn("2~4문장", prompt)
+        self.assertIn("두세 문장", prompt)
         self.assertNotIn("관측 구간", prompt)
 
-    def test_ninety_day_prompt_also_omits_seven_day_comparison(self):
+    def test_ninety_day_prompt_uses_long_period_signal_without_numeric_payload(self):
         prompt = _build_growth_report_prompt(self.make_source_data(90))
 
-        self.assertIn('"periodDays": 90', prompt)
-        self.assertNotIn('"weekOverWeek"', prompt)
+        self.assertIn("장기 성장 기록의 흐름", prompt)
+        self.assertNotIn("periodDays", prompt)
+        self.assertNotIn("weekOverWeek", prompt)
+        self.assertNotIn("averageGrowth", prompt)
 
-    def test_seven_day_prompt_keeps_seven_day_metrics_and_insights(self):
-        prompt = _build_growth_report_prompt(self.make_source_data(7))
+    def test_seven_day_prompt_uses_weekly_qualitative_growth_signal(self):
+        source = self.make_source_data(7)
+        source["growthInsights"]["weekOverWeek"].update({
+            "status": "available",
+            "direction": "increase",
+            "averageDailyGrowthChangePercent": 12.4,
+        })
+        prompt = _build_growth_report_prompt(source)
 
-        self.assertIn('"averageDailyGrowth"', prompt)
-        self.assertIn('"weekOverWeek"', prompt)
+        self.assertIn("최근 성장 기록의 흐름", prompt)
+        self.assertIn("이전보다 성장 속도가 완만하게 높아짐", prompt)
+        self.assertNotIn("averageDailyGrowth", prompt)
+        self.assertNotIn("weekOverWeek", prompt)
+        self.assertNotIn("12.4", prompt)
 
     def test_gemini_quota_error_preserves_http_status_and_retry_delay(self):
         error = RuntimeError(
