@@ -5,6 +5,12 @@ function formatTrillion(value) {
   return trillion.toFixed(digits) + "조";
 }
 
+function formatDate(value) {
+  if (!value) return "자료 부족";
+  const parts = String(value).split("-");
+  return parts.length === 3 ? parts.join(".") : String(value);
+}
+
 function buildInsight(metrics) {
   const comparison = metrics.growthComparison;
   if (metrics.observedChangeDays < 2 || comparison.direction === "insufficient_data") {
@@ -41,6 +47,11 @@ export default function GrowthInsight({ character, metrics }) {
   };
   const insight = buildInsight(authoritativeMetrics);
   const rankingChange = authoritativeMetrics.rankingChange;
+  const prediction = authoritativeMetrics.prediction || null;
+  const predictionDate = prediction?.estimatedDate || prediction?.date || null;
+  const predictionDetail = prediction?.requiredExpEstimated && prediction?.requiredExp != null
+    ? `남은 EXP 약 ${formatTrillion(prediction.requiredExp)} (역산 추정)`
+    : "현재 EXP와 진행률을 확인하면 다음 레벨까지 남은 EXP를 역산할 수 있어요.";
 
   return (
     <aside className="mgt-growth-insight" aria-labelledby="mgt-growth-insight-title" data-testid="growth-insight">
@@ -57,8 +68,8 @@ export default function GrowthInsight({ character, metrics }) {
       <div className="mgt-growth-insight-facts">
         <div>
           <span>다음 레벨 예상</span>
-          <strong>자료 부족</strong>
-          <small>레벨별 필요 EXP 기준이 확인되기 전까지 날짜를 추정하지 않아요.</small>
+          <strong>{predictionDate ? formatDate(predictionDate) : "자료 부족"}</strong>
+          <small>{predictionDate ? predictionDetail : "동일 레벨의 일일 EXP 관측값이 쌓이면 예상 날짜를 계산해요."}</small>
         </div>
         <div>
           <span>종합 랭킹 변화</span>
