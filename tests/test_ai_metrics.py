@@ -191,19 +191,21 @@ class ServerAIMetricsTests(unittest.TestCase):
             [{"date": "2026-11-18", "previousLevel": 298, "currentLevel": 299}],
         )
         self.assertTrue(result["history"][1]["levelUp"])
-        self.assertIn(
-            "당일 경험치 증가량 미확인",
-            next(event["description"] for event in result["metrics"]["timeline"] if event["type"] == "level-up"),
+        level_up_event = next(
+            event for event in result["metrics"]["timeline"]
+            if event["type"] == "level-up"
         )
+        self.assertEqual(level_up_event["date"], "2026-11-18")
+        self.assertNotIn("당일 경험치 증가량 미확인", level_up_event["description"])
         self.assertFalse(result["history"][2]["levelUp"])
         self.assertTrue(result["history"][2]["levelUpCatchUp"])
-        self.assertIsNone(result["history"][1]["experienceChange"])
+        self.assertEqual(result["history"][1]["experienceChange"], 26803094948045)
         self.assertIsNone(result["history"][2]["experienceChange"])
         self.assertEqual(result["periodSummary"]["levelUpIntervals"], 1)
-        self.assertEqual(result["metrics"]["observedChangeDays"], 0)
-        self.assertIsNone(result["metrics"]["averageDailyGrowth"])
-        self.assertEqual(result["periodSummary"]["validGrowthIntervals"], 0)
-        self.assertIsNone(result["periodSummary"]["observedExperienceSum"])
+        self.assertEqual(result["metrics"]["observedChangeDays"], 1)
+        self.assertEqual(result["metrics"]["averageDailyGrowth"], 26803094948045)
+        self.assertEqual(result["periodSummary"]["validGrowthIntervals"], 1)
+        self.assertEqual(result["periodSummary"]["observedExperienceSum"], 26803094948045)
 
     def test_missing_dates_and_level_up_transitions_are_not_interpolated(self):
         today = date(2026, 11, 16)
