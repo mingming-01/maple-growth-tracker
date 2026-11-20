@@ -280,6 +280,11 @@ class AIResponseCacheTests(unittest.TestCase):
             release.wait(timeout=3)
             return generated_text
 
+        with self.app.app_context():
+            self.state.gemini_api_key = "test-key"
+            self.state.openrouter_api_key = ""
+            self.state.ai_response_cache.clear()
+
         def generate():
             with self.app.app_context():
                 return tracker.generate_ai_analysis(character, history, metrics)
