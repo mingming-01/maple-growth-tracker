@@ -253,7 +253,7 @@ class AIServerInputTests(unittest.TestCase):
             f"{event_date.month}월 {event_date.day}일에 298레벨에서 299레벨로 올라갔어요.",
             payload["analysis"],
         )
-        self.assertIn("레벨업 날짜를 확정하기 어려워요.", payload["analysis"])
+        self.assertIn("다음 레벨업 날짜를 예상하기 어려워요.", payload["analysis"])
 
         gemini_request.assert_called_once()
         openrouter_request.assert_called_once()
