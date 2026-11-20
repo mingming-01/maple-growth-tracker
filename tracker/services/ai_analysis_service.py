@@ -530,7 +530,7 @@ def _extract_ai_comment(value):
     """Extract only the AI commentary; factual report sections are always server-owned."""
     text = str(value or "")
     # Some providers/test doubles emit escaped line breaks as literal \n sequences.
-    text = text.replace("\\r\n", "\n").replace("\n", "\n").replace("\\r", "\n").strip()
+    text = text.replace("\\r\\n", "\n").replace("\\n", "\n").replace("\\r", "\n").strip()
     if not text:
         return ""
 
