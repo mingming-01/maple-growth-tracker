@@ -12,6 +12,7 @@ from tracker.services.ai_analysis_service import (
     _growth_report_fact_error,
     _format_experience_korean,
     _build_growth_report_cache_key,
+    _prepare_ai_comment,
 )
 from tracker.services.ai_text_service import sanitize_ai_text, validate_growth_report
 
@@ -216,16 +217,34 @@ class AIAnalysisQualityTests(unittest.TestCase):
 
         self.assertEqual([item["date"] for item in filtered], ["2026-11-13", "2026-11-19"])
 
-    def test_growth_report_prompt_sends_server_facts_but_requests_only_ai_commentary(self):
+    def test_growth_report_prompt_sends_qualitative_signals_without_raw_facts(self):
         source = self.make_source_data(7)
         source["history"] = [{"date": "2026-11-18", "level": 299, "experienceChange": 16530569535123}]
+        source["growthInsights"]["weekOverWeek"].update({
+            "direction": "increase",
+            "averageDailyGrowthChangePercent": 35.9,
+        })
         prompt = _build_growth_report_prompt(source)
 
-        self.assertIn("16530569535123", prompt)
+        self.assertNotIn("16530569535123", prompt)
+        self.assertNotIn("2026-11-18", prompt)
+        self.assertIn("이전보다 성장 속도가 완만하게 높아짐", prompt)
         self.assertIn("AI 코멘트 본문만 작성해", prompt)
         self.assertIn("수치·날짜·평균·비율·원인·행동을 새로 계산하거나 추측하지 마", prompt)
         for section in ("[성장 패턴]", "[성장 변화]", "[레벨업 분석]", "[성장 전망]"):
             self.assertNotIn(section, prompt)
+
+    def test_numeric_ai_sentence_is_removed_without_rejecting_qualitative_comment(self):
+        source = self.make_source_data(7)
+        response = (
+            "[AI 코멘트] 최근 하루 평균은 16.5조예요. "
+            "전반적인 성장 흐름은 안정적으로 이어지고 있어요."
+        )
+
+        comment, error = _prepare_ai_comment(response, None, source)
+
+        self.assertIsNone(error)
+        self.assertEqual(comment, "전반적인 성장 흐름은 안정적으로 이어지고 있어요.")
 
     def test_ai_comment_extraction_discards_model_written_factual_sections(self):
         response = (
