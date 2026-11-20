@@ -148,12 +148,17 @@ class AIServerInputTests(unittest.TestCase):
         reset_day = captured["history"][-2]
         catch_up_day = captured["history"][-1]
         self.assertTrue(reset_day["levelUp"])
-        self.assertIsNone(reset_day["experienceChange"])
+        self.assertEqual(reset_day["experienceChange"], 14984259283040)
+        self.assertEqual(reset_day["experienceChangeKind"], "level_up_reconstructed")
         self.assertTrue(catch_up_day["levelUpCatchUp"])
         self.assertFalse(catch_up_day["levelUp"])
         self.assertEqual(catch_up_day["experienceChange"], 28044319335425)
         self.assertEqual(captured["metrics"]["observedChangeDays"], 1)
-        self.assertEqual(captured["metrics"]["averageDailyGrowth"], 28044319335425)
+        self.assertEqual(captured["metrics"]["calculatedChangeDays"], 2)
+        self.assertEqual(
+            captured["metrics"]["averageDailyGrowth"],
+            (14984259283040 + 28044319335425) / 2,
+        )
         self.assertEqual(
             captured["metrics"]["levelUps"],
             [{
@@ -162,13 +167,19 @@ class AIServerInputTests(unittest.TestCase):
                 "currentLevel": 299,
             }],
         )
-        self.assertEqual(captured["insights"]["recentPeriod"]["validGrowthIntervals"], 1)
+        self.assertEqual(captured["insights"]["recentPeriod"]["validGrowthIntervals"], 2)
         self.assertEqual(
             captured["insights"]["recentPeriod"]["observedExperienceSum"],
             28044319335425,
         )
+        self.assertEqual(
+            captured["insights"]["recentPeriod"]["experienceGainSum"],
+            43028578618465,
+        )
+        self.assertEqual(captured["insights"]["recentPeriod"]["reconstructedLevelUpIntervals"], 1)
         self.assertEqual(captured["insights"]["recentPeriod"]["levelUpIntervals"], 1)
-        self.assertEqual(captured["context"]["periodSummary"]["validGrowthIntervals"], 1)
+        self.assertEqual(captured["context"]["periodSummary"]["validGrowthIntervals"], 2)
+        self.assertEqual(captured["context"]["periodSummary"]["experienceGainSum"], 43028578618465)
 
     def test_api_route_runs_real_ai_report_pipeline_with_saved_level_up_growth(self):
         event_date = self.today - timedelta(days=1)
