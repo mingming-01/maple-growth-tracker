@@ -809,8 +809,94 @@ def _build_deterministic_growth_report(character, metrics, growth_insights, anal
             f"{previous_label}의 하루 평균은 {previous_average}, "
             f"{recent_label}은 {recent_average}로, 직전 기간보다 {change_text}"
         )
+    elif period_days in (30, 90):
+        previous_summary = (analysis_context or {}).get("previousPeriodSummary") or {}
+        current_count = summary.get("validGrowthIntervals")
+        previous_count = previous_summary.get("validGrowthIntervals")
+        current_sum = summary.get("observedExperienceSum")
+        previous_sum = previous_summary.get("observedExperienceSum")
+        minimum_intervals = max(4, (period_days * 2 + 4) // 5)
+
+        enough_period_comparison = (
+            isinstance(current_count, int)
+            and isinstance(previous_count, int)
+            and current_count >= minimum_intervals
+            and previous_count >= minimum_intervals
+            and current_sum is not None
+            and previous_sum is not None
+        )
+        if enough_period_comparison:
+            current_total = Decimal(str(current_sum))
+            previous_total = Decimal(str(previous_sum))
+            current_average = current_total / Decimal(current_count)
+            previous_average = previous_total / Decimal(previous_count)
+            current_average_text = _format_experience_korean(current_average)
+            previous_average_text = _format_experience_korean(previous_average)
+
+            if previous_total > 0:
+                change_percent = (
+                    (current_total * previous_count - previous_total * current_count)
+                    * Decimal("100")
+                    / (previous_total * current_count)
+                )
+                if change_percent > Decimal("0.5"):
+                    change_text = f"이전 기간보다 {change_percent:.1f}% 늘었어요."
+                elif change_percent < Decimal("-0.5"):
+                    change_text = f"이전 기간보다 {abs(change_percent):.1f}% 줄었어요."
+                else:
+                    change_text = "이전 기간과 큰 차이가 없어요."
+                growth_change = (
+                    f"직전 {period_days}일의 하루 평균은 {previous_average_text}, "
+                    f"선택한 {period_days}일은 {current_average_text}로, {change_text}"
+                )
+            elif current_total > 0:
+                growth_change = (
+                    f"직전 {period_days}일에는 확인된 경험치 증가가 없었고, "
+                    f"선택한 {period_days}일에는 하루 평균 {current_average_text}의 "
+                    "경험치 증가가 확인됐어요."
+                )
+            else:
+                growth_change = (
+                    f"직전 {period_days}일과 선택한 {period_days}일 모두 "
+                    "확인된 경험치 증가가 거의 없어요."
+                )
+        else:
+            period_trend = metrics.get("periodTrend") or {}
+            trend_status = period_trend.get("status")
+            trend_direction = period_trend.get("direction")
+            trend_percent = period_trend.get("changePercent")
+            if trend_status == "available" and trend_direction == "increase":
+                detail = (
+                    f"후반부의 하루 평균 경험치 증가량이 초반부보다 "
+                    f"{abs(float(trend_percent)):.1f}% 높았어요."
+                    if isinstance(trend_percent, (int, float))
+                    else "후반부의 하루 평균 경험치 증가량이 초반부보다 높았어요."
+                )
+                growth_change = f"직전 기간과 비교할 기록은 충분하지 않지만, 선택한 {period_days}일 안에서는 {detail}"
+            elif trend_status == "available" and trend_direction == "decrease":
+                detail = (
+                    f"후반부의 하루 평균 경험치 증가량이 초반부보다 "
+                    f"{abs(float(trend_percent)):.1f}% 낮았어요."
+                    if isinstance(trend_percent, (int, float))
+                    else "후반부의 하루 평균 경험치 증가량이 초반부보다 낮았어요."
+                )
+                growth_change = f"직전 기간과 비교할 기록은 충분하지 않지만, 선택한 {period_days}일 안에서는 {detail}"
+            elif trend_status == "available":
+                growth_change = (
+                    f"직전 기간과 비교할 기록은 충분하지 않지만, "
+                    f"선택한 {period_days}일의 초반과 후반은 비슷한 성장 흐름을 보였어요."
+                )
+            elif average_text:
+                growth_change = (
+                    f"선택한 {period_days}일의 하루 평균은 {average_text}예요. "
+                    "직전 기간과 기간 내 흐름을 비교할 만큼 기록이 충분하지 않아요."
+                )
+            else:
+                growth_change = (
+                    f"선택한 {period_days}일은 비교할 만큼 경험치 변화 기록이 충분하지 않아요."
+                )
     elif average_text:
-        growth_change = f"{period_name}의 하루 평균은 {average_text}로 확인됐어요. 비교할 이전 기간의 기록은 충분하지 않아요."
+        growth_change = f"{period_name}의 하루 평균 경험치는 {average_text}로 확인됐어요. 비교할 이전 기간의 기록은 충분하지 않아요."
     else:
         growth_change = "이전 기간과 비교할 만큼 충분한 성장 기록이 아직 없어요."
 
