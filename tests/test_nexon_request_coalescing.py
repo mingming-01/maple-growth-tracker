@@ -66,5 +66,29 @@ class NexonRequestCoalescingTests(unittest.TestCase):
         self.assertIs(second_result, response)
 
 
+    def test_failed_request_is_removed_so_a_later_call_can_retry(self):
+        response = Mock(status_code=200)
+        with (
+            patch.object(nexon_api, "_throttle_nexon_request"),
+            patch.object(
+                nexon_api,
+                "request_with_retries",
+                side_effect=[__import__("requests").Timeout("upstream timeout"), response],
+            ) as upstream,
+        ):
+            with self.assertRaises(__import__("requests").Timeout):
+                nexon_api.request_nexon_api(
+                    "character/basic", {"ocid": "retry-ocid"},
+                    timeout_override=(1, 1), max_attempts_override=1,
+                )
+            result = nexon_api.request_nexon_api(
+                "character/basic", {"ocid": "retry-ocid"},
+                timeout_override=(1, 1), max_attempts_override=1,
+            )
+
+        self.assertIs(result, response)
+        self.assertEqual(upstream.call_count, 2)
+
+
 if __name__ == "__main__":
     unittest.main()
