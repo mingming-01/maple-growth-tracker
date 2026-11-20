@@ -43,7 +43,10 @@ def _build_long_period_growth_trend(period_records, period_start, period_end):
                 continue
             change = to_exact_integer(record.get("experienceChange"))
             if change is not None and change >= 0:
-                changes.append(change)
+                changes.append({
+                    "value": change,
+                    "kind": record.get("experienceChangeKind"),
+                })
 
         expected_intervals = (end_date - start_date).days + 1
         # 각 구간의 달력 일수 중 40% 이상, 최소 4개의 실제 변화가 있어야
@@ -55,15 +58,22 @@ def _build_long_period_growth_trend(period_records, period_start, period_end):
             "expectedIntervals": expected_intervals,
             "minimumRequiredIntervals": minimum_samples,
             "validGrowthIntervals": len(changes),
-            "observedExperienceSum": sum(changes) if changes else None,
+            "experienceGainSum": sum(item["value"] for item in changes) if changes else None,
+            "observedExperienceSum": (
+                sum(item["value"] for item in changes if item["kind"] != "level_up_reconstructed")
+                if any(item["kind"] != "level_up_reconstructed" for item in changes) else None
+            ),
+            "reconstructedLevelUpIntervals": sum(
+                item["kind"] == "level_up_reconstructed" for item in changes
+            ),
         }
 
     first_half = summarize(first_start, first_end)
     second_half = summarize(second_start, second_end)
     first_count = first_half["validGrowthIntervals"]
     second_count = second_half["validGrowthIntervals"]
-    first_sum = first_half["observedExperienceSum"] or 0
-    second_sum = second_half["observedExperienceSum"] or 0
+    first_sum = first_half["experienceGainSum"] or 0
+    second_sum = second_half["experienceGainSum"] or 0
 
     result = {
         "status": "insufficient_data",
