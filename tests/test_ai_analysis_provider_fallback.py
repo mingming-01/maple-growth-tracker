@@ -230,12 +230,12 @@ class AIAnalysisFallbackTests(unittest.TestCase):
             },
             {
                 "date": "2026-11-18", "level": 298,
-                "experience": 1156066685461973, "experienceRate": 0.355,
+                "experience": 6175579914147, "experienceRate": 0.355,
                 "recordStatus": "available",
             },
             {
                 "date": "2026-11-19", "level": 299,
-                "experience": 17096549681346, "experienceRate": 0.984,
+                "experience": 34219899249572, "experienceRate": 1.969,
                 "recordStatus": "available",
             },
         ]
@@ -247,11 +247,12 @@ class AIAnalysisFallbackTests(unittest.TestCase):
             period_days=7,
         )
         self.assertEqual(calculated["metrics"]["observedChangeDays"], 1)
-        self.assertEqual(calculated["metrics"]["averageDailyGrowth"], 26803094948045)
-        self.assertEqual(calculated["history"][1]["experienceChange"], 26803094948045)
+        self.assertEqual(calculated["metrics"]["averageDailyGrowth"], 28044319335425)
+        self.assertIsNone(calculated["history"][1]["experienceChange"])
+        self.assertEqual(calculated["history"][2]["experienceChange"], 28044319335425)
         self.assertTrue(calculated["history"][1]["levelUp"])
         self.assertTrue(calculated["history"][2]["levelUpCatchUp"])
-        self.assertIsNone(calculated["history"][2]["experienceChange"])
+        self.assertEqual(calculated["history"][2]["experienceChange"], 28044319335425)
 
         result = service.generate_ai_analysis(
             {
@@ -271,13 +272,13 @@ class AIAnalysisFallbackTests(unittest.TestCase):
         self.assertIn("analysis", result)
         self.assertTrue(result["analysis"].startswith("[성장 패턴]"))
         self.assertIn("[AI 코멘트]", result["analysis"])
-        self.assertIn("현재 기록만으로는 다음 레벨업 날짜를 예상하기 어려워요.", result["analysis"])
+        self.assertIn("최근처럼 경험치를 얻는다면 1월 19일쯤 300레벨에 도달할 것으로 예상돼요.", result["analysis"])
         prompt = openrouter.call_args.args[0]
         self.assertIn("레벨업 전환이 확인됨", prompt)
         self.assertNotIn('"experienceChange"', prompt)
         self.assertNotIn('"date":', prompt)
-        self.assertNotIn("1156066685461973", prompt)
-        self.assertNotIn("17096549681346", prompt)
+        self.assertNotIn("6175579914147", prompt)
+        self.assertNotIn("34219899249572", prompt)
 
     @patch("tracker.services.ai_analysis_service._request_deadline", return_value=12345.0)
     @patch("tracker.services.ai_analysis_service.get_runtime_state")
