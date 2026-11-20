@@ -74,6 +74,8 @@ class HistoryControllerPartialResponseTests(unittest.TestCase):
         boundary_date = period_start - timedelta(days=1)
         records = []
         for offset in range(31):
+            if offset == 5:
+                continue
             record_date = boundary_date + timedelta(days=offset)
             records.append({
                 "date": record_date.isoformat(),
@@ -101,9 +103,12 @@ class HistoryControllerPartialResponseTests(unittest.TestCase):
         self.assertEqual(len(payload["history"]), 30)
         self.assertEqual(payload["history"][0]["date"], period_start.isoformat())
         self.assertEqual(payload["history"][0]["experienceChange"], 100)
-        self.assertEqual(payload["periodSummary"]["validGrowthIntervals"], 30)
-        self.assertEqual(payload["periodSummary"]["growthDays"], 30)
-        self.assertEqual(payload["periodSummary"]["observedExperienceSum"], 3000)
+        self.assertEqual(payload["history"][5]["recordStatus"], "not_collected")
+        self.assertEqual(payload["periodSummary"]["availableSnapshots"], 29)
+        self.assertEqual(payload["periodSummary"]["validGrowthIntervals"], 28)
+        self.assertEqual(payload["periodSummary"]["growthDays"], 28)
+        self.assertEqual(payload["periodSummary"]["notCollectedDays"], 1)
+        self.assertEqual(payload["periodSummary"]["observedExperienceSum"], 2800)
         self.assertEqual(payload["periodSummary"]["averageGrowth"], 100)
 
     def test_keeps_available_days_when_another_day_is_unavailable(self):
