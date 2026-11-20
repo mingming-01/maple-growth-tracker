@@ -124,6 +124,96 @@ class AIAnalysisFallbackTests(unittest.TestCase):
     @patch("tracker.services.ai_analysis_service.get_ai_response_cache", return_value=None)
     @patch("tracker.services.ai_analysis_service.set_ai_response_cache")
     @patch("tracker.services.ai_analysis_service._gemini_cooldown_remaining", return_value=0)
+    @patch("tracker.services.ai_analysis_service.request_gemini", return_value=(
+        "[성장 패턴] 잘못된 모델 수치 999조\\n"
+        "[성장 변화] 모델이 임의로 만든 변화예요.\\n"
+        "[레벨업 분석] 모델이 임의로 만든 레벨 변화예요.\\n"
+        "[성장 전망] 모델이 임의로 만든 날짜예요.\\n"
+        "[AI 코멘트] 최근 기록을 더 쌓아가며 변화가 이어지는지 살펴보면 좋아요."
+    ))
+    def test_server_composes_measured_facts_and_keeps_only_ai_comment(
+        self, gemini, _cooldown, _set_cache, _get_cache, get_state
+    ):
+        get_state.return_value = self.state
+        self.state.openrouter_api_key = ""
+        summary = {
+            "startDate": "2026-11-18",
+            "endDate": "2026-11-20",
+            "observedExperienceSum": 1200000000000,
+            "averageDailyExperience": 1200000000000,
+            "validGrowthIntervals": 1,
+            "levelUpIntervals": 1,
+        }
+        metrics = {
+            "levelProgress": {"currentRate": 55.0, "remainingRate": 45.0},
+            "levelUps": [{
+                "date": "2026-11-18",
+                "previousLevel": 279,
+                "currentLevel": 280,
+            }],
+            "prediction": None,
+        }
+        insights = {
+            "recentPeriod": {
+                **summary,
+                "validGrowthIntervals": 1,
+            },
+            "previousPeriod": {},
+            "weekOverWeek": {"status": "insufficient_data"},
+        }
+
+        result = service.generate_ai_analysis(
+            {**self.character, "level": 280},
+            [],
+            computed_metrics=metrics,
+            growth_insights=insights,
+            analysis_context={"periodDays": 7, "periodSummary": summary},
+            force_refresh=True,
+        )
+
+        self.assertTrue(result["aiGenerated"])
+        self.assertEqual(result["aiStatus"], "generated")
+        self.assertIn("1.2조", result["analysis"])
+        self.assertIn("11월 18일에 279레벨에서 280레벨", result["analysis"])
+        self.assertIn("55.0%", result["analysis"])
+        self.assertIn("최근 기록을 더 쌓아가며", result["analysis"])
+        self.assertNotIn("999조", result["analysis"])
+        gemini.assert_called_once()
+
+    @patch("tracker.services.ai_analysis_service.get_runtime_state")
+    @patch("tracker.services.ai_analysis_service.get_ai_response_cache", return_value=None)
+    @patch("tracker.services.ai_analysis_service.set_ai_response_cache")
+    @patch("tracker.services.ai_analysis_service.request_gemini", side_effect=ProviderError(
+        "Gemini unavailable", "provider_unavailable"
+    ))
+    @patch("tracker.services.ai_analysis_service.request_openrouter", return_value=(
+        "[AI 코멘트] 이 캐릭터는 확인된 사실과 무관하게 999% 상승했어요."
+    ))
+    def test_invalid_ai_comment_returns_un_cached_server_report(
+        self, openrouter, _gemini, set_cache, _get_cache, get_state
+    ):
+        get_state.return_value = self.state
+        result = service.generate_ai_analysis(
+            self.character,
+            [],
+            computed_metrics={},
+            growth_insights={},
+            analysis_context={"periodDays": 7, "periodSummary": {}},
+            force_refresh=True,
+        )
+
+        self.assertIn("analysis", result)
+        self.assertFalse(result["aiGenerated"])
+        self.assertEqual(result["aiStatus"], "fallback")
+        self.assertIn("AI 코멘트를 생성하지 못했어요", result["analysis"])
+        self.assertNotIn("999%", result["analysis"])
+        set_cache.assert_not_called()
+        openrouter.assert_called_once()
+
+    @patch("tracker.services.ai_analysis_service.get_runtime_state")
+    @patch("tracker.services.ai_analysis_service.get_ai_response_cache", return_value=None)
+    @patch("tracker.services.ai_analysis_service.set_ai_response_cache")
+    @patch("tracker.services.ai_analysis_service._gemini_cooldown_remaining", return_value=0)
     @patch("tracker.services.ai_analysis_service.request_gemini", side_effect=ProviderError(
         "Gemini unavailable", "provider_unavailable"
     ))
@@ -255,7 +345,7 @@ class AIAnalysisFallbackTests(unittest.TestCase):
     @patch("tracker.services.ai_analysis_service._gemini_cooldown_remaining", return_value=0)
     @patch("tracker.services.ai_analysis_service.request_gemini")
     @patch("tracker.services.ai_analysis_service.request_openrouter", side_effect=requests.Timeout("read timeout"))
-    def test_http_429_then_openrouter_timeout_returns_structured_503(
+    def test_http_429_then_openrouter_timeout_returns_deterministic_report(
         self, openrouter, gemini, _cooldown, _set_cache, _get_cache, get_state
     ):
         response = type("Response", (), {
@@ -270,10 +360,11 @@ class AIAnalysisFallbackTests(unittest.TestCase):
             self.character, [], computed_metrics={}, force_refresh=True
         )
 
-        self.assertEqual(result["statusCode"], 503)
-        self.assertEqual(result["errorType"], "provider_fallback_failed")
-        self.assertEqual(result["primaryErrorType"], "provider_quota")
-        self.assertEqual(result["fallbackErrorType"], "provider_timeout")
+        self.assertIn("analysis", result)
+        self.assertFalse(result["aiGenerated"])
+        self.assertEqual(result["aiStatus"], "fallback")
+        self.assertEqual(result["aiFallbackReason"], "provider_timeout")
+        self.assertIn("AI 코멘트를 생성하지 못했어요", result["analysis"])
         self.assertTrue(self.state.ai_provider_state_store.saved)
         openrouter.assert_called_once()
 
@@ -313,7 +404,7 @@ class AIAnalysisFallbackTests(unittest.TestCase):
         "Gemini unavailable", "provider_unavailable"
     ))
     @patch("tracker.services.ai_analysis_service.request_openrouter", return_value=VALID_REPORT)
-    def test_openrouter_ungrounded_output_retries_once_with_same_bounded_request(
+    def test_openrouter_ungrounded_comment_is_rejected_without_quota_wasting_retry(
         self, openrouter, _gemini, _facts, _cooldown, _set_cache, _get_cache, get_state
     ):
         get_state.return_value = self.state
@@ -323,8 +414,8 @@ class AIAnalysisFallbackTests(unittest.TestCase):
         )
 
         self.assertIn("analysis", result)
-        self.assertEqual(openrouter.call_count, 2)
-        self.assertEqual(openrouter.call_args_list[0].kwargs, openrouter.call_args_list[1].kwargs)
+        self.assertFalse(result["aiGenerated"])
+        self.assertEqual(openrouter.call_count, 1)
 
     @patch("tracker.services.ai_analysis_service.get_runtime_state")
     @patch("tracker.services.ai_analysis_service.get_ai_response_cache", return_value=None)
