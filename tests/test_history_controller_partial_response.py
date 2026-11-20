@@ -103,7 +103,7 @@ class HistoryControllerPartialResponseTests(unittest.TestCase):
         self.assertEqual(len(payload["history"]), 30)
         self.assertEqual(payload["history"][0]["date"], period_start.isoformat())
         self.assertEqual(payload["history"][0]["experienceChange"], 100)
-        self.assertEqual(payload["history"][5]["recordStatus"], "not_collected")
+        self.assertEqual(payload["history"][4]["recordStatus"], "not_collected")
         self.assertEqual(payload["periodSummary"]["availableSnapshots"], 29)
         self.assertEqual(payload["periodSummary"]["validGrowthIntervals"], 28)
         self.assertEqual(payload["periodSummary"]["growthDays"], 28)
