@@ -85,3 +85,30 @@ Render 계정에서 관리되는 PostgreSQL 인스턴스는 조회되지 않았�
 - Render 서비스 설정, 환경변수, 운영 DB는 변경하지 않는다.
 - PR 병합과 배포는 별도 승인 전까지 수행하지 않는다.
 - CI의 PostgreSQL 서비스 컨테이너 테스트는 격리된 테스트 DB만 사용하며 운영 DB와 무관하다.
+
+
+## 2026-11-20 추가 운영 검증
+
+### Gunicorn 설정 및 CI
+
+- Render의 실제 Start Command `gunicorn app:app`와 동일한 명령으로 `gunicorn --print-config app:app`를 실행하는 회귀 테스트가 통과했다.
+- GitHub Actions 커밋 `606d56f`에서 Python 313개 테스트, JavaScript 41개 테스트, Browser E2E 21개 테스트가 모두 통과했다.
+- Gunicorn 관련 테스트 3개(`Procfile` 설정, 기본 설정 파일 로딩, AI 요청 제한보다 긴 worker timeout)가 통과했다.
+- 따라서 Render Start Command는 변경하지 않아도 프로젝트 기본 설정 파일의 120초 timeout을 적용하는 것으로 검증됐다.
+
+### 최근 Render 관측 결과
+
+2026-11-19 07:57 UTC부터 2026-11-20 07:57 UTC까지 조회했다.
+
+- 앱 로그에서 `FLASK_SECRET_KEY` 미설정 경고 1건, `TRUSTED_PROXY_HOPS=0` 경고 1건을 확인했다.
+- 같은 기간 `WORKER TIMEOUT` 문구 검색 결과는 없었다. 이는 해당 문구가 검색된 로그에 없다는 뜻이며, 모든 요청의 정상 완료를 보증하지 않는다.
+- `ADMIN_PASSWORD_HASH` 및 `ADMIN_PASSWORD` 문구 검색 결과는 없었다. 환경변수의 실제 존재 여부를 확인한 결과는 아니다.
+- Render의 HTTP 요청 수, HTTP 지연 시간, CPU, 메모리, 인스턴스 수 시계열 조회는 모두 데이터가 비어 있었다. 따라서 현재 시점에서 운영 성능의 수치 기준선이나 배포 전후 비교를 만들 수 없다.
+- 최근 24시간 Render 이벤트 조회 결과는 비어 있었다.
+
+### 남은 수동 확인
+
+- [ ] Render 대시보드 Environment에서 `FLASK_SECRET_KEY`, `ADMIN_PASSWORD_HASH`, `TRUSTED_PROXY_HOPS`의 **변수명 존재 여부만** 확인한다. 값은 채팅이나 문서에 복사하지 않는다.
+- [ ] 프록시 hop 수를 실제 배포 경로에서 확인한 후 `TRUSTED_PROXY_HOPS` 설정을 결정한다.
+- [ ] 다음 실제 배포 후 앱 시작 로그에서 Gunicorn 유효 timeout과 세션 키 경고를 재확인한다.
+- [ ] Render 메트릭이 수집되는 기간에 HTTP 요청 수·지연 시간·CPU·메모리 기준선을 다시 측정한다.
