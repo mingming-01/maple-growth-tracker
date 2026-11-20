@@ -60,7 +60,7 @@ function parseAnalysis(analysis) {
 
 function buildReportSignature(character, history, metrics, analysisContext = {}) {
   return stableStringify({
-    cacheVersion: 6,
+    cacheVersion: 7,
     name:character.characterName,
     ocid:character.ocid,
     level:character.level,
@@ -77,6 +77,7 @@ function buildReportSignature(character, history, metrics, analysisContext = {})
 export function AIReport({ character, history, analysisHistory = history, periodDays = 7, periodSummary = null, metrics: serverMetrics, onPeriodSelect }) {
   const [analysis,setAnalysis] = useState("");
   const [growthInsights,setGrowthInsights] = useState(null);
+  const [aiGenerated,setAiGenerated] = useState(null);
   const [loading,setLoading] = useState(false);
   const [error,setError] = useState("");
   const [notice,setNotice] = useState("");
@@ -99,6 +100,7 @@ export function AIReport({ character, history, analysisHistory = history, period
     if (cached?.analysis) {
       setAnalysis(cached.analysis);
       setGrowthInsights(cached.growthInsights || null);
+      setAiGenerated(true);
       setNotice(analysisContext.periodDays > 7 ? `지난 ${analysisContext.periodDays}일 분석 결과를 불러왔어요.` : "");
       setLoading(false);
       return;
@@ -106,6 +108,7 @@ export function AIReport({ character, history, analysisHistory = history, period
     if (!allowGenerate && !force) {
       setAnalysis("");
       setGrowthInsights(null);
+      setAiGenerated(null);
       setNotice(`최근 ${analysisContext.periodDays}일 리포트가 아직 없어요. AI 분석 시작을 누르면 지금 기록으로 새 리포트를 만들어요.`);
       setLoading(false);
       return;
@@ -116,8 +119,14 @@ export function AIReport({ character, history, analysisHistory = history, period
       if (!result.analysis) throw new Error("AI 분석 결과가 비어 있습니다.");
       setAnalysis(result.analysis);
       setGrowthInsights(result.growthInsights || null);
-      setNotice("");
-      saveCachedAI(cacheType,signature,result.analysis,result.growthInsights || null);
+      const generatedByAI = result.aiGenerated !== false;
+      setAiGenerated(generatedByAI);
+      setNotice(generatedByAI
+        ? ""
+        : "AI 응답을 받지 못해 서버가 확인한 수치로 리포트를 표시하고 있어요. AI 코멘트는 아직 생성되지 않았습니다.");
+      if (generatedByAI) {
+        saveCachedAI(cacheType,signature,result.analysis,result.growthInsights || null);
+      }
     } catch (requestError) {
       setError(requestError.message || "AI 성장 분석을 불러오지 못했습니다.");
     } finally {
@@ -128,6 +137,7 @@ export function AIReport({ character, history, analysisHistory = history, period
   useEffect(() => {
     setAnalysis("");
     setGrowthInsights(null);
+    setAiGenerated(null);
     setError("");
     // 모든 기간은 보관 시간 안의 결과만 확인한다. 새 분석은 버튼을 눌렀을 때만 실행한다.
     run({ allowGenerate: false });
