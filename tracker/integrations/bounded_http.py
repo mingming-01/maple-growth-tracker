@@ -176,11 +176,16 @@ def post_json_with_deadline(
         )
         response_header_metadata = _safe_response_headers(response)
         content_type = str(response_header_metadata.get("response_content_type") or "").lower()
+        # Some OpenRouter routes can return SSE despite stream=False. In auto mode,
+        # use the response Content-Type rather than assuming the request setting won.
         is_sse_response = (
-            response_format == "sse"
+            response_format in {"sse", "auto"}
             and "text/event-stream" in content_type
             and response.status_code < 400
         )
+        if is_sse_response:
+            # SSE framing/metadata is larger than the compact JSON envelope.
+            byte_limit = max(byte_limit, DEFAULT_MAX_SSE_RESPONSE_BYTES)
         try:
             expected_response_bytes = int(response.headers.get("Content-Length"))
         except (AttributeError, TypeError, ValueError):
@@ -297,6 +302,7 @@ def post_json_with_deadline(
                 transfer_encoding=transfer_encoding,
                 extra_metadata={
                     **response_header_metadata,
+                    "response_mode": "sse",
                     "stream_event_count": sse["event_count"],
                     "stream_done": True,
                     "stream_reasoning_bytes": sse["reasoning_bytes"],
@@ -319,7 +325,7 @@ def post_json_with_deadline(
             expected_response_bytes=expected_response_bytes,
             body_complete=True,
             transfer_encoding=transfer_encoding,
-            extra_metadata=response_header_metadata,
+            extra_metadata={**response_header_metadata, "response_mode": "json"},
         )
     except Exception as error:
         existing_metadata = getattr(error, "provider_metadata", None)

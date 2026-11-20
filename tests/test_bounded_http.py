@@ -1,4 +1,5 @@
-"""Regression tests for wall-clock bounded streamed JSON responses."""
+"""Regression tests for wall-clock bounded JSON and SSE responses."""
+import json
 import unittest
 from unittest.mock import Mock, patch
 
@@ -146,6 +147,39 @@ class BoundedJSONHTTPTests(unittest.TestCase):
         self.assertEqual(result.provider_metadata["stream_event_count"], 4)
         self.assertEqual(result.provider_metadata["response_content_type"], "text/event-stream")
         self.assertEqual(result.provider_metadata["response_request_id"], "req-test-123")
+        response.close.assert_called_once()
+
+    @patch("tracker.integrations.bounded_http.requests.post")
+    @patch("tracker.integrations.bounded_http.time.monotonic", return_value=10.0)
+    def test_auto_mode_detects_sse_even_when_request_requested_json(self, _clock, post):
+        # The default JSON limit is 96 KiB. A route that responds with SSE must use
+        # the larger bounded SSE allowance and stop at the explicit completion frame.
+        generated_text = "x" * 100_000
+        event = {
+            "choices": [{
+                "delta": {"content": generated_text},
+                "finish_reason": "stop",
+            }]
+        }
+        wire = (
+            f"data: {json.dumps(event)}\\n\\n"
+            "data: [DONE]\\n\\n"
+        ).encode("utf-8")
+        chunks = [wire[index:index + 4096] for index in range(0, len(wire), 4096)]
+        response = self.make_response(chunks)
+        response.headers = {"Content-Type": "text/event-stream"}
+        post.return_value = response
+
+        result = post_json_with_deadline(
+            "https://provider.invalid",
+            headers={},
+            json_body={"stream": False},
+            response_format="auto",
+        )
+
+        self.assertEqual(result["choices"][0]["message"]["content"], generated_text)
+        self.assertEqual(result.provider_metadata["response_mode"], "sse")
+        self.assertTrue(result.provider_metadata["stream_done"])
         response.close.assert_called_once()
 
     @patch("tracker.integrations.bounded_http.requests.post")

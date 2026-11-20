@@ -496,7 +496,7 @@ def _build_growth_report_cache_key(prompt, source_data):
     """정성 신호 프롬프트와 해당 캐릭터의 실제 계산 데이터로 캐시를 구분한다."""
     return (
         prompt
-        + "\n[리포트 형식 버전] 5\n"
+        + "\n[리포트 형식 버전] 6\n"
         + "[캐시 식별 데이터]\n"
         + json.dumps(source_data, ensure_ascii=False, sort_keys=True)
     )
@@ -959,10 +959,10 @@ def _generate_ai_analysis_impl(character, history, computed_metrics=None, growth
             cached_analysis = _apply_deterministic_growth_forecast(
                 cached_analysis, character, computed_metrics
             )
-            if (
-                not _validate_growth_report_facts(cached_analysis, source_data)
-                or not validate_growth_report(cached_analysis)
-            ):
+            # Cached output was assembled from server-owned metrics and a previously
+            # validated commentary. Re-running a token/unit allowlist here can reject
+            # legitimate server-written phrases (for example, a period expressed as days).
+            if not validate_growth_report(cached_analysis):
                 cached_analysis = None
         if cached_analysis is not None:
             print("저장된 AI 성장 리포트를 재사용했습니다.")

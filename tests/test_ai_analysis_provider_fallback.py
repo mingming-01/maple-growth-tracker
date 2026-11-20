@@ -391,6 +391,28 @@ class AIAnalysisFallbackTests(unittest.TestCase):
         openrouter.assert_called_once()
 
     @patch("tracker.services.ai_analysis_service.get_runtime_state")
+    @patch("tracker.services.ai_analysis_service.get_ai_response_cache", return_value=VALID_REPORT)
+    @patch("tracker.services.ai_analysis_service._growth_report_fact_error")
+    @patch("tracker.services.ai_analysis_service.request_gemini")
+    def test_cached_server_report_skips_legacy_number_unit_allowlist(
+        self, gemini, fact_error, _cache, get_state
+    ):
+        get_state.return_value = self.state
+
+        result = service.generate_ai_analysis(
+            self.character,
+            [],
+            computed_metrics={},
+            growth_insights={},
+            analysis_context={"periodDays": 7, "periodSummary": {}},
+        )
+
+        self.assertTrue(result["cacheHit"])
+        self.assertTrue(result["aiGenerated"])
+        fact_error.assert_not_called()
+        gemini.assert_not_called()
+
+    @patch("tracker.services.ai_analysis_service.get_runtime_state")
     @patch("tracker.services.ai_analysis_service.get_ai_response_cache", return_value=None)
     @patch("tracker.services.ai_analysis_service.set_ai_response_cache")
     @patch("tracker.services.ai_analysis_service._gemini_cooldown_remaining", return_value=0)

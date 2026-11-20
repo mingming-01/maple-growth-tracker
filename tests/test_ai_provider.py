@@ -83,6 +83,7 @@ class AIProviderAdapterTests(unittest.TestCase):
         self.assertEqual(post_json.call_args.kwargs["total_timeout"], 14.0)
         self.assertEqual(post_json.call_args.kwargs["read_timeout"], 12.0)
         self.assertEqual(post_json.call_args.kwargs["json_body"]["stream"], False)
+        self.assertEqual(post_json.call_args.kwargs["response_format"], "auto")
         # Even when configured above the supported cap, the adapter sends at most 1024 tokens.
         self.assertEqual(post_json.call_args.kwargs["json_body"]["max_tokens"], 1024)
         self.assertNotIn("reasoning", post_json.call_args.kwargs["json_body"])

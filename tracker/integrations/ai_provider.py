@@ -266,6 +266,7 @@ def request_openrouter(prompt, api_key=None, deadline=None):
         read_timeout=read_timeout,
         total_timeout=total_timeout,
         deadline=deadline,
+        response_format="auto",
     )
     metadata = _http_metadata(payload, "openrouter", model_alias)
     metadata.update({
