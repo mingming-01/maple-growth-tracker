@@ -60,17 +60,27 @@ function createLevelUpStarPlugin(levelUpEvents) {
     id: "growthLevelUpStars",
     afterDatasetsDraw(chart) {
       const meta = chart.getDatasetMeta(0);
-      if (!meta?.data?.length) return;
+      const xScale = chart.scales.x;
+      if (!meta?.data?.length || !xScale) return;
       const { ctx } = chart;
+      let lastKnownY = null;
       ctx.save();
       levelUpEvents.forEach((isLevelUp, index) => {
-        if (!isLevelUp) return;
         const point = meta.data[index];
         if (!point) return;
-        const { x, y } = point.getProps(["x", "y"], true);
+        const position = point.getProps(["x", "y"], true);
+        const pointIsKnown = !point.skip && Number.isFinite(position.y);
+        if (!isLevelUp) {
+          if (pointIsKnown) lastKnownY = position.y;
+          return;
+        }
+
+        // If EXP across the level boundary is unknown, keep the star on the
+        // event date and align it to the last measured cumulative value.
+        const x = xScale.getPixelForValue(index);
+        const y = pointIsKnown ? position.y : lastKnownY;
         if (!Number.isFinite(x) || !Number.isFinite(y)) return;
 
-        // Draw the star at the exact cumulative-series point, replacing its circle.
         const outerRadius = 9;
         const innerRadius = 4;
         ctx.save();
@@ -92,6 +102,7 @@ function createLevelUpStarPlugin(levelUpEvents) {
         ctx.fill();
         ctx.stroke();
         ctx.restore();
+        if (pointIsKnown) lastKnownY = position.y;
       });
       ctx.restore();
     }
@@ -414,7 +425,7 @@ export default function GrowthDashboard({ character, history, metrics: serverMet
     const sorted = sortHistoryAscending(displayHistory)
       .filter(item => item?.date && item.date <= today);
     if (!sorted.length) return undefined;
-    const { daily, cumulative } = buildExperienceChartSeries(sorted);
+    const { daily, cumulative, cumulativeHasUnknownGaps } = buildExperienceChartSeries(sorted);\n    const cumulativeLabel = cumulativeHasUnknownGaps ? "확인된 누적 경험치 증가량" : "총 경험치 증가량";
     // 서버가 반환한 명시적 레벨업 플래그를 우선 사용하고,
     // 레거시 응답에 플래그가 없을 때만 차트 모듈이 이전 레벨을 보완한다.
     const levelUpEvents = detectLevelUpEvents(sorted);
@@ -427,7 +438,7 @@ export default function GrowthDashboard({ character, history, metrics: serverMet
       data: {
         labels: sorted.map(item => String(item.date || "").slice(5)),
         datasets: [
-          { label:"총 경험치 증가량",data:cumulative,yAxisID:"experience",borderColor:"#36a2eb",backgroundColor:"#36a2eb",borderWidth:3,tension:0,pointRadius:levelUpEvents.map(isLevelUp=>isLevelUp?1:3),pointHoverRadius:levelUpEvents.map(isLevelUp=>isLevelUp?2:6),pointHitRadius:levelUpEvents.map(isLevelUp=>isLevelUp?12:8),pointStyle:"circle",pointBackgroundColor:"#36a2eb",pointBorderColor:"#36a2eb",pointBorderWidth:0,fill:false },
+          { label:cumulativeLabel,data:cumulative,yAxisID:"experience",borderColor:"#36a2eb",backgroundColor:"#36a2eb",borderWidth:3,tension:0,pointRadius:levelUpEvents.map(isLevelUp=>isLevelUp?1:3),pointHoverRadius:levelUpEvents.map(isLevelUp=>isLevelUp?2:6),pointHitRadius:levelUpEvents.map(isLevelUp=>isLevelUp?12:8),pointStyle:"circle",pointBackgroundColor:"#36a2eb",pointBorderColor:"#36a2eb",pointBorderWidth:0,fill:false },
           { label:"일일 경험치 증가량",data:daily,yAxisID:"dailyGrowth",borderColor:"#ff6384",backgroundColor:"#ff6384",borderWidth:2,segment:{borderDash:dailyGrowthSegmentDash},spanGaps:false,tension:0,pointRadius:2,pointHoverRadius:5,fill:false }
         ]
       },
@@ -435,13 +446,13 @@ export default function GrowthDashboard({ character, history, metrics: serverMet
         responsive:true,maintainAspectRatio:false,interaction:{intersect:false,mode:"index"},
         plugins:{legend:{display:true},tooltip:{callbacks:{
           label(context) {
-            if (levelUpEvents[context.dataIndex] && context.dataset.label === "총 경험치 증가량") {
+            if (levelUpEvents[context.dataIndex] && context.dataset.label === cumulativeLabel) {
               const current = sorted[context.dataIndex];
               const previous = sorted.slice(0, context.dataIndex).reverse()
                 .find(item => item?.level !== null && item?.level !== undefined && Number.isFinite(Number(item.level)));
               const previousLevel = current?.levelUpPreviousLevel ?? previous?.level ?? "—";
               const currentLevel = current?.levelUpCurrentLevel ?? current?.level ?? "—";
-              return "⭐ 레벨업 · Lv. " + previousLevel + " → " + currentLevel + " · 누적 " + context.parsed.y.toFixed(2) + "조";
+              return "⭐ 레벨업 · Lv. " + previousLevel + " → " + currentLevel + (Number.isFinite(context.parsed.y) ? " · 확인된 누적 " + context.parsed.y.toFixed(2) + "조" : " · 레벨업 당일 증가량은 확인되지 않음");
             }
             return context.parsed.y === null ? "" : context.dataset.label + ": " + context.parsed.y.toFixed(2) + "조";
           }
@@ -457,7 +468,7 @@ export default function GrowthDashboard({ character, history, metrics: serverMet
               return isLevelUp ? label + " ★" : label;
             }
           }},
-          experience:{type:"linear",position:"left",title:{display:true,text:"총 경험치 증가량"},ticks:{callback:value=>Number(value).toFixed(0)+"조"}},
+          experience:{type:"linear",position:"left",title:{display:true,text:cumulativeLabel},ticks:{callback:value=>Number(value).toFixed(0)+"조"}},
           dailyGrowth:{type:"linear",position:"right",beginAtZero:true,title:{display:true,text:"일일 경험치 증가량"},grid:{drawOnChartArea:false},ticks:{callback:value=>Number(value).toFixed(0)+"조"}}
         }
       }
