@@ -716,31 +716,22 @@ test("React AI report restores evidence details from cache", async ({ page }) =>
   await expect(cachedEvidence).toContainText("10 / 15일");
 });
 
-test("React growth chart marks the level-up reset without inventing cross-level daily EXP and AI receives the same history", async ({ page }) => {
-  const timestamp = "2026-11-19T08:45:00+09:00";
+test("React growth chart shows raw level EXP and estimates the next level from observed progress", async ({ page }) => {
+  const timestamp = "2026-11-20T08:45:00+09:00";
   const character = {
-    characterName: "레벨업검증",
-    ocid: "level-up-chart-ai-e2e",
-    character_image: null,
-    worldName: "크로아",
-    job: "아델",
-    guildName: null,
-    level: 299,
-    experience: 17096549681346,
-    experienceRate: "0.984",
-    ranking: 12345,
-    rankingDataStatus: "available",
-    dataStatus: "current",
-    dataAsOf: timestamp
+    characterName: "레벨업검증", ocid: "level-up-chart-ai-e2e",
+    character_image: null, worldName: "크로아", job: "아델", guildName: null,
+    level: 299, experience: 50805631039495, experienceRate: "2.924",
+    ranking: 12345, rankingDataStatus: "available", dataStatus: "current", dataAsOf: timestamp
   };
   const history = [
-    { date: "2026-11-13", level: 298, experience: 1056883268251231, experienceRate: 93.284, experienceChange: null, levelUp: false, recordStatus: "available" },
-    { date: "2026-11-14", level: 298, experience: 1094349410488372, experienceRate: 94.825, experienceChange: 37466142237141, levelUp: false, recordStatus: "available" },
+    { date: "2026-11-14", level: 298, experience: 1094349410488372, experienceRate: 94.825, experienceChange: null, levelUp: false, recordStatus: "available" },
     { date: "2026-11-15", level: 298, experience: 1103053861914765, experienceRate: 96.177, experienceChange: 8704451426393, levelUp: false, recordStatus: "available" },
     { date: "2026-11-16", level: 298, experience: 1118748264632899, experienceRate: 97.143, experienceChange: 15694402718134, levelUp: false, recordStatus: "available" },
     { date: "2026-11-17", level: 298, experience: 1129263590513928, experienceRate: 99.226, experienceChange: 10515325881029, levelUp: false, recordStatus: "available" },
-    { date: "2026-11-18", level: 298, experience: 1156066685461973, experienceRate: 0.355, experienceChange: 26803094948045, levelUp: true, levelUpPreviousLevel: 298, levelUpCurrentLevel: 299, recordStatus: "available" },
-    { date: "2026-11-19", level: 299, experience: 17096549681346, experienceRate: 0.984, experienceChange: null, levelUp: false, levelUpCatchUp: true, recordStatus: "available" }
+    { date: "2026-11-18", level: 298, experience: 6175579914147, experienceRate: 0.355, experienceChange: null, levelUp: true, levelUpPreviousLevel: 298, levelUpCurrentLevel: 299, recordStatus: "available" },
+    { date: "2026-11-19", level: 299, experience: 34219899249572, experienceRate: 1.969, experienceChange: 28044319335425, levelUp: false, levelUpCatchUp: true, recordStatus: "available" },
+    { date: "2026-11-20", level: 299, experience: 50805631039495, experienceRate: 2.924, experienceChange: 16585731789923, levelUp: false, recordStatus: "available" }
   ];
 
   await page.route("**/api/character?*", route => route.fulfill({
@@ -749,40 +740,34 @@ test("React growth chart marks the level-up reset without inventing cross-level 
   await page.route("**/api/history?*", route => route.fulfill({
     status: 200, contentType: "application/json",
     body: JSON.stringify({
-      characterName: character.characterName,
-      worldName: character.worldName,
-      history,
-      historyStatus: "complete",
+      characterName: character.characterName, worldName: character.worldName,
+      history, historyStatus: "complete",
       metrics: {
-        observedChangeDays: 5,
-        recordedDays: 7,
-        latestDailyGrowth: null,
-        averageDailyGrowth: 19836683442148.4,
-        sevenDayGrowth: 99183417210742,
-        rankingChange: null,
-        levelProgress: { currentRate: 0.984, remainingRate: 99.016 },
+        observedChangeDays: 5, recordedDays: 7,
+        latestDailyGrowth: 16585731789923,
+        averageDailyGrowth: 15908846230180.8,
+        sevenDayGrowth: 79544231150904, rankingChange: null,
+        levelProgress: { currentRate: 2.924, remainingRate: 97.076, dailyProgressRate: 1.2845 },
         growthComparison: { direction: "increased", earlierAverage: 1000, recentAverage: 2000 },
         levelUps: [{ date: "2026-11-18", previousLevel: 298, currentLevel: 299 }],
         timeline: [
-          { type: "level-up", date: "2026-11-18", title: "Lv. 299 달성", description: "Lv. 298에서 레벨업", priority: 0 },
-          { type: "latest", date: "2026-11-19", title: "최근 정상 기록", description: "Lv. 299 · 경험치 17,096,549,681,346", priority: 3 }
+          { type: "level-up", date: "2026-11-18", title: "Lv. 299 달성", description: "Lv. 298에서 레벨업 · 당일 경험치 증가량 미확인", priority: 0 },
+          { type: "latest", date: "2026-11-20", title: "최근 정상 기록", description: "Lv. 299 · 경험치 50,805,631,039,495", priority: 3 }
         ],
-        prediction: null
+        prediction: {
+          currentLevel: 299, nextLevel: 300, currentRate: 2.924, remainingRate: 97.076,
+          requiredExp: null, averageDailyProgressRate: 1.2845, progressSamples: 2,
+          confidence: "initial", days: 75.57493188010899, date: "2027-02-04",
+          estimatedDays: 75.57493188010899, estimatedDate: "2027-02-04",
+          observationDate: "2026-11-20", method: "same_level_observed_progress_rate"
+        }
       },
       periodSummary: {
-        startDate: "2026-11-13",
-        endDate: "2026-11-19",
-        expectedSnapshots: 7,
-        availableDays: 7,
-        coveragePercent: 100,
-        confirmedChangeDays: 5,
-        averageGrowth: 19836683442148.4,
-        growth: 99183417210742,
-        notReadyDays: 0,
-        notCollectedDays: 0,
-        unavailableDays: 0,
-        levelUpCount: 1,
-        levelUpDates: ["2026-11-18"]
+        startDate: "2026-11-14", endDate: "2026-11-20", expectedSnapshots: 7,
+        availableDays: 7, coveragePercent: 100, confirmedChangeDays: 5,
+        averageGrowth: 15908846230180.8, growth: 79544231150904,
+        notReadyDays: 0, notCollectedDays: 0, unavailableDays: 0,
+        levelUpCount: 1, levelUpDates: ["2026-11-18"]
       }
     })
   }));
@@ -797,9 +782,8 @@ test("React growth chart marks the level-up reset without inventing cross-level 
     await route.fulfill({
       status: 200, contentType: "application/json",
       body: JSON.stringify({
-        analysis: "[성장 패턴] 최근 기록에서 경험치 증가가 확인됐어요.\\n[성장 변화] 레벨업 기록이 있는 날에도 같은 레벨 기준의 원본 경험치 증가량을 확인했어요.\\n[레벨업 분석] 11월 18일에 298레벨에서 299레벨로 올라갔어요.\\n[성장 전망] 현재 진행률을 기준으로 확인해 주세요.\\n[AI 코멘트] 다음 기록도 계속 비교해 보세요.",
-        cacheHit: false,
-        growthInsights: {}
+        analysis: "[성장 패턴] 확인된 다섯 구간의 일일 변화가 있습니다.\\n[성장 변화] 레벨업 경계는 제외하고 새 레벨 내부의 관측 증가량을 반영했습니다.\\n[레벨업 분석] 11월 18일에 298레벨에서 299레벨로 올라갔어요.\\n[성장 전망] 관측된 진행률을 기준으로 초기 전망을 계산했습니다.\\n[AI 코멘트] 다음 기록에서도 같은 레벨의 변화를 이어서 비교해 보세요.",
+        cacheHit: false, growthInsights: {}
       })
     });
   });
@@ -808,43 +792,46 @@ test("React growth chart marks the level-up reset without inventing cross-level 
   await page.getByLabel("캐릭터명").fill(character.characterName);
   await page.getByRole("button", { name: /캐릭터 조회/ }).click();
   await expect(page.getByRole("heading", { name: character.characterName })).toBeVisible();
-
   await page.locator('.mgt-nav a[href="#/growth"]').click();
   await expect(page.locator("#growth-trend canvas[aria-label='기간별 성장 추이 그래프']")).toBeVisible();
-  const chartCanvas = page.locator("#growth-trend canvas[aria-label='기간별 성장 추이 그래프']");
-  const countChartPixels = () => chartCanvas.evaluate(canvas => {
-    const context = canvas.getContext("2d");
-    const { data, width, height } = context.getImageData(0, 0, canvas.width, canvas.height);
-    let redPixels = 0;
-    let yellowPixels = 0;
+
+  const canvas = page.locator("#growth-trend canvas[aria-label='기간별 성장 추이 그래프']");
+  const pixelCounts = () => canvas.evaluate(element => {
+    const ctx = element.getContext("2d");
+    const { data, width, height } = ctx.getImageData(0, 0, element.width, element.height);
+    let pink = 0, yellow = 0;
     for (let y = 0; y < height; y += 1) {
       for (let x = 0; x < width; x += 1) {
         const offset = (y * width + x) * 4;
         const red = data[offset], green = data[offset + 1], blue = data[offset + 2], alpha = data[offset + 3];
-        if (alpha > 160 && red > 210 && green < 150 && blue > 90 && blue < 190) redPixels += 1;
-        if (alpha > 160 && red > 200 && green > 150 && blue < 100) yellowPixels += 1;
+        if (alpha > 160 && red > 210 && green < 150 && blue > 90 && blue < 190) pink += 1;
+        if (alpha > 160 && red > 200 && green > 150 && blue < 100) yellow += 1;
       }
     }
-    return { redPixels, yellowPixels };
+    return { pink, yellow };
   });
-  await expect.poll(async () => (await countChartPixels()).redPixels).toBeGreaterThan(30);
-  const chartPixels = await countChartPixels();
-  expect(chartPixels.yellowPixels).toBeGreaterThan(8);
+  await expect.poll(async () => (await pixelCounts()).pink).toBeGreaterThan(30);
+  expect((await pixelCounts()).yellow).toBeGreaterThan(8);
+
   await expect(page.locator("#growth-timeline .growth-timeline-item.is-level-up")).toHaveCount(1);
   await expect(page.locator("#growth-timeline")).toContainText("2026.11.18");
-  await expect(page.locator("#growth-timeline")).toContainText("Lv. 298에서 레벨업");
-  await expect(page.locator("#growth-timeline")).not.toContainText("당일 경험치 증가량 미확인");
-  await expect(page.locator("#growth-trend .history-range-notice")).not.toContainText("당일 일일 EXP 증가량 미확인");
-  await expect(page.locator("#growth-prediction .prediction-item").nth(3).locator(".prediction-value")).toHaveText("19.8조");
-  await expect(page.locator("#growth-timeline")).not.toContainText("2026.11.19\\n레벨업");
+  await expect(page.locator("#growth-timeline")).toContainText("당일 경험치 증가량 미확인");
+  await expect(page.locator("#growth-trend .history-range-notice")).toContainText("레벨업 1일 · 당일 일일 EXP 증가량 미확인");
+  await expect(page.locator("#growth-prediction .prediction-item").nth(0).locator(".prediction-value")).toHaveText("97.076% 남음");
+  await expect(page.locator("#growth-prediction .prediction-item").nth(1).locator(".prediction-value")).toHaveText("약 75.6일");
+  await expect(page.locator("#growth-prediction .prediction-item").nth(2).locator(".prediction-value")).toHaveText("2027.02.04");
+  await expect(page.locator("#growth-prediction .prediction-item").nth(3).locator(".prediction-value")).toHaveText("15.9조");
+  await expect(page.locator("#growth-prediction .prediction-note")).toContainText("2개 연속 일일 기록");
 
   await page.locator('.mgt-nav a[href="#/analytics"]').click();
   await expect(page.getByText("11월 18일에 298레벨에서 299레벨로 올라갔어요.")).toBeVisible();
   expect(submittedPayload).not.toBeNull();
   const resetDay = submittedPayload.history.find(item => item.date === "2026-11-18");
   const catchUpDay = submittedPayload.history.find(item => item.date === "2026-11-19");
-  expect(resetDay.experienceChange).toBe(26803094948045);
+  const latestDay = submittedPayload.history.find(item => item.date === "2026-11-20");
+  expect(resetDay.experienceChange).toBeNull();
   expect(resetDay.levelUp).toBe(true);
-  expect(catchUpDay.experienceChange).toBeNull();
+  expect(catchUpDay.experienceChange).toBe(28044319335425);
   expect(catchUpDay.levelUpCatchUp).toBe(true);
+  expect(latestDay.experienceChange).toBe(16585731789923);
 });
