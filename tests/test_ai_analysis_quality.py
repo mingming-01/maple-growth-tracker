@@ -77,6 +77,41 @@ class AIAnalysisQualityTests(unittest.TestCase):
         self.assertNotIn("weekOverWeek", prompt)
         self.assertNotIn("averageGrowth", prompt)
 
+    def test_long_period_prompt_uses_backend_early_late_trend_without_numeric_values(self):
+        source = self.make_source_data(90)
+        source["metrics"]["periodTrend"] = {
+            "status": "available",
+            "direction": "decrease",
+            "strength": "strong",
+            "changePercent": -35.0,
+            "firstHalf": {"validGrowthIntervals": 42},
+            "secondHalf": {"validGrowthIntervals": 40},
+        }
+
+        prompt = _build_growth_report_prompt(source)
+
+        self.assertIn(
+            "기간 후반의 하루 평균 경험치 증가량이 초반보다 뚜렷하게 낮아짐",
+            prompt,
+        )
+        self.assertNotIn("35.0", prompt)
+        self.assertNotIn("validGrowthIntervals", prompt)
+        self.assertNotIn("changePercent", prompt)
+
+    def test_long_period_prompt_reports_insufficient_early_late_samples(self):
+        source = self.make_source_data(30)
+        source["metrics"]["periodTrend"] = {
+            "status": "insufficient_data",
+            "direction": "insufficient_data",
+        }
+
+        prompt = _build_growth_report_prompt(source)
+
+        self.assertIn(
+            "기간 초반과 후반을 비교할 만큼 확인된 경험치 변화 기록이 충분하지 않음",
+            prompt,
+        )
+
     def test_seven_day_prompt_uses_weekly_qualitative_growth_signal(self):
         source = self.make_source_data(7)
         source["growthInsights"]["weekOverWeek"].update({
