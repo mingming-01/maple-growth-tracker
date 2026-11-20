@@ -1,4 +1,5 @@
 """Deployment entrypoint and Gunicorn timeout regression tests."""
+import re
 import runpy
 from pathlib import Path
 import subprocess
@@ -27,13 +28,7 @@ class GunicornRuntimeConfigTests(unittest.TestCase):
     def test_render_start_command_loads_project_gunicorn_config_by_default(self):
         """Render configured gunicorn app:app must resolve the repository config."""
         result = subprocess.run(
-            [
-                sys.executable,
-                "-m",
-                "gunicorn",
-                "--print-config",
-                "app:app",
-            ],
+            [sys.executable, "-m", "gunicorn", "--print-config", "app:app"],
             cwd=ROOT,
             check=True,
             capture_output=True,
@@ -41,14 +36,12 @@ class GunicornRuntimeConfigTests(unittest.TestCase):
             timeout=15,
         )
 
-        settings = dict(
-            line.split(" = ", 1)
-            for line in result.stdout.splitlines()
-            if " = " in line
-        )
-        output = result.stdout + "\\n" + result.stderr
-        self.assertEqual(settings.get("timeout"), "120", msg=output[-4000:])
-        self.assertEqual(settings.get("config"), "./gunicorn.conf.py", msg=output[-4000:])
+        timeout_match = re.search(r"(?m)^timeout\\s*=\\s*(\\d+)\\s*$", result.stdout)
+        config_match = re.search(r"(?m)^config\\s*=\\s*(.+?)\\s*$", result.stdout)
+        self.assertIsNotNone(timeout_match, msg=result.stdout[-4000:])
+        self.assertIsNotNone(config_match, msg=result.stdout[-4000:])
+        self.assertEqual(timeout_match.group(1), "120")
+        self.assertEqual(config_match.group(1), "./gunicorn.conf.py")
 
 
 if __name__ == "__main__":
