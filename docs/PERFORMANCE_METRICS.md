@@ -20,11 +20,13 @@ React 관리자 세션 인증을 그대로 사용한다. 별도 API 키나 브�
 | http.request_ms | Flask endpoint·dataStatus별 처리 시간(p50/p95) |
 | cache.lookups | 일반 응답 캐시 및 Nexon 원본 데이터 캐시의 hit/miss |
 | cache.writes | 해당 캐시에 새 값을 저장한 횟수 |
-| nexon.logical_requests | Nexon API 논리 요청 수 |
+| nexon.logical_requests | Nexon API 논리 요청 수(동일 진행 요청에 합류한 호출 포함) |
+| nexon.coalesced_requests | 동일한 Nexon API 요청의 진행 중 결과를 공유한 호출 수 |
 | nexon.attempts | 재시도를 포함한 실제 HTTP 시도 수 |
 | nexon.retries | 첫 시도 이후 재시도 수 |
 | nexon.responses / nexon.errors | 엔드포인트·상태 코드별 응답과 네트워크 오류 |
-| nexon.logical_request_ms | 스로틀 대기와 재시도를 포함한 논리 요청 시간 |
+| nexon.logical_request_ms | 스로틀 대기·재시도 및 진행 중 요청 대기를 포함한 논리 요청 시간 |
+| ai.logical_requests / ai.coalesced_requests | AI 성장 리포트·비교의 논리 요청 수와 동일 진행 요청에 합류한 호출 수 |
 | character.search_component_ms | 캐릭터 검색에서 병렬 실행되는 rankings / combat_power 작업 각각의 경과 시간 |
 | character.search_parallel_ms | rankings와 combat_power 작업을 함께 기다린 전체 병렬 구간 시간 |
 | db.connection_attempts / db.connection_ms | 저장소별 DB 연결 시도 횟수(실패 포함)와 연결 소요 시간 |
@@ -61,3 +63,35 @@ React 관리자 세션 인증을 그대로 사용한다. 별도 API 키나 브�
 5. P3 변경 후 동일한 조건으로 다시 측정한다.
 6. 검색 p50/p95, component별 Nexon attempts와 소요 시간, 병렬 구간 시간, cache hit/miss 비율, DB connection 수·시간 및 operation 시간을 비교한다.
 7. 데이터 정확성, 429 비율, 외부 API 호출량이 악화되지 않았는지도 함께 확인한다.
+
+
+## P4 공통 병목·캐시 검증 결과 (2026-11-20)
+
+### 동일한 동시 요청 병합
+
+- Nexon API: endpoint, 파라미터, 인증 키 해시, timeout, historical 구분, 재시도 설정이 같은 진행 중 요청만 하나로 합친다.
+- AI 성장 리포트·비교: 입력 데이터와 공급자 설정이 같은 진행 중 작업만 하나로 합친다.
+- 병합은 프로세스 내부의 진행 중 요청에만 적용한다. 완료된 결과는 기존 TTL·검증 캐시가 담당하며, 병합 레지스트리는 완료 또는 실패 시 제거된다.
+- 대기 호출은 리더의 성공 응답 또는 오류를 전달받는다. 이후 새 요청은 다시 실행할 수 있다.
+- 서로 다른 파라미터·공급자 설정의 요청은 합치지 않는다.
+- `force_refresh` 값도 AI 작업 식별에 포함하므로 일반 분석과 강제 갱신 작업은 서로 합치지 않는다.
+
+### 캐시 일관성 보강
+
+- 상세 정보의 전체 응답 캐시는 모든 원본이 `available`일 때만 기록한다. 일부 원본이 실패한 `partial` 결과는 전체 캐시에 고정하지 않고, 성공한 원본별 5분 캐시만 재사용해 실패 원본을 다시 조회할 수 있게 한다.
+- 최근 성장 기록은 일시적인 Nexon 오류(`retryable=True`)가 포함된 `partial` 결과를 메모리 캐시에 저장하지 않는다.
+- 정상 완료 기록은 기존 30분 TTL, 오늘 기록 미준비 또는 재시도 대상이 아닌 부분 응답은 기존 5분 TTL 정책을 유지한다.
+- AI 응답 캐시는 기존처럼 검증을 통과한 성공 분석문만 저장한다.
+
+### DB 접근 경로 점검
+
+- 최근 7일 성장 기록: 기간 SELECT 1회, 일괄 UPSERT 1회.
+- 30일·90일 아카이브: 요청 기간 SELECT 1회, 수집한 누락 기록은 일괄 UPSERT한다. 날짜별 N+1 SELECT/INSERT는 확인되지 않았다.
+- 아카이브는 최대 10일 단위 배치이므로 90일 수집 시 각 배치에서 전체 90일 범위를 다시 읽을 수 있다(최대 9회). 현재 조회 범위는 최대 90행이므로 실제 운영 지연 자료 없이 추가 최적화는 보류한다.
+
+### 계측 해석 및 한계
+
+- `nexon.logical_requests`와 `ai.logical_requests`는 호출자 관점의 논리 요청 수다. `nexon.attempts`는 실제 Nexon HTTP 시도 수다. `*.coalesced_requests`는 기존 진행 요청에 합류한 호출 수다.
+- 병합 레지스트리와 성능 계측은 프로세스 로컬이다. 여러 Gunicorn worker 사이의 전역 합계를 제공하지 않는다.
+- 2026-11-20 Render 메트릭 조회에서는 HTTP 요청·지연 시간·CPU·메모리 시계열이 반환되지 않았다. 따라서 이번 변경의 운영 전후 p50/p95 개선율이나 실제 비용 절감량은 주장하지 않는다.
+- 실제 운영 비교는 관리자 인증 후 `/admin/api/performance`에서 동일 worker의 cold/warm 검색과 AI 요청을 측정해 수행한다.
