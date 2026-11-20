@@ -246,8 +246,9 @@ class AIAnalysisFallbackTests(unittest.TestCase):
             reference_date=today,
             period_days=7,
         )
-        self.assertEqual(calculated["metrics"]["observedChangeDays"], 0)
-        self.assertIsNone(calculated["history"][1]["experienceChange"])
+        self.assertEqual(calculated["metrics"]["observedChangeDays"], 1)
+        self.assertEqual(calculated["metrics"]["averageDailyGrowth"], 26803094948045)
+        self.assertEqual(calculated["history"][1]["experienceChange"], 26803094948045)
         self.assertTrue(calculated["history"][1]["levelUp"])
         self.assertTrue(calculated["history"][2]["levelUpCatchUp"])
         self.assertIsNone(calculated["history"][2]["experienceChange"])

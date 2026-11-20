@@ -103,7 +103,7 @@ class AIServerInputTests(unittest.TestCase):
             max_attempts_override=1,
         )
 
-    def test_api_ai_route_excludes_unverified_level_up_deltas_from_all_server_ai_inputs(self):
+    def test_api_ai_route_preserves_exact_same_level_exp_delta_on_level_up_date(self):
         captured = {}
         records = [
             {
@@ -148,12 +148,12 @@ class AIServerInputTests(unittest.TestCase):
         reset_day = captured["history"][-2]
         catch_up_day = captured["history"][-1]
         self.assertTrue(reset_day["levelUp"])
-        self.assertIsNone(reset_day["experienceChange"])
+        self.assertEqual(reset_day["experienceChange"], 26803094948045)
         self.assertTrue(catch_up_day["levelUpCatchUp"])
         self.assertFalse(catch_up_day["levelUp"])
         self.assertIsNone(catch_up_day["experienceChange"])
-        self.assertEqual(captured["metrics"]["observedChangeDays"], 0)
-        self.assertIsNone(captured["metrics"]["averageDailyGrowth"])
+        self.assertEqual(captured["metrics"]["observedChangeDays"], 1)
+        self.assertEqual(captured["metrics"]["averageDailyGrowth"], 26803094948045)
         self.assertEqual(
             captured["metrics"]["levelUps"],
             [{
@@ -162,10 +162,13 @@ class AIServerInputTests(unittest.TestCase):
                 "currentLevel": 299,
             }],
         )
-        self.assertEqual(captured["insights"]["recentPeriod"]["validGrowthIntervals"], 0)
-        self.assertIsNone(captured["insights"]["recentPeriod"]["observedExperienceSum"])
+        self.assertEqual(captured["insights"]["recentPeriod"]["validGrowthIntervals"], 1)
+        self.assertEqual(
+            captured["insights"]["recentPeriod"]["observedExperienceSum"],
+            26803094948045,
+        )
         self.assertEqual(captured["insights"]["recentPeriod"]["levelUpIntervals"], 1)
-        self.assertEqual(captured["context"]["periodSummary"]["validGrowthIntervals"], 0)
+        self.assertEqual(captured["context"]["periodSummary"]["validGrowthIntervals"], 1)
 
     def test_api_route_runs_real_ai_report_pipeline_with_saved_level_up_growth(self):
         event_date = self.today - timedelta(days=1)
@@ -197,7 +200,7 @@ class AIServerInputTests(unittest.TestCase):
         ]})
         report = (
             "[성장 패턴] 확인된 성장 기록을 바탕으로 최근 변화를 살펴봤어요.\n"
-            "[성장 변화] 레벨업 구간은 정확한 필요 경험치 기준이 없어 일일 획득량을 확정하지 않았어요.\n"
+            "[성장 변화] 같은 레벨의 원본 경험치 차이를 기준으로 일일 증가량을 계산했어요.\n"
             f"[레벨업 분석] {event_date.month}월 {event_date.day}일에 298레벨에서 299레벨로 올라갔어요.\n"
             "[성장 전망] 현재 기록만으로는 다음 레벨업 날짜를 확정하기 어려워요.\n"
             "[AI 코멘트] 레벨업 뒤에는 새 레벨의 경험치 진행률을 기준으로 살펴보세요."
@@ -248,6 +251,7 @@ class AIServerInputTests(unittest.TestCase):
         payload = response.get_json()
         self.assertFalse(payload["cacheHit"])
         self.assertIn("[성장 패턴]", payload["analysis"])
+        self.assertIn("26.8조", payload["analysis"])
         self.assertIn("[AI 코멘트]", payload["analysis"])
         self.assertIn(
             f"{event_date.month}월 {event_date.day}일에 298레벨에서 299레벨로 올라갔어요.",
