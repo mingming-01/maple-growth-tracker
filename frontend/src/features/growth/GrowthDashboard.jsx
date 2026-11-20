@@ -295,7 +295,7 @@ function PeriodSummary({ summary, previous, label }) {
     ? (summary.averageGrowth - previous.averageGrowth) / Math.abs(previous.averageGrowth) * 100
     : null;
   const cells = [
-    ["총 경험치 증가량",fmt(summary.growth),summary.confirmedChangeDays + "일의 경험치 변화 기준"],
+    ["총 경험치량",fmt(summary.growth),summary.confirmedChangeDays + "일의 경험치 변화 기준"],
     ["하루 평균 경험치",fmt(summary.averageGrowth),summary.confirmedChangeDays + "일의 기록 기준"],
     ["랭킹 변화",summary.rankingChange === null ? "자료 부족" : (summary.rankingChange > 0 ? "▲ " + summary.rankingChange + "위 상승" : summary.rankingChange < 0 ? "▼ " + Math.abs(summary.rankingChange) + "위 하락" : "변화 없음"),"첫 기록과 마지막 기록 비교"],
     ["지난 기간과 비교",comparisonPercent === null ? "비교 자료 부족" : (comparisonPercent > 0 ? "+" : "") + comparisonPercent.toFixed(1) + "%",previous ? "바로 앞선 같은 기간과 비교" : "지난 기간 기록 없음"],
@@ -392,27 +392,30 @@ export default function GrowthDashboard({ character, history, metrics: serverMet
       data: {
         labels: sorted.map(item => String(item.date || "").slice(5)),
         datasets: [
-          { label:"총 경험치 증가량",data:experience,yAxisID:"experience",borderColor:"#36a2eb",backgroundColor:"#36a2eb",borderWidth:3,tension:0,spanGaps:false,pointRadius:levelUpEvents.map(isLevelUp=>isLevelUp?7:3),pointHoverRadius:levelUpEvents.map(isLevelUp=>isLevelUp?9:5),pointStyle:levelUpEvents.map(isLevelUp=>isLevelUp?"star":"circle"),pointBackgroundColor:levelUpEvents.map(isLevelUp=>isLevelUp?"#f5c542":"#36a2eb"),pointBorderColor:levelUpEvents.map(isLevelUp=>isLevelUp?"#805b00":"#36a2eb"),pointBorderWidth:levelUpEvents.map(isLevelUp=>isLevelUp?1.5:0),fill:false },
+          { label:"총 경험치량",data:experience,yAxisID:"experience",borderColor:"#36a2eb",backgroundColor:"#36a2eb",borderWidth:3,tension:0,spanGaps:false,pointRadius:levelUpEvents.map(isLevelUp=>isLevelUp?7:3),pointHoverRadius:levelUpEvents.map(isLevelUp=>isLevelUp?9:5),pointStyle:levelUpEvents.map(isLevelUp=>isLevelUp?"star":"circle"),pointBackgroundColor:levelUpEvents.map(isLevelUp=>isLevelUp?"#f5c542":"#36a2eb"),pointBorderColor:levelUpEvents.map(isLevelUp=>isLevelUp?"#805b00":"#36a2eb"),pointBorderWidth:levelUpEvents.map(isLevelUp=>isLevelUp?1.5:0),fill:false },
           { label:"일일 경험치 증가량",data:daily,yAxisID:"dailyGrowth",borderColor:"#ff6384",backgroundColor:"#ff6384",borderWidth:2,segment:{borderDash:dailyGrowthSegmentDash},spanGaps:false,tension:0,pointRadius:sorted.map(item=>item.experienceChangeKind === "level_up_reconstructed" ? 4 : 2),pointHoverRadius:5,pointStyle:sorted.map(item=>item.experienceChangeKind === "level_up_reconstructed" ? "rectRot" : "circle"),fill:false },
         ]
       },
       options: {
         responsive:true,maintainAspectRatio:false,interaction:{intersect:false,mode:"index"},
-        plugins:{legend:{display:true},tooltip:{callbacks:{
+        plugins:{legend:{display:true},tooltip:{usePointStyle:true,callbacks:{
           labelColor(context) {
-            const color = context.dataset.label === "총 경험치 증가량" ? "#36a2eb" : "#ff6384";
+            const color = context.datasetIndex === 0 ? "#36a2eb" : "#ff6384";
             return { borderColor:color, backgroundColor:color };
+          },
+          labelPointStyle(context) {
+            return { pointStyle:"circle", rotation:0 };
           },
           label(context) {
             const current = sorted[context.dataIndex];
-            if (context.dataset.label === "총 경험치 증가량" && levelUpEvents[context.dataIndex]) {
+            if (context.dataset.label === "총 경험치량" && levelUpEvents[context.dataIndex]) {
               const previous = sorted.slice(0, context.dataIndex).reverse()
                 .find(item => item?.level !== null && item?.level !== undefined && Number.isFinite(Number(item.level)));
               const previousLevel = current?.levelUpPreviousLevel ?? previous?.level ?? "—";
               const currentLevel = current?.levelUpCurrentLevel ?? current?.level ?? "—";
               return [
                 "레벨업 · Lv. " + previousLevel + " → " + currentLevel,
-                "총 경험치 증가량: " + context.parsed.y.toFixed(2) + "조"
+                "총 경험치량: " + context.parsed.y.toFixed(2) + "조"
               ];
             }
             if (context.dataset.label === "일일 경험치 증가량" && current?.experienceChangeKind === "level_up_reconstructed" && context.parsed.y !== null) {
@@ -434,7 +437,7 @@ export default function GrowthDashboard({ character, history, metrics: serverMet
               return String(item?.date || "").slice(5);
             }
           }},
-          experience:{type:"linear",position:"left",title:{display:true,text:"총 경험치 증가량"},ticks:{callback:value=>Number(value).toFixed(0)+"조"}},
+          experience:{type:"linear",position:"left",title:{display:true,text:"총 경험치량"},ticks:{callback:value=>Number(value).toFixed(0)+"조"}},
           dailyGrowth:{type:"linear",position:"right",beginAtZero:true,title:{display:true,text:"일일 경험치 증가량"},grid:{drawOnChartArea:false},ticks:{callback:value=>Number(value).toFixed(0)+"조"}}
         }
       }
@@ -513,7 +516,7 @@ export default function GrowthDashboard({ character, history, metrics: serverMet
 
       <section className="section" id="growth-trend">
         <div className="section-header history-chart-header">
-          <div><h2 className="section-title">성장 추이</h2><p className="section-description">총 경험치 증가량과 하루 단위 증가량, 레벨업 기록을 보여줍니다.</p></div>
+          <div><h2 className="section-title">성장 추이</h2><p className="section-description">총 경험치량과 하루 단위 증가량, 레벨업 기록을 보여줍니다.</p></div>
           <label className="history-range-control">기록 범위
             <select className="history-range-select" value={range} onChange={event => changeRange(Number(event.target.value))} disabled={busy}>
               <option value="7">최근 7일</option><option value="30">저장 기록 30일</option><option value="90">저장 기록 90일</option>
