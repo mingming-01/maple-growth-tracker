@@ -1,6 +1,8 @@
 """Deployment entrypoint and Gunicorn timeout regression tests."""
 import runpy
 from pathlib import Path
+import subprocess
+import sys
 import unittest
 
 from tracker.config import Config
@@ -21,6 +23,31 @@ class GunicornRuntimeConfigTests(unittest.TestCase):
 
         self.assertGreater(config["timeout"], Config.AI_REQUEST_TOTAL_TIMEOUT)
         self.assertEqual(config["timeout"], 120)
+
+    def test_render_start_command_loads_project_gunicorn_config_by_default(self):
+        """Render configured gunicorn app:app must resolve the repository config."""
+        result = subprocess.run(
+            [
+                sys.executable,
+                "-m",
+                "gunicorn",
+                "--print-config",
+                "app:app",
+            ],
+            cwd=ROOT,
+            check=True,
+            capture_output=True,
+            text=True,
+            timeout=15,
+        )
+
+        settings = dict(
+            line.split(" = ", 1)
+            for line in result.stdout.splitlines()
+            if " = " in line
+        )
+        self.assertEqual(settings.get("timeout"), "120")
+        self.assertEqual(settings.get("config"), "./gunicorn.conf.py")
 
 
 if __name__ == "__main__":
