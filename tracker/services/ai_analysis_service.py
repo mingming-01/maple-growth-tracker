@@ -1019,67 +1019,70 @@ def _generate_ai_analysis_impl(character, history, computed_metrics=None, growth
                 return _error_result(error, "AI 분석을 불러오지 못했습니다.")
 
     if openrouter_api_key:
-        openrouter_error = None
-        for attempt in range(2):
-            openrouter_started_at = time.monotonic()
-            try:
-                response_text = _require_provider_text(
-                    request_openrouter(
-                        prompt,
-                        api_key=openrouter_api_key,
-                        deadline=deadline,
-                    ),
+        openrouter_started_at = time.monotonic()
+        try:
+            response_text = _require_provider_text(
+                request_openrouter(
+                    prompt,
+                    api_key=openrouter_api_key,
+                    deadline=deadline,
+                ),
+                "OpenRouter",
+            )
+            provider_metadata = dict(getattr(response_text, "provider_metadata", {}) or {})
+            provider_metadata["attempt"] = 1
+            print("OpenRouter로 성장 리포트를 처리했습니다.")
+            if computed_metrics is not None:
+                analysis = _compose_growth_report_from_ai(
+                    response_text,
+                    character,
+                    computed_metrics,
+                    growth_insights,
+                    analysis_context,
+                    source_data,
+                    expected_date,
                     "OpenRouter",
                 )
-                provider_metadata = dict(getattr(response_text, "provider_metadata", {}) or {})
-                provider_metadata["attempt"] = attempt + 1
-                print("OpenRouter로 성장 리포트를 처리했습니다.")
-                if computed_metrics is not None:
-                    analysis = _compose_growth_report_from_ai(
-                        response_text,
-                        character,
-                        computed_metrics,
-                        growth_insights,
-                        analysis_context,
-                        source_data,
-                        expected_date,
-                        "OpenRouter",
+            else:
+                analysis = sanitize_ai_text(response_text, expected_date)
+                if not validate_growth_report(analysis):
+                    error = ProviderError(
+                        "OpenRouter report format validation failed.",
+                        "provider_invalid_output",
                     )
-                else:
-                    analysis = sanitize_ai_text(response_text, expected_date)
-                    if not validate_growth_report(analysis):
-                        error = ProviderError("OpenRouter report format validation failed.", "provider_invalid_output")
-                        error.validation_reason = "report_format"
-                        error.provider_metadata = {**provider_metadata, "response_classification": "report_format_failed"}
-                        raise error
-                _store_cached_ai_response(cache_key, analysis)
-                metadata = _log_provider_success("openrouter", provider_metadata, validated=True, returned=True, cache_hit=False)
-                return {"analysis": analysis, "cacheHit": False, "growthInsights": growth_insights, "aiGenerated": True, "aiStatus": "generated", "providerMetadata": metadata}
-            except Exception as error:
-                openrouter_error = error
-                _log_provider_failure("openrouter", error, openrouter_started_at, deadline, attempt=attempt + 1)
-                retryable_output_error = provider_error_type(error) == "provider_output_truncated"
-                remaining_ms = max(0, (deadline - time.monotonic()) * 1000)
-                if attempt == 0 and retryable_output_error and remaining_ms >= 1000:
-                    if has_app_context():
-                        current_app.logger.warning(
-                            "OpenRouter 응답이 출력 한도에 도달했습니다. "
-                            "같은 OpenRouter 모델 별칭으로 한 번 재시도합니다: "
-                            "reason=%s remaining_ms=%d",
-                            provider_error_type(error), round(remaining_ms),
-                        )
-                    continue
-                break
-        if computed_metrics is not None:
-            failed_error = openrouter_error or gemini_error
-            return _server_fallback_growth_report(
-                character,
-                computed_metrics,
-                growth_insights,
-                analysis_context,
-                provider_error_type(failed_error) if failed_error else "provider_unavailable",
+                    error.validation_reason = "report_format"
+                    error.provider_metadata = {
+                        **provider_metadata,
+                        "response_classification": "report_format_failed",
+                    }
+                    raise error
+            _store_cached_ai_response(cache_key, analysis)
+            metadata = _log_provider_success(
+                "openrouter",
+                provider_metadata,
+                validated=True,
+                returned=True,
+                cache_hit=False,
             )
-        return _fallback_failure_result(gemini_error, openrouter_error)
+            return {
+                "analysis": analysis,
+                "cacheHit": False,
+                "growthInsights": growth_insights,
+                "aiGenerated": True,
+                "aiStatus": "generated",
+                "providerMetadata": metadata,
+            }
+        except Exception as error:
+            _log_provider_failure("openrouter", error, openrouter_started_at, deadline)
+            if computed_metrics is not None:
+                return _server_fallback_growth_report(
+                    character,
+                    computed_metrics,
+                    growth_insights,
+                    analysis_context,
+                    provider_error_type(error) or "provider_unavailable",
+                )
+            return _fallback_failure_result(gemini_error, error)
 
     if gemini_error:
         if computed_metrics is not None:
