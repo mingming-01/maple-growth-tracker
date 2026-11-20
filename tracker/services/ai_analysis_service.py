@@ -341,7 +341,10 @@ def _build_ai_commentary_context(source_data):
     except (TypeError, ValueError):
         magnitude = None
 
-    if comparison.get("status") != "available" or direction in (None, "insufficient", "insufficient_data"):
+    period_days = selected_period.get("periodDays", 7)
+    if period_days in (30, 90):
+        growth_comparison = "선택한 장기 구간의 전체 성장 기록을 중심으로 해석"
+    elif comparison.get("status") != "available" or direction in (None, "insufficient", "insufficient_data"):
         growth_comparison = "비교할 이전 성장 기록이 충분하지 않음"
     elif direction == "increase":
         growth_comparison = (
@@ -379,7 +382,7 @@ def _build_ai_commentary_context(source_data):
         level_transition = "분석 기간 중 레벨업 전환이 확인됨"
     elif summary.get("levelUpIntervals"):
         level_transition = "레벨업 전환은 관찰됐지만 날짜나 전후 레벨을 확정할 수 없음"
-    elif summary.get("validGrowthIntervals") is None:
+    elif summary.get("validGrowthIntervals") in (None, 0):
         level_transition = "레벨업 여부를 판단할 연속 기록이 부족함"
     else:
         level_transition = "분석 기간의 확인된 기록에서 레벨업 전환이 나타나지 않음"
@@ -404,7 +407,6 @@ def _build_ai_commentary_context(source_data):
         if isinstance(prediction, dict) and prediction.get("estimatedDate")
         else "기록만으로 신뢰할 수 있는 성장 전망을 계산하기 어려움"
     )
-    period_days = selected_period.get("periodDays", 7)
     period_scope = "장기 성장 기록의 흐름" if period_days in (30, 90) else "최근 성장 기록의 흐름"
     return {
         "분석 범위": period_scope,
@@ -494,8 +496,8 @@ def _build_growth_report_cache_key(prompt, source_data):
     """정성 신호 프롬프트와 해당 캐릭터의 실제 계산 데이터로 캐시를 구분한다."""
     return (
         prompt
-        + "\\n[리포트 형식 버전] 5\\n"
-        + "[캐시 식별 데이터]\\n"
+        + "\n[리포트 형식 버전] 5\n"
+        + "[캐시 식별 데이터]\n"
         + json.dumps(source_data, ensure_ascii=False, sort_keys=True)
     )
 
@@ -644,7 +646,7 @@ def _prepare_ai_comment(value, expected_date, source_data):
     sanitized = sanitize_ai_text(value, expected_date)
     comment = _extract_ai_comment(sanitized)
     comment, removed_numeric_sentences = _remove_numeric_comment_sentences(comment)
-    compact = re.sub(r"[\\s.!?…·]", "", comment)
+    compact = re.sub(r"[\s.!?…·]", "", comment)
     if len(compact) < 8:
         reason = "numeric_claim_only" if removed_numeric_sentences else "empty_comment"
         return None, reason
