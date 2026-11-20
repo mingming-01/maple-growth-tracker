@@ -60,7 +60,7 @@ function parseAnalysis(analysis) {
 
 function buildReportSignature(character, history, metrics, analysisContext = {}) {
   return stableStringify({
-    cacheVersion: 9,
+    cacheVersion: 10,
     name:character.characterName,
     ocid:character.ocid,
     level:character.level,
