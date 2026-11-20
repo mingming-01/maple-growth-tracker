@@ -71,7 +71,7 @@ class GrowthCalculationBehaviorTests(unittest.TestCase):
         self.assertIsNone(history[3]["experienceRateChange"])
         self.assertIsNone(history[4]["experienceRateChange"])
 
-    def test_recent_history_does_not_invent_daily_change_across_level_up(self):
+    def test_recent_history_includes_bounded_level_up_daily_gain(self):
         response_stub = Mock(status_code=200)
         basic = {
             "character_name": "테스트캐릭터",
