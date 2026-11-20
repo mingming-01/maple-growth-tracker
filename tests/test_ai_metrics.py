@@ -361,6 +361,43 @@ class ServerAIMetricsTests(unittest.TestCase):
         self.assertEqual(prediction["date"], "2027-02-04")
         self.assertEqual(prediction["estimatedDate"], "2027-02-04")
 
+    def test_period_totals_include_level_up_gain_without_mixing_it_into_exact_snapshot_sum(self):
+        today = date(2026, 11, 18)
+        records = [
+            {
+                "date": "2026-11-17",
+                "level": 280,
+                "experience": 900_000_000_000_000,
+                "experienceRate": 96.000,
+                "recordStatus": "available",
+            },
+            {
+                "date": "2026-11-18",
+                "level": 281,
+                "experience": 2_500_000_000_000,
+                "experienceRate": 0.144,
+                "recordStatus": "available",
+            },
+        ]
+
+        result = build_server_growth_metrics(
+            {"level": 281, "experienceRate": 0.144},
+            records,
+            reference_date=today,
+            period_days=2,
+        )
+
+        summary = result["periodSummary"]
+        self.assertEqual(summary["experienceGainSum"], 40_000_000_000_000)
+        self.assertIsNone(summary["observedExperienceSum"])
+        self.assertEqual(summary["reconstructedLevelUpExperienceSum"], 40_000_000_000_000)
+        self.assertEqual(summary["reconstructedLevelUpIntervals"], 1)
+        self.assertEqual(summary["validGrowthIntervals"], 1)
+        self.assertEqual(summary["averageDailyExperience"], 40_000_000_000_000)
+        self.assertEqual(result["metrics"]["calculatedChangeDays"], 1)
+        self.assertEqual(result["metrics"]["observedChangeDays"], 0)
+        self.assertEqual(result["metrics"]["averageDailyGrowth"], 40_000_000_000_000)
+
     def test_missing_dates_and_level_up_transitions_are_not_interpolated(self):
         today = date(2026, 11, 16)
         records = [
