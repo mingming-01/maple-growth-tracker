@@ -879,6 +879,7 @@ test("React growth chart plots level-local EXP with a dashed level-up boundary",
   expect(markerState.x).toBeLessThan(markerState.chartArea.right);
   expect(markerState.y).toBeGreaterThanOrEqual(markerState.chartArea.top);
   expect(markerState.y).toBeLessThanOrEqual(markerState.chartArea.bottom);
+  await expect.poll(async () => (await pixelCounts()).yellow).toBeGreaterThan(8);
 
   await expect(page.locator("#growth-timeline .growth-timeline-item.is-level-up")).toHaveCount(1);
   await expect(page.locator("#growth-timeline")).toContainText("2026.11.18");
