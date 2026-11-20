@@ -272,13 +272,11 @@ class AIAnalysisFallbackTests(unittest.TestCase):
         self.assertIn("[AI 코멘트]", result["analysis"])
         self.assertIn("현재 기록만으로는 다음 레벨업 날짜를 예상하기 어려워요.", result["analysis"])
         prompt = openrouter.call_args.args[0]
-        self.assertIn('"experienceChange": null', prompt)
-        self.assertIn('"date": "2026-11-18"', prompt)
-        self.assertNotIn("26803094948045", prompt)
-        self.assertIn('"levelUp": true', prompt)
-        self.assertNotIn(f'"experienceChange": {-(
-            1156066685461973 - 17096549681346
-        )}', prompt)
+        self.assertIn("레벨업 전환이 확인됨", prompt)
+        self.assertNotIn('"experienceChange"', prompt)
+        self.assertNotIn('"date":', prompt)
+        self.assertNotIn("1156066685461973", prompt)
+        self.assertNotIn("17096549681346", prompt)
 
     @patch("tracker.services.ai_analysis_service._request_deadline", return_value=12345.0)
     @patch("tracker.services.ai_analysis_service.get_runtime_state")
@@ -377,7 +375,7 @@ class AIAnalysisFallbackTests(unittest.TestCase):
         ProviderError("OpenRouter output was truncated", "provider_output_truncated"),
         VALID_REPORT,
     ])
-    def test_http_429_then_truncated_openrouter_retries_same_model_alias(
+    def test_http_429_then_truncated_openrouter_returns_fallback_without_retry(
         self, openrouter, gemini, _cooldown, _set_cache, _get_cache, get_state
     ):
         response = type("Response", (), {"status_code": 429, "headers": {}, "text": ""})()
@@ -389,11 +387,8 @@ class AIAnalysisFallbackTests(unittest.TestCase):
         )
 
         self.assertIn("analysis", result)
-        self.assertEqual(openrouter.call_count, 2)
-        self.assertEqual(
-            openrouter.call_args_list[0].kwargs["deadline"],
-            openrouter.call_args_list[1].kwargs["deadline"],
-        )
+        self.assertFalse(result["aiGenerated"])
+        openrouter.assert_called_once()
 
     @patch("tracker.services.ai_analysis_service.get_runtime_state")
     @patch("tracker.services.ai_analysis_service.get_ai_response_cache", return_value=None)
@@ -404,7 +399,7 @@ class AIAnalysisFallbackTests(unittest.TestCase):
         "Gemini unavailable", "provider_unavailable"
     ))
     @patch("tracker.services.ai_analysis_service.request_openrouter", return_value=VALID_REPORT)
-    def test_openrouter_ungrounded_comment_is_rejected_without_quota_wasting_retry(
+    def test_openrouter_comment_does_not_use_legacy_numeric_allowlist(
         self, openrouter, _gemini, _facts, _cooldown, _set_cache, _get_cache, get_state
     ):
         get_state.return_value = self.state
@@ -414,8 +409,9 @@ class AIAnalysisFallbackTests(unittest.TestCase):
         )
 
         self.assertIn("analysis", result)
-        self.assertFalse(result["aiGenerated"])
+        self.assertTrue(result["aiGenerated"])
         self.assertEqual(openrouter.call_count, 1)
+        _facts.assert_not_called()
 
     @patch("tracker.services.ai_analysis_service.get_runtime_state")
     @patch("tracker.services.ai_analysis_service.get_ai_response_cache", return_value=None)
