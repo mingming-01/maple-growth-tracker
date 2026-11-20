@@ -131,6 +131,12 @@ class GrowthCalculationBehaviorTests(unittest.TestCase):
         self.assertEqual(history[6]["rankingChange"], 10)
         self.assertEqual(history[6]["experienceRate"], "23.4567")
         self.assertTrue(history[6]["experienceRateChecked"])
+        prediction = response.get_json()["metrics"]["prediction"]
+        self.assertEqual(prediction["currentLevel"], 281)
+        self.assertEqual(prediction["currentExperience"], 100)
+        self.assertEqual(prediction["currentRate"], 23.4567)
+        self.assertEqual(prediction["requiredExp"], 326)
+        self.assertIsNone(prediction["averageGrowth"])
 
     def test_level_up_boundary_is_unknown_but_delayed_level_catch_up_growth_is_calculated(self):
         history = [
