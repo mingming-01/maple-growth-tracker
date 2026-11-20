@@ -11,7 +11,7 @@ import requests
 from decimal import Decimal, InvalidOperation, ROUND_HALF_UP
 
 from flask import current_app, has_app_context, has_request_context, request
-from datetime import date
+from datetime import date, datetime, timezone
 from types import SimpleNamespace
 
 from tracker.integrations.ai_provider import (
@@ -31,6 +31,7 @@ from tracker.services.ai_text_service import (
 from tracker.services.performance_metrics import increment_metric
 from tracker.runtime import (
     get_ai_response_cache,
+    get_ai_response_cache_metadata,
     get_gemini_client,
     get_runtime_state,
     set_ai_response_cache,
@@ -166,14 +167,42 @@ def _get_cached_ai_response(cache_key):
         return None
 
 
-def _store_cached_ai_response(cache_key, analysis):
-    """공급자가 만든 정상 분석문을 캐시 저장 실패와 무관하게 반환한다."""
+def _get_cached_ai_response_metadata(cache_key):
+    """캐시 본문 조회와 분리해 기존 생성 메타데이터를 안전하게 읽는다."""
     try:
-        set_ai_response_cache(cache_key, analysis)
+        return get_ai_response_cache_metadata(cache_key) or {}
+    except Exception as error:
+        _log_ai_cache_failure("read_metadata", error)
+        return {}
+
+
+def _store_cached_ai_response(cache_key, analysis, metadata=None):
+    """공급자가 만든 정상 분석문과 선택적 출처 정보를 캐시한다."""
+    try:
+        if metadata is None:
+            set_ai_response_cache(cache_key, analysis)
+        else:
+            set_ai_response_cache(cache_key, analysis, metadata=metadata)
         return True
     except Exception as error:
         _log_ai_cache_failure("write", error)
         return False
+
+
+def _build_generation_metadata(provider, provider_metadata=None, *, fallback_used=False, fallback_reason=None):
+    """실제 생성 제공자·모델과 폴백 여부만 응답 및 캐시에 보존한다."""
+    safe = _safe_provider_metadata(provider_metadata)
+    requested_model = safe.get("model_alias")
+    selected_model = safe.get("selected_model") or requested_model
+    return {
+        "provider": str(provider or "unknown"),
+        "requestedModel": str(requested_model)[:120] if requested_model else None,
+        "selectedModel": str(selected_model)[:120] if selected_model else None,
+        "selectedProvider": str(safe.get("selected_provider"))[:120] if safe.get("selected_provider") else None,
+        "fallbackUsed": bool(fallback_used),
+        "fallbackReason": str(fallback_reason)[:80] if fallback_used and fallback_reason else None,
+        "generatedAt": datetime.now(timezone.utc).isoformat(timespec="seconds"),
+    }
 
 
 def _gemini_cooldown_remaining(runtime_state):
@@ -1090,9 +1119,30 @@ def _generate_ai_analysis_impl(character, history, computed_metrics=None, growth
             if not validate_growth_report(cached_analysis):
                 cached_analysis = None
         if cached_analysis is not None:
+            cached_metadata = _get_cached_ai_response_metadata(cache_key)
+            generation = cached_metadata.get("generation") if isinstance(cached_metadata, dict) else None
+            if not isinstance(generation, dict):
+                generation = None
+            log_provider = generation.get("provider") if generation else "cache"
+            log_metadata = {"response_body_present": True}
+            if generation:
+                log_metadata.update({
+                    "model_alias": generation.get("requestedModel"),
+                    "selected_model": generation.get("selectedModel"),
+                    "selected_provider": generation.get("selectedProvider"),
+                })
             print("저장된 AI 성장 리포트를 재사용했습니다.")
-            metadata = _log_provider_success("cache", {"response_body_present": True}, validated=True, returned=True, cache_hit=True)
-            return {"analysis": cached_analysis, "cacheHit": True, "growthInsights": growth_insights, "aiGenerated": True, "aiStatus": "generated", "providerMetadata": metadata}
+            metadata = _log_provider_success(log_provider, log_metadata, validated=True, returned=True, cache_hit=True)
+            return {
+                "analysis": cached_analysis,
+                "cacheHit": True,
+                "growthInsights": growth_insights,
+                "aiGenerated": True,
+                "aiStatus": "generated",
+                "providerMetadata": metadata,
+                "generation": generation,
+                "delivery": {"source": "server_cache"},
+            }
 
     gemini_error = None
     if gemini_api_key and cooldown_remaining > 0:
@@ -1131,9 +1181,19 @@ def _generate_ai_analysis_impl(character, history, computed_metrics=None, growth
                     error.provider_metadata = {**provider_metadata, "response_classification": "report_format_failed"}
                     raise error
             _clear_gemini_cooldown(runtime_state)
-            _store_cached_ai_response(cache_key, analysis)
+            generation = _build_generation_metadata("gemini", provider_metadata)
+            _store_cached_ai_response(cache_key, analysis, metadata={"generation": generation})
             metadata = _log_provider_success("gemini", provider_metadata, validated=True, returned=True, cache_hit=False)
-            return {"analysis": analysis, "cacheHit": False, "growthInsights": growth_insights, "aiGenerated": True, "aiStatus": "generated", "providerMetadata": metadata}
+            return {
+                "analysis": analysis,
+                "cacheHit": False,
+                "growthInsights": growth_insights,
+                "aiGenerated": True,
+                "aiStatus": "generated",
+                "providerMetadata": metadata,
+                "generation": generation,
+                "delivery": {"source": "generated"},
+            }
         except Exception as error:
             gemini_error = error
             if _is_quota_error(error):
@@ -1181,7 +1241,13 @@ def _generate_ai_analysis_impl(character, history, computed_metrics=None, growth
                         "response_classification": "report_format_failed",
                     }
                     raise error
-            _store_cached_ai_response(cache_key, analysis)
+            generation = _build_generation_metadata(
+                "openrouter",
+                provider_metadata,
+                fallback_used=gemini_error is not None,
+                fallback_reason=provider_error_type(gemini_error) if gemini_error is not None else None,
+            )
+            _store_cached_ai_response(cache_key, analysis, metadata={"generation": generation})
             metadata = _log_provider_success(
                 "openrouter",
                 provider_metadata,
@@ -1196,6 +1262,8 @@ def _generate_ai_analysis_impl(character, history, computed_metrics=None, growth
                 "aiGenerated": True,
                 "aiStatus": "generated",
                 "providerMetadata": metadata,
+                "generation": generation,
+                "delivery": {"source": "generated"},
             }
         except Exception as error:
             _log_provider_failure("openrouter", error, openrouter_started_at, deadline)

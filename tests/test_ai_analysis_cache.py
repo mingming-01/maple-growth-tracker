@@ -12,6 +12,7 @@ from tracker import create_app
 from tracker.runtime import get_runtime_state
 from tracker.services import runtime_cache
 from tracker.services.runtime_cache import RuntimeCache
+from tracker.integrations.ai_provider import ProviderText
 
 
 class AIResponseCacheMetricsTests(unittest.TestCase):
@@ -65,6 +66,14 @@ class AIResponseCacheMetricsTests(unittest.TestCase):
         metric.assert_any_call("cache.evictions", 2, cache="ai_response")
 
 
+    def test_ai_cache_metadata_is_preserved_without_changing_legacy_text_reads(self):
+        cache = RuntimeCache()
+        metadata = {"generation": {"provider": "gemini", "selectedModel": "gemini-test"}}
+        cache.set_ai_response("metadata prompt", "analysis text", metadata=metadata)
+
+        self.assertEqual(cache.get_ai_response("metadata prompt"), "analysis text")
+        self.assertEqual(cache.get_ai_response_metadata("metadata prompt"), metadata)
+
 class AIResponseCacheTests(unittest.TestCase):
     def setUp(self):
         self.app = create_app({
@@ -103,12 +112,17 @@ class AIResponseCacheTests(unittest.TestCase):
             self.assertEqual(self.state.ai_response_cache, {})
 
     def test_growth_report_reuses_successful_model_response(self):
-        generated_text = (
+        generated_text = ProviderText(
             "[성장 패턴] 기록된 성장 흐름입니다.\n"
             "[성장 변화] 최근 기록에서 변화가 보입니다.\n"
             "[레벨업 분석] 확인된 레벨업은 없습니다.\n"
             "[성장 전망] 전망 자료를 참고하세요.\n"
-            "[AI 코멘트] 기록을 이어가세요."
+            "[AI 코멘트] 기록을 이어가세요.",
+            {
+                "provider": "gemini",
+                "model_alias": "gemini-test-flash",
+                "selected_model": "gemini-test-flash",
+            },
         )
         character = {
             "characterName": "테스트캐릭터", "worldName": "크로아",
@@ -137,6 +151,11 @@ class AIResponseCacheTests(unittest.TestCase):
         self.assertEqual(first["analysis"], second["analysis"])
         self.assertFalse(first["cacheHit"])
         self.assertTrue(second["cacheHit"])
+        self.assertEqual(first["generation"]["provider"], "gemini")
+        self.assertEqual(first["generation"]["selectedModel"], "gemini-test-flash")
+        self.assertEqual(second["generation"], first["generation"])
+        self.assertEqual(first["delivery"]["source"], "generated")
+        self.assertEqual(second["delivery"]["source"], "server_cache")
         generate.assert_called_once()
 
     def test_comparison_reuses_successful_model_response(self):

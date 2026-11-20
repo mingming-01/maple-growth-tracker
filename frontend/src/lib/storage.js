@@ -116,11 +116,14 @@ export function getCachedAI(type, signature) {
   writeJson(globalThis.localStorage, STORAGE_KEYS.ai, entries);
   return {
     analysis: entry.analysis,
-    growthInsights: entry.growthInsights || null
+    growthInsights: entry.growthInsights || null,
+    generation: entry.generation && typeof entry.generation === "object" && !Array.isArray(entry.generation)
+      ? entry.generation
+      : null
   };
 }
 
-export function saveCachedAI(type, signature, analysis, growthInsights = null) {
+export function saveCachedAI(type, signature, analysis, growthInsights = null, generation = null) {
   if (!analysis) return;
   const entries = readAIEntries();
   const key = type + ":" + hashSignature(signature);
@@ -132,6 +135,9 @@ export function saveCachedAI(type, signature, analysis, growthInsights = null) {
     signature,
     analysis,
     growthInsights,
+    generation: generation && typeof generation === "object" && !Array.isArray(generation)
+      ? generation
+      : null,
     savedAt: now,
     lastUsedAt: now
   });

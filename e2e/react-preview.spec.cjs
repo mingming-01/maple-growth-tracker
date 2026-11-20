@@ -469,7 +469,19 @@ test("AI report loads the server cache on entry and regenerates only on explicit
       status: 200, contentType: "application/json",
       body: JSON.stringify({
         analysis: "[성장 패턴] 기간 분석 테스트 결과입니다.\\n[성장 변화] 선택 기간 기록을 확인했습니다.\\n[레벨업 분석] 확인할 기록이 부족합니다.\\n[성장 전망] 자료가 부족합니다.\\n[AI 코멘트] 테스트 리포트입니다.",
-        cacheHit: false, growthInsights: {}
+        cacheHit: false,
+        aiGenerated: true,
+        growthInsights: {},
+        generation: {
+          provider: "openrouter",
+          requestedModel: "openrouter/free",
+          selectedModel: "sample/free-route-model",
+          selectedProvider: "sample-provider",
+          fallbackUsed: true,
+          fallbackReason: "provider_quota",
+          generatedAt: "2026-11-20T19:00:00+00:00"
+        },
+        delivery: { source: "generated" }
       })
     });
   });
@@ -481,6 +493,10 @@ test("AI report loads the server cache on entry and regenerates only on explicit
   // Opening the AI report checks browser cache, then the server cache; a miss starts generation.
   await page.locator('.mgt-nav a[href="#/analytics"]').click();
   await expect(page.getByText("기간 분석 테스트 결과입니다.")).toBeVisible();
+  const provenance = page.getByTestId("ai-report-provenance");
+  await expect(provenance).toContainText("OpenRouter");
+  await expect(provenance).toContainText("sample/free-route-model");
+  await expect(provenance).toContainText("Gemini 사용량 제한");
   expect(aiCalls).toBe(1);
   expect(submittedPayload.analysisContext.periodDays).toBe(7);
   expect(submittedPayload.forceRefresh).toBe(false);
@@ -503,6 +519,8 @@ test("AI report loads the server cache on entry and regenerates only on explicit
   // Re-entering the same report reuses the browser cache.
   await page.locator('.mgt-nav a[href="#/analytics"]').click();
   await expect(page.getByText("기간 분석 테스트 결과입니다.")).toBeVisible();
+  await expect(provenance).toContainText("브라우저 캐시");
+  await expect(provenance).toContainText("sample/free-route-model");
   expect(aiCalls).toBe(2);
 
   await page.getByRole("button", { name: "다시 분석" }).click();

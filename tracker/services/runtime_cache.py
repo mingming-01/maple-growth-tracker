@@ -36,7 +36,22 @@ class RuntimeCache:
             increment_metric("cache.lookups", cache="ai_response", result="hit")
             return item["analysis"]
 
-    def set_ai_response(self, prompt, analysis):
+    def get_ai_response_metadata(self, prompt):
+        """Return optional metadata for a previously retrieved AI response."""
+        cache_key = hashlib.sha256(prompt.encode("utf-8")).hexdigest()
+        with self.lock:
+            item = self.ai_response_cache.get(cache_key)
+            if not item:
+                return None
+            now = time.time()
+            if now - item["cached_at"] > AI_RESPONSE_CACHE_TTL:
+                self.ai_response_cache.pop(cache_key, None)
+                increment_metric("cache.expirations", cache="ai_response")
+                return None
+            metadata = item.get("metadata")
+            return dict(metadata) if isinstance(metadata, dict) else None
+
+    def set_ai_response(self, prompt, analysis, metadata=None):
         if not analysis:
             return
         now = time.time()
@@ -50,6 +65,7 @@ class RuntimeCache:
                         evicted += 1
             self.ai_response_cache[cache_key] = {
                 "analysis": analysis,
+                "metadata": dict(metadata) if isinstance(metadata, dict) else None,
                 "cached_at": now,
                 "used_at": now,
             }

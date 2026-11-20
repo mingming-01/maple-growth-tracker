@@ -74,12 +74,54 @@ function buildReportSignature(character, history, metrics, analysisContext = {})
 }
 
 
+function describeAIReportGeneration(generation, deliverySource) {
+  const deliveryLabels = {
+    generated: "이번 요청에서 생성",
+    server_cache: "서버 캐시",
+    browser_cache: "브라우저 캐시"
+  };
+  const fallbackReasonLabels = {
+    provider_quota: "Gemini 사용량 제한",
+    provider_timeout: "Gemini 응답 시간 초과",
+    provider_unavailable: "Gemini 일시 장애",
+    provider_empty_response: "Gemini 응답 내용 없음",
+    provider_invalid_response: "Gemini 응답 형식 오류",
+    provider_parse_error: "Gemini 응답 파싱 실패",
+    provider_output_truncated: "Gemini 응답 잘림",
+    provider_invalid_output: "Gemini 응답 검증 실패"
+  };
+  const deliveryLabel = deliveryLabels[deliverySource] || "조회 경로 확인 불가";
+  if (!generation || typeof generation !== "object") {
+    return "생성 모델 정보가 없는 이전 리포트 · " + deliveryLabel;
+  }
+  const providerLabels = { gemini: "Gemini", openrouter: "OpenRouter" };
+  const provider = providerLabels[generation.provider] || generation.provider || "제공자 확인 불가";
+  const selectedModel = generation.selectedModel || generation.requestedModel;
+  const modelLabel = selectedModel
+    ? "모델: " + selectedModel + (
+      generation.requestedModel && generation.requestedModel !== selectedModel
+        ? " (요청: " + generation.requestedModel + ")"
+        : ""
+    )
+    : "모델 정보 없음";
+  const details = ["생성: " + provider, modelLabel];
+  if (generation.selectedProvider) details.push("라우팅 제공자: " + generation.selectedProvider);
+  if (generation.fallbackUsed) {
+    const reason = fallbackReasonLabels[generation.fallbackReason] || "기본 제공자 응답 실패";
+    details.push("Gemini 폴백 사용 · " + reason);
+  }
+  details.push(deliveryLabel);
+  return details.join(" · ");
+}
+
 export function AIReport({ character, history, analysisHistory = history, periodDays = 7, periodSummary = null, metrics: serverMetrics, onPeriodSelect }) {
   const [analysis,setAnalysis] = useState("");
   const [growthInsights,setGrowthInsights] = useState(null);
   const [serverPeriodSummary,setServerPeriodSummary] = useState(null);
   const [serverPreviousPeriodSummary,setServerPreviousPeriodSummary] = useState(null);
   const [aiGenerated,setAiGenerated] = useState(null);
+  const [generation,setGeneration] = useState(null);
+  const [deliverySource,setDeliverySource] = useState(null);
   const [loading,setLoading] = useState(false);
   const [error,setError] = useState("");
   const [notice,setNotice] = useState("");
@@ -104,6 +146,8 @@ export function AIReport({ character, history, analysisHistory = history, period
       setServerPreviousPeriodSummary(null);
       setAnalysis(cached.analysis);
       setGrowthInsights(cached.growthInsights || null);
+      setGeneration(cached.generation || null);
+      setDeliverySource("browser_cache");
       setAiGenerated(true);
       setNotice(analysisContext.periodDays > 7 ? `지난 ${analysisContext.periodDays}일 분석 결과를 불러왔어요.` : "");
       setLoading(false);
@@ -115,6 +159,8 @@ export function AIReport({ character, history, analysisHistory = history, period
       setAnalysis("");
       setGrowthInsights(null);
       setAiGenerated(null);
+      setGeneration(null);
+      setDeliverySource(null);
       setNotice(`최근 ${analysisContext.periodDays}일 리포트가 아직 없어요. AI 분석 시작을 누르면 지금 기록으로 새 리포트를 만들어요.`);
       setLoading(false);
       return;
@@ -128,12 +174,15 @@ export function AIReport({ character, history, analysisHistory = history, period
       setServerPeriodSummary(result.periodSummary || null);
       setServerPreviousPeriodSummary(result.previousPeriodSummary || null);
       const generatedByAI = result.aiGenerated !== false;
+      const reportGeneration = generatedByAI ? result.generation || null : null;
+      setGeneration(reportGeneration);
+      setDeliverySource(result.delivery?.source || (generatedByAI ? "generated" : "server_fallback"));
       setAiGenerated(generatedByAI);
       setNotice(generatedByAI
         ? ""
         : "AI 응답을 받지 못해 서버가 확인한 수치로 리포트를 표시하고 있어요. AI 코멘트는 아직 생성되지 않았습니다.");
       if (generatedByAI) {
-        saveCachedAI(cacheType,signature,result.analysis,result.growthInsights || null);
+        saveCachedAI(cacheType,signature,result.analysis,result.growthInsights || null,reportGeneration);
       }
     } catch (requestError) {
       setError(requestError.message || "AI 성장 분석을 불러오지 못했습니다.");
@@ -148,6 +197,8 @@ export function AIReport({ character, history, analysisHistory = history, period
     setServerPeriodSummary(null);
     setServerPreviousPeriodSummary(null);
     setAiGenerated(null);
+    setGeneration(null);
+    setDeliverySource(null);
     setError("");
     // 리포트 화면 진입 시 브라우저 캐시를 먼저 보고, 없으면 서버 캐시를 확인한 뒤 필요한 경우 생성한다.
     // 캐릭터 검색 자체에서는 AI 공급자 호출을 하지 않는다.
@@ -217,6 +268,11 @@ export function AIReport({ character, history, analysisHistory = history, period
         </div>
         {loading && <div className="ai-analysis-loading" role="status">성장 기록을 살펴보고 있습니다...</div>}
         {notice && !loading && <p className="ai-analysis-notice" role="status">{notice}</p>}
+        {analysis && !loading && aiGenerated !== false && (
+          <p className="ai-analysis-notice" data-testid="ai-report-provenance">
+            {describeAIReportGeneration(generation, deliverySource)}
+          </p>
+        )}
         {error && <div className="ai-analysis-error" role="alert">{error}</div>}
         {analysis && !loading && (
           <div className="ai-analysis-result">

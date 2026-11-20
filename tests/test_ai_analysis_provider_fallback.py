@@ -6,7 +6,7 @@ import unittest
 from types import SimpleNamespace
 from unittest.mock import patch
 
-from tracker.integrations.ai_provider import ProviderError
+from tracker.integrations.ai_provider import ProviderError, ProviderText
 from tracker.domain.ai_metrics import build_server_growth_metrics
 from tracker.services import ai_analysis_service as service
 
@@ -485,6 +485,78 @@ class AIAnalysisFallbackTests(unittest.TestCase):
         self.assertTrue(result["analysis"].startswith("[성장 패턴]"))
         openrouter.assert_called_once()
 
+
+    def test_gemini_success_records_generator_and_never_calls_openrouter(self):
+        gemini_result = ProviderText(
+            VALID_REPORT,
+            {
+                "provider": "gemini",
+                "model_alias": "gemini-test-flash",
+                "selected_model": "gemini-test-flash",
+            },
+        )
+        with (
+            patch("tracker.services.ai_analysis_service.get_runtime_state", return_value=self.state),
+            patch("tracker.services.ai_analysis_service._gemini_cooldown_remaining", return_value=0),
+            patch("tracker.services.ai_analysis_service.get_ai_response_cache", return_value=None),
+            patch("tracker.services.ai_analysis_service.set_ai_response_cache") as set_cache,
+            patch("tracker.services.ai_analysis_service.request_gemini", return_value=gemini_result) as gemini,
+            patch("tracker.services.ai_analysis_service.request_openrouter") as openrouter,
+        ):
+            result = service.generate_ai_analysis(
+                self.character, [], computed_metrics={}, force_refresh=True
+            )
+
+        self.assertTrue(result["aiGenerated"])
+        self.assertEqual(result["generation"]["provider"], "gemini")
+        self.assertEqual(result["generation"]["selectedModel"], "gemini-test-flash")
+        self.assertFalse(result["generation"]["fallbackUsed"])
+        self.assertEqual(result["delivery"]["source"], "generated")
+        gemini.assert_called_once()
+        openrouter.assert_not_called()
+        self.assertEqual(
+            set_cache.call_args.kwargs["metadata"]["generation"],
+            result["generation"],
+        )
+
+    def test_openrouter_success_preserves_fallback_reason_and_routed_model(self):
+        openrouter_result = ProviderText(
+            VALID_REPORT,
+            {
+                "provider": "openrouter",
+                "model_alias": "openrouter/free",
+                "selected_model": "sample/free-route-model",
+                "selected_provider": "sample-provider",
+            },
+        )
+        with (
+            patch("tracker.services.ai_analysis_service.get_runtime_state", return_value=self.state),
+            patch("tracker.services.ai_analysis_service._gemini_cooldown_remaining", return_value=0),
+            patch("tracker.services.ai_analysis_service.get_ai_response_cache", return_value=None),
+            patch("tracker.services.ai_analysis_service.set_ai_response_cache") as set_cache,
+            patch(
+                "tracker.services.ai_analysis_service.request_gemini",
+                side_effect=ProviderError("Gemini quota", "provider_quota"),
+            ) as gemini,
+            patch("tracker.services.ai_analysis_service.request_openrouter", return_value=openrouter_result) as openrouter,
+        ):
+            result = service.generate_ai_analysis(
+                self.character, [], computed_metrics={}, force_refresh=True
+            )
+
+        self.assertTrue(result["aiGenerated"])
+        self.assertEqual(result["generation"]["provider"], "openrouter")
+        self.assertEqual(result["generation"]["requestedModel"], "openrouter/free")
+        self.assertEqual(result["generation"]["selectedModel"], "sample/free-route-model")
+        self.assertEqual(result["generation"]["selectedProvider"], "sample-provider")
+        self.assertTrue(result["generation"]["fallbackUsed"])
+        self.assertEqual(result["generation"]["fallbackReason"], "provider_quota")
+        gemini.assert_called_once()
+        openrouter.assert_called_once()
+        self.assertEqual(
+            set_cache.call_args.kwargs["metadata"]["generation"],
+            result["generation"],
+        )
 
 if __name__ == "__main__":
     unittest.main()
