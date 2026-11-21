@@ -43,13 +43,13 @@ def _is_quota_error(error):
 
 
 def _request_deadline():
-    """요청 시작부터 최대 90초의 전체 AI deadline을 적용한다."""
-    total = 90.0
+    """요청 시작부터 최대 120초의 전체 AI deadline을 적용한다."""
+    total = 120.0
     started = None
     if has_request_context():
         started = request.environ.get("maple_request_started_at")
         try:
-            total = min(90.0, max(5.0, float(current_app.config.get("AI_REQUEST_TOTAL_TIMEOUT", 90.0))))
+            total = min(120.0, max(5.0, float(current_app.config.get("AI_REQUEST_TOTAL_TIMEOUT", 120.0))))
         except (TypeError, ValueError):
             pass
     if started is None:
@@ -67,6 +67,7 @@ _PROVIDER_LOG_FIELDS = (
     "response_content_type", "response_content_encoding", "response_server",
     "response_request_id", "cause_class", "context_class",
     "stream_event_count", "stream_done", "stream_reasoning_bytes", "stream_content_bytes",
+    "stream_first_content_ms", "stream_first_reasoning_ms",
     "stream_finish_reason", "stream_native_finish_reason", "response_mode", "timeout_cause",
     "retry_count",
 )
@@ -116,6 +117,7 @@ def _log_provider_failure(provider, error, started_at, deadline, attempt=1):
             "response_read" if isinstance(error, requests.ReadTimeout) else
             "total_deadline" if provider_error_type(error) == "provider_timeout" else None
         ),
+        "timeout_cause": metadata.get("timeout_cause") if isinstance(metadata, dict) else None,
         "elapsed_ms": round((now - started_at) * 1000, 1),
         "deadline_remaining_ms": max(0, round((float(deadline) - now) * 1000, 1)),
         "http_status": http_status,
@@ -321,15 +323,16 @@ def _require_provider_text(value, provider):
 
 _OPENROUTER_MAX_ATTEMPTS = 2
 _OPENROUTER_RETRY_BACKOFF_SECONDS = 0.25
-_OPENROUTER_RETRY_MIN_REMAINING_SECONDS = 5.0
+# A follow-up OpenRouter attempt can consume its full 35-second provider budget.
+_OPENROUTER_RETRY_MIN_REMAINING_SECONDS = 36.0
 
 
 def _is_retryable_openrouter_error(error):
     """전송 중단·일시적 제공자 장애만 재시도 대상으로 분류한다."""
     metadata = getattr(error, "provider_metadata", None) or getattr(error, "http_metadata", None) or {}
-    if isinstance(metadata, dict) and metadata.get("timeout_cause") == "total_deadline":
-        # The provider kept streaming until our own wall-clock limit; replaying the
-        # same request is unlikely to help and consumes the remaining request budget.
+    if isinstance(metadata, dict) and metadata.get("timeout_cause") in {"request_deadline", "total_deadline"}:
+        # Do not retry after the end-to-end request budget has actually expired.
+        # "total_deadline" remains non-retryable for compatibility with older metadata.
         return False
     classification = metadata.get("response_classification") if isinstance(metadata, dict) else None
     if classification in {"response_body_incomplete", "stream_incomplete"}:
