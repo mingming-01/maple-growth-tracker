@@ -33,6 +33,28 @@ class AIServerInputTests(unittest.TestCase):
         self.client = self.app.test_client()
         self.today = datetime.now(KOREA_TIMEZONE).date()
 
+    def test_public_ai_error_response_hides_provider_diagnostics(self):
+        with self.app.app_context():
+            response = ai_controller._service_error_response({
+                "error": "기본 AI와 대체 AI 분석 요청이 모두 실패했습니다. 잠시 후 다시 시도해주세요.",
+                "statusCode": 503,
+                "retryAfterSeconds": 60,
+                "errorType": "provider_fallback_failed",
+                "primaryErrorType": "provider_timeout",
+                "fallbackErrorType": "provider_invalid_output",
+                "primaryException": "TimeoutError",
+                "fallbackException": "ProviderError",
+                "primaryProviderMetadata": {"selected_model": "internal/model-a"},
+                "fallbackProviderMetadata": {"selected_model": "internal/model-b"},
+            })
+
+        self.assertEqual(response.status_code, 503)
+        self.assertEqual(
+            response.get_json(),
+            {"error": "기본 AI와 대체 AI 분석 요청이 모두 실패했습니다. 잠시 후 다시 시도해주세요."},
+        )
+        self.assertEqual(response.headers.get("Retry-After"), "60")
+
     def make_records(self, base_experience):
         return [
             {
