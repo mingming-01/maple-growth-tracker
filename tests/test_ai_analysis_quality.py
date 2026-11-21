@@ -67,7 +67,27 @@ class AIAnalysisQualityTests(unittest.TestCase):
         self.assertIn("확인된 흐름", prompt)
         self.assertIn("기록 공백을 성장 정체", prompt)
         self.assertIn("짧고 구체적인 표현", prompt)
+        self.assertIn("모든 문장은 리포트 본문과 같은 존댓말 해요체로 통일해", prompt)
+        self.assertIn("반말로 읽히는 끝맺음", prompt)
         self.assertNotIn("관측 구간", prompt)
+
+    def test_ai_comment_rejects_informal_endings_and_accepts_honorific_style(self):
+        informal = (
+            "[AI 코멘트] 최근 성장 속도가 이전보다는 조금 느린 걸로 보여. "
+            "현재 흐름에서 크게 성장할 가능성이 크다. "
+            "다음엔 어떤 변화가 있는지 확인해 볼게. 꾸준히 하면 더 활짝 피어날 거야."
+        )
+        comment, error = _prepare_ai_comment(informal, None, self.make_source_data(7))
+        self.assertIsNone(comment)
+        self.assertEqual(error, "informal_tone")
+
+        polite = (
+            "[AI 코멘트] 최근 성장 흐름을 차분히 살펴볼 수 있어요. "
+            "앞으로 변화가 이어지는지도 함께 확인해 보면 좋겠어요."
+        )
+        comment, error = _prepare_ai_comment(polite, None, self.make_source_data(7))
+        self.assertIsNone(error)
+        self.assertEqual(comment, polite.replace("[AI 코멘트] ", ""))
 
     def test_ninety_day_prompt_uses_long_period_signal_without_numeric_payload(self):
         prompt = _build_growth_report_prompt(self.make_source_data(90))
