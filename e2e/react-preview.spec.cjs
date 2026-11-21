@@ -103,6 +103,24 @@ test("React preview loads profile data and refreshes only on explicit request", 
       historyStorage: { backend: "postgres", status: "saved" }
     })
   }));
+  await page.route("**/api/ai-analysis?*", route => route.fulfill({
+    status: 200,
+    contentType: "application/json",
+    body: JSON.stringify({
+      analysis: [
+        "[성장 패턴] 최근 기록에서 성장 흐름을 확인했어요.",
+        "[성장 변화] 이전 기록과 비슷한 흐름이에요.",
+        "[레벨업 분석] 이번 기간에는 레벨 변화가 확인되지 않았어요.",
+        "[성장 전망] 현재 기록을 바탕으로 전망을 살펴볼 수 있어요.",
+        "[AI 코멘트] 최근 흐름을 차분히 확인해 보면 좋겠어요."
+      ].join("\\n"),
+      aiGenerated: true,
+      aiFallbackUsed: true,
+      growthInsights: null,
+      periodSummary: null,
+      previousPeriodSummary: null
+    })
+  }));
   await page.route("**/api/character-details?*", route => route.fulfill({
     status: 200,
     contentType: "application/json",
@@ -189,6 +207,9 @@ test("React preview loads profile data and refreshes only on explicit request", 
 
   await page.locator('.mgt-nav a[href="#/analytics"]').click();
   await expect(page.locator("#analytics").getByRole("heading", { name: "AI 성장 리포트" })).toBeVisible();
+  await expect(page.getByText("기본 AI 응답이 원활하지 않아 대체 경로로 코멘트를 생성했습니다.", { exact: true })).toBeVisible();
+  await expect(page.locator('[data-testid="ai-report-provenance"]')).toHaveCount(0);
+  await expect(page.locator("#analytics")).not.toContainText(/Gemini|OpenRouter|nvidia\\/|라우팅 제공자|요청 모델/);
   await page.locator('.mgt-nav a[href="#/comparison"]').click();
   await expect(page.locator("#comparison").getByRole("heading", { name: "성장 캐릭터 비교" })).toBeVisible();
 
