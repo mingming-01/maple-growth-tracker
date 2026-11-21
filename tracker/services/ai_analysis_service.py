@@ -715,11 +715,18 @@ _INFORMAL_COMMENT_ENDING = re.compile(
 def _has_informal_comment_tone(comment):
     """끝맺음에서 명확한 반말 표현이 발견되는지 보수적으로 확인한다."""
     sentences = re.split(r"(?<=[.!?])\s+|\n+", str(comment or ""))
-    return any(
-        _INFORMAL_COMMENT_ENDING.search(sentence.strip().rstrip("\"'”’)]}"))
-        for sentence in sentences
-        if sentence.strip()
-    )
+    for sentence in sentences:
+        ending = sentence.strip().rstrip("\"'”’)]}")
+        if not ending:
+            continue
+        if _INFORMAL_COMMENT_ENDING.search(ending):
+            return True
+        if ending.endswith("다") and not re.search(
+            r"(?:습니다|입니다|합니다|됩니다|있습니다|없습니다|했습니다|됐습니다|드립니다)$",
+            ending,
+        ):
+            return True
+    return False
 
 
 def _prepare_ai_comment(value, expected_date, source_data):
