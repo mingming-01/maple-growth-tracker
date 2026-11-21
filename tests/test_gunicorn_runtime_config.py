@@ -23,7 +23,7 @@ class GunicornRuntimeConfigTests(unittest.TestCase):
         config = runpy.run_path(str(ROOT / "gunicorn.conf.py"))
 
         self.assertGreater(config["timeout"], Config.AI_REQUEST_TOTAL_TIMEOUT)
-        self.assertEqual(config["timeout"], 120)
+        self.assertEqual(config["timeout"], 150)
 
     @unittest.skipUnless(sys.platform != "win32", "Gunicorn requires Unix; Render runs Linux.")
     def test_render_start_command_loads_project_gunicorn_config_by_default(self):
@@ -39,7 +39,7 @@ class GunicornRuntimeConfigTests(unittest.TestCase):
 
         timeout_match = re.search(r"(?m)^timeout\s*=\s*(\d+)\s*$", result.stdout)
         self.assertIsNotNone(timeout_match, msg=result.stdout[-4000:])
-        self.assertEqual(timeout_match.group(1), "120")
+        self.assertEqual(timeout_match.group(1), "150")
 
 
 if __name__ == "__main__":
