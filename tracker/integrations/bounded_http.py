@@ -58,8 +58,8 @@ def _safe_response_headers(response):
     }
 
 
-def _consume_sse_frame(frame, aggregate):
-    normalized = frame.decode("utf-8", errors="replace").replace("\r\n", "\n").replace("\r", "\n")
+def _consume_sse_frame(frame, aggregate, elapsed_ms=None):
+    normalized = frame.decode("utf-8", errors="replace").replace("\\r\\n", "\\n").replace("\\r", "\\n")
     data_lines = [
         line[5:].lstrip()
         for line in normalized.splitlines()
@@ -67,7 +67,7 @@ def _consume_sse_frame(frame, aggregate):
     ]
     if not data_lines:
         return False
-    data = "\n".join(data_lines).strip()
+    data = "\\n".join(data_lines).strip()
     if data == "[DONE]":
         aggregate["done"] = True
         return True
@@ -91,16 +91,22 @@ def _consume_sse_frame(frame, aggregate):
         if isinstance(delta, dict):
             content = delta.get("content")
             if isinstance(content, str):
+                if content and aggregate.get("first_content_ms") is None and elapsed_ms is not None:
+                    aggregate["first_content_ms"] = round(max(0.0, float(elapsed_ms)), 1)
                 aggregate["content"].append(content)
                 aggregate["content_bytes"] += len(content.encode("utf-8"))
             elif isinstance(content, list):
                 for part in content:
                     if isinstance(part, dict) and isinstance(part.get("text"), str):
                         text_part = part["text"]
+                        if text_part and aggregate.get("first_content_ms") is None and elapsed_ms is not None:
+                            aggregate["first_content_ms"] = round(max(0.0, float(elapsed_ms)), 1)
                         aggregate["content"].append(text_part)
                         aggregate["content_bytes"] += len(text_part.encode("utf-8"))
             reasoning = delta.get("reasoning") or delta.get("reasoning_content")
             if isinstance(reasoning, str):
+                if reasoning and aggregate.get("first_reasoning_ms") is None and elapsed_ms is not None:
+                    aggregate["first_reasoning_ms"] = round(max(0.0, float(elapsed_ms)), 1)
                 aggregate["reasoning_bytes"] += len(reasoning.encode("utf-8"))
         if choice.get("finish_reason") is not None:
             aggregate["finish_reason"] = choice.get("finish_reason")
@@ -109,10 +115,9 @@ def _consume_sse_frame(frame, aggregate):
     return False
 
 
-
-def _deadline_timeout(message):
+def _deadline_timeout(message, timeout_cause):
     error = requests.Timeout(message)
-    error.provider_metadata = {"timeout_cause": "total_deadline"}
+    error.provider_metadata = {"timeout_cause": timeout_cause}
     return error
 
 
@@ -157,19 +162,22 @@ def post_json_with_deadline(
     response_header_metadata = {}
     is_sse_response = False
     sse_buffer = bytearray()
+    last_chunk_elapsed_ms = None
     sse = {
         "event_count": 0, "model": None, "provider": None, "usage": {},
         "content": [], "content_bytes": 0, "reasoning_bytes": 0,
+        "first_content_ms": None, "first_reasoning_ms": None,
         "finish_reason": None, "native_finish_reason": None, "done": False,
     }
-    local_deadline = started_at + total_timeout
-    if deadline is not None:
-        local_deadline = min(local_deadline, float(deadline))
+    provider_deadline = started_at + total_timeout
+    local_deadline = provider_deadline
+    timeout_cause = "provider_attempt_deadline"
+    if deadline is not None and float(deadline) <= provider_deadline:
+        local_deadline = float(deadline)
+        timeout_cause = "request_deadline"
     remaining = local_deadline - started_at
-    if remaining <= 0:
-        raise requests.Timeout("AI provider request deadline has expired")
     if remaining <= 0.1:
-        raise requests.Timeout("AI provider request deadline has expired")
+        raise _deadline_timeout("AI provider request deadline has expired", timeout_cause)
     # Requests applies connect and response-header read timeouts consecutively.
     # Keep their combined budget within the remaining wall-clock allowance.
     connect_timeout = min(connect_timeout, max(0.05, remaining * 0.25))
@@ -208,7 +216,7 @@ def post_json_with_deadline(
             remaining = local_deadline - time.monotonic()
             if remaining <= 0:
                 raise _deadline_timeout(
-                    f"AI provider response exceeded {total_timeout:.1f}s deadline"
+                    f"AI provider response exceeded {total_timeout:.1f}s deadline", timeout_cause=timeout_cause
                 )
             if not _set_socket_read_timeout(response, min(read_timeout, remaining)):
                 error = requests.Timeout("Unable to enforce AI provider response deadline")
@@ -222,6 +230,8 @@ def post_json_with_deadline(
 
             if not chunk:
                 continue
+            chunk_received_at = time.monotonic()
+            last_chunk_elapsed_ms = (chunk_received_at - started_at) * 1000
             body.extend(chunk)
             if len(body) > byte_limit:
                 raise requests.RequestException(
@@ -239,7 +249,7 @@ def post_json_with_deadline(
                     separator_size = 4 if sse_buffer[position:position + 4] == b"\r\n\r\n" else 2
                     frame = bytes(sse_buffer[:position])
                     del sse_buffer[:position + separator_size]
-                    if _consume_sse_frame(frame, sse):
+                    if _consume_sse_frame(frame, sse, elapsed_ms=last_chunk_elapsed_ms):
                         body_complete = True
                         break
                 if sse["done"] and time.monotonic() < local_deadline:
@@ -247,14 +257,14 @@ def post_json_with_deadline(
 
             # Process received bytes before enforcing the deadline so diagnostics
             # retain the last complete SSE events, even when the read crossed it.
-            if time.monotonic() >= local_deadline:
+            if chunk_received_at >= local_deadline:
                 raise _deadline_timeout(
-                    f"AI provider response exceeded {total_timeout:.1f}s deadline"
+                    f"AI provider response exceeded {total_timeout:.1f}s deadline", timeout_cause=timeout_cause
                 )
 
         if time.monotonic() >= local_deadline:
             raise _deadline_timeout(
-                f"AI provider response exceeded {total_timeout:.1f}s deadline"
+                f"AI provider response exceeded {total_timeout:.1f}s deadline", timeout_cause=timeout_cause
             )
 
         raw_text = body.decode("utf-8-sig", errors="replace")
@@ -279,7 +289,7 @@ def post_json_with_deadline(
 
         if is_sse_response:
             if sse_buffer.strip():
-                _consume_sse_frame(bytes(sse_buffer), sse)
+                _consume_sse_frame(bytes(sse_buffer), sse, elapsed_ms=last_chunk_elapsed_ms)
             if not sse["done"]:
                 error = InvalidProviderResponse(
                     "OpenRouter SSE stream ended before its completion marker"
@@ -290,6 +300,8 @@ def post_json_with_deadline(
                     "stream_event_count": sse["event_count"],
                     "stream_done": False,
                     "stream_reasoning_bytes": sse["reasoning_bytes"],
+                    "stream_first_content_ms": sse["first_content_ms"],
+                    "stream_first_reasoning_ms": sse["first_reasoning_ms"],
                     "stream_content_bytes": sse["content_bytes"],
                     "stream_finish_reason": sse["finish_reason"],
                     "stream_native_finish_reason": sse["native_finish_reason"],
@@ -323,6 +335,8 @@ def post_json_with_deadline(
                     "stream_event_count": sse["event_count"],
                     "stream_done": True,
                     "stream_reasoning_bytes": sse["reasoning_bytes"],
+                    "stream_first_content_ms": sse["first_content_ms"],
+                    "stream_first_reasoning_ms": sse["first_reasoning_ms"],
                     "stream_content_bytes": sse["content_bytes"],
                     "stream_finish_reason": sse["finish_reason"],
                     "stream_native_finish_reason": sse["native_finish_reason"],
@@ -372,6 +386,8 @@ def post_json_with_deadline(
                 "stream_done": sse["done"],
                 "stream_content_bytes": sse["content_bytes"],
                 "stream_reasoning_bytes": sse["reasoning_bytes"],
+                "stream_first_content_ms": sse["first_content_ms"],
+                "stream_first_reasoning_ms": sse["first_reasoning_ms"],
                 "stream_finish_reason": sse["finish_reason"],
                 "stream_native_finish_reason": sse["native_finish_reason"],
             }

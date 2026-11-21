@@ -115,19 +115,19 @@ def _provider_timeouts(provider, deadline=None):
     )
     if provider == "gemini":
         read_timeout = min(
-            14.0, max(2.0, float(_setting("AI_GEMINI_READ_TIMEOUT", 14.0)))
+            22.0, max(2.0, float(_setting("AI_GEMINI_READ_TIMEOUT", 22.0)))
         )
         total_timeout = min(
-            16.0,
-            max(1.0, float(_setting("AI_GEMINI_TOTAL_TIMEOUT", 16.0))),
+            24.0,
+            max(1.0, float(_setting("AI_GEMINI_TOTAL_TIMEOUT", 24.0))),
         )
     else:
         read_timeout = min(
-            18.0, max(3.0, float(_setting("AI_OPENROUTER_READ_TIMEOUT", 18.0)))
+            33.0, max(3.0, float(_setting("AI_OPENROUTER_READ_TIMEOUT", 33.0)))
         )
         total_timeout = min(
-            20.0,
-            max(2.0, float(_setting("AI_OPENROUTER_TOTAL_TIMEOUT", 20.0))),
+            35.0,
+            max(2.0, float(_setting("AI_OPENROUTER_TOTAL_TIMEOUT", 35.0))),
         )
     read_timeout = min(read_timeout, max(0.5, total_timeout - connect_timeout))
     if deadline is not None:
@@ -135,7 +135,7 @@ def _provider_timeouts(provider, deadline=None):
         if provider == "gemini" and _setting("OPENROUTER_API_KEY", ""):
             reserve = max(
                 1.0,
-                float(_setting("AI_OPENROUTER_MIN_REMAINING_SECONDS", 15.0)),
+                float(_setting("AI_OPENROUTER_MIN_REMAINING_SECONDS", 72.0)),
             )
             remaining -= reserve
         if remaining <= 0:
