@@ -374,7 +374,7 @@ class AIAnalysisFallbackTests(unittest.TestCase):
         self.assertEqual(result["aiFallbackReason"], "provider_timeout")
         self.assertIn("AI 코멘트를 생성하지 못했어요", result["analysis"])
         self.assertTrue(self.state.ai_provider_state_store.saved)
-        openrouter.assert_called_once()
+        self.assertEqual(openrouter.call_count, 2)
 
     @patch("tracker.services.ai_analysis_service.get_runtime_state")
     @patch("tracker.services.ai_analysis_service.get_ai_response_cache", return_value=None)
