@@ -220,10 +220,6 @@ def post_json_with_deadline(
                 body_complete = True
                 break
 
-            if time.monotonic() >= local_deadline:
-                raise requests.Timeout(
-                    f"AI provider response exceeded {total_timeout:.1f}s deadline"
-                )
             if not chunk:
                 continue
             body.extend(chunk)
@@ -246,8 +242,15 @@ def post_json_with_deadline(
                     if _consume_sse_frame(frame, sse):
                         body_complete = True
                         break
-                if sse["done"]:
+                if sse["done"] and time.monotonic() < local_deadline:
                     break
+
+            # Process received bytes before enforcing the deadline so diagnostics
+            # retain the last complete SSE events, even when the read crossed it.
+            if time.monotonic() >= local_deadline:
+                raise _deadline_timeout(
+                    f"AI provider response exceeded {total_timeout:.1f}s deadline"
+                )
 
         if time.monotonic() >= local_deadline:
             raise _deadline_timeout(
