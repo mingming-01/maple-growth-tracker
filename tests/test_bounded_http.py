@@ -31,7 +31,7 @@ class BoundedJSONHTTPTests(unittest.TestCase):
         self.assertEqual(result, {"ok": True})
         self.assertEqual(post.call_args.kwargs["stream"], True)
         self.assertEqual(post.call_args.kwargs["timeout"], (1.5, 4.0))
-        self.assertEqual(response.iter_content.call_args.kwargs["chunk_size"], 1)
+        self.assertEqual(response.iter_content.call_args.kwargs["chunk_size"], 4096)
         self.assertEqual(result.provider_metadata["http_status"], 200)
         self.assertEqual(result.provider_metadata["response_bytes"], len(b'{"ok":true}'))
         self.assertTrue(result.provider_metadata["response_body_present"])
@@ -55,7 +55,36 @@ class BoundedJSONHTTPTests(unittest.TestCase):
         response.close.assert_called_once()
         self.assertEqual(caught.exception.provider_metadata["http_status"], 200)
         self.assertEqual(caught.exception.provider_metadata["response_classification"], "response_body_incomplete")
+        self.assertEqual(caught.exception.provider_metadata["timeout_cause"], "total_deadline")
         self.assertFalse(caught.exception.provider_metadata["body_complete"])
+
+    @patch("tracker.integrations.bounded_http.requests.post")
+    @patch("tracker.integrations.bounded_http.time.monotonic", side_effect=[10.0, 10.5, 11.1, 11.1])
+    def test_sse_deadline_failure_preserves_partial_stream_diagnostics(self, _clock, post):
+        wire = (
+            'data: {"choices":[{"delta":{"content":"partial text","reasoning":"internal trace"},"finish_reason":null}]}\\n\\n'
+        ).encode("utf-8")
+        response = self.make_response([wire])
+        response.headers = {"Content-Type": "text/event-stream"}
+        post.return_value = response
+
+        with self.assertRaises(requests.Timeout) as caught:
+            post_json_with_deadline(
+                "https://provider.invalid",
+                headers={"Accept": "text/event-stream"},
+                json_body={"stream": True},
+                total_timeout=1.0,
+                response_format="sse",
+            )
+
+        metadata = caught.exception.provider_metadata
+        self.assertEqual(metadata["response_mode"], "sse")
+        self.assertEqual(metadata["stream_event_count"], 1)
+        self.assertFalse(metadata["stream_done"])
+        self.assertEqual(metadata["stream_content_bytes"], len("partial text"))
+        self.assertEqual(metadata["stream_reasoning_bytes"], len("internal trace"))
+        self.assertIsNone(metadata["stream_finish_reason"])
+        response.close.assert_called_once()
 
     @patch("tracker.integrations.bounded_http.requests.post", side_effect=requests.ReadTimeout("header wait timed out"))
     @patch("tracker.integrations.bounded_http.time.monotonic", return_value=10.0)
