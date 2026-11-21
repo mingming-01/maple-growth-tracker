@@ -67,6 +67,48 @@ class GrowthHistoryStoreTests(unittest.TestCase):
         self.assertTrue(result[0]["experienceRateChecked"])
         self.assertEqual(result[0]["rankingScope"], "overall")
 
+    def test_growth_snapshot_source_and_observation_time_are_persisted(self):
+        observed_at = "2026-11-10T03:15:00+00:00"
+        self.store.save_records(
+            "test-ocid", "테스트캐릭터", "테스트월드",
+            [{
+                "date": self.today.isoformat(),
+                "recordStatus": "available",
+                "level": 280,
+                "experience": 12345,
+                "experienceRate": 12.3456,
+                "experienceRateChecked": True,
+                "growthSource": "character/basic",
+                "growthObservedAt": observed_at,
+            }],
+        )
+
+        saved = self.store.get_records("test-ocid", self.today, self.today)[0]
+
+        self.assertEqual(saved["growthSource"], "character/basic")
+        self.assertEqual(
+            datetime.fromisoformat(saved["growthObservedAt"]),
+            datetime.fromisoformat(observed_at),
+        )
+
+    def test_invalid_growth_source_or_timezone_free_observation_time_is_not_persisted(self):
+        self.store.save_records(
+            "test-ocid", "테스트캐릭터", "테스트월드",
+            [{
+                "date": self.today.isoformat(),
+                "recordStatus": "available",
+                "level": 280,
+                "experience": 12345,
+                "growthSource": "unknown-endpoint",
+                "growthObservedAt": "2026-11-10T03:15:00",
+            }],
+        )
+
+        saved = self.store.get_records("test-ocid", self.today, self.today)[0]
+
+        self.assertIsNone(saved["growthSource"])
+        self.assertIsNone(saved["growthObservedAt"])
+
     def test_non_overall_and_invalid_rankings_are_not_persisted(self):
         records = [{
             "date": self.today.isoformat(),
@@ -280,6 +322,8 @@ class GrowthHistoryStoreTests(unittest.TestCase):
         self.assertEqual(records[0]["ranking"], 77)
         self.assertEqual(records[0]["rankingScope"], "overall")
         self.assertIsNone(records[0]["rankingSourceDate"])
+        self.assertIsNone(records[0]["growthSource"])
+        self.assertIsNone(records[0]["growthObservedAt"])
 
     def test_api_rate_limit_is_shared_between_store_instances(self):
         store_path = str(Path(self.temp_dir.name) / "shared_limits.sqlite3")
@@ -391,7 +435,9 @@ class GrowthHistoryApiTests(unittest.TestCase):
                 "rankingScope": "overall",
                 "rankingSourceDate": (self.today - timedelta(days=1)).isoformat(),
                 "experienceRate": 12.345,
-                "experienceRateChecked": True
+                "experienceRateChecked": True,
+                "growthSource": "ranking/overall",
+                "growthObservedAt": "2026-11-19T10:00:00+00:00",
             }]
         )
         with self.app.app_context():
@@ -594,6 +640,60 @@ class GrowthHistoryApiTests(unittest.TestCase):
         self.assertEqual(saved["rankingSourceDate"], target_date)
         self.assertEqual(saved["experience"], 123999)
 
+    def test_archive_recollects_legacy_records_without_growth_provenance(self):
+        target_date = (self.today - timedelta(days=1)).isoformat()
+        # 기존 저장 행에는 출처/수집 시각이 없지만 성장 수치 자체는 보존되어 있다.
+        self.store.save_records(
+            "test-ocid", "테스트캐릭터", "테스트월드",
+            [{
+                "date": target_date,
+                "recordStatus": "available",
+                "level": 280,
+                "experience": 123456,
+                "ranking": 77,
+                "rankingScope": "overall",
+                "rankingSourceDate": target_date,
+                "experienceRate": 12.345,
+                "experienceRateChecked": True,
+            }],
+        )
+        ranking = {
+            "ranking": 55,
+            "character_level": 280,
+            "character_exp": 123999,
+            "character_exp_rate": 12.5,
+        }
+        verified_basic = {
+            "character_name": "테스트캐릭터",
+            "world_name": "테스트월드",
+            "character_level": 280,
+            "character_exp": 123999,
+        }
+        with patch.object(
+            history_controller, "get_basic_character_snapshot",
+            return_value=(verified_basic, Mock(status_code=200)),
+        ) as verify_basic, patch.object(
+            history_archive_service, "get_ranking_snapshot",
+            return_value=(ranking, Mock(status_code=200)),
+        ) as get_ranking:
+            response = self.client.get(
+                "/api/history/archive?ocid=test-ocid&days=30&collect=1"
+                "&character_name=%ED%85%8C%EC%8A%A4%ED%8A%B8%EC%BA%90%EB%A6%AD%ED%84%B0"
+                "&offset=28&limit=1&summary_only=1"
+            )
+
+        self.assertEqual(response.status_code, 200)
+        collection = response.get_json()["collection"]
+        self.assertEqual(collection["checkedDays"], 1)
+        self.assertEqual(collection["savedRecords"], 1)
+        self.assertEqual(collection["remainingDays"], 29)
+        verify_basic.assert_called_once()
+        get_ranking.assert_called_once()
+        saved = self.store.get_records("test-ocid", target_date, target_date)[0]
+        self.assertEqual(saved["experience"], 123999)
+        self.assertEqual(saved["growthSource"], "ranking/overall")
+        self.assertIsNotNone(datetime.fromisoformat(saved["growthObservedAt"]))
+
     def test_archive_reuses_recent_verified_character_identity_between_batches(self):
         target_date = (self.today - timedelta(days=29)).isoformat()
         cached_basic = {
@@ -732,6 +832,17 @@ class GrowthHistoryApiTests(unittest.TestCase):
             "character_level": 280,
             "character_exp": 123456
         }
+        historical_basic = {
+            "character_level": 280,
+            "character_exp": 654321
+        }
+
+        def get_historical_basic(ocid, target_date=None, historical=False):
+            self.assertEqual(target_date, target_date_expected)
+            self.assertTrue(historical)
+            return historical_basic, Mock(status_code=200)
+
+        target_date_expected = target_date.isoformat()
         with patch.object(
             history_controller, "get_basic_character_snapshot",
             return_value=(current_basic, Mock(status_code=200))
@@ -739,7 +850,7 @@ class GrowthHistoryApiTests(unittest.TestCase):
             history_archive_service, "get_ranking_snapshot", return_value=(ranking, ranking_response)
         ) as get_ranking, patch.object(
             history_archive_service, "get_basic_character_snapshot",
-            return_value=(current_basic, Mock(status_code=200))
+            side_effect=get_historical_basic
         ) as get_basic:
             response = self.client.get(
                 "/api/history/archive?ocid=test-ocid&days=30&collect=1"
@@ -761,6 +872,54 @@ class GrowthHistoryApiTests(unittest.TestCase):
         self.assertEqual(saved[0]["recordStatus"], "available")
         self.assertEqual(saved[0]["experience"], 654321)
         self.assertEqual(saved[0]["ranking"], 123)
+
+    def test_archive_does_not_requery_checked_snapshot_without_experience_rate(self):
+        target_date = self.today - timedelta(days=1)
+        self.store.save_records(
+            "test-ocid", "테스트캐릭터", "테스트월드",
+            [{
+                "date": target_date.isoformat(),
+                "recordStatus": "available",
+                "level": 280,
+                "experience": 123456,
+                "ranking": 321,
+                "rankingScope": "overall",
+                "rankingSourceDate": target_date.isoformat(),
+                "experienceRate": None,
+                "experienceRateChecked": True,
+                "growthSource": "ranking/overall",
+                "growthObservedAt": "2026-11-19T10:00:00+00:00",
+            }],
+        )
+        current_basic = {
+            "character_name": "테스트캐릭터",
+            "world_name": "테스트월드",
+            "character_level": 280,
+            "character_exp": 200000,
+        }
+        offset = (target_date - (self.today - timedelta(days=29))).days
+
+        with patch.object(
+            history_controller, "get_basic_character_snapshot",
+            return_value=(current_basic, Mock(status_code=200))
+        ), patch.object(
+            history_archive_service, "get_ranking_snapshot"
+        ) as get_ranking, patch.object(
+            history_archive_service, "get_basic_character_snapshot"
+        ) as get_historical_basic:
+            response = self.client.get(
+                "/api/history/archive?ocid=test-ocid&days=30&collect=1"
+                "&character_name=%ED%85%8C%EC%8A%A4%ED%8A%B8%EC%BA%90%EB%A6%AD%ED%84%B0"
+                f"&offset={offset}&limit=1"
+            )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.get_json()["collection"]["checkedDays"], 0)
+        get_ranking.assert_not_called()
+        get_historical_basic.assert_not_called()
+        saved = self.store.get_records("test-ocid", target_date, target_date)[0]
+        self.assertIsNone(saved["experienceRate"])
+        self.assertTrue(saved["experienceRateChecked"])
 
     def test_archive_does_not_save_api_parameter_errors_as_missing_data(self):
         invalid_response = Mock(status_code=400)
@@ -852,6 +1011,8 @@ class GrowthHistoryApiTests(unittest.TestCase):
                 "ranking": 500 + offset,
                 "experienceRate": None if offset in (1, 2) else 12.345,
                 "experienceRateChecked": offset != 1,
+                "growthSource": "ranking/overall",
+                "growthObservedAt": "2026-11-10T03:00:00+00:00",
                 "rankingScope": "overall",
                 "rankingSourceDate": (today - timedelta(days=offset)).isoformat(),
             }
@@ -891,10 +1052,14 @@ class GrowthHistoryApiTests(unittest.TestCase):
             {
                 today.isoformat(),
                 (today - timedelta(days=1)).isoformat(),
-                (today - timedelta(days=2)).isoformat(),
             },
         )
-        self.assertEqual(get_ranking.call_count, 3)
+        self.assertEqual(get_ranking.call_count, 2)
+        checked_but_unavailable = self.store.get_records(
+            "test-ocid", today - timedelta(days=2), today - timedelta(days=2)
+        )
+        self.assertIsNone(checked_but_unavailable[0]["experienceRate"])
+        self.assertTrue(checked_but_unavailable[0]["experienceRateChecked"])
         refreshed = self.store.get_records(
             "test-ocid", today - timedelta(days=1), today - timedelta(days=1)
         )
@@ -913,6 +1078,8 @@ class GrowthHistoryApiTests(unittest.TestCase):
                 "experienceRate": 12.345,
                 # This test covers reuse of fully checked historical records.
                 "experienceRateChecked": True,
+                "growthSource": "ranking/overall",
+                "growthObservedAt": "2026-11-10T03:00:00+00:00",
                 "rankingScope": "overall",
                 "rankingSourceDate": (today - timedelta(days=offset)).isoformat(),
             }

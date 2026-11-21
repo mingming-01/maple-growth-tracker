@@ -33,6 +33,31 @@ test("React and retained legacy growth calculation modules stay byte-identical",
   assert.equal(reactModule, legacyModule);
 });
 
+test("AI report cache signature includes current growth data, not only character and period", () => {
+  const analytics = readFileSync(
+    join(frontendSource, "features", "analytics", "AnalyticsAndComparison.jsx"),
+    "utf8"
+  );
+
+  assert.match(analytics, /cacheVersion:\s*11/);
+  assert.match(
+    analytics,
+    /buildReportSignature\(\s*character,\s*analysisHistory,\s*metrics,\s*analysisContext\s*\)/
+  );
+});
+
+test("AI report identifies deterministic fallback and does not cache it as AI-generated", () => {
+  const analytics = readFileSync(
+    join(frontendSource, "features", "analytics", "AnalyticsAndComparison.jsx"),
+    "utf8"
+  );
+
+  assert.match(analytics, /result\.aiGenerated !== false/);
+  assert.match(analytics, /if \(generatedByAI\) \{/);
+  assert.match(analytics, /AI 응답을 받지 못해 서버가 확인한 수치로 리포트를 표시/);
+  assert.match(analytics, /data-ai-generated=\{aiGenerated === null/);
+});
+
 test("React browser storage access stays inside the storage module", () => {
   const offenders = sourceFiles
     .filter(file => relative(frontendSource, file) !== join("lib", "storage.js"))

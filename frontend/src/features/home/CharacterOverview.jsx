@@ -1,9 +1,3 @@
-import {
-  calculateAverageGrowth,
-  calculateLevelProgress,
-  sortHistoryAscending
-} from "../../lib/growth.js";
-
 const WORLD_LOGOS = {
   "스카니아":"/static/images/worlds/SCANIA.PNG",
   "베라":"/static/images/worlds/BERA.PNG",
@@ -84,11 +78,9 @@ function RankingStatus({ character }) {
   );
 }
 
-export default function CharacterOverview({ character, history }) {
-  const rate = formatRate(character.experienceRate);
-  const weeklyHistory = sortHistoryAscending(history || []).slice(-7);
-  const average = calculateAverageGrowth(weeklyHistory);
-  const progress = calculateLevelProgress(character,average);
+export default function CharacterOverview({ character, metrics }) {
+  const rate = formatRate(metrics?.levelProgress?.currentRate ?? character.experienceRate);
+  const average = metrics?.averageDailyGrowth ?? null;
   const logo = WORLD_LOGOS[character.worldName];
 
   return (
@@ -124,16 +116,14 @@ export default function CharacterOverview({ character, history }) {
             <span className="mgt-exp-fill" style={{width:(rate ?? 0)+"%"}} />
           </div>
           <p className="mgt-progress-note">
-            {progress?.dailyProgressRate != null
-              ? "최근 하루 평균 +" + progress.dailyProgressRate.toFixed(4) + "%p / 일"
-              : "성장 기록이 쌓이면 하루에 레벨이 얼마나 가까워지는지 보여드려요."}
+            일일 레벨 진척 예측은 정확한 레벨별 필요 경험치 기준이 확인될 때 제공해요.
           </p>
         </div>
       </div>
       <div className="mgt-profile-side">
         <div className="mgt-eyebrow">CHARACTER SNAPSHOT</div>
         <div className="mgt-snapshot-stat"><span>현재 경험치</span><strong>{formatNumber(character.experience)}</strong></div>
-        <div className="mgt-snapshot-stat"><span>주간 일일 평균 경험치</span><strong>{average === null ? "자료 부족" : formatTrillion(average)}</strong></div>
+        <div className="mgt-snapshot-stat"><span>최근 7일 확인된 일일 평균</span><strong>{average === null ? "자료 부족" : formatTrillion(average)}</strong></div>
         <div className="mgt-snapshot-stat" data-testid="profile-combat-power">
           <span>현재 전투력</span><strong>{character.currentCombatPower == null ? "조회 불가" : formatNumber(character.currentCombatPower)}</strong>
         </div>

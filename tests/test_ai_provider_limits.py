@@ -12,14 +12,14 @@ class AIProviderLimitTests(unittest.TestCase):
         with patch.object(ai_analysis_service, "has_request_context", return_value=False), patch.object(ai_analysis_service.time, "monotonic", return_value=100.0):
             self.assertEqual(ai_analysis_service._request_deadline(), 190.0)
 
-    def test_provider_timeouts_leave_a_large_openrouter_window(self):
+    def test_openrouter_timeout_honors_configured_fallback_budget(self):
         settings = {
             "AI_PROVIDER_CONNECT_TIMEOUT": 2.0,
             "AI_OPENROUTER_READ_TIMEOUT": 60.0,
             "AI_OPENROUTER_TOTAL_TIMEOUT": 65.0,
         }
         with patch.object(ai_provider, "_setting", side_effect=lambda name, default=None: settings.get(name, default)):
-            self.assertEqual(ai_provider._provider_timeouts("openrouter"), (2.0, 60.0, 65.0))
+            self.assertEqual(ai_provider._provider_timeouts("openrouter"), (2.0, 18.0, 20.0))
 
     def test_gemini_timeout_reserves_time_for_openrouter_fallback(self):
         settings = {
@@ -32,7 +32,7 @@ class AIProviderLimitTests(unittest.TestCase):
         with patch.object(ai_provider, "_setting", side_effect=lambda name, default=None: settings.get(name, default)), patch.object(ai_provider.time, "monotonic", return_value=100.0):
             self.assertEqual(
                 ai_provider._provider_timeouts("gemini", deadline=190.0),
-                (2.0, 15.0, 18.0),
+                (2.0, 14.0, 16.0),
             )
 
     @patch("tracker.integrations.ai_provider.post_json_with_deadline")
@@ -54,6 +54,7 @@ class AIProviderLimitTests(unittest.TestCase):
         self.assertEqual(ai_provider.request_openrouter("prompt", api_key="test-key"), "report")
         payload = post_json.call_args.kwargs["json_body"]
         self.assertEqual(payload["max_tokens"], 4096)
+        self.assertNotIn("reasoning", payload)
 
 
 if __name__ == "__main__":

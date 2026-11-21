@@ -65,5 +65,32 @@ class CharacterDetailControllerTests(unittest.TestCase):
         self.assertNotIn("defaultProfile", body)
 
 
+    def test_partial_detail_response_is_not_cached_so_failed_sources_can_retry(self):
+        partial = {
+            "section": "equipment",
+            "status": "partial",
+            "sources": [{"id": "itemEquipment", "status": "unavailable"}],
+        }
+        recovered = {
+            "section": "equipment",
+            "status": "available",
+            "sources": [{"id": "itemEquipment", "status": "available"}],
+        }
+        with patch(
+            "tracker.controller.character_detail_controller.get_character_detail_section",
+            side_effect=[partial, recovered],
+        ) as fetch_section:
+            first = self.client.get(
+                "/api/character-details?ocid=sample-ocid&section=equipment"
+            )
+            second = self.client.get(
+                "/api/character-details?ocid=sample-ocid&section=equipment"
+            )
+
+        self.assertEqual(first.get_json()["status"], "partial")
+        self.assertEqual(second.get_json()["status"], "available")
+        self.assertEqual(fetch_section.call_count, 2)
+
+
 if __name__ == "__main__":
     unittest.main()

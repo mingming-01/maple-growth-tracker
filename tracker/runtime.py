@@ -231,9 +231,16 @@ def get_ai_response_cache(prompt):
     return get_runtime_state().cache_service.get_ai_response(prompt)
 
 
-def set_ai_response_cache(prompt, analysis):
-    """기존 호출부 호환성을 위한 AI 응답 캐시 위임 함수."""
-    return get_runtime_state().cache_service.set_ai_response(prompt, analysis)
+def get_ai_response_cache_metadata(prompt):
+    """캐시된 AI 응답의 선택적 생성 메타데이터를 조회한다."""
+    return get_runtime_state().cache_service.get_ai_response_metadata(prompt)
+
+
+def set_ai_response_cache(prompt, analysis, metadata=None):
+    """기존 호출부와 호환되며 AI 응답의 선택적 출처 정보도 보존한다."""
+    return get_runtime_state().cache_service.set_ai_response(
+        prompt, analysis, metadata=metadata
+    )
 
 
 def get_cache(key):

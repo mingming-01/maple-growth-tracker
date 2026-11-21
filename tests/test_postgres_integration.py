@@ -1,6 +1,7 @@
 """격리된 PostgreSQL에서 저장·복원·공유 제한·동시성을 검증한다."""
 import os
 from pathlib import Path
+from types import SimpleNamespace
 
 import psycopg
 import unittest
@@ -9,6 +10,13 @@ from datetime import date
 from uuid import uuid4
 
 from tracker.repositories.growth_history_store import GrowthHistoryStore
+from tracker.repositories.admin_log_repository import AdminLogRepository
+from tracker.repositories.ai_provider_state_store import AIProviderStateStore
+from tracker.repositories.api_snapshot_repository import (
+    initialize_snapshot_db,
+    load_api_snapshot,
+    save_api_snapshot,
+)
 
 
 POSTGRES_URL = os.getenv("TEST_POSTGRES_URL")
@@ -24,6 +32,28 @@ class PostgreSQLIntegrationTests(unittest.TestCase):
                     connection.execute(f"CREATE ROLE {role} NOLOGIN")
                 except psycopg.errors.DuplicateObject:
                     pass
+            # 현재 운영 DB의 업그레이드 경로를 재현하기 위해 출처 컬럼이 없는 구형 테이블을 만든다.
+            connection.execute(
+                """
+                CREATE TABLE IF NOT EXISTS public.growth_daily_snapshots (
+                    ocid TEXT NOT NULL,
+                    snapshot_date DATE NOT NULL,
+                    character_name TEXT NOT NULL,
+                    world_name TEXT,
+                    level INTEGER,
+                    experience NUMERIC(30, 0),
+                    ranking INTEGER,
+                    ranking_scope TEXT,
+                    ranking_source_date DATE,
+                    experience_rate NUMERIC(7, 4),
+                    experience_rate_checked BOOLEAN NOT NULL DEFAULT FALSE,
+                    record_status TEXT NOT NULL
+                        CHECK (record_status IN ('available', 'not_ready')),
+                    recorded_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                    PRIMARY KEY (ocid, snapshot_date)
+                )
+                """
+            )
             migration = Path("migrations/20261116_shared_rate_limit_state.sql").read_text(
                 encoding="utf-8"
             )
@@ -43,6 +73,8 @@ class PostgreSQLIntegrationTests(unittest.TestCase):
             "ranking": 321,
             "rankingScope": "overall",
             "rankingSourceDate": date.today().isoformat(),
+            "growthSource": "ranking/overall",
+            "growthObservedAt": "2026-11-19T10:00:00+00:00",
             "recordStatus": "available",
         }]
         self.store.save_records(ocid, "통합테스트", "테스트월드", records)
@@ -55,7 +87,95 @@ class PostgreSQLIntegrationTests(unittest.TestCase):
         self.assertEqual(result[0]["ranking"], 321)
         self.assertEqual(result[0]["rankingScope"], "overall")
         self.assertEqual(result[0]["rankingSourceDate"], date.today().isoformat())
+        self.assertEqual(result[0]["growthSource"], "ranking/overall")
+        self.assertEqual(result[0]["growthObservedAt"], "2026-11-19T10:00:00+00:00")
         self.assertEqual(result[0]["recordStatus"], "available")
+
+    def test_growth_history_store_uses_pooled_connections_for_transactions(self):
+        first = self.store._connect()
+        try:
+            with first:
+                first_value = first.execute("SELECT 1").fetchone()[0]
+        finally:
+            first.close()
+
+        second = self.store._connect()
+        try:
+            with second:
+                second_value = second.execute("SELECT 2").fetchone()[0]
+        finally:
+            second.close()
+
+        self.assertEqual(first_value, 1)
+        self.assertEqual(second_value, 2)
+
+    def test_api_snapshot_repository_uses_pooled_postgres_connections(self):
+        backend, warning = initialize_snapshot_db(
+            "instance/postgres-snapshot-integration-unused.sqlite3",
+            POSTGRES_URL,
+        )
+        self.assertEqual(backend, "postgres")
+        self.assertEqual(warning, "")
+
+        cache_key = "integration:" + uuid4().hex
+        payload = {"characterName": "스냅샷통합", "level": 300}
+        saved_at = save_api_snapshot(
+            "instance/postgres-snapshot-integration-unused.sqlite3",
+            cache_key,
+            payload,
+            POSTGRES_URL,
+            "postgres",
+        )
+        restored, restored_at = load_api_snapshot(
+            "instance/postgres-snapshot-integration-unused.sqlite3",
+            cache_key,
+            POSTGRES_URL,
+            "postgres",
+        )
+
+        self.assertIsNotNone(saved_at)
+        self.assertEqual(restored, payload)
+        self.assertIsNotNone(restored_at)
+
+    def test_ai_provider_state_store_uses_pooled_postgres_connections(self):
+        store = AIProviderStateStore(
+            database_url=POSTGRES_URL,
+            sqlite_path="instance/postgres-provider-state-unused.sqlite3",
+        )
+        provider_key = "integration:" + uuid4().hex
+        cooldown_until = 1_900_000_000.0
+
+        store.set_cooldown_until(provider_key, cooldown_until)
+        self.assertEqual(store.get_cooldown_until(provider_key), cooldown_until)
+        store.clear_cooldown(provider_key)
+        self.assertEqual(store.get_cooldown_until(provider_key), 0.0)
+
+    def test_admin_log_repository_uses_dict_row_pooled_connections(self):
+        state = SimpleNamespace(
+            log_db_backend="postgres",
+            growth_database_url=POSTGRES_URL,
+            log_db_path="instance/postgres-admin-logs-unused.sqlite3",
+            log_storage_warning="",
+        )
+        repository = AdminLogRepository(state)
+        repository.initialize()
+        action = "pool-integration-" + uuid4().hex
+
+        repository.insert(
+            action=action,
+            character_name="풀링통합테스트",
+            world_name="테스트월드",
+            result="성공",
+            path="/pool-integration",
+            status_code=200,
+            duration_ms=12,
+        )
+        result = repository.search(search_text=action)
+
+        self.assertEqual(result["total_count"], 1)
+        self.assertEqual(len(result["rows"]), 1)
+        self.assertEqual(result["rows"][0]["action"], action)
+        self.assertIn(action, result["action_options"])
 
     def test_ai_daily_limits_are_shared_and_atomic_under_concurrency(self):
         client_key = uuid4().hex

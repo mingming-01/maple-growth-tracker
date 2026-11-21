@@ -1,5 +1,7 @@
 """과거 성장 기록의 Nexon API 수집 규칙."""
 
+from datetime import datetime, timezone
+
 import requests
 
 from tracker.services.nexon_service import (
@@ -7,6 +9,11 @@ from tracker.services.nexon_service import (
     get_ranking_snapshot,
     get_world_type,
 )
+
+
+def _now_utc_iso():
+    """API 응답 수신 시각을 UTC ISO-8601 형식으로 반환한다."""
+    return datetime.now(timezone.utc).isoformat(timespec="milliseconds")
 
 
 def _positive_rank(value):
@@ -52,6 +59,9 @@ def fetch_historical_record(
         if level is None or experience is None:
             return None
 
+        growth_data = ranking_data
+        growth_source = "ranking/overall"
+        growth_observed_at = _now_utc_iso()
         experience_rate = ranking_data.get("character_exp_rate")
         rate_checked = experience_rate is not None
         if experience_rate is None:
@@ -64,7 +74,18 @@ def fetch_historical_record(
             except requests.RequestException:
                 rate_data, rate_response = None, None
             if rate_data and rate_response and rate_response.status_code == 200:
-                experience_rate = rate_data.get("character_exp_rate")
+                # 진행률을 기본 정보 API에서 보충할 때는 레벨·EXP도 같은 응답으로 통일한다.
+                # 두 API의 서로 다른 스냅샷을 한 날짜의 성장 데이터로 혼합하지 않는다.
+                if (
+                    rate_data.get("character_level") is not None
+                    and rate_data.get("character_exp") is not None
+                ):
+                    growth_data = rate_data
+                    growth_source = "character/basic"
+                    growth_observed_at = _now_utc_iso()
+                    experience_rate = rate_data.get("character_exp_rate")
+                else:
+                    experience_rate = None
             rate_checked = bool(
                 rate_response is not None and rate_response.status_code == 200
             )
@@ -75,10 +96,12 @@ def fetch_historical_record(
             "ranking": ranking,
             "rankingScope": "overall" if ranking is not None else None,
             "rankingSourceDate": date_text,
-            "level": level,
-            "experience": experience,
+            "level": growth_data.get("character_level"),
+            "experience": growth_data.get("character_exp"),
             "experienceRate": experience_rate,
             "experienceRateChecked": rate_checked,
+            "growthSource": growth_source,
+            "growthObservedAt": growth_observed_at,
             "recordStatus": "available",
         }
 
@@ -110,6 +133,8 @@ def fetch_historical_record(
                 "experience": experience,
                 "experienceRate": basic_data.get("character_exp_rate"),
                 "experienceRateChecked": True,
+                "growthSource": "character/basic",
+                "growthObservedAt": _now_utc_iso(),
                 "recordStatus": "available",
             }
 
@@ -127,6 +152,8 @@ def fetch_historical_record(
             "experienceRateChecked": saved_record.get(
                 "experienceRateChecked", False
             ),
+            "growthSource": saved_record.get("growthSource"),
+            "growthObservedAt": saved_record.get("growthObservedAt"),
             "recordStatus": "available",
         }
 

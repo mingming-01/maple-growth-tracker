@@ -1,5 +1,5 @@
 """과거 성장 기록 수집 서비스 테스트."""
-from datetime import date
+from datetime import date, datetime
 import unittest
 from unittest.mock import Mock, patch
 
@@ -29,7 +29,7 @@ class HistoryArchiveServiceTests(unittest.TestCase):
             "ocid-1", "크로아", self.target_date, self.today
         )
 
-        self.assertEqual(result, {
+        self.assertEqual({key: value for key, value in result.items() if key != "growthObservedAt"}, {
             "date": "2026-11-08",
             "ranking": 123,
             "rankingScope": "overall",
@@ -38,8 +38,10 @@ class HistoryArchiveServiceTests(unittest.TestCase):
             "experience": 98765,
             "experienceRate": 12.5,
             "experienceRateChecked": True,
+            "growthSource": "ranking/overall",
             "recordStatus": "available",
         })
+        self.assertIsNotNone(datetime.fromisoformat(result["growthObservedAt"]))
         get_basic.assert_not_called()
         get_ranking.assert_called_once_with(
             "2026-11-08",
@@ -92,11 +94,67 @@ class HistoryArchiveServiceTests(unittest.TestCase):
         self.assertEqual(result["recordStatus"], "available")
         self.assertEqual(result["level"], 289)
         self.assertEqual(result["experienceRate"], 8.75)
+        self.assertEqual(result["growthSource"], "character/basic")
+        self.assertIsNotNone(datetime.fromisoformat(result["growthObservedAt"]))
         self.assertEqual(result["rankingSourceDate"], "2026-11-08")
         self.assertEqual(result["rankingSourceDate"], "2026-11-08")
         get_basic.assert_called_once_with(
             "ocid-1", target_date="2026-11-08", historical=True
         )
+
+    @patch("tracker.services.history_archive_service.get_basic_character_snapshot")
+    @patch("tracker.services.history_archive_service.get_ranking_snapshot")
+    @patch("tracker.services.history_archive_service.get_world_type", return_value=0)
+    def test_uses_one_basic_response_when_ranking_lacks_experience_rate(
+        self, _get_world_type, get_ranking, get_basic
+    ):
+        get_ranking.return_value = ({
+            "ranking": 123,
+            "character_level": 298,
+            "character_exp": 1_156_066_685_461_973,
+            "character_exp_rate": None,
+        }, Mock(status_code=200))
+        get_basic.return_value = ({
+            "character_level": 299,
+            "character_exp": 17_096_549_681_346,
+            "character_exp_rate": 0.355,
+        }, Mock(status_code=200))
+
+        result = history_archive_service.fetch_historical_record(
+            "ocid-1", "크로아", self.target_date, self.today
+        )
+
+        self.assertEqual(result["level"], 299)
+        self.assertEqual(result["experience"], 17_096_549_681_346)
+        self.assertEqual(result["experienceRate"], 0.355)
+        self.assertEqual(result["growthSource"], "character/basic")
+        self.assertIsNotNone(datetime.fromisoformat(result["growthObservedAt"]))
+
+    @patch("tracker.services.history_archive_service.get_basic_character_snapshot")
+    @patch("tracker.services.history_archive_service.get_ranking_snapshot")
+    @patch("tracker.services.history_archive_service.get_world_type", return_value=0)
+    def test_does_not_mix_partial_basic_rate_with_ranking_growth_values(
+        self, _get_world_type, get_ranking, get_basic
+    ):
+        get_ranking.return_value = ({
+            "ranking": 123,
+            "character_level": 298,
+            "character_exp": 1_156_066_685_461_973,
+            "character_exp_rate": None,
+        }, Mock(status_code=200))
+        get_basic.return_value = ({
+            "character_exp_rate": 0.355,
+        }, Mock(status_code=200))
+
+        result = history_archive_service.fetch_historical_record(
+            "ocid-1", "크로아", self.target_date, self.today
+        )
+
+        self.assertEqual(result["level"], 298)
+        self.assertEqual(result["experience"], 1_156_066_685_461_973)
+        self.assertIsNone(result["experienceRate"])
+        self.assertTrue(result["experienceRateChecked"])
+        self.assertEqual(result["growthSource"], "ranking/overall")
 
     @patch("tracker.services.history_archive_service.get_basic_character_snapshot")
     @patch("tracker.services.history_archive_service.get_ranking_snapshot")
@@ -201,10 +259,33 @@ class HistoryArchiveServiceTests(unittest.TestCase):
         )
 
         self.assertEqual(result["recordStatus"], "available")
+        self.assertEqual(result["growthSource"], "character/basic")
         self.assertEqual(result["rankingSourceDate"], "2026-11-10")
         get_basic.assert_called_once_with(
             "ocid-1", target_date=None, historical=True
         )
+
+
+    @patch("tracker.services.history_archive_service.get_basic_character_snapshot")
+    @patch("tracker.services.history_archive_service.get_ranking_snapshot")
+    @patch("tracker.services.history_archive_service.get_world_type", return_value=1)
+    def test_uses_world_type_one_for_helios_historical_archive(
+        self, _get_world_type, get_ranking, get_basic
+    ):
+        get_ranking.return_value = ({
+            "ranking": 123,
+            "character_level": 290,
+            "character_exp": 98765,
+            "character_exp_rate": 12.5,
+        }, Mock(status_code=200))
+
+        result = history_archive_service.fetch_historical_record(
+            "ocid-1", "헬리오스", self.target_date, self.today
+        )
+
+        self.assertEqual(result["recordStatus"], "available")
+        self.assertEqual(get_ranking.call_args.kwargs["world_type"], 1)
+        get_basic.assert_not_called()
 
 
 if __name__ == "__main__":

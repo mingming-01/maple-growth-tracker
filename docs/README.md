@@ -17,6 +17,7 @@
 | [성장 기록 저장](GROWTH_HISTORY_STORAGE.md) | 날짜별 기록 수집, PostgreSQL/SQLite 저장, 관리자 로그 저장, 저장 한계 |
 | [Nexon 랭킹 API 검증](NEXON_RANKING_API.md) | 랭킹 필터 파라미터 및 월드 유형을 확인한 검증 기록 |
 | [성능 계측](PERFORMANCE_METRICS.md) | 관리자 성능 API, 지표 정의, 측정 시 주의점 |
+| [Render 배포 전 운영 점검](DEPLOYMENT_READINESS.md) | Render 실행 설정, Gunicorn 타임아웃, PostgreSQL 연결 상한, 운영 환경변수 경고 |
 | [Phase 1 운영 안정성](PHASE1_HARDENING.md) | 외부 API 재시도, AI 요청 제한, 관리자 로그인 방어 |
 | [캐릭터 상세 정보](PHASE3_CHARACTER_DETAILS.md) | 스탯·장비·심볼·링크·유니온 상세 조회와 프리셋 처리 |
 | [AI 성장 인사이트](PHASE5_AI_GROWTH_INSIGHTS.md) | 성장 인사이트 계산 기준과 AI에 전달하는 근거 |

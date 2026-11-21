@@ -7,6 +7,11 @@ from unittest.mock import Mock, patch
 import app as tracker
 from tracker import create_app
 from tracker.controller import history_controller
+from tracker.domain.growth_calculations import (
+    calculate_recent_history_changes,
+    calculate_archive_history_changes,
+    calculate_observed_experience_change,
+)
 from tracker.repositories.growth_history_store import GrowthHistoryStore
 from tracker.runtime import get_runtime_state
 from tracker.services.growth_history_service import GrowthHistoryService
@@ -48,7 +53,25 @@ class GrowthCalculationBehaviorTests(unittest.TestCase):
             self.state.cache.clear()
         self.temp_dir.cleanup()
 
-    def test_recent_history_excludes_level_up_experience_change(self):
+
+    def test_experience_rate_change_is_server_calculated_only_for_same_level_consecutive_days(self):
+        history = [
+            {"date": "2026-11-16", "recordStatus": "available", "level": 280, "experience": 1000, "experienceRate": "10.100"},
+            {"date": "2026-11-17", "recordStatus": "available", "level": 280, "experience": 1200, "experienceRate": "10.350"},
+            {"date": "2026-11-18", "recordStatus": "available", "level": 280, "experience": 1400, "experienceRate": "10.350"},
+            {"date": "2026-11-19", "recordStatus": "available", "level": 280, "experience": 1500, "experienceRate": "0.500"},
+            {"date": "2026-11-20", "recordStatus": "available", "level": 281, "experience": 100, "experienceRate": "0.600"},
+        ]
+
+        calculate_recent_history_changes(history)
+
+        self.assertIsNone(history[0]["experienceRateChange"])
+        self.assertEqual(history[1]["experienceRateChange"], 0.25)
+        self.assertEqual(history[2]["experienceRateChange"], 0.0)
+        self.assertIsNone(history[3]["experienceRateChange"])
+        self.assertIsNone(history[4]["experienceRateChange"])
+
+    def test_recent_history_includes_bounded_level_up_daily_gain(self):
         response_stub = Mock(status_code=200)
         basic = {
             "character_name": "테스트캐릭터",
@@ -72,6 +95,18 @@ class GrowthCalculationBehaviorTests(unittest.TestCase):
                 response_stub,
             )
 
+        def get_basic_for_date(ocid, target_date=None, historical=False):
+            # Historical basic snapshots must correspond to the requested date,
+            # rather than reusing today's resolve_character profile for every day.
+            ranking_data, _ = get_ranking(target_date)
+            return (
+                {
+                    **ranking_data,
+                    "character_exp_rate": basic["character_exp_rate"],
+                },
+                response_stub,
+            )
+
         with patch.object(
             history_controller,
             "resolve_character",
@@ -81,7 +116,7 @@ class GrowthCalculationBehaviorTests(unittest.TestCase):
         ), patch.object(
             history_controller,
             "get_basic_character_snapshot",
-            return_value=(basic, response_stub),
+            side_effect=get_basic_for_date,
         ):
             response = self.client.get(
                 "/api/history",
@@ -91,11 +126,102 @@ class GrowthCalculationBehaviorTests(unittest.TestCase):
         self.assertEqual(response.status_code, 200)
         history = response.get_json()["history"]
         self.assertEqual(len(history), 7)
-        self.assertIsNone(history[6]["experienceChange"])
+        self.assertEqual(history[6]["experienceChange"], 11521)
+        self.assertEqual(history[6]["experienceChangeKind"], "level_up_reconstructed")
+        self.assertEqual(history[6]["experienceChangeLowerBound"], 11520)
+        self.assertEqual(history[6]["experienceChangeUpperBound"], 11522)
         self.assertTrue(history[6]["levelUp"])
         self.assertEqual(history[6]["rankingChange"], 10)
         self.assertEqual(history[6]["experienceRate"], "23.4567")
         self.assertTrue(history[6]["experienceRateChecked"])
+        prediction = response.get_json()["metrics"]["prediction"]
+        self.assertEqual(prediction["currentLevel"], 281)
+        self.assertEqual(prediction["currentExperience"], 100)
+        self.assertEqual(prediction["currentRate"], 23.4567)
+        self.assertEqual(prediction["requiredExp"], 326)
+        self.assertIsNone(prediction["averageGrowth"])
+
+    def test_level_up_boundary_growth_is_reconstructed_and_delayed_catch_up_is_calculated(self):
+        history = [
+            {"date": "2026-11-17", "recordStatus": "available", "level": 298, "experience": 1129263590513928, "experienceRate": 99.226},
+            {"date": "2026-11-18", "recordStatus": "available", "level": 298, "experience": 6175579914147, "experienceRate": 0.355},
+            {"date": "2026-11-19", "recordStatus": "available", "level": 299, "experience": 34219899249572, "experienceRate": 1.969},
+            {"date": "2026-11-20", "recordStatus": "available", "level": 299, "experience": 50805631039495, "experienceRate": 2.924},
+        ]
+
+        calculate_recent_history_changes(history)
+
+        self.assertTrue(history[1]["levelUp"])
+        self.assertEqual(history[1]["levelUpPreviousLevel"], 298)
+        self.assertEqual(history[1]["levelUpCurrentLevel"], 299)
+        self.assertEqual(history[1]["experienceChange"], 14984259283040)
+        self.assertEqual(history[1]["experienceChangeKind"], "level_up_reconstructed")
+        self.assertEqual(history[1]["experienceChangeLowerBound"], 14972789902025)
+        self.assertEqual(history[1]["experienceChangeUpperBound"], 14995728895234)
+        self.assertFalse(history[2]["levelUp"])
+        self.assertTrue(history[2]["levelUpCatchUp"])
+        self.assertEqual(history[2]["experienceChange"], 28044319335425)
+        self.assertEqual(history[2]["experienceRateChange"], 1.614)
+        self.assertEqual(history[3]["experienceChange"], 16585731789923)
+        self.assertEqual(history[3]["experienceRateChange"], 0.955)
+
+    def test_archive_level_up_boundary_growth_is_reconstructed_and_delayed_catch_up_is_calculated(self):
+        history = [
+            {"date": "2026-11-17", "recordStatus": "available", "level": 298, "experience": 1129263590513928, "experienceRate": 99.226},
+            {"date": "2026-11-18", "recordStatus": "available", "level": 298, "experience": 6175579914147, "experienceRate": 0.355},
+            {"date": "2026-11-19", "recordStatus": "available", "level": 299, "experience": 34219899249572, "experienceRate": 1.969},
+            {"date": "2026-11-20", "recordStatus": "available", "level": 299, "experience": 50805631039495, "experienceRate": 2.924},
+        ]
+
+        calculate_archive_history_changes(history)
+
+        self.assertTrue(history[1]["levelUp"])
+        self.assertEqual(history[1]["levelUpCurrentLevel"], 299)
+        self.assertEqual(history[1]["experienceChange"], 14984259283040)
+        self.assertEqual(history[1]["experienceChangeKind"], "level_up_reconstructed")
+        self.assertTrue(history[2]["levelUpCatchUp"])
+        self.assertEqual(history[2]["experienceChange"], 28044319335425)
+        self.assertEqual(history[3]["experienceChange"], 16585731789923)
+
+    def test_forty_trillion_level_up_gain_is_included_with_a_rate_rounding_range(self):
+        history = [
+            {
+                "date": "2026-11-17",
+                "recordStatus": "available",
+                "level": 280,
+                "experience": 900_000_000_000_000,
+                "experienceRate": "96.000",
+            },
+            {
+                "date": "2026-11-18",
+                "recordStatus": "available",
+                "level": 281,
+                "experience": 2_500_000_000_000,
+                "experienceRate": "0.144",
+            },
+        ]
+
+        calculate_recent_history_changes(history)
+
+        level_up = history[1]
+        self.assertTrue(level_up["levelUp"])
+        self.assertEqual(level_up["experienceChange"], 40_000_000_000_000)
+        self.assertEqual(level_up["experienceChangeKind"], "level_up_reconstructed")
+        self.assertEqual(level_up["experienceChangeLowerBound"], 39_990_234_476_724)
+        self.assertEqual(level_up["experienceChangeUpperBound"], 40_009_765_726_727)
+
+    def test_shared_experience_delta_preserves_large_integer_precision(self):
+        previous = {
+            "date": "2026-11-17", "recordStatus": "available", "level": 298,
+            "experience": "9007199254740992", "experienceRate": "97.000",
+        }
+        current = {
+            "date": "2026-11-18", "recordStatus": "available", "level": 298,
+            "experience": "9007199254740993", "experienceRate": "97.001",
+        }
+        self.assertEqual(calculate_observed_experience_change(previous, current), 1)
+        current["experience"] = float(9007199254740993)
+        self.assertIsNone(calculate_observed_experience_change(previous, current))
 
     def test_archive_history_does_not_calculate_changes_across_missing_records(self):
         start_date = self.today - timedelta(days=29)

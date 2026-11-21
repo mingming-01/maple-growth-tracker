@@ -1,16 +1,22 @@
 """AI 성장 분석과 캐릭터 비교의 프롬프트·모델 호출을 담당한다."""
+import hashlib
 import json
 import logging
 import re
 import time
+from concurrent.futures import Future
+from threading import Lock
+
+import requests
 from decimal import Decimal, InvalidOperation, ROUND_HALF_UP
 
 from flask import current_app, has_app_context, has_request_context, request
-from datetime import date
+from datetime import date, datetime, timezone
 from types import SimpleNamespace
 
 from tracker.integrations.ai_provider import (
     ProviderError,
+    ProviderText,
     provider_error_type,
     provider_retry_after_seconds,
     request_gemini,
@@ -22,8 +28,10 @@ from tracker.services.ai_text_service import (
     sanitize_ai_text,
     validate_growth_report,
 )
+from tracker.services.performance_metrics import increment_metric
 from tracker.runtime import (
     get_ai_response_cache,
+    get_ai_response_cache_metadata,
     get_gemini_client,
     get_runtime_state,
     set_ai_response_cache,
@@ -49,29 +57,154 @@ def _request_deadline():
     return float(started) + total
 
 
-def _log_provider_failure(provider, error, started_at, deadline):
-    """공급자 실패 원인을 비밀정보 없이 구조화 로그로 기록한다."""
+_PROVIDER_LOG_FIELDS = (
+    "provider", "model_alias", "selected_model", "selected_provider",
+    "http_status", "elapsed_ms", "response_bytes", "response_body_present",
+    "candidate_count", "choice_count", "has_choices", "has_message", "content_present",
+    "content_length", "content_type", "reasoning_present", "reasoning_length",
+    "finish_reason", "native_finish_reason", "response_classification", "timeout_phase", "attempt", "provider_error_code",
+    "expected_response_bytes", "body_complete", "transfer_encoding",
+    "response_content_type", "response_content_encoding", "response_server",
+    "response_request_id", "cause_class", "context_class",
+    "stream_event_count", "stream_done", "stream_reasoning_bytes", "stream_content_bytes",
+    "stream_finish_reason", "stream_native_finish_reason", "response_mode", "timeout_cause",
+    "retry_count",
+)
+_SAFE_USAGE_FIELDS = (
+    "prompt_tokens", "completion_tokens", "total_tokens", "reasoning_tokens",
+    "promptTokenCount", "candidatesTokenCount", "totalTokenCount", "thoughtsTokenCount",
+)
+
+
+def _safe_provider_metadata(metadata):
+    source = metadata if isinstance(metadata, dict) else {}
+    safe = {key: source[key] for key in _PROVIDER_LOG_FIELDS if key in source}
+    for key in ("provider", "model_alias", "selected_model", "selected_provider", "response_classification", "timeout_cause", "stream_finish_reason", "stream_native_finish_reason"):
+        if safe.get(key) is not None:
+            safe[key] = str(safe[key])[:120]
+    usage = source.get("usage")
+    if isinstance(usage, dict):
+        safe["usage"] = {
+            key: usage[key] for key in _SAFE_USAGE_FIELDS
+            if isinstance(usage.get(key), (int, float)) and not isinstance(usage.get(key), bool)
+        }
+    return safe
+
+
+def _log_provider_failure(provider, error, started_at, deadline, attempt=1):
+    """Record classified failure metadata only; never log request or response text."""
     now = time.monotonic()
     response = getattr(error, "response", None)
+    metadata = getattr(error, "provider_metadata", None) or getattr(error, "http_metadata", None) or {}
+    provider_error_code = metadata.get("provider_error_code") if isinstance(metadata, dict) else None
+    if provider_error_code is None and response is not None:
+        try:
+            error_payload = json.loads(response.text or "")
+            error_object = error_payload.get("error") if isinstance(error_payload, dict) else None
+            provider_error_code = error_object.get("code") if isinstance(error_object, dict) else None
+        except (TypeError, ValueError, AttributeError):
+            provider_error_code = None
     http_status = (
-        getattr(error, "status_code", None)
-        or getattr(response, "status_code", None)
-    )
+        metadata.get("http_status") if isinstance(metadata, dict) else None
+    ) or getattr(error, "status_code", None) or getattr(response, "status_code", None)
     details = {
         "provider": provider,
         "error_type": provider_error_type(error),
         "exception_class": type(error).__name__,
+        "timeout_phase": (metadata.get("timeout_phase") if isinstance(metadata, dict) and metadata.get("timeout_phase") else None) or (
+            "connect" if isinstance(error, requests.ConnectTimeout) else
+            "response_read" if isinstance(error, requests.ReadTimeout) else
+            "total_deadline" if provider_error_type(error) == "provider_timeout" else None
+        ),
         "elapsed_ms": round((now - started_at) * 1000, 1),
         "deadline_remaining_ms": max(0, round((float(deadline) - now) * 1000, 1)),
         "http_status": http_status,
+        "provider_error_code": str(provider_error_code)[:80] if provider_error_code is not None else None,
+        "validation_failure_reason": getattr(error, "validation_reason", None),
         "finish_reason": getattr(error, "finish_reason", None),
+        "attempt": int(attempt),
+        "retry_count": max(0, int(attempt) - 1),
+        "response": _safe_provider_metadata(metadata),
     }
-    log_message = json.dumps(details, ensure_ascii=False, sort_keys=True)
+    message = json.dumps(details, ensure_ascii=False, sort_keys=True)
+    logger = current_app.logger if has_app_context() else logging.getLogger(__name__)
+    logger.warning("AI provider request failed: %s", message)
+
+
+def _log_provider_success(provider, metadata, *, validated, returned, cache_hit):
+    details = _safe_provider_metadata(metadata)
+    details.update({
+        "provider": provider,
+        "backend_validated": bool(validated),
+        "report_returned": bool(returned),
+        "cache_hit": bool(cache_hit),
+    })
+    message = json.dumps(details, ensure_ascii=False, sort_keys=True)
+    logger = current_app.logger if has_app_context() else logging.getLogger(__name__)
+    logger.info("AI provider request succeeded: %s", message)
+    return details
+
+
+def _log_ai_cache_failure(operation, error):
+    """AI 응답 캐시 장애는 분석 공급자 장애와 분리해 기록한다."""
+    details = {
+        "operation": operation,
+        "exception_class": type(error).__name__,
+    }
+    message = json.dumps(details, ensure_ascii=False, sort_keys=True)
     if has_app_context():
-        current_app.logger.warning("AI 공급자 요청 실패: %s", log_message)
+        current_app.logger.warning("AI 응답 캐시 작업 실패(분석은 계속 진행): %s", message)
     else:
-        # 서비스 단위 테스트나 Flask 외부 작업에서도 폴백 경로를 중단하지 않는다.
-        logging.getLogger(__name__).warning("AI 공급자 요청 실패: %s", log_message)
+        logging.getLogger(__name__).warning(
+            "AI 응답 캐시 작업 실패(분석은 계속 진행): %s", message
+        )
+
+
+def _get_cached_ai_response(cache_key):
+    """캐시 조회가 실패해도 공급자 분석 경로를 계속 사용한다."""
+    try:
+        return get_ai_response_cache(cache_key)
+    except Exception as error:
+        _log_ai_cache_failure("read", error)
+        return None
+
+
+def _get_cached_ai_response_metadata(cache_key):
+    """캐시 본문 조회와 분리해 기존 생성 메타데이터를 안전하게 읽는다."""
+    try:
+        return get_ai_response_cache_metadata(cache_key) or {}
+    except Exception as error:
+        _log_ai_cache_failure("read_metadata", error)
+        return {}
+
+
+def _store_cached_ai_response(cache_key, analysis, metadata=None):
+    """공급자가 만든 정상 분석문과 선택적 출처 정보를 캐시한다."""
+    try:
+        if metadata is None:
+            set_ai_response_cache(cache_key, analysis)
+        else:
+            set_ai_response_cache(cache_key, analysis, metadata=metadata)
+        return True
+    except Exception as error:
+        _log_ai_cache_failure("write", error)
+        return False
+
+
+def _build_generation_metadata(provider, provider_metadata=None, *, fallback_used=False, fallback_reason=None):
+    """실제 생성 제공자·모델과 폴백 여부만 응답 및 캐시에 보존한다."""
+    safe = _safe_provider_metadata(provider_metadata)
+    requested_model = safe.get("model_alias")
+    selected_model = safe.get("selected_model")
+    return {
+        "provider": str(provider or "unknown"),
+        "requestedModel": str(requested_model)[:120] if requested_model else None,
+        "selectedModel": str(selected_model)[:120] if selected_model else None,
+        "selectedProvider": str(safe.get("selected_provider"))[:120] if safe.get("selected_provider") else None,
+        "fallbackUsed": bool(fallback_used),
+        "fallbackReason": str(fallback_reason)[:80] if fallback_used and fallback_reason else None,
+        "generatedAt": datetime.now(timezone.utc).isoformat(timespec="seconds"),
+    }
 
 
 def _gemini_cooldown_remaining(runtime_state):
@@ -142,7 +275,28 @@ def _fallback_failure_result(primary_error, fallback_error=None):
         "errorType": "provider_fallback_failed",
         "primaryErrorType": provider_error_type(primary_error),
         "fallbackErrorType": provider_error_type(fallback_error),
+        "primaryHttpStatus": _provider_http_status(primary_error),
+        "fallbackHttpStatus": _provider_http_status(fallback_error),
+        "primaryException": type(primary_error).__name__,
+        "fallbackException": type(fallback_error).__name__,
+        "primaryProviderMetadata": _safe_provider_metadata(
+            getattr(primary_error, "provider_metadata", None) or getattr(primary_error, "http_metadata", None)
+        ),
+        "fallbackProviderMetadata": _safe_provider_metadata(
+            getattr(fallback_error, "provider_metadata", None) or getattr(fallback_error, "http_metadata", None)
+        ),
     }
+
+
+def _provider_http_status(error):
+    response = getattr(error, "response", None)
+    metadata = getattr(error, "provider_metadata", None) or getattr(error, "http_metadata", None)
+    status = (
+        (metadata.get("http_status") if isinstance(metadata, dict) else None)
+        or getattr(error, "status_code", None)
+        or getattr(response, "status_code", None)
+    )
+    return status if isinstance(status, int) and 100 <= status <= 599 else None
 
 
 def _generate_gemini_content(client_or_prompt, prompt=None, api_key=None, deadline=None):
@@ -161,7 +315,76 @@ def _generate_gemini_content(client_or_prompt, prompt=None, api_key=None, deadli
 def _require_provider_text(value, provider):
     if not isinstance(value, str) or not value.strip():
         raise ProviderError(f"{provider} 응답에 분석 텍스트가 없습니다.", "provider_empty_response")
-    return value.strip()
+    text = value.strip()
+    return ProviderText(text, getattr(value, "provider_metadata", {})) if isinstance(value, ProviderText) else text
+
+
+_OPENROUTER_MAX_ATTEMPTS = 2
+_OPENROUTER_RETRY_BACKOFF_SECONDS = 0.25
+_OPENROUTER_RETRY_MIN_REMAINING_SECONDS = 5.0
+
+
+def _is_retryable_openrouter_error(error):
+    """전송 중단·일시적 제공자 장애만 재시도 대상으로 분류한다."""
+    metadata = getattr(error, "provider_metadata", None) or getattr(error, "http_metadata", None) or {}
+    if isinstance(metadata, dict) and metadata.get("timeout_cause") == "total_deadline":
+        # The provider kept streaming until our own wall-clock limit; replaying the
+        # same request is unlikely to help and consumes the remaining request budget.
+        return False
+    classification = metadata.get("response_classification") if isinstance(metadata, dict) else None
+    if classification in {"response_body_incomplete", "stream_incomplete"}:
+        return True
+    return provider_error_type(error) in {"provider_timeout", "provider_unavailable"}
+
+
+def _request_openrouter_with_retry(prompt, *, api_key, deadline, operation):
+    """OpenRouter 전송 장애에 한해 전체 deadline 안에서 최대 한 번 재시도한다."""
+    for attempt in range(1, _OPENROUTER_MAX_ATTEMPTS + 1):
+        attempt_started_at = time.monotonic()
+        try:
+            value = request_openrouter(prompt, api_key=api_key, deadline=deadline)
+            response_text = _require_provider_text(value, "OpenRouter")
+            metadata = dict(getattr(response_text, "provider_metadata", {}) or {})
+            metadata.update({"attempt": attempt, "retry_count": attempt - 1})
+            return ProviderText(str(response_text), metadata)
+        except Exception as error:
+            metadata = dict(
+                getattr(error, "provider_metadata", None)
+                or getattr(error, "http_metadata", None)
+                or {}
+            )
+            metadata.update({"attempt": attempt, "retry_count": attempt - 1})
+            try:
+                error.provider_metadata = metadata
+                error.attempt = attempt
+                error._ai_failure_logged = True
+            except Exception:
+                pass
+            _log_provider_failure(
+                operation, error, attempt_started_at, deadline, attempt=attempt
+            )
+
+            remaining = float(deadline) - time.monotonic() if deadline is not None else float("inf")
+            can_retry = (
+                attempt < _OPENROUTER_MAX_ATTEMPTS
+                and _is_retryable_openrouter_error(error)
+                and remaining >= (
+                    _OPENROUTER_RETRY_MIN_REMAINING_SECONDS
+                    + _OPENROUTER_RETRY_BACKOFF_SECONDS
+                )
+            )
+            if not can_retry:
+                raise
+
+            logger = current_app.logger if has_app_context() else logging.getLogger(__name__)
+            logger.info(
+                "OpenRouter 일시적 전송 오류로 재시도합니다: attempt=%s, remaining_seconds=%.1f",
+                attempt,
+                remaining,
+            )
+            time.sleep(_OPENROUTER_RETRY_BACKOFF_SECONDS)
+
+    raise RuntimeError("OpenRouter retry loop exited unexpectedly")
 
 
 
@@ -200,52 +423,245 @@ def _apply_deterministic_growth_forecast(analysis, character, metrics):
     return re.sub(pattern, append_server_forecast, analysis, count=1)
 
 
-def _build_growth_report_prompt(source_data):
-    prompt_data = dict(source_data)
-    selected_period = prompt_data.get("selectedPeriod") or {}
+def _build_ai_commentary_context(source_data):
+    """서버 계산 결과를 숫자가 없는 정성 신호로 변환해 AI에 전달한다."""
+    source_data = source_data if isinstance(source_data, dict) else {}
+    metrics = source_data.get("metrics") or {}
+    insights = source_data.get("growthInsights") or {}
+    selected_period = source_data.get("selectedPeriod") or {}
+    summary = selected_period.get("periodSummary") or {}
+    basis = insights.get("basis") or {}
+
+    comparison = insights.get("weekOverWeek") or {}
+    direction = comparison.get("direction")
+    change_percent = comparison.get("averageDailyGrowthChangePercent")
+    try:
+        magnitude = abs(float(change_percent))
+    except (TypeError, ValueError):
+        magnitude = None
+
     period_days = selected_period.get("periodDays", 7)
     if period_days in (30, 90):
-        # 장기 리포트에는 7일 기준 평균/증감 지표를 섞지 않는다.
-        # 장기 기간 통계는 periodSummary, 전망은 최근 7일 기준 prediction으로 분리한다.
-        original_metrics = prompt_data.get("metrics") or {}
-        level_progress = original_metrics.get("levelProgress") or {}
-        prompt_data["metrics"] = {
-            "recentSevenDayPrediction": original_metrics.get("prediction"),
-            "currentLevelProgress": {
-                key: level_progress.get(key)
-                for key in ("currentRate", "remainingRate")
-                if key in level_progress
-            },
-        }
-        prompt_data["growthInsights"] = None
+        current_summary = selected_period.get("periodSummary") or {}
+        previous_summary = selected_period.get("previousPeriodSummary") or {}
+        current_count = current_summary.get("validGrowthIntervals")
+        previous_count = previous_summary.get("validGrowthIntervals")
+        current_total = current_summary.get(
+            "experienceGainSum", current_summary.get("observedExperienceSum")
+        )
+        previous_total = previous_summary.get(
+            "experienceGainSum", previous_summary.get("observedExperienceSum")
+        )
+        minimum_intervals = max(4, (period_days * 2 + 4) // 5)
+        enough_period_comparison = (
+            isinstance(current_count, int) and not isinstance(current_count, bool)
+            and isinstance(previous_count, int) and not isinstance(previous_count, bool)
+            and current_count >= minimum_intervals
+            and previous_count >= minimum_intervals
+            and current_total is not None
+            and previous_total is not None
+        )
+        if enough_period_comparison:
+            try:
+                current_total = Decimal(str(current_total))
+                previous_total = Decimal(str(previous_total))
+                if not current_total.is_finite() or not previous_total.is_finite():
+                    raise InvalidOperation
+            except (InvalidOperation, TypeError, ValueError):
+                enough_period_comparison = False
 
+        if enough_period_comparison and previous_total > 0:
+            change_percent = (
+                (current_total * previous_count - previous_total * current_count)
+                * Decimal("100")
+                / (previous_total * current_count)
+            )
+            magnitude = abs(change_percent)
+            if change_percent > Decimal("0.5"):
+                growth_comparison = (
+                    "이전 동일 기간보다 하루 평균 경험치 증가량이 뚜렷하게 높아짐"
+                    if magnitude >= Decimal("20")
+                    else "이전 동일 기간보다 하루 평균 경험치 증가량이 완만하게 높아짐"
+                    if magnitude >= Decimal("5")
+                    else "이전 동일 기간보다 하루 평균 경험치 증가량이 소폭 높아짐"
+                )
+            elif change_percent < Decimal("-0.5"):
+                growth_comparison = (
+                    "이전 동일 기간보다 하루 평균 경험치 증가량이 뚜렷하게 낮아짐"
+                    if magnitude >= Decimal("20")
+                    else "이전 동일 기간보다 하루 평균 경험치 증가량이 완만하게 낮아짐"
+                    if magnitude >= Decimal("5")
+                    else "이전 동일 기간보다 하루 평균 경험치 증가량이 소폭 낮아짐"
+                )
+            else:
+                growth_comparison = "이전 동일 기간과 하루 평균 경험치 증가량이 대체로 비슷함"
+        elif enough_period_comparison and current_total > 0:
+            growth_comparison = (
+                "이전 동일 기간에는 확인된 경험치 증가가 없었지만 "
+                "선택한 기간에는 경험치 증가가 확인됨"
+            )
+        elif enough_period_comparison:
+            growth_comparison = "두 기간 모두 확인된 경험치 증가가 거의 없음"
+        else:
+            period_trend = metrics.get("periodTrend") or {}
+            trend_status = period_trend.get("status")
+            trend_direction = period_trend.get("direction")
+            if trend_status == "available" and trend_direction == "increase":
+                growth_comparison = (
+                    "직전 동일 기간과 비교할 기록은 충분하지 않지만 "
+                    "선택한 기간 안에서는 후반부의 하루 평균 경험치 증가량이 초반부보다 높아짐"
+                )
+            elif trend_status == "available" and trend_direction == "decrease":
+                growth_comparison = (
+                    "직전 동일 기간과 비교할 기록은 충분하지 않지만 "
+                    "선택한 기간 안에서는 후반부의 하루 평균 경험치 증가량이 초반부보다 낮아짐"
+                )
+            elif trend_status == "available":
+                growth_comparison = (
+                    "직전 동일 기간과 비교할 기록은 충분하지 않지만 "
+                    "선택한 기간 안에서는 초반과 후반의 성장 흐름이 대체로 비슷함"
+                )
+            else:
+                growth_comparison = (
+                    "직전 동일 기간과 비교하거나 선택 기간 내부의 흐름을 판단할 "
+                    "경험치 변화 기록이 충분하지 않음"
+                )
+    elif comparison.get("status") != "available" or direction in (None, "insufficient", "insufficient_data"):
+        growth_comparison = "비교할 이전 성장 기록이 충분하지 않음"
+    elif direction == "increase":
+        growth_comparison = (
+            "이전보다 성장 속도가 뚜렷하게 높아짐" if magnitude is not None and magnitude >= 20
+            else "이전보다 성장 속도가 완만하게 높아짐" if magnitude is not None and magnitude >= 5
+            else "이전보다 성장 속도가 소폭 높아짐"
+        )
+    elif direction == "decrease":
+        growth_comparison = (
+            "이전보다 성장 속도가 뚜렷하게 낮아짐" if magnitude is not None and magnitude >= 20
+            else "이전보다 성장 속도가 완만하게 낮아짐" if magnitude is not None and magnitude >= 5
+            else "이전보다 성장 속도가 소폭 낮아짐"
+        )
+    else:
+        growth_comparison = "이전 기간과 비슷한 성장 흐름"
+
+    coverage = summary.get("coveragePercent")
+    if coverage is None:
+        coverage = basis.get("coveragePercent")
+    try:
+        coverage_value = float(coverage)
+    except (TypeError, ValueError):
+        coverage_value = None
+    if coverage_value is None:
+        record_coverage = "기록 충실도를 판단할 자료가 부족함"
+    elif coverage_value >= 85:
+        record_coverage = "분석 기간의 기록이 비교적 충실함"
+    elif coverage_value >= 60:
+        record_coverage = "분석 기간 중 일부 날짜의 기록이 비어 있음"
+    else:
+        record_coverage = "분석 기간의 기록이 충분하지 않음"
+
+    level_ups = metrics.get("levelUps")
+    if isinstance(level_ups, list) and level_ups:
+        level_transition = "분석 기간 중 레벨업 전환이 확인됨"
+    elif summary.get("levelUpIntervals"):
+        level_transition = "레벨업 전환은 관찰됐지만 날짜나 전후 레벨을 확정할 수 없음"
+    elif summary.get("validGrowthIntervals") in (None, 0):
+        level_transition = "레벨업 여부를 판단할 연속 기록이 부족함"
+    else:
+        level_transition = "분석 기간의 확인된 기록에서 레벨업 전환이 나타나지 않음"
+
+    progress = (metrics.get("levelProgress") or {}).get("currentRate")
+    try:
+        progress_value = float(progress)
+    except (TypeError, ValueError):
+        progress_value = None
+    if progress_value is None:
+        current_progress = "현재 레벨 진행 단계를 판단할 자료가 부족함"
+    elif progress_value >= 80:
+        current_progress = "현재 레벨의 후반 진행 구간"
+    elif progress_value >= 35:
+        current_progress = "현재 레벨의 중간 진행 구간"
+    else:
+        current_progress = "현재 레벨의 초반 진행 구간"
+
+    prediction = metrics.get("prediction")
+    forecast = (
+        "서버에서 참고 가능한 성장 전망을 계산함"
+        if isinstance(prediction, dict) and prediction.get("estimatedDate")
+        else "기록만으로 신뢰할 수 있는 성장 전망을 계산하기 어려움"
+    )
+    period_scope = "장기 성장 기록의 흐름" if period_days in (30, 90) else "최근 성장 기록의 흐름"
+
+    commentary_context = {
+        "분석 범위": period_scope,
+        "이전 기간 대비 성장 흐름": growth_comparison,
+        "기록 충실도": record_coverage,
+        "레벨업 관찰": level_transition,
+        "현재 레벨 진행 단계": current_progress,
+        "성장 전망 자료": forecast,
+    }
+    if period_days in (30, 90):
+        period_trend = metrics.get("periodTrend") or {}
+        if period_trend.get("status") != "available":
+            long_period_signal = "기간 초반과 후반을 비교할 만큼 확인된 경험치 변화 기록이 충분하지 않음"
+        else:
+            direction = period_trend.get("direction")
+            strength = period_trend.get("strength")
+            if direction == "increase" and strength == "strong":
+                long_period_signal = "기간 후반의 하루 평균 경험치 증가량이 초반보다 뚜렷하게 높아짐"
+            elif direction == "increase" and strength == "moderate":
+                long_period_signal = "기간 후반의 하루 평균 경험치 증가량이 초반보다 완만하게 높아짐"
+            elif direction == "increase":
+                long_period_signal = "기간 후반의 경험치 증가량이 초반보다 높지만 초반 기준값이 작아 변화 폭을 단정하기 어려움"
+            elif direction == "decrease" and strength == "strong":
+                long_period_signal = "기간 후반의 하루 평균 경험치 증가량이 초반보다 뚜렷하게 낮아짐"
+            elif direction == "decrease" and strength == "moderate":
+                long_period_signal = "기간 후반의 하루 평균 경험치 증가량이 초반보다 완만하게 낮아짐"
+            elif direction == "decrease":
+                long_period_signal = "기간 후반의 경험치 증가량이 초반보다 낮지만 변화 폭은 크지 않음"
+            else:
+                long_period_signal = "기간 초반과 후반의 하루 평균 경험치 증가량이 대체로 비슷함"
+        commentary_context["선택 기간 내 초반과 후반의 성장 흐름"] = long_period_signal
+
+    return commentary_context
+
+
+def _build_growth_report_prompt(source_data):
+    """수치 원문 대신 백엔드가 분류한 정성 신호만 AI 코멘트에 제공한다."""
+    commentary_context = _build_ai_commentary_context(source_data)
     return f"""
-너는 메이플스토리 캐릭터의 성장 기록을 읽고 플레이어가 편하게 이해할 수 있는 리포트를 쓰는 도우미야.
-친근하고 담백한 해요체를 사용해. 메이플스토리에서 익숙한 경험치, 레벨업, 월드 랭킹 표현을 우선해.
+너는 메이플스토리 캐릭터의 성장 기록을 플레이어와 함께 살펴보는 친근한 성장 코치야.
+친근하고 자연스러운 해요체를 사용하고, 메이플스토리에서 익숙한 경험치·레벨업 표현을 우선해. 딱딱한 보고서 말투보다 실제 플레이어에게 이야기하듯 담백하게 작성해.
 
-[작성 규칙]
-- 아래 분석 자료에 있는 사실만 사용해. 수치·날짜·평균·비율·원인·행동을 새로 계산하거나 추측하지 마.
-- 경험치 증가량과 현재 레벨 진행률을 구분해. experienceRate는 현재 레벨 진행률이야. 남은 비율은 currentLevelProgress.remainingRate가 있을 때만 말해.
-- 7일 리포트는 growthInsights의 최근/직전 7일 비교를 참고해. 비교할 기록이 부족하면 증가·감소를 단정하지 마.
-- 30일·90일 리포트는 selectedPeriod.periodSummary가 선택 기간의 핵심 근거야. metrics의 전망과 진행률은 최근 7일 기준이므로 장기 기간 통계처럼 설명하지 마.
-- 예상 레벨업은 metrics.prediction 또는 metrics.recentSevenDayPrediction에 날짜가 있을 때만, 참고값임을 밝혀 말해. 서버가 계산한 정확한 전망 문장도 함께 제공되므로, 그 의미와 전제 조건을 자연스럽게 설명해.
-- 기록이 적으면 흐름이 꾸준하다거나 안정적이라고 말하지 마. 근거 없는 칭찬, 사냥 방식, 플레이 시간, 접속 습관을 만들지 마.
-- 하루 평균 경험치는 확인된 경험치 변화의 평균으로 설명하고, 큰 경험치는 '17.8조'처럼 한국어 단위로 써. 과학적 표기, 개발 용어, 데이터 필드명, 모델명, API, null, undefined, 영어 상태값은 본문에 쓰지 마.
-- '관측 구간', '표본', '결측', '기록 충실도', '유효 구간', '메트릭' 같은 말 대신 '확인된 날짜', '하루 평균 경험치', '지난 기간과 비교'처럼 자연스럽게 표현해.
-- [성장 패턴]은 선택 기간의 전체 흐름, [성장 변화]는 확인된 구체적 차이, [레벨업 분석]은 실제 레벨 변화와 현재 진행 상황, [성장 전망]은 주어진 전망, [AI 코멘트]는 유의할 점 한 가지를 설명해.
-- 각 항목은 근거가 있는 자연스러운 한국어 1~2문장으로 작성해. 근거가 없으면 짧게 밝혀.
-- 아래 다섯 제목을 정확히 한 번씩 순서대로 사용해. 마크다운·목록·표·별도 제목은 쓰지 마.
+[역할]
+- 백엔드가 계산한 사실을 다시 계산하지 말고, 제공된 정성 신호를 바탕으로 성장 과정에서 눈에 띄는 양상과 그 의미를 설명해.
+- 성장 흐름, 기록의 충실도, 레벨업 전후의 상황을 서로 자연스럽게 연결해. 신호를 그대로 나열하거나 앞의 리포트 내용을 반복하지 마.
+- 30일·90일 분석에서 '선택 기간 내 초반과 후반의 성장 흐름' 신호가 있으면 이를 핵심 해석에 반영해. 이는 선택 기간 내부 비교이며, 선택 기간 이전의 기록과 비교했다는 뜻으로 바꾸지 마.
+- 기록에 없는 사냥 방식, 플레이 시간, 접속 습관, 장비 효과, 성장 원인을 추측하지 마.
+- 신호가 부족하면 단정하지 말고 무엇을 판단하기 어려운지 솔직하게 밝혀.
 
-[분석 자료]
-{json.dumps(prompt_data, ensure_ascii=False)}
+[해석과 문체]
+- 가능한 경우 '확인된 흐름 → 그 흐름이 보여주는 의미 → 다음에 살펴볼 점 또는 짧은 응원'으로 자연스럽게 이어가. 이 순서를 모든 문장에 억지로 적용하지는 마.
+- 성장 속도가 낮아진 신호가 있으면 그 사실을 숨기지 말되, 성장이 멈췄다고 과장하지 마. 기록 공백을 성장 정체나 미접속의 증거로 해석하지 마.
+- 레벨업이 확인됐다면 그 성취나 새 레벨에서 이어지는 성장을 자연스럽게 짚어도 좋아. 확인되지 않은 레벨업을 축하하거나 성과를 만들어내지는 마.
+- 응원은 전체 분석과 연결되는 짧고 구체적인 표현으로 필요할 때 한 번만 덧붙여. 과장된 칭찬, 상투적인 격려, 뜬금없는 응원, 플레이를 강요하는 표현은 피해야 해.
+- 기록만으로 말할 수 있는 내용이 적다면 억지로 풍성하게 쓰지 말고, 짧더라도 정확하고 따뜻하게 마무리해.
+- 모든 문장은 리포트 본문과 같은 존댓말 해요체로 통일해. 문장 중간이나 끝에서 반말로 바꾸지 마.
+- '보여', '있어', '좋아', '할게', '볼게', '거야'처럼 반말로 읽히는 끝맺음과 평서형 '-다' 체는 사용하지 마.
 
-[성장 패턴]
-[성장 변화]
-[레벨업 분석]
-[성장 전망]
-[AI 코멘트]
+[정확성 규칙]
+- 제공된 정성 신호에 없는 성장 방향이나 원인을 만들어내지 마.
+- 수치·날짜·평균·비율·원인·행동을 새로 계산하거나 추측하지 마.
+- 숫자·날짜·퍼센트·레벨 번호·경험치 단위·횟수는 쓰지 마. 정확한 수치와 날짜는 백엔드가 리포트에 별도로 작성해.
+- 서로 다른 레벨의 경험치 진행률을 직접 비교하거나 레벨업 당일의 경험치 획득량을 추정하지 마.
+
+[출력 형식]
+- AI 코멘트 본문만 작성해. 제목, 구분 표시, 목록, 표, 마크다운, 코드, 영어 상태값은 쓰지 마.
+- 자연스럽고 구체적인 한국어 해요체로 두세 문장만 작성해. 길게 설명하거나 여러 내용을 한꺼번에 나열하지 마.
+- 리포트 앞부분에 표시된 숫자와 날짜를 반복하지 말고, 플레이어가 성장 흐름을 이해하는 데 도움이 되는 해석과 다음에 살펴볼 점을 중심으로 작성해.
+
+[백엔드가 계산한 정성 신호]
+{json.dumps(commentary_context, ensure_ascii=False)}
 """
-
 
 
 def _format_experience_korean(value):
@@ -294,16 +710,16 @@ def _format_period_date_range(start_value, end_value):
 
 
 def _build_growth_report_cache_key(prompt, source_data):
-    """같은 정성 신호라도 서로 다른 캐릭터/기록의 결과가 섞이지 않게 한다."""
+    """정성 신호 프롬프트와 해당 캐릭터의 실제 계산 데이터로 캐시를 구분한다."""
     return (
         prompt
-        + "\n[리포트 형식 버전] 3\n"
+        + "\n[리포트 형식 버전] 9\n"
         + "[캐시 식별 데이터]\n"
         + json.dumps(source_data, ensure_ascii=False, sort_keys=True)
     )
 
 
-def _validate_growth_report_facts(report, source_data):
+def _growth_report_fact_error(report, source_data):
     """AI가 작성한 수치와 날짜가 서버가 제공한 데이터에 존재하는지 확인한다."""
     allowed_numbers = set()
     allowed_dates = set()
@@ -373,16 +789,16 @@ def _validate_growth_report_facts(report, source_data):
 
     for match in re.finditer(r"(?<!\d)(\d{1,2})월\s*(\d{1,2})일", report):
         if (int(match.group(1)), int(match.group(2))) not in allowed_dates:
-            return False
+            return "unsupported_date"
 
     for token in re.findall(r"(?<![A-Za-z])\d+(?:,\d{3})*(?:\.\d+)?", report):
         normalized = token.replace(",", "")
         try:
             number = format(Decimal(normalized).normalize(), "f")
         except InvalidOperation:
-            return False
+            return "unsupported_number"
         if number not in allowed_numbers:
-            return False
+            return "unsupported_number"
 
     for number, unit in re.findall(
         r"(\d+(?:,\d{3})*(?:\.\d+)?)\s*(경|조|억|만|%p|%|레벨|회|일|위)",
@@ -390,8 +806,148 @@ def _validate_growth_report_facts(report, source_data):
     ):
         normalized = format(Decimal(number.replace(",", "")).normalize(), "f")
         if (normalized, unit) not in allowed_number_units:
-            return False
+            return "unsupported_number_unit"
     return True
+
+
+def _validate_growth_report_facts(report, source_data):
+    """Boolean compatibility wrapper around the categorized fact check."""
+    return _growth_report_fact_error(report, source_data) is True
+
+
+def _extract_ai_comment(value):
+    """Extract only the AI commentary; factual report sections are always server-owned."""
+    text = str(value or "")
+    # Some providers/test doubles emit escaped line breaks as literal \n sequences.
+    text = text.replace("\\r\\n", "\n").replace("\\n", "\n").replace("\\r", "\n").strip()
+    if not text:
+        return ""
+
+    ai_heading = re.search(r"(?im)^\s*\[AI\s*코멘트\]\s*", text)
+    if ai_heading:
+        text = text[ai_heading.end():]
+        next_heading = re.search(
+            r"(?im)^\s*\[(?:성장\s*패턴|성장\s*변화|성장\s*분석|레벨업\s*분석|레벨업|성장\s*전망)\]\s*",
+            text,
+        )
+        if next_heading:
+            text = text[:next_heading.start()]
+    elif re.search(
+        r"(?im)^\s*\[(?:성장\s*패턴|성장\s*변화|성장\s*분석|레벨업\s*분석|레벨업|성장\s*전망)\]\s*",
+        text,
+    ):
+        # A full model-written report without an explicit AI-comment section is not commentary.
+        return ""
+
+    return text.strip()
+
+
+def _remove_numeric_comment_sentences(comment):
+    """AI 코멘트의 숫자 포함 문장만 제거하고 서버가 제공할 사실과 분리한다."""
+    sentences = re.split(r"(?<=[.!?])\s+|\n+", str(comment or ""))
+    kept = []
+    removed = False
+    for sentence in sentences:
+        text = sentence.strip()
+        if not text:
+            continue
+        if re.search(r"\d", text):
+            removed = True
+            continue
+        kept.append(text)
+    return " ".join(kept), removed
+
+
+_INFORMAL_COMMENT_ENDING = re.compile(
+    r"(?:보여|볼게|해\s*볼게|해볼게|할게|할\s*거야|거야|이야|야|같아|좋아|"
+    r"있어|없어|돼|해|했어|했지|하자|크다|작다|높다|낮다|맞아|아니야|구나|"
+    r"겠지|하네|그렇네|많아|적어|필요해|어려워|좋겠네|괜찮아|맞네|해봐|해줘)$"
+)
+
+
+def _has_informal_comment_tone(comment):
+    """끝맺음에서 명확한 반말 표현이 발견되는지 보수적으로 확인한다."""
+    sentences = re.split(r"(?<=[.!?])\s+|\n+", str(comment or ""))
+    for sentence in sentences:
+        ending = sentence.strip().rstrip("\"'”’)]}.!?…")
+        if not ending:
+            continue
+        if _INFORMAL_COMMENT_ENDING.search(ending):
+            return True
+        if ending.endswith("다") and not re.search(
+            r"(?:습니다|입니다|합니다|됩니다|있습니다|없습니다|했습니다|됐습니다|드립니다)$",
+            ending,
+        ):
+            return True
+    return False
+
+
+def _prepare_ai_comment(value, expected_date, source_data):
+    """Keep usable, consistently polite prose; numeric facts remain server-owned."""
+    sanitized = sanitize_ai_text(value, expected_date)
+    comment = _extract_ai_comment(sanitized)
+    comment, removed_numeric_sentences = _remove_numeric_comment_sentences(comment)
+    compact = re.sub(r"[\s.!?…·]", "", comment)
+    if len(compact) < 8:
+        reason = "numeric_claim_only" if removed_numeric_sentences else "empty_comment"
+        return None, reason
+    if _has_informal_comment_tone(comment):
+        return None, "informal_tone"
+    return comment, None
+
+
+def _server_fallback_growth_report(
+    character, metrics, growth_insights, analysis_context, reason="provider_unavailable"
+):
+    """Return a clearly-labelled deterministic report when no AI commentary is usable."""
+    fallback_comment = (
+        "이번 요청에서는 AI 코멘트를 생성하지 못했어요. "
+        "아래 성장 수치와 레벨업 정보는 저장된 기록을 바탕으로 서버가 계산한 내용이에요."
+    )
+    report = _build_deterministic_growth_report(
+        character, metrics, growth_insights, analysis_context, fallback_comment
+    )
+    metadata = _log_provider_success(
+        "server_fallback",
+        {"response_classification": "deterministic_fallback"},
+        validated=True,
+        returned=True,
+        cache_hit=False,
+    )
+    return {
+        "analysis": report,
+        "cacheHit": False,
+        "growthInsights": growth_insights,
+        "aiGenerated": False,
+        "aiStatus": "fallback",
+        "aiFallbackReason": str(reason or "provider_unavailable")[:80],
+        "providerMetadata": metadata,
+    }
+
+
+def _compose_growth_report_from_ai(
+    response_text, character, metrics, growth_insights, analysis_context,
+    source_data, expected_date, provider,
+):
+    """Keep AI prose, while the backend supplies every measured fact and section."""
+    comment, validation_reason = _prepare_ai_comment(
+        response_text, expected_date, source_data
+    )
+    if validation_reason:
+        error = ProviderError(
+            f"{provider} AI commentary failed validation.",
+            "provider_invalid_output",
+        )
+        error.validation_reason = validation_reason
+        error.provider_metadata = {
+            **dict(getattr(response_text, "provider_metadata", {}) or {}),
+            "response_classification": "comment_validation_failed",
+        }
+        raise error
+
+    return _build_deterministic_growth_report(
+        character, metrics, growth_insights, analysis_context, comment
+    )
 
 
 def _build_deterministic_growth_report(character, metrics, growth_insights, analysis_context, ai_comment):
@@ -401,21 +957,28 @@ def _build_deterministic_growth_report(character, metrics, growth_insights, anal
     period_days = (analysis_context or {}).get("periodDays", 7)
     recent = insights.get("recentPeriod") if period_days == 7 else None
     previous = insights.get("previousPeriod") if period_days == 7 else None
-    summary = recent or metrics.get("periodSummary") or {}
+    summary = (
+        recent
+        or (analysis_context or {}).get("periodSummary")
+        or metrics.get("periodSummary")
+        or {}
+    )
 
     period_label = _format_period_date_range(
         summary.get("startDate"), summary.get("endDate")
     )
     period_name = "최근 7일" if period_days == 7 else f"선택한 {period_days}일"
 
-    total_text = _format_experience_korean(summary.get("observedExperienceSum"))
+    total_text = _format_experience_korean(
+        summary.get("experienceGainSum", summary.get("observedExperienceSum"))
+    )
     average_text = _format_experience_korean(summary.get("averageDailyExperience"))
     valid_intervals = summary.get("validGrowthIntervals")
 
     if total_text and average_text and isinstance(valid_intervals, int):
         date_prefix = f"{period_label} 동안 " if period_label else ""
         growth_pattern = (
-            f"{date_prefix}확인된 {valid_intervals}회의 일일 경험치 변화 합계는 "
+            f"{date_prefix}집계된 {valid_intervals}회의 일일 경험치 변화 합계는 "
             f"{total_text}이며, 변화가 확인된 날의 하루 평균은 {average_text}예요."
         )
     elif average_text:
@@ -458,8 +1021,98 @@ def _build_deterministic_growth_report(character, metrics, growth_insights, anal
             f"{previous_label}의 하루 평균은 {previous_average}, "
             f"{recent_label}은 {recent_average}로, 직전 기간보다 {change_text}"
         )
+    elif period_days in (30, 90):
+        previous_summary = (analysis_context or {}).get("previousPeriodSummary") or {}
+        current_count = summary.get("validGrowthIntervals")
+        previous_count = previous_summary.get("validGrowthIntervals")
+        current_sum = summary.get(
+            "experienceGainSum", summary.get("observedExperienceSum")
+        )
+        previous_sum = previous_summary.get(
+            "experienceGainSum", previous_summary.get("observedExperienceSum")
+        )
+        minimum_intervals = max(4, (period_days * 2 + 4) // 5)
+
+        enough_period_comparison = (
+            isinstance(current_count, int)
+            and isinstance(previous_count, int)
+            and current_count >= minimum_intervals
+            and previous_count >= minimum_intervals
+            and current_sum is not None
+            and previous_sum is not None
+        )
+        if enough_period_comparison:
+            current_total = Decimal(str(current_sum))
+            previous_total = Decimal(str(previous_sum))
+            current_average = current_total / Decimal(current_count)
+            previous_average = previous_total / Decimal(previous_count)
+            current_average_text = _format_experience_korean(current_average)
+            previous_average_text = _format_experience_korean(previous_average)
+
+            if previous_total > 0:
+                change_percent = (
+                    (current_total * previous_count - previous_total * current_count)
+                    * Decimal("100")
+                    / (previous_total * current_count)
+                )
+                if change_percent > Decimal("0.5"):
+                    change_text = f"이전 기간보다 {change_percent:.1f}% 늘었어요."
+                elif change_percent < Decimal("-0.5"):
+                    change_text = f"이전 기간보다 {abs(change_percent):.1f}% 줄었어요."
+                else:
+                    change_text = "이전 기간과 큰 차이가 없어요."
+                growth_change = (
+                    f"직전 {period_days}일의 하루 평균은 {previous_average_text}, "
+                    f"선택한 {period_days}일은 {current_average_text}로, {change_text}"
+                )
+            elif current_total > 0:
+                growth_change = (
+                    f"직전 {period_days}일에는 확인된 경험치 증가가 없었고, "
+                    f"선택한 {period_days}일에는 하루 평균 {current_average_text}의 "
+                    "경험치 증가가 확인됐어요."
+                )
+            else:
+                growth_change = (
+                    f"직전 {period_days}일과 선택한 {period_days}일 모두 "
+                    "확인된 경험치 증가가 거의 없어요."
+                )
+        else:
+            period_trend = metrics.get("periodTrend") or {}
+            trend_status = period_trend.get("status")
+            trend_direction = period_trend.get("direction")
+            trend_percent = period_trend.get("changePercent")
+            if trend_status == "available" and trend_direction == "increase":
+                detail = (
+                    f"후반부의 하루 평균 경험치 증가량이 초반부보다 "
+                    f"{abs(float(trend_percent)):.1f}% 높았어요."
+                    if isinstance(trend_percent, (int, float))
+                    else "후반부의 하루 평균 경험치 증가량이 초반부보다 높았어요."
+                )
+                growth_change = f"직전 기간과 비교할 기록은 충분하지 않지만, 선택한 {period_days}일 안에서는 {detail}"
+            elif trend_status == "available" and trend_direction == "decrease":
+                detail = (
+                    f"후반부의 하루 평균 경험치 증가량이 초반부보다 "
+                    f"{abs(float(trend_percent)):.1f}% 낮았어요."
+                    if isinstance(trend_percent, (int, float))
+                    else "후반부의 하루 평균 경험치 증가량이 초반부보다 낮았어요."
+                )
+                growth_change = f"직전 기간과 비교할 기록은 충분하지 않지만, 선택한 {period_days}일 안에서는 {detail}"
+            elif trend_status == "available":
+                growth_change = (
+                    f"직전 기간과 비교할 기록은 충분하지 않지만, "
+                    f"선택한 {period_days}일의 초반과 후반은 비슷한 성장 흐름을 보였어요."
+                )
+            elif average_text:
+                growth_change = (
+                    f"선택한 {period_days}일의 하루 평균은 {average_text}예요. "
+                    "직전 기간과 기간 내 흐름을 비교할 만큼 기록이 충분하지 않아요."
+                )
+            else:
+                growth_change = (
+                    f"선택한 {period_days}일은 비교할 만큼 경험치 변화 기록이 충분하지 않아요."
+                )
     elif average_text:
-        growth_change = f"{period_name}의 하루 평균은 {average_text}로 확인됐어요. 비교할 이전 기간의 기록은 충분하지 않아요."
+        growth_change = f"{period_name}의 하루 평균 경험치는 {average_text}로 확인됐어요. 비교할 이전 기간의 기록은 충분하지 않아요."
     else:
         growth_change = "이전 기간과 비교할 만큼 충분한 성장 기록이 아직 없어요."
 
@@ -552,7 +1205,7 @@ def _filter_growth_history_to_selected_period(history, analysis_context):
     return filtered
 
 
-def generate_ai_analysis(character, history, computed_metrics=None, growth_insights=None, analysis_context=None, force_refresh=False):
+def _generate_ai_analysis_impl(character, history, computed_metrics=None, growth_insights=None, analysis_context=None, force_refresh=False):
     runtime_state = get_runtime_state()
     gemini_api_key = getattr(runtime_state, "gemini_api_key", "")
     openrouter_api_key = getattr(runtime_state, "openrouter_api_key", "")
@@ -635,20 +1288,42 @@ def generate_ai_analysis(character, history, computed_metrics=None, growth_insig
         if isinstance(prediction, dict):
             expected_date = prediction.get("estimatedDate")
 
-    cached_analysis = None if force_refresh else get_ai_response_cache(cache_key)
+    cached_analysis = None if force_refresh else _get_cached_ai_response(cache_key)
     if cached_analysis is not None:
         if computed_metrics is not None:
             cached_analysis = _apply_deterministic_growth_forecast(
                 cached_analysis, character, computed_metrics
             )
-            if (
-                not _validate_growth_report_facts(cached_analysis, source_data)
-                or not validate_growth_report(cached_analysis)
-            ):
+            # Cached output was assembled from server-owned metrics and a previously
+            # validated commentary. Re-running a token/unit allowlist here can reject
+            # legitimate server-written phrases (for example, a period expressed as days).
+            if not validate_growth_report(cached_analysis):
                 cached_analysis = None
         if cached_analysis is not None:
+            cached_metadata = _get_cached_ai_response_metadata(cache_key)
+            generation = cached_metadata.get("generation") if isinstance(cached_metadata, dict) else None
+            if not isinstance(generation, dict):
+                generation = None
+            log_provider = generation.get("provider") if generation else "cache"
+            log_metadata = {"response_body_present": True}
+            if generation:
+                log_metadata.update({
+                    "model_alias": generation.get("requestedModel"),
+                    "selected_model": generation.get("selectedModel"),
+                    "selected_provider": generation.get("selectedProvider"),
+                })
             print("저장된 AI 성장 리포트를 재사용했습니다.")
-            return {"analysis": cached_analysis, "cacheHit": True, "growthInsights": growth_insights}
+            metadata = _log_provider_success(log_provider, log_metadata, validated=True, returned=True, cache_hit=True)
+            return {
+                "analysis": cached_analysis,
+                "cacheHit": True,
+                "growthInsights": growth_insights,
+                "aiGenerated": True,
+                "aiStatus": "generated",
+                "providerMetadata": metadata,
+                "generation": generation,
+                "delivery": {"source": "server_cache"},
+            }
 
     gemini_error = None
     if gemini_api_key and cooldown_remaining > 0:
@@ -666,62 +1341,142 @@ def generate_ai_analysis(character, history, computed_metrics=None, growth_insig
                 else _generate_gemini_content(prompt, api_key=gemini_api_key, deadline=deadline)
             )
             gemini_text = _require_provider_text(getattr(response, "text", None), "Gemini")
-            analysis = sanitize_ai_text(gemini_text, expected_date)
+            provider_metadata = dict(getattr(gemini_text, "provider_metadata", {}) or {})
+            provider_metadata["attempt"] = 1
             if computed_metrics is not None:
-                analysis = _apply_deterministic_growth_forecast(
-                    analysis, character, computed_metrics
+                analysis = _compose_growth_report_from_ai(
+                    gemini_text,
+                    character,
+                    computed_metrics,
+                    growth_insights,
+                    analysis_context,
+                    source_data,
+                    expected_date,
+                    "Gemini",
                 )
-                if not _validate_growth_report_facts(analysis, source_data):
-                    raise ProviderError(
-                        "Gemini 분석에 입력 데이터와 일치하지 않는 수치나 날짜가 있습니다.",
-                        "provider_invalid_output",
-                    )
-            if not validate_growth_report(analysis):
-                raise ProviderError("Gemini 분석 결과가 리포트 검증을 통과하지 못했습니다.", "provider_invalid_output")
+            else:
+                analysis = sanitize_ai_text(gemini_text, expected_date)
+                if not validate_growth_report(analysis):
+                    error = ProviderError("Gemini report format validation failed.", "provider_invalid_output")
+                    error.validation_reason = "report_format"
+                    error.provider_metadata = {**provider_metadata, "response_classification": "report_format_failed"}
+                    raise error
             _clear_gemini_cooldown(runtime_state)
-            set_ai_response_cache(cache_key, analysis)
-            return {"analysis": analysis, "cacheHit": False, "growthInsights": growth_insights}
+            generation = _build_generation_metadata("gemini", provider_metadata)
+            _store_cached_ai_response(cache_key, analysis, metadata={"generation": generation})
+            metadata = _log_provider_success("gemini", provider_metadata, validated=True, returned=True, cache_hit=False)
+            return {
+                "analysis": analysis,
+                "cacheHit": False,
+                "growthInsights": growth_insights,
+                "aiGenerated": True,
+                "aiStatus": "generated",
+                "providerMetadata": metadata,
+                "generation": generation,
+                "delivery": {"source": "generated"},
+            }
         except Exception as error:
             gemini_error = error
             if _is_quota_error(error):
                 delay = _set_gemini_cooldown(runtime_state, error)
                 print(f"Gemini 쿼터 제한으로 {delay}초 쿨다운을 적용했습니다.")
             _log_provider_failure("gemini", error, gemini_started_at, deadline)
-            if not should_use_openrouter(error):
+            if not should_use_openrouter(error) and not openrouter_api_key and computed_metrics is None:
                 return _error_result(error, "AI 분석을 불러오지 못했습니다.")
 
     if openrouter_api_key:
         openrouter_started_at = time.monotonic()
         try:
-            response_text = _require_provider_text(
-                request_openrouter(prompt, api_key=openrouter_api_key, deadline=deadline),
-                "OpenRouter",
+            response_text = _request_openrouter_with_retry(
+                prompt,
+                api_key=openrouter_api_key,
+                deadline=deadline,
+                operation="openrouter",
             )
+            provider_metadata = dict(getattr(response_text, "provider_metadata", {}) or {})
             print("OpenRouter로 성장 리포트를 처리했습니다.")
-            analysis = sanitize_ai_text(response_text, expected_date)
             if computed_metrics is not None:
-                analysis = _apply_deterministic_growth_forecast(
-                    analysis, character, computed_metrics
+                analysis = _compose_growth_report_from_ai(
+                    response_text,
+                    character,
+                    computed_metrics,
+                    growth_insights,
+                    analysis_context,
+                    source_data,
+                    expected_date,
+                    "OpenRouter",
                 )
-                if not _validate_growth_report_facts(analysis, source_data):
-                    raise ProviderError(
-                        "OpenRouter 분석에 입력 데이터와 일치하지 않는 수치나 날짜가 있습니다.",
+            else:
+                analysis = sanitize_ai_text(response_text, expected_date)
+                if not validate_growth_report(analysis):
+                    error = ProviderError(
+                        "OpenRouter report format validation failed.",
                         "provider_invalid_output",
                     )
-            if not validate_growth_report(analysis):
-                raise ProviderError("OpenRouter 분석 결과가 리포트 검증을 통과하지 못했습니다.", "provider_invalid_output")
-            set_ai_response_cache(cache_key, analysis)
-            return {"analysis": analysis, "cacheHit": False, "growthInsights": growth_insights}
+                    error.validation_reason = "report_format"
+                    error.provider_metadata = {
+                        **provider_metadata,
+                        "response_classification": "report_format_failed",
+                    }
+                    raise error
+            generation = _build_generation_metadata(
+                "openrouter",
+                provider_metadata,
+                fallback_used=gemini_error is not None,
+                fallback_reason=provider_error_type(gemini_error) if gemini_error is not None else None,
+            )
+            _store_cached_ai_response(cache_key, analysis, metadata={"generation": generation})
+            metadata = _log_provider_success(
+                "openrouter",
+                provider_metadata,
+                validated=True,
+                returned=True,
+                cache_hit=False,
+            )
+            return {
+                "analysis": analysis,
+                "cacheHit": False,
+                "growthInsights": growth_insights,
+                "aiGenerated": True,
+                "aiStatus": "generated",
+                "providerMetadata": metadata,
+                "generation": generation,
+                "delivery": {"source": "generated"},
+            }
         except Exception as error:
-            _log_provider_failure("openrouter", error, openrouter_started_at, deadline)
+            if not getattr(error, "_ai_failure_logged", False):
+                _log_provider_failure(
+                    "openrouter", error, openrouter_started_at, deadline,
+                    attempt=getattr(error, "attempt", 1),
+                )
+            if computed_metrics is not None:
+                return _server_fallback_growth_report(
+                    character,
+                    computed_metrics,
+                    growth_insights,
+                    analysis_context,
+                    provider_error_type(error) or "provider_unavailable",
+                )
             return _fallback_failure_result(gemini_error, error)
 
     if gemini_error:
+        if computed_metrics is not None:
+            return _server_fallback_growth_report(
+                character,
+                computed_metrics,
+                growth_insights,
+                analysis_context,
+                provider_error_type(gemini_error),
+            )
         return _fallback_failure_result(gemini_error)
+    if computed_metrics is not None:
+        return _server_fallback_growth_report(
+            character, computed_metrics, growth_insights, analysis_context
+        )
     return {"error": "AI 분석을 사용할 수 없습니다.", "statusCode": 503, "errorType": "provider_unavailable"}
 
 
-def generate_ai_comparison(primary, comparison):
+def _generate_ai_comparison_impl(primary, comparison):
     runtime_state = get_runtime_state()
     gemini_api_key = getattr(runtime_state, "gemini_api_key", "")
     openrouter_api_key = getattr(runtime_state, "openrouter_api_key", "")
@@ -766,7 +1521,7 @@ def generate_ai_comparison(primary, comparison):
 비교 데이터:
 {json.dumps(prompt_data, ensure_ascii=False)}
 """
-    cached_analysis = get_ai_response_cache(prompt)
+    cached_analysis = _get_cached_ai_response(prompt)
     if cached_analysis is not None:
         print("저장된 AI 성장 비교 분석을 재사용했습니다.")
         return {"analysis": cached_analysis, "cacheHit": True}
@@ -784,7 +1539,7 @@ def generate_ai_comparison(primary, comparison):
             response = _generate_gemini_content(prompt, api_key=gemini_api_key, deadline=deadline)
             analysis = sanitize_ai_text(_require_provider_text(getattr(response, "text", None), "Gemini"))
             _clear_gemini_cooldown(runtime_state)
-            set_ai_response_cache(prompt, analysis)
+            _store_cached_ai_response(prompt, analysis)
             return {"analysis": analysis, "cacheHit": False}
         except Exception as error:
             gemini_error = error
@@ -797,18 +1552,130 @@ def generate_ai_comparison(primary, comparison):
     if openrouter_api_key:
         openrouter_started_at = time.monotonic()
         try:
-            response_text = _require_provider_text(
-                request_openrouter(prompt, api_key=openrouter_api_key, deadline=deadline),
-                "OpenRouter",
+            response_text = _request_openrouter_with_retry(
+                prompt,
+                api_key=openrouter_api_key,
+                deadline=deadline,
+                operation="openrouter_comparison",
             )
             print("OpenRouter로 성장 비교 분석을 처리했습니다.")
             analysis = sanitize_ai_text(response_text)
-            set_ai_response_cache(prompt, analysis)
+            _store_cached_ai_response(prompt, analysis)
             return {"analysis": analysis, "cacheHit": False}
         except Exception as error:
-            _log_provider_failure("openrouter_comparison", error, openrouter_started_at, deadline)
+            if not getattr(error, "_ai_failure_logged", False):
+                _log_provider_failure(
+                    "openrouter_comparison", error, openrouter_started_at, deadline,
+                    attempt=getattr(error, "attempt", 1),
+                )
             return _fallback_failure_result(gemini_error, error)
 
     if gemini_error:
         return _fallback_failure_result(gemini_error)
     return {"error": "AI 성장 분석을 사용할 수 없습니다.", "statusCode": 503, "errorType": "provider_unavailable"}
+
+
+# Same-process single-flight for identical AI requests. Completed results continue to
+# use the validated response cache above; this registry only shares work while a
+# provider request is still in progress.
+_AI_INFLIGHT_REQUESTS = {}
+_AI_INFLIGHT_LOCK = Lock()
+
+
+def _ai_singleflight_key(kind, payload):
+    runtime_state = get_runtime_state()
+    provider_identity = {
+        "gemini_key": hashlib.sha256(
+            str(getattr(runtime_state, "gemini_api_key", "")).encode("utf-8")
+        ).hexdigest(),
+        "openrouter_key": hashlib.sha256(
+            str(getattr(runtime_state, "openrouter_api_key", "")).encode("utf-8")
+        ).hexdigest(),
+        "openrouter_model": getattr(runtime_state, "openrouter_model", "openrouter/free"),
+    }
+    serialized = json.dumps(
+        {"kind": kind, "payload": payload, "providers": provider_identity},
+        ensure_ascii=False,
+        sort_keys=True,
+        default=str,
+    )
+    return hashlib.sha256(serialized.encode("utf-8")).hexdigest()
+
+
+def _coalesce_ai_operation(kind, payload, operation):
+    """동일한 AI 작업의 동시 cache miss를 하나의 공급자 호출로 합친다."""
+    request_key = _ai_singleflight_key(kind, payload)
+    increment_metric("ai.logical_requests", kind=kind)
+    with _AI_INFLIGHT_LOCK:
+        future = _AI_INFLIGHT_REQUESTS.get(request_key)
+        is_leader = future is None
+        if is_leader:
+            future = Future()
+            _AI_INFLIGHT_REQUESTS[request_key] = future
+
+    if not is_leader:
+        increment_metric("ai.coalesced_requests", kind=kind)
+        result = future.result()
+        if not isinstance(result, dict):
+            return result
+        shared_result = dict(result)
+        if shared_result.get("analysis") is not None:
+            shared_result["cacheHit"] = True
+            provider_metadata = shared_result.get("providerMetadata")
+            if isinstance(provider_metadata, dict):
+                provider_metadata = dict(provider_metadata)
+                provider_metadata["cache_hit"] = True
+                provider_metadata["coalesced"] = True
+                shared_result["providerMetadata"] = provider_metadata
+        return shared_result
+
+    try:
+        result = operation()
+    except BaseException as error:
+        future.set_exception(error)
+        raise
+    else:
+        future.set_result(result)
+        return result
+    finally:
+        with _AI_INFLIGHT_LOCK:
+            if _AI_INFLIGHT_REQUESTS.get(request_key) is future:
+                _AI_INFLIGHT_REQUESTS.pop(request_key, None)
+
+
+def generate_ai_analysis(
+    character,
+    history,
+    computed_metrics=None,
+    growth_insights=None,
+    analysis_context=None,
+    force_refresh=False,
+):
+    payload = {
+        "character": character,
+        "history": history,
+        "computed_metrics": computed_metrics,
+        "growth_insights": growth_insights,
+        "analysis_context": analysis_context,
+        "force_refresh": force_refresh,
+    }
+    return _coalesce_ai_operation(
+        "growth_report",
+        payload,
+        lambda: _generate_ai_analysis_impl(
+            character,
+            history,
+            computed_metrics,
+            growth_insights,
+            analysis_context,
+            force_refresh,
+        ),
+    )
+
+
+def generate_ai_comparison(primary, comparison):
+    return _coalesce_ai_operation(
+        "comparison",
+        {"primary": primary, "comparison": comparison},
+        lambda: _generate_ai_comparison_impl(primary, comparison),
+    )

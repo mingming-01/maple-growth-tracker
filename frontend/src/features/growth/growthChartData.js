@@ -1,82 +1,35 @@
 /**
- * Build calendar-anchored total EXP and daily EXP chart series.
- *
- * The first calendar date is the fixed baseline. It is never shifted to the
- * first later observed record, and missing records are never converted to zero.
- * A level-up day has no comparable same-level delta, so the total line carries
- * the last confirmed value while the level-up marker explains the boundary.
+ * Build chart series from Nexon's daily level-local EXP snapshots.
+ * EXP naturally resets when the character levels up; that boundary is marked
+ * with a dashed segment so the reset is visible without implying lost EXP.
  */
 export function buildExperienceChartSeries(records) {
   const rows = Array.isArray(records) ? records : [];
+  const available = item => !!item && (!item.recordStatus || item.recordStatus === "available");
+
+  const experience = rows.map(item => {
+    if (!available(item) || item.experience === null || item.experience === undefined || item.experience === "") return null;
+    const value = Number(item.experience);
+    return Number.isFinite(value) ? value / 1_000_000_000_000 : null;
+  });
+
   const daily = rows.map((item, index) => {
-    if (item?.recordStatus && item.recordStatus !== "available") return null;
-    if (index === 0) return null;
-    const value = item?.experienceChange;
+    if (!available(item) || index === 0) return null;
+    const value = item.experienceChange;
     if (value === null || value === undefined || value === "") return null;
     const number = Number(value);
     return Number.isFinite(number) ? number / 1_000_000_000_000 : null;
   });
 
-  const cumulative = [];
-  let running = null;
-  let baselineEstablished = false;
-  let cumulativeIsComplete = true;
-  const levelUpEvents = detectLevelUpEvents(rows);
+  return { daily, experience };
+}
 
-  rows.forEach((item, index) => {
-    const available = !!item &&
-      (!item.recordStatus || item.recordStatus === "available");
-    if (!available) {
-      cumulative.push(null);
-      if (index === 0 || baselineEstablished) cumulativeIsComplete = false;
-      return;
-    }
-
-    if (index === 0) {
-      const startingExperience = item.experience;
-      const parsed = startingExperience === null || startingExperience === undefined || startingExperience === ""
-        ? null
-        : Number(startingExperience);
-      if (!Number.isFinite(parsed)) {
-        cumulative.push(null);
-        cumulativeIsComplete = false;
-        return;
-      }
-      running = parsed;
-      baselineEstablished = true;
-      cumulative.push(running / 1_000_000_000_000);
-      return;
-    }
-
-    if (!baselineEstablished || !cumulativeIsComplete || running === null) {
-      cumulative.push(null);
-      return;
-    }
-
-    if (levelUpEvents[index]) {
-      // Nexon EXP resets at a level boundary; do not invent cross-level EXP.
-      cumulative.push(running / 1_000_000_000_000);
-      return;
-    }
-
-    const change = item.experienceChange;
-    if (change === null || change === undefined || change === "") {
-      cumulative.push(null);
-      cumulativeIsComplete = false;
-      return;
-    }
-    const delta = Number(change);
-    if (!Number.isFinite(delta)) {
-      cumulative.push(null);
-      cumulativeIsComplete = false;
-      return;
-    }
-
-    running += delta;
-    cumulative.push(running / 1_000_000_000_000);
-  });
-
-  return { daily, cumulative };
+/** Dash only the blue EXP segment that enters a confirmed level-up day. */
+export function levelExperienceSegmentDash(context, levelUpEvents) {
+  const index = context?.p1DataIndex;
+  return Array.isArray(levelUpEvents) && levelUpEvents[index] === true
+    ? [6, 4]
+    : [];
 }
 
 /**
@@ -88,45 +41,26 @@ export function dailyGrowthSegmentDash(context) {
   return Number(current) === 0 ? [2, 4] : [];
 }
 
-/**
- * Detect level-up days from explicit flags or an increase in the observed level.
- */
+/** Detect level-up events while honoring explicit server-side event metadata. */
 export function detectLevelUpEvents(records) {
   let previousAvailableLevel = null;
-  return records.map(item => {
+  return (Array.isArray(records) ? records : []).map(item => {
     const parsedLevel = item?.level === null || item?.level === undefined || item.level === ""
       ? null
       : Number(item.level);
     const currentLevel = Number.isFinite(parsedLevel) ? parsedLevel : null;
-    const available = !!item &&
-      (!item.recordStatus || item.recordStatus === "available");
+    const available = !!item && (!item.recordStatus || item.recordStatus === "available");
     const explicitlyMarked = available && item.levelUp === true;
+    const delayedLevelCatchUp = available && item.levelUpCatchUp === true;
 
     if (!available || currentLevel === null) {
-      // A missing/unavailable date breaks inferred level-up date continuity.
       previousAvailableLevel = null;
       return explicitlyMarked;
     }
-
-    const detected = explicitlyMarked ||
-      (previousAvailableLevel !== null && currentLevel > previousAvailableLevel);
+    const detected = typeof item?.levelUp === "boolean"
+      ? explicitlyMarked && !delayedLevelCatchUp
+      : !delayedLevelCatchUp && previousAvailableLevel !== null && currentLevel > previousAvailableLevel;
     previousAvailableLevel = currentLevel;
     return detected;
-  });
-}
-
-/**
- * Build a dedicated Chart.js dataset for level-up markers.
- * A level-up can be a valid event even when that day's EXP delta is unavailable.
- */
-export function buildLevelUpMarkers(records, cumulative) {
-  let lastKnownCumulative = null;
-  const events = detectLevelUpEvents(records);
-  return records.map((item, index) => {
-    const value = cumulative[index];
-    if (value !== null && value !== undefined && Number.isFinite(Number(value))) {
-      lastKnownCumulative = Number(value);
-    }
-    return events[index] ? lastKnownCumulative : null;
   });
 }

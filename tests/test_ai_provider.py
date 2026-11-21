@@ -11,9 +11,10 @@ from tracker.integrations.ai_provider import (
     request_openrouter,
     should_use_openrouter,
     ProviderError,
+    provider_error_type,
     provider_retry_after_seconds,
 )
-from tracker.integrations.bounded_http import InvalidProviderResponse
+from tracker.integrations.bounded_http import InvalidProviderResponse, ProviderHTTPPayload
 from tracker.config import DEFAULT_OPENROUTER_MODEL, _resolve_openrouter_model
 
 
@@ -79,11 +80,60 @@ class AIProviderAdapterTests(unittest.TestCase):
                          "https://openrouter.ai/api/v1/chat/completions")
         self.assertEqual(post_json.call_args.kwargs["headers"]["Authorization"],
                          "Bearer openrouter-test-key")
-        self.assertEqual(post_json.call_args.kwargs["total_timeout"], 27.0)
-        self.assertEqual(post_json.call_args.kwargs["read_timeout"], 25.0)
-        self.assertEqual(post_json.call_args.kwargs["json_body"]["stream"], False)
-        # Even when configured above the supported cap, the adapter must send at most 8192 tokens.
-        self.assertEqual(post_json.call_args.kwargs["json_body"]["max_tokens"], 8192)
+        self.assertEqual(post_json.call_args.kwargs["total_timeout"], 20.0)
+        self.assertEqual(post_json.call_args.kwargs["read_timeout"], 18.0)
+        self.assertEqual(post_json.call_args.kwargs["json_body"]["stream"], True)
+        self.assertEqual(post_json.call_args.kwargs["headers"]["Accept"], "text/event-stream")
+        self.assertEqual(post_json.call_args.kwargs["response_format"], "sse")
+        # Even when configured above the supported cap, the adapter sends at most 4096 tokens.
+        self.assertEqual(post_json.call_args.kwargs["json_body"]["max_tokens"], 4096)
+        self.assertNotIn("reasoning", post_json.call_args.kwargs["json_body"])
+        self.assertEqual(post_json.call_args.kwargs["json_body"]["model"], "google/gemini-3.6-flash")
+
+    @patch("tracker.integrations.ai_provider.post_json_with_deadline")
+    def test_openrouter_sse_response_preserves_stream_and_reasoning_metadata(self, post_json):
+        post_json.return_value = ProviderHTTPPayload({
+            "model": "vendor/free-model",
+            "provider": "route-provider",
+            "usage": {"prompt_tokens": 12, "completion_tokens": 20, "total_tokens": 32},
+            "choices": [{
+                "message": {"content": "스트리밍 응답", "reasoning_length": 128},
+                "finish_reason": "stop",
+            }],
+        }, status_code=200, elapsed_ms=1200, response_bytes=420, extra_metadata={
+            "response_mode": "sse",
+            "stream_event_count": 4,
+            "stream_done": True,
+            "stream_reasoning_bytes": 128,
+        })
+
+        with self.app.app_context():
+            result = request_openrouter("prompt")
+
+        self.assertEqual(result, "스트리밍 응답")
+        self.assertEqual(result.provider_metadata["response_mode"], "sse")
+        self.assertEqual(result.provider_metadata["stream_event_count"], 4)
+        self.assertTrue(result.provider_metadata["stream_done"])
+        self.assertTrue(result.provider_metadata["reasoning_present"])
+        self.assertEqual(result.provider_metadata["reasoning_length"], 128)
+
+    @patch("tracker.integrations.ai_provider.post_json_with_deadline")
+    def test_openrouter_adapter_omits_optional_model_specific_reasoning_controls(self, post_json):
+        post_json.return_value = {"choices": [{"message": {"content": "재시도 응답"}}]}
+        with self.app.app_context():
+            result = request_openrouter("prompt")
+
+        self.assertEqual(result, "재시도 응답")
+        self.assertNotIn("reasoning", post_json.call_args.kwargs["json_body"])
+
+    @patch("tracker.integrations.ai_provider.post_json_with_deadline")
+    def test_openrouter_request_uses_dynamic_free_alias_without_reasoning_controls(self, post_json):
+        post_json.return_value = {"choices": [{"message": {"content": "report"}}]}
+
+        with self.app.app_context():
+            request_openrouter("prompt")
+
+        self.assertNotIn("reasoning", post_json.call_args.kwargs["json_body"])
         self.assertEqual(post_json.call_args.kwargs["json_body"]["model"], "google/gemini-3.6-flash")
 
     @patch("tracker.integrations.ai_provider._log_openrouter_empty_response")
@@ -116,11 +166,32 @@ class AIProviderAdapterTests(unittest.TestCase):
         details = log_metadata.call_args.kwargs
         self.assertEqual(details["finish_reason"], "length")
         self.assertEqual(details["selected_model"], "sample/free-model")
-        self.assertEqual(details["provider"], "sample-provider")
+        self.assertEqual(details["selected_provider"], "sample-provider")
         self.assertEqual(details["usage"]["reasoning_tokens"], 1500)
+        self.assertEqual(details["response_classification"], "truncated_output")
         self.assertEqual(details["reasoning_length"], len("private reasoning must not be logged"))
         self.assertNotIn("private prompt text", repr(log_metadata.call_args))
         self.assertNotIn("private reasoning must not be logged", repr(log_metadata.call_args))
+
+    @patch("tracker.integrations.ai_provider._log_openrouter_empty_response")
+    @patch("tracker.integrations.ai_provider.post_json_with_deadline")
+    def test_openrouter_reasoning_only_response_is_classified_without_logging_text(self, post_json, log_metadata):
+        post_json.return_value = ProviderHTTPPayload({
+            "model": "routed/free-model",
+            "choices": [{"finish_reason": "stop", "message": {"content": "", "reasoning": "private chain"}}],
+            "usage": {"prompt_tokens": 10, "completion_tokens": 12, "reasoning_tokens": 12},
+        }, status_code=200, elapsed_ms=3400, response_bytes=300)
+        with self.app.app_context():
+            with self.assertRaises(ProviderError) as caught:
+                request_openrouter("private prompt")
+        details = log_metadata.call_args.kwargs
+        self.assertEqual(caught.exception.provider_metadata["http_status"], 200)
+        self.assertEqual(caught.exception.provider_metadata["response_classification"], "reasoning_only")
+        self.assertEqual(caught.exception.provider_metadata["elapsed_ms"], 3400)
+        self.assertEqual(details["reasoning_present"], True)
+        self.assertEqual(details["usage"]["reasoning_tokens"], 12)
+        self.assertNotIn("private chain", repr(log_metadata.call_args))
+        self.assertNotIn("private prompt", repr(log_metadata.call_args))
 
     @patch("tracker.integrations.ai_provider.post_json_with_deadline")
     def test_openrouter_extracts_text_from_multimodal_content_parts(self, post_json):
@@ -176,6 +247,23 @@ class AIProviderAdapterTests(unittest.TestCase):
         response = type("Response", (), {"status_code": 429, "headers": {}, "text": ""})()
         error = requests.HTTPError("429 Too Many Requests", response=response)
         self.assertTrue(should_use_openrouter(error))
+
+    def test_provider_rejection_statuses_are_classified_precisely(self):
+        cases = {
+            400: "provider_bad_request",
+            401: "provider_auth",
+            402: "provider_billing",
+            403: "provider_auth",
+            404: "provider_model_unavailable",
+            413: "provider_payload_too_large",
+        }
+        for status, expected in cases.items():
+            with self.subTest(status=status):
+                response = type("Response", (), {"status_code": status})()
+                error = requests.HTTPError(f"{status} provider rejection", response=response)
+                self.assertEqual(provider_error_type(error), expected)
+                self.assertFalse(should_use_openrouter(error))
+
 
     def test_retry_delay_from_gemini_error_body_is_used(self):
         response = type("Response", (), {

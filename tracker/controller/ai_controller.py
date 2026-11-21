@@ -32,15 +32,32 @@ def _ai_rate_limit_response():
 
 
 def _service_error_response(result):
-    """서비스 계층의 공급자 상태를 HTTP 응답에 정확히 반영한다."""
-    payload = dict(result)
-    status_code = payload.pop("statusCode", 502)
-    retry_after = payload.get("retryAfterSeconds")
+    """일반 응답에는 사용자용 오류 문구만 남기고 진단 정보는 서버 로그에 둔다."""
+    status_code = result.get("statusCode", 502)
+    retry_after = result.get("retryAfterSeconds")
+    error_message = result.get("error") or "AI 분석을 처리하지 못했습니다."
+    payload = {"error": str(error_message)}
+    if isinstance(retry_after, int) and retry_after > 0:
+        payload["retryAfterSeconds"] = retry_after
     response = jsonify(payload)
     response.status_code = status_code if isinstance(status_code, int) and 400 <= status_code <= 599 else 502
     if isinstance(retry_after, int) and retry_after > 0:
         response.headers["Retry-After"] = str(retry_after)
     return response
+
+
+def _public_ai_analysis_payload(result):
+    """일반 사용자 응답에는 분석 결과와 간단한 폴백 여부만 전달한다."""
+    payload = dict(result)
+    generation = payload.pop("generation", None)
+    payload.pop("providerMetadata", None)
+    payload.pop("delivery", None)
+    payload.pop("aiFallbackReason", None)
+    payload.pop("aiStatus", None)
+    payload["aiFallbackUsed"] = (
+        isinstance(generation, dict) and generation.get("fallbackUsed") is True
+    )
+    return payload
 
 
 def _resolve_character_for_ai(character_name):
@@ -159,7 +176,16 @@ def ai_analysis():
         storage = get_growth_history_service()
         period_start = today - timedelta(days=period_days - 1)
         insight_start = today - timedelta(days=14)
-        query_start = min(period_start - timedelta(days=1), insight_start)
+        previous_period_end = period_start - timedelta(days=1)
+        previous_period_start = previous_period_end - timedelta(days=period_days - 1)
+        # 장기 분석은 직전 동일 기간과 첫날 경계 계산에 필요한 스냅샷도
+        # 서버 저장소에서 직접 조회한다. 클라이언트가 전달한 요약값은 신뢰하지 않는다.
+        comparison_start = (
+            previous_period_start - timedelta(days=1)
+            if period_days in (30, 90)
+            else period_start - timedelta(days=1)
+        )
+        query_start = min(comparison_start, insight_start)
         try:
             # 선택 기간과 14일 인사이트를 하나의 DB 조회로 확보한다.
             combined_records = storage.get_records(ocid, query_start, today)
@@ -172,31 +198,37 @@ def ai_analysis():
         timings["history_db_ms"] = round((time.perf_counter() - stage_started) * 1000, 1)
         stage = "calculation"
         stage_started = time.perf_counter()
-        stored_records = [
-            item for item in combined_records
-            if str(item.get("date") or "") >= period_start.isoformat()
-        ]
-        insight_records = [
-            item for item in combined_records
-            if str(item.get("date") or "") >= insight_start.isoformat()
-        ]
-
-        # 선택 기간 첫날의 레벨업/경험치 변화도 직전 날짜와 비교할 수 있도록
-        # 기준 스냅샷 하루를 추가하되, periodSummary 자체는 선택 기간만 집계한다.
+        # 하나의 원본 구간을 공통 백엔드 계산기로 정규화한다.
+        # 최근 성장 이력, 기간 통계, AI 비교 인사이트는 모두 이 결과에서 파생한다.
         calculation_start = period_start - timedelta(days=1)
-        calculation_records = [
-            item for item in combined_records
+        calculated = build_server_growth_metrics(
+            character, combined_records, reference_date=today, period_days=period_days
+        )
+        normalized_history = calculated["history"]
+        recent_history = [
+            item for item in normalized_history
             if str(item.get("date") or "") >= calculation_start.isoformat()
         ]
-        calculated = build_server_growth_metrics(
-            character, calculation_records, reference_date=today, period_days=period_days
-        )
-        recent_history = calculated["history"]
+        previous_period_summary = None
+        if period_days in (30, 90):
+            previous_calculated = build_server_growth_metrics(
+                character,
+                combined_records,
+                reference_date=previous_period_end,
+                period_days=period_days,
+            )
+            previous_period_summary = previous_calculated["periodSummary"]
+
         analysis_context = {
             "periodDays": period_days,
             "periodSummary": calculated["periodSummary"],
+            "previousPeriodSummary": previous_period_summary,
         }
-        growth_insights = build_growth_insights(insight_records, reference_date=today)
+        growth_insights = build_growth_insights(
+            normalized_history,
+            reference_date=today,
+            already_calculated=True,
+        )
         timings["calculation_ms"] = round((time.perf_counter() - stage_started) * 1000, 1)
         stage = "provider"
         stage_started = time.perf_counter()
@@ -221,13 +253,19 @@ def ai_analysis():
             )
             return _service_error_response(result)
 
+        # 화면의 기간 요약과 AI 리포트 본문이 동일한 서버 집계값을 사용하도록 반환한다.
+        result["periodSummary"] = calculated["periodSummary"]
+        result["previousPeriodSummary"] = previous_period_summary
+
         current_app.logger.info(
-            "AI 리포트 생성 완료: cache_hit=%s timings=%s total_ms=%s",
+            "AI 리포트 응답 완료: ai_generated=%s ai_status=%s cache_hit=%s timings=%s total_ms=%s",
+            result.get("aiGenerated", True),
+            result.get("aiStatus", "generated"),
             bool(result.get("cacheHit")),
             timings,
             total_ms,
         )
-        return jsonify(result)
+        return jsonify(_public_ai_analysis_payload(result))
     except Exception:
         current_app.logger.exception(
             "AI 리포트 요청 예외: stage=%s timings=%s elapsed_ms=%s",

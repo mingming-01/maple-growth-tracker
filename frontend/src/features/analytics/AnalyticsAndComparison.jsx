@@ -1,16 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { getCharacter, getHistory, postAiAnalysis, postAiComparison } from "../../services/api.js";
 import { fetchHistoryArchive } from "../../lib/historyCollection.js";
-import {
-  calculatePrediction,
-  calculateGrowthMetrics,
-  calculateLevelProgress,
-  calculateAverageGrowth,
-  calculateWeeklyGrowth,
-  getDailyGrowth,
-  getRankingChange,
-  sortHistoryAscending
-} from "../../lib/growth.js";
 import { getCachedAI, saveCachedAI, stableStringify } from "../../lib/storage.js";
 
 function formatNumber(value) {
@@ -70,6 +60,7 @@ function parseAnalysis(analysis) {
 
 function buildReportSignature(character, history, metrics, analysisContext = {}) {
   return stableStringify({
+    cacheVersion: 11,
     name:character.characterName,
     ocid:character.ocid,
     level:character.level,
@@ -83,44 +74,49 @@ function buildReportSignature(character, history, metrics, analysisContext = {})
 }
 
 
-export function AIReport({ character, history, analysisHistory = history, periodDays = 7, periodSummary = null, onPeriodSelect }) {
+export function AIReport({ character, history, analysisHistory = history, periodDays = 7, periodSummary = null, metrics: serverMetrics, onPeriodSelect }) {
   const [analysis,setAnalysis] = useState("");
   const [growthInsights,setGrowthInsights] = useState(null);
+  const [serverPeriodSummary,setServerPeriodSummary] = useState(null);
+  const [serverPreviousPeriodSummary,setServerPreviousPeriodSummary] = useState(null);
+  const [aiGenerated,setAiGenerated] = useState(null);
   const [loading,setLoading] = useState(false);
   const [error,setError] = useState("");
   const [notice,setNotice] = useState("");
   const [periodChanging,setPeriodChanging] = useState(false);
 
-  const metrics = useMemo(() => {
-    const sourceHistory = Array.isArray(analysisHistory) ? analysisHistory : [];
-    const prediction = calculatePrediction(character,sourceHistory);
-    return calculateGrowthMetrics(character,sourceHistory,prediction);
-  },[character,analysisHistory]);
+  const metrics = serverMetrics || null;
 
   const run = useCallback(async ({ force = false, allowGenerate = true } = {}) => {
     if (!character?.characterName || !Array.isArray(history) || !Array.isArray(analysisHistory)) return;
     setLoading(true);
     setError("");
     const analysisContext = { periodDays:[7,30,90].includes(Number(periodDays)) ? Number(periodDays) : 7, periodSummary:periodSummary || null };
-        // 같은 캐릭터·기간의 리포트는 정해진 보관 시간 동안 재사용한다.
-    // 매일 기록이 추가되는 7일 리포트도 6시간 안에는 같은 결과를 보여준다.
-    const signature = stableStringify({
-      cacheVersion: 4,
-      characterId: character.ocid || character.characterName,
-      periodDays: analysisContext.periodDays
-    });
+        // 캐릭터·기간뿐 아니라 실제 기록·계산 지표가 같을 때만 캐시를 재사용한다.
+    // 새 기록이나 레벨/진행률이 반영되면 기존 리포트가 아닌 새 분석으로 넘어간다.
+    const signature = buildReportSignature(
+      character, analysisHistory, metrics, analysisContext
+    );
     const cacheType = `growth-report-${analysisContext.periodDays}d`;
     const cached = !force ? getCachedAI(cacheType,signature) : null;
     if (cached?.analysis) {
+      setServerPeriodSummary(null);
+      setServerPreviousPeriodSummary(null);
       setAnalysis(cached.analysis);
       setGrowthInsights(cached.growthInsights || null);
-      setNotice(analysisContext.periodDays > 7 ? `지난 ${analysisContext.periodDays}일 분석 결과를 불러왔어요.` : "");
+      setNotice(cached.fallbackUsed === true
+        ? "기본 AI 응답이 원활하지 않아 대체 경로로 코멘트를 생성했습니다."
+        : analysisContext.periodDays > 7 ? `지난 ${analysisContext.periodDays}일 분석 결과를 불러왔어요.` : "");
+      setAiGenerated(true);
       setLoading(false);
       return;
     }
     if (!allowGenerate && !force) {
+      setServerPeriodSummary(null);
+      setServerPreviousPeriodSummary(null);
       setAnalysis("");
       setGrowthInsights(null);
+      setAiGenerated(null);
       setNotice(`최근 ${analysisContext.periodDays}일 리포트가 아직 없어요. AI 분석 시작을 누르면 지금 기록으로 새 리포트를 만들어요.`);
       setLoading(false);
       return;
@@ -131,8 +127,17 @@ export function AIReport({ character, history, analysisHistory = history, period
       if (!result.analysis) throw new Error("AI 분석 결과가 비어 있습니다.");
       setAnalysis(result.analysis);
       setGrowthInsights(result.growthInsights || null);
-      setNotice("");
-      saveCachedAI(cacheType,signature,result.analysis,result.growthInsights || null);
+      setServerPeriodSummary(result.periodSummary || null);
+      setServerPreviousPeriodSummary(result.previousPeriodSummary || null);
+      const generatedByAI = result.aiGenerated !== false;
+      const fallbackUsed = generatedByAI && result.aiFallbackUsed === true;
+      setAiGenerated(generatedByAI);
+      setNotice(generatedByAI
+        ? fallbackUsed ? "기본 AI 응답이 원활하지 않아 대체 경로로 코멘트를 생성했습니다." : ""
+        : "AI 응답을 받지 못해 서버가 확인한 수치로 리포트를 표시하고 있어요. AI 코멘트는 아직 생성되지 않았습니다.");
+      if (generatedByAI) {
+        saveCachedAI(cacheType,signature,result.analysis,result.growthInsights || null,fallbackUsed);
+      }
     } catch (requestError) {
       setError(requestError.message || "AI 성장 분석을 불러오지 못했습니다.");
     } finally {
@@ -143,9 +148,13 @@ export function AIReport({ character, history, analysisHistory = history, period
   useEffect(() => {
     setAnalysis("");
     setGrowthInsights(null);
+    setServerPeriodSummary(null);
+    setServerPreviousPeriodSummary(null);
+    setAiGenerated(null);
     setError("");
-    // 모든 기간은 보관 시간 안의 결과만 확인한다. 새 분석은 버튼을 눌렀을 때만 실행한다.
-    run({ allowGenerate: false });
+    // 리포트 화면 진입 시 브라우저 캐시를 먼저 보고, 없으면 서버 캐시를 확인한 뒤 필요한 경우 생성한다.
+    // 캐릭터 검색 자체에서는 AI 공급자 호출을 하지 않는다.
+    run({ allowGenerate: true });
   },[run,periodDays]);
 
   async function handlePeriodChange(event) {
@@ -165,9 +174,13 @@ export function AIReport({ character, history, analysisHistory = history, period
   }
 
   const sections = useMemo(() => parseAnalysis(analysis),[analysis]);
+  const evidencePeriodSummary = serverPeriodSummary || periodSummary;
+  const evidencePreviousSummary = serverPeriodSummary
+    ? serverPreviousPeriodSummary
+    : periodSummary?.previousSummary || null;
 
   return (
-    <section className="section">
+    <section className="section" data-ai-generated={aiGenerated === null ? "unknown" : String(aiGenerated)}>
       <div className="section-header">
         <h2 className="section-title">AI 성장 리포트</h2>
         <p className="section-description">최근 {periodDays}일 동안의 경험치와 레벨 변화를 정리해요.</p>
@@ -183,13 +196,13 @@ export function AIReport({ character, history, analysisHistory = history, period
             {growthInsights.weekdayWeekend?.status === "available" && <div className="ai-analysis-evidence-item"><span>주말 성장 비중</span><strong>{Number(growthInsights.weekdayWeekend.weekendSharePercent).toFixed(1)}%</strong></div>}
           </div>
         </div>}
-        {periodDays > 7 && periodSummary && <div className="ai-analysis-period-evidence" data-testid="ai-analysis-period-evidence">
+        {periodDays > 7 && evidencePeriodSummary && <div className="ai-analysis-period-evidence" data-testid="ai-analysis-period-evidence">
           <strong>최근 {periodDays}일 성장 기록</strong>
           <div className="ai-analysis-period-grid">
-            <span>기록이 남은 날짜 <b>{Number.isFinite(Number(periodSummary.coveragePercent)) ? Number(periodSummary.coveragePercent).toFixed(1)+"%" : "자료 부족"}</b></span>
-            <span>경험치가 늘어난 날 <b>{periodSummary.confirmedChangeDays ?? 0}일</b></span>
-            <span>하루 평균 경험치 <b>{periodSummary.averageGrowth == null ? "자료 부족" : (Number(periodSummary.averageGrowth)/1_000_000_000_000).toFixed(2)+"조"}</b></span>
-            <span>지난 기간 하루 평균 <b>{periodSummary.previousSummary?.averageGrowth == null ? "자료 부족" : (Number(periodSummary.previousSummary.averageGrowth)/1_000_000_000_000).toFixed(2)+"조"}</b></span>
+            <span>기록이 남은 날짜 <b>{Number.isFinite(Number(evidencePeriodSummary.coveragePercent)) ? Number(evidencePeriodSummary.coveragePercent).toFixed(1)+"%" : "자료 부족"}</b></span>
+            <span>경험치가 늘어난 날 <b>{evidencePeriodSummary.growthDays ?? 0}일</b></span>
+            <span>하루 평균 경험치 <b>{evidencePeriodSummary.averageGrowth == null ? "자료 부족" : (Number(evidencePeriodSummary.averageGrowth)/1_000_000_000_000).toFixed(2)+"조"}</b></span>
+            <span>지난 기간 하루 평균 <b>{evidencePreviousSummary?.averageGrowth == null ? "자료 부족" : (Number(evidencePreviousSummary.averageGrowth)/1_000_000_000_000).toFixed(2)+"조"}</b></span>
           </div>
         </div>}
         <div className="ai-analysis-actions">
@@ -236,31 +249,22 @@ export function AIReport({ character, history, analysisHistory = history, period
   );
 }
 
-function comparisonSummary(history,days) {
-  const records = sortHistoryAscending(history || []);
-  const changes = records.filter(item =>
-    (!item.recordStatus || item.recordStatus === "available") &&
-    item.experienceChange !== null && item.experienceChange !== undefined &&
-    Number.isFinite(Number(item.experienceChange))
-  );
-  const total = changes.length ? changes.reduce((sum,item) => sum + Number(item.experienceChange),0) : null;
-  const ranked = records.filter(item => item.ranking !== null && item.ranking !== undefined && Number.isFinite(Number(item.ranking)));
-  const available = records.filter(item => item.recordStatus === "available").length;
+function comparisonSummary(summary,days) {
+  if (!summary) return null;
   return {
-    days,
-    growth:total,
-    average:total === null ? null : total / changes.length,
-    rankingChange:ranked.length >= 2 ? Number(ranked[0].ranking)-Number(ranked[ranked.length-1].ranking) : null,
-    availableDays:available,
-    coverage:records.length ? available/records.length*100 : 0,
-    notReady:records.filter(item=>item.recordStatus==="not_ready").length,
-    notCollected:records.filter(item=>item.recordStatus==="not_collected").length
+    days: summary.expectedSnapshots ?? days,
+    growth: summary.growth ?? null,
+    average: summary.averageGrowth ?? null,
+    rankingChange: summary.rankingChange ?? null,
+    availableDays: summary.availableDays ?? 0,
+    coverage: summary.coveragePercent ?? 0,
+    notReady: summary.notReadyDays ?? 0,
+    notCollected: summary.notCollectedDays ?? 0
   };
 }
 
-function ComparisonCharacterCard({ title, character, history }) {
-  const prediction = calculatePrediction(character,history || []);
-  const metrics = calculateGrowthMetrics(character,history || [],prediction);
+function ComparisonCharacterCard({ title, character, metrics }) {
+  metrics = metrics || {};
   const values = [
     ["레벨","Lv. "+formatNumber(character.level)],
     ["레벨 내 진행률",character.experienceRate == null ? "자료 부족" : Number(character.experienceRate).toFixed(3)+"%"],
@@ -284,10 +288,11 @@ function ComparisonCharacterCard({ title, character, history }) {
   );
 }
 
-export function GrowthComparison({ character, history, initialState, onSave }) {
+export function GrowthComparison({ character, history, metrics: primaryMetrics, initialState, onSave }) {
   const [name,setName] = useState(initialState?.character?.characterName || "");
   const [other,setOther] = useState(initialState?.character || null);
   const [otherHistory,setOtherHistory] = useState(initialState?.history || []);
+  const [otherMetrics,setOtherMetrics] = useState(initialState?.metrics || null);
   const [analysis,setAnalysis] = useState(initialState?.aiAnalysis || "");
   const [days,setDays] = useState(Number(initialState?.periodDays) === 90 ? 90 : 30);
   const [period,setPeriod] = useState(initialState?.periodSummary || null);
@@ -300,14 +305,14 @@ export function GrowthComparison({ character, history, initialState, onSave }) {
     setName(initialState?.character?.characterName || "");
     setOther(initialState?.character || null);
     setOtherHistory(initialState?.history || []);
+    setOtherMetrics(initialState?.metrics || null);
     setAnalysis(initialState?.aiAnalysis || "");
     setDays(Number(initialState?.periodDays) === 90 ? 90 : 30);
     setPeriod(initialState?.periodSummary || null);
   },[character.ocid]);
 
-  const primaryPrediction = calculatePrediction(character,history || []);
-  const primaryMetrics = calculateGrowthMetrics(character,history || [],primaryPrediction);
-  const secondaryMetrics = other ? calculateGrowthMetrics(other,otherHistory || []) : null;
+  const authoritativePrimaryMetrics = primaryMetrics || {};
+  const secondaryMetrics = otherMetrics || null;
 
   async function loadPeriod(secondary,selectedDays) {
     setPeriodBusy(true);
@@ -317,8 +322,8 @@ export function GrowthComparison({ character, history, initialState, onSave }) {
         fetchHistoryArchive(selectedDays,character,{collect:true,onProgress:setNotice,progressPrefix:character.characterName}),
         fetchHistoryArchive(selectedDays,secondary,{collect:true,onProgress:setNotice,progressPrefix:secondary.characterName})
       ]);
-      const firstSummary = comparisonSummary(first.history,selectedDays);
-      const secondSummary = comparisonSummary(second.history,selectedDays);
+      const firstSummary = comparisonSummary(first.periodSummary,selectedDays);
+      const secondSummary = comparisonSummary(second.periodSummary,selectedDays);
       const result = {days:selectedDays,primary:firstSummary,secondary:secondSummary};
       setPeriod(result);
       setNotice(`최근 ${selectedDays}일 동안 확인된 기록을 비교했어요.`);
@@ -352,14 +357,14 @@ export function GrowthComparison({ character, history, initialState, onSave }) {
         throw new Error("같은 캐릭터는 비교할 수 없습니다.");
       }
       const historyItems = secondHistory.history || [];
-      const secondPrediction = calculatePrediction(secondCharacter,historyItems);
-      const secondMetrics = calculateGrowthMetrics(secondCharacter,historyItems,secondPrediction);
+      const secondMetrics = secondHistory.metrics || null;
       setOther(secondCharacter);
       setOtherHistory(historyItems);
+      setOtherMetrics(secondMetrics);
       const periodResult = await loadPeriod(secondCharacter,days);
 
       const signature = stableStringify({
-        primary:{character,metrics:primaryMetrics,history},
+        primary:{character,metrics:authoritativePrimaryMetrics,history},
         comparison:{character:secondCharacter,metrics:secondMetrics,history:historyItems}
       });
       const cached = getCachedAI("growth-comparison-v1",signature);
@@ -369,7 +374,7 @@ export function GrowthComparison({ character, history, initialState, onSave }) {
         setNotice("지난 비교 분석 결과를 불러왔어요.");
       } else {
         const result = await postAiComparison(
-          {character,metrics:primaryMetrics,history},
+          {character,metrics:authoritativePrimaryMetrics,history},
           {character:secondCharacter,metrics:secondMetrics,history:historyItems}
         );
         comparisonReport = result.analysis || "분석 결과가 없습니다.";
@@ -420,8 +425,8 @@ export function GrowthComparison({ character, history, initialState, onSave }) {
         {other && !busy && (
           <div className="comparison-result">
             <div className="comparison-grid">
-              <ComparisonCharacterCard title="기준 캐릭터" character={character} history={history || []} />
-              <ComparisonCharacterCard title="비교 캐릭터" character={other} history={otherHistory || []} />
+              <ComparisonCharacterCard title="기준 캐릭터" character={character} metrics={authoritativePrimaryMetrics} />
+              <ComparisonCharacterCard title="비교 캐릭터" character={other} metrics={secondaryMetrics} />
             </div>
             <section className="comparison-period-section">
               <div className="comparison-period-heading">

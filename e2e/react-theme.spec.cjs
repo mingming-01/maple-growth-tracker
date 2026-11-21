@@ -22,8 +22,8 @@ async function installFixtures(page) {
   };
   const history = [
     { date: "2026-11-04", level: 280, experience: 1000, experienceRate: "35.100", experienceChange: null, recordStatus: "available" },
-    { date: "2026-11-05", level: 280, experience: 1200, experienceRate: "35.300", experienceChange: 200, recordStatus: "available" },
-    { date: "2026-11-06", level: 280, experience: 1400, experienceRate: "35.600", experienceChange: 200, recordStatus: "available" }
+    { date: "2026-11-05", level: 280, experience: 1200, experienceRate: "35.300", experienceChange: 200, experienceRateChange: 0.2, recordStatus: "available" },
+    { date: "2026-11-06", level: 280, experience: 1400, experienceRate: "35.600", experienceChange: 200, experienceRateChange: 0.3, recordStatus: "available" }
   ];
 
   await page.route("**/api/character?*", route => route.fulfill({
@@ -35,6 +35,36 @@ async function installFixtures(page) {
     body: JSON.stringify({
       history,
       historyStatus: "complete",
+      metrics: {
+        observedChangeDays: 2,
+        recordedDays: 3,
+        latestDailyGrowth: 200,
+        averageDailyGrowth: 200,
+        sevenDayGrowth: 400,
+        rankingChange: null,
+        levelProgress: { currentRate: 35.6, remainingRate: 64.4, dailyProgressRate: 0.25 },
+        growthComparison: { direction: "stable", earlierAverage: 200, recentAverage: 200 },
+        levelUps: [],
+        timeline: [
+          { type: "latest", date: "2026-11-06", title: "최근 정상 기록", description: "Lv. 280 · 경험치 1,400", priority: 3 }
+        ],
+        prediction: null
+      },
+      periodSummary: {
+        startDate: "2026-10-31",
+        endDate: "2026-11-06",
+        expectedSnapshots: 7,
+        availableDays: 3,
+        coveragePercent: 42.9,
+        confirmedChangeDays: 2,
+        averageGrowth: 200,
+        growth: 400,
+        notReadyDays: 0,
+        notCollectedDays: 4,
+        unavailableDays: 0,
+        levelUpCount: 0,
+        levelUpDates: []
+      },
       historyStorage: { backend: "postgres", status: "saved" }
     })
   }));
@@ -73,6 +103,42 @@ async function installFixtures(page) {
         availableDays: days,
         notReadyDays: 0,
         notCollectedDays: 0,
+        metrics: {
+          observedChangeDays: Math.max(0, days - 1),
+          recordedDays: days,
+          latestDailyGrowth: 1000,
+          averageDailyGrowth: 1000,
+          sevenDayGrowth: 7000,
+          rankingChange: 1,
+          levelProgress: { currentRate: 35.6, remainingRate: 64.4, dailyProgressRate: 0.25 },
+          growthComparison: { direction: "stable", earlierAverage: 1000, recentAverage: 1000 },
+          levelUps: [],
+          timeline: [
+            { type: "latest", date: records[records.length - 1].date, title: "최근 정상 기록", description: "Lv. 280 · 경험치 기록", priority: 3 }
+          ],
+          prediction: null
+        },
+        periodSummary: {
+          startDate: records[0].date,
+          endDate: records[records.length - 1].date,
+          expectedSnapshots: days,
+          availableDays: days,
+          coveragePercent: 100,
+          confirmedChangeDays: Math.max(0, days - 1),
+          averageGrowth: 1000,
+          growth: Math.max(0, days - 1) * 1000,
+          notReadyDays: 0,
+          notCollectedDays: 0,
+          unavailableDays: 0,
+          bestDailyGrowth: days > 1 ? 1000 : null,
+          bestDailyGrowthDate: days > 1 ? records[1].date : null,
+          growthDays: Math.max(0, days - 1),
+          zeroGrowthDays: 0,
+          negativeGrowthDays: 0,
+          levelUpCount: 0,
+          levelUpDates: [],
+          rankingChange: 1
+        },
         collection: collecting ? {
           offset,
           limit,

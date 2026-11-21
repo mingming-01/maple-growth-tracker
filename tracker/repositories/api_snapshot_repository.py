@@ -3,15 +3,25 @@ import json
 import sqlite3
 from datetime import datetime
 import time
+from urllib.parse import urlparse
 import psycopg
 
 from tracker.services.performance_metrics import increment_metric, observe_metric
+from tracker.repositories.postgres_connection_pool import get_pooled_connection
 
 
 def _connect_postgres(database_url):
     started_at = time.perf_counter()
     try:
-        return psycopg.connect(database_url, connect_timeout=3, sslmode="require", prepare_threshold=None)
+        host = urlparse(database_url).hostname
+        sslmode = "disable" if host in ("localhost", "127.0.0.1", "::1") else "require"
+        return get_pooled_connection(
+            database_url,
+            connect_timeout=3,
+            sslmode=sslmode,
+            prepare_threshold=None,
+            store="snapshots",
+        )
     finally:
         increment_metric("db.connection_attempts", backend="postgres", store="snapshots")
         observe_metric(

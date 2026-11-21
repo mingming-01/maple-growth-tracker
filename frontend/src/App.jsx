@@ -47,7 +47,13 @@ function App() {
   const [character,setCharacter] = useState(restored?.character || null);
   const [profileRevision,setProfileRevision] = useState(0);
   const [history,setHistory] = useState(Array.isArray(restored?.history) ? restored.history : []);
-  const [analysisPeriod,setAnalysisPeriod] = useState(() => ({ days:[7,30,90].includes(Number(restored?.historyRange)) ? Number(restored.historyRange) : 7, history:Array.isArray(restored?.displayHistory) ? restored.displayHistory : (Array.isArray(restored?.history) ? restored.history : []), summary:restored?.periodSummary || null }));
+  const [growthMetrics,setGrowthMetrics] = useState(restored?.growthMetrics || null);
+  const [analysisPeriod,setAnalysisPeriod] = useState(() => ({
+    days:[7,30,90].includes(Number(restored?.historyRange)) ? Number(restored.historyRange) : 7,
+    history:Array.isArray(restored?.displayHistory) ? restored.displayHistory : (Array.isArray(restored?.history) ? restored.history : []),
+    summary:restored?.periodSummary || null,
+    metrics:restored?.periodMetrics || restored?.growthMetrics || null
+  }));
   const [openNavMenu,setOpenNavMenu] = useState(null);
   const [loading,setLoading] = useState(false);
   const [error,setError] = useState("");
@@ -138,25 +144,28 @@ function App() {
   async function selectAnalysisPeriod(value) {
     const days = [7, 30, 90].includes(Number(value)) ? Number(value) : 7;
     if (days === 7) {
-      const next = { days: 7, history: history || [], summary: null };
+      const next = { days: 7, history: history || [], summary: null, metrics: growthMetrics };
       setAnalysisPeriod(next);
       persistPatch({
         historyRange: 7,
         displayHistory: history || [],
         historyRangeStatus: null,
-        periodSummary: null
+        periodSummary: null,
+        periodMetrics: null,
+        growthMetrics
       });
       return next;
     }
     const { loadGrowthPeriod } = await import("./features/growth/GrowthDashboard.jsx");
     const loaded = await loadGrowthPeriod(character, days);
-    const next = { days, history: loaded.history, summary: loaded.summary };
+    const next = { days, history: loaded.history, summary: loaded.summary, metrics: loaded.metrics };
     setAnalysisPeriod(next);
     persistPatch({
       historyRange: days,
       displayHistory: loaded.history,
       historyRangeStatus: loaded.rangeStatus,
-      periodSummary: loaded.summary
+      periodSummary: loaded.summary,
+      periodMetrics: loaded.metrics
     });
     return next;
   }
@@ -180,13 +189,16 @@ function App() {
         setHistoryWarning(historyError.message || "성장 기록을 조회하지 못했습니다. 캐릭터 기본 정보는 표시합니다.");
       }
       const records = Array.isArray(historyResult.history) ? historyResult.history : [];
+      const serverMetrics = historyResult.metrics || null;
+      const serverSummary = historyResult.periodSummary || null;
       nextCharacter.historyStatus = historyResult.historyStatus || null;
       nextCharacter.historyDataStatus = historyResult.dataStatus || null;
       nextCharacter.historyDataAsOf = historyResult.dataAsOf || null;
       nextCharacter.historyStorage = historyResult.historyStorage || null;
       setCharacter(nextCharacter);
       setHistory(records);
-      setAnalysisPeriod({days:7,history:records,summary:null});
+      setGrowthMetrics(serverMetrics);
+      setAnalysisPeriod({days:7,history:records,summary:serverSummary,metrics:serverMetrics});
       setComparisonState(null);
       setLastSearched(new Date().toLocaleTimeString("ko-KR",{hour:"2-digit",minute:"2-digit"}));
       // Character and history are persisted by the state-change effect above.
@@ -197,7 +209,9 @@ function App() {
         historyRange:7,
         displayHistory:records,
         historyRangeStatus:null,
-        periodSummary:null
+        periodSummary:serverSummary,
+        growthMetrics:serverMetrics,
+        periodMetrics:null
       });
     } catch (requestError) {
       setError(requestError.message || "캐릭터 정보를 불러오지 못했습니다.");
@@ -430,6 +444,7 @@ function App() {
                 character={character}
                 profileRevision={profileRevision}
                 history={history}
+                metrics={growthMetrics}
                 onStatsLoaded={onStatsLoaded}
                 onHistoryChange={setHistory}
                 onAnalysisPeriodChange={setAnalysisPeriod}
