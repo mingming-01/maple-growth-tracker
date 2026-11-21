@@ -706,7 +706,7 @@ def _remove_numeric_comment_sentences(comment):
 
 
 _INFORMAL_COMMENT_ENDING = re.compile(
-    r"(?:보여|볼게|해\\s*볼게|해볼게|할게|할\\s*거야|거야|이야|야|같아|좋아|"
+    r"(?:보여|볼게|해\s*볼게|해볼게|할게|할\s*거야|거야|이야|야|같아|좋아|"
     r"있어|없어|돼|해|했어|했지|하자|크다|작다|높다|낮다|맞아|아니야|구나|"
     r"겠지|하네|그렇네|많아|적어|필요해|어려워|좋겠네|괜찮아|맞네|해봐|해줘)$"
 )
@@ -714,9 +714,9 @@ _INFORMAL_COMMENT_ENDING = re.compile(
 
 def _has_informal_comment_tone(comment):
     """끝맺음에서 명확한 반말 표현이 발견되는지 보수적으로 확인한다."""
-    sentences = re.split(r"(?<=[.!?])\\s+|\\n+", str(comment or ""))
+    sentences = re.split(r"(?<=[.!?])\s+|\n+", str(comment or ""))
     return any(
-        _INFORMAL_COMMENT_ENDING.search(sentence.strip().rstrip("\\\"'”’)]}"))
+        _INFORMAL_COMMENT_ENDING.search(sentence.strip().rstrip("\"'”’)]}"))
         for sentence in sentences
         if sentence.strip()
     )
@@ -727,7 +727,7 @@ def _prepare_ai_comment(value, expected_date, source_data):
     sanitized = sanitize_ai_text(value, expected_date)
     comment = _extract_ai_comment(sanitized)
     comment, removed_numeric_sentences = _remove_numeric_comment_sentences(comment)
-    compact = re.sub(r"[\\s.!?…·]", "", comment)
+    compact = re.sub(r"[\s.!?…·]", "", comment)
     if len(compact) < 8:
         reason = "numeric_claim_only" if removed_numeric_sentences else "empty_comment"
         return None, reason
