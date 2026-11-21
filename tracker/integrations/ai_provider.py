@@ -135,7 +135,7 @@ def _provider_timeouts(provider, deadline=None):
         if provider == "gemini" and _setting("OPENROUTER_API_KEY", ""):
             reserve = max(
                 1.0,
-                float(_setting("AI_OPENROUTER_MIN_REMAINING_SECONDS", 15.0)),
+                float(_setting("AI_OPENROUTER_MIN_REMAINING_SECONDS", 72.0)),
             )
             remaining -= reserve
         if remaining <= 0:
