@@ -270,6 +270,9 @@ class AIServerInputTests(unittest.TestCase):
             payload["analysis"],
         )
         self.assertIn("최근처럼 경험치를 얻는다면", payload["analysis"])
+        self.assertTrue(payload["aiFallbackUsed"])
+        for internal_field in ("generation", "providerMetadata", "delivery", "aiFallbackReason", "aiStatus"):
+            self.assertNotIn(internal_field, payload)
 
         gemini_request.assert_called_once()
         openrouter_request.assert_called_once()
