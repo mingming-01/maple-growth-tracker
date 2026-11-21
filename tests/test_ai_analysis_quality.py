@@ -38,24 +38,56 @@ class AIAnalysisQualityTests(unittest.TestCase):
                 "periodDays": period_days,
                 "periodSummary": {
                     "averageGrowth": 12000000000000,
+                    "experienceGainSum": 312000000000000,
+                    "validGrowthIntervals": 26,
                     "previousSummary": {"averageGrowth": 11000000000000},
                     "coveragePercent": 93.3,
                     "confirmedChangeDays": 26,
+                },
+                "previousPeriodSummary": {
+                    "experienceGainSum": 286000000000000,
+                    "validGrowthIntervals": 26,
                 },
             },
             "predictionDisplayDate": "11월 19일",
             "history": [],
         }
 
-    def test_long_period_prompt_uses_only_long_period_qualitative_context(self):
+    def test_long_period_prompt_uses_previous_period_comparison_without_numeric_values(self):
         prompt = _build_growth_report_prompt(self.make_source_data(30))
 
         self.assertIn("장기 성장 기록의 흐름", prompt)
-        self.assertIn("선택한 장기 구간의 전체 성장 기록을 중심으로 해석", prompt)
-        self.assertNotIn("12000000000000", prompt)
+        self.assertIn(
+            "이전 동일 기간보다 하루 평균 경험치 증가량이 완만하게 높아짐",
+            prompt,
+        )
+        self.assertNotIn("선택한 장기 구간의 전체 성장 기록을 중심으로 해석", prompt)
+        self.assertNotIn("312000000000000", prompt)
+        self.assertNotIn("286000000000000", prompt)
         self.assertNotIn("averageDailyGrowth", prompt)
         self.assertNotIn("weekOverWeek", prompt)
         self.assertNotIn("remainingRate", prompt)
+
+    def test_long_period_prompt_highlights_a_strong_previous_period_decline(self):
+        source = self.make_source_data(30)
+        source["selectedPeriod"]["periodSummary"].update({
+            "experienceGainSum": 75400000000000,
+            "validGrowthIntervals": 30,
+        })
+        source["selectedPeriod"]["previousPeriodSummary"] = {
+            "experienceGainSum": 100000000000000,
+            "validGrowthIntervals": 30,
+        }
+
+        prompt = _build_growth_report_prompt(source)
+
+        self.assertIn(
+            "이전 동일 기간보다 하루 평균 경험치 증가량이 뚜렷하게 낮아짐",
+            prompt,
+        )
+        self.assertNotIn("24.6", prompt)
+        self.assertNotIn("75400000000000", prompt)
+        self.assertNotIn("100000000000000", prompt)
 
     def test_growth_report_prompt_prefers_everyday_maple_language(self):
         prompt = _build_growth_report_prompt(self.make_source_data(30))
