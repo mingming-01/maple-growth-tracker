@@ -493,16 +493,7 @@ test("AI report loads the server cache on entry and regenerates only on explicit
         cacheHit: false,
         aiGenerated: true,
         growthInsights: {},
-        generation: {
-          provider: "openrouter",
-          requestedModel: "openrouter/free",
-          selectedModel: "sample/free-route-model",
-          selectedProvider: "sample-provider",
-          fallbackUsed: true,
-          fallbackReason: "provider_quota",
-          generatedAt: "2026-11-20T19:00:00+00:00"
-        },
-        delivery: { source: "generated" }
+        aiFallbackUsed: true
       })
     });
   });
@@ -514,10 +505,13 @@ test("AI report loads the server cache on entry and regenerates only on explicit
   // Opening the AI report checks browser cache, then the server cache; a miss starts generation.
   await page.locator('.mgt-nav a[href="#/analytics"]').click();
   await expect(page.getByText("기간 분석 테스트 결과입니다.")).toBeVisible();
-  const provenance = page.getByTestId("ai-report-provenance");
-  await expect(provenance).toContainText("OpenRouter");
-  await expect(provenance).toContainText("sample/free-route-model");
-  await expect(provenance).toContainText("Gemini 사용량 제한");
+  const fallbackNotice = page.getByText(
+    "기본 AI 응답이 원활하지 않아 대체 경로로 코멘트를 생성했습니다.",
+    { exact: true }
+  );
+  await expect(fallbackNotice).toBeVisible();
+  await expect(page.locator('[data-testid="ai-report-provenance"]')).toHaveCount(0);
+  await expect(page.locator("#analytics")).not.toContainText(/Gemini|OpenRouter|sample\\/free-route-model|라우팅 제공자|요청 모델/);
   expect(aiCalls).toBe(1);
   expect(submittedPayload.analysisContext.periodDays).toBe(7);
   expect(submittedPayload.forceRefresh).toBe(false);
@@ -540,8 +534,8 @@ test("AI report loads the server cache on entry and regenerates only on explicit
   // Re-entering the same report reuses the browser cache.
   await page.locator('.mgt-nav a[href="#/analytics"]').click();
   await expect(page.getByText("기간 분석 테스트 결과입니다.")).toBeVisible();
-  await expect(provenance).toContainText("브라우저 캐시");
-  await expect(provenance).toContainText("sample/free-route-model");
+  await expect(fallbackNotice).toBeVisible();
+  await expect(page.locator("#analytics")).not.toContainText(/Gemini|OpenRouter|sample\\/free-route-model|라우팅 제공자|요청 모델/);
   expect(aiCalls).toBe(2);
 
   await page.getByRole("button", { name: "다시 분석" }).click();
