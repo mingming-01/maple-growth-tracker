@@ -80,12 +80,12 @@ class AIProviderAdapterTests(unittest.TestCase):
                          "https://openrouter.ai/api/v1/chat/completions")
         self.assertEqual(post_json.call_args.kwargs["headers"]["Authorization"],
                          "Bearer openrouter-test-key")
-        self.assertEqual(post_json.call_args.kwargs["total_timeout"], 14.0)
-        self.assertEqual(post_json.call_args.kwargs["read_timeout"], 12.0)
+        self.assertEqual(post_json.call_args.kwargs["total_timeout"], 20.0)
+        self.assertEqual(post_json.call_args.kwargs["read_timeout"], 18.0)
         self.assertEqual(post_json.call_args.kwargs["json_body"]["stream"], False)
         self.assertEqual(post_json.call_args.kwargs["response_format"], "auto")
-        # Even when configured above the supported cap, the adapter sends at most 1024 tokens.
-        self.assertEqual(post_json.call_args.kwargs["json_body"]["max_tokens"], 1024)
+        # Even when configured above the supported cap, the adapter sends at most 4096 tokens.
+        self.assertEqual(post_json.call_args.kwargs["json_body"]["max_tokens"], 4096)
         self.assertNotIn("reasoning", post_json.call_args.kwargs["json_body"])
         self.assertEqual(post_json.call_args.kwargs["json_body"]["model"], "google/gemini-3.6-flash")
 
