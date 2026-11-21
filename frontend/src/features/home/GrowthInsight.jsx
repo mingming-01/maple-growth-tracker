@@ -1,6 +1,3 @@
-import { useMemo } from "react";
-import { calculateGrowthMetrics, formatLocalISODate } from "../../lib/growth.js";
-
 function formatTrillion(value) {
   if (value === null || value === undefined || !Number.isFinite(Number(value))) return "자료 부족";
   const trillion = Number(value) / 1_000_000_000_000;
@@ -10,8 +7,8 @@ function formatTrillion(value) {
 
 function formatDate(value) {
   if (!value) return "자료 부족";
-  const [year, month, day] = String(value).split("-");
-  return year && month && day ? `${year}년 ${Number(month)}월 ${Number(day)}일` : "자료 부족";
+  const parts = String(value).split("-");
+  return parts.length === 3 ? parts.join(".") : String(value);
 }
 
 function buildInsight(metrics) {
@@ -40,21 +37,28 @@ function buildInsight(metrics) {
   };
 }
 
-export default function GrowthInsight({ character, history }) {
-  const metrics = useMemo(
-    () => calculateGrowthMetrics(character, Array.isArray(history) ? history : []),
-    [character, history]
-  );
-  const insight = buildInsight(metrics);
-  const prediction = metrics.prediction;
-  const rankingChange = metrics.rankingChange;
+export default function GrowthInsight({ character, metrics }) {
+  const authoritativeMetrics = metrics || {
+    observedChangeDays: 0,
+    recordedDays: 0,
+    growthComparison: { direction: "insufficient_data", earlierAverage: null, recentAverage: null },
+    prediction: null,
+    rankingChange: null
+  };
+  const insight = buildInsight(authoritativeMetrics);
+  const rankingChange = authoritativeMetrics.rankingChange;
+  const prediction = authoritativeMetrics.prediction || null;
+  const predictionDate = prediction?.estimatedDate || prediction?.date || null;
+  const predictionDetail = prediction?.requiredExp != null
+    ? `다음 레벨까지 남은 EXP ${formatTrillion(prediction.requiredExp)}`
+    : "현재 레벨의 경험치와 진행률이 확인되면 남은 EXP를 표시할 수 있어요.";
 
   return (
     <aside className="mgt-growth-insight" aria-labelledby="mgt-growth-insight-title" data-testid="growth-insight">
       <div className="mgt-growth-insight-heading">
         <span className="mgt-eyebrow">GROWTH INSIGHT</span>
         <h3 className="mgt-growth-insight-overline">이번 성장 기록에서 확인한 점</h3>
-        <span className="mgt-insight-record-count">확인된 성장 기록 {metrics.recordedDays}일</span>
+        <span className="mgt-insight-record-count">확인된 성장 기록 {authoritativeMetrics.recordedDays}일</span>
       </div>
       <div className="mgt-growth-insight-copy">
         <span className="mgt-insight-spark" aria-hidden="true">✦</span>
@@ -64,8 +68,8 @@ export default function GrowthInsight({ character, history }) {
       <div className="mgt-growth-insight-facts">
         <div>
           <span>다음 레벨 예상</span>
-          <strong>{prediction?.estimatedDate ? formatDate(prediction.estimatedDate) : "기록 부족"}</strong>
-          <small>{prediction?.estimatedDays != null ? `최근 평균 기준 약 ${prediction.estimatedDays.toFixed(1)}일` : "경험치 기록이 조금 더 필요해요"}</small>
+          <strong>{predictionDate ? formatDate(predictionDate) : "자료 부족"}</strong>
+          <small>{predictionDate ? predictionDetail : "동일 레벨의 일일 EXP 관측값이 쌓이면 예상 날짜를 계산해요."}</small>
         </div>
         <div>
           <span>종합 랭킹 변화</span>
@@ -74,7 +78,6 @@ export default function GrowthInsight({ character, history }) {
         </div>
       </div>
       <a className="mgt-insight-link" href="#growth">성장 기록 자세히 보기 <span aria-hidden="true">→</span></a>
-      <span className="sr-only">기준일 {formatLocalISODate(new Date())}</span>
     </aside>
   );
 }

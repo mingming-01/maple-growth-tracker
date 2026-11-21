@@ -1,21 +1,7 @@
-import { useEffect, useMemo, useRef, useState } from "react";
-import { detectLevelUpEvents, buildLevelUpMarkers, buildExperienceChartSeries, dailyGrowthSegmentDash } from "./growthChartData.js";
+import { useEffect, useRef, useState } from "react";
+import { detectLevelUpEvents, buildExperienceChartSeries, levelExperienceSegmentDash, dailyGrowthSegmentDash } from "./growthChartData.js";
 import { fetchHistoryArchive } from "../../lib/historyCollection.js";
-import {
-  sortHistoryAscending,
-  sortHistoryDescending,
-  getDailyGrowth,
-  calculateAverageGrowth,
-  calculateDailyExperienceRateChanges,
-  calculateWeeklyGrowth,
-  getRankingChange,
-  calculatePrediction,
-  formatLocalISODate,
-  calculateLevelProgress,
-  calculateGrowthMetrics,
-  buildGrowthTimeline,
-  summarizeGrowthPeriod
-} from "../../lib/growth.js";
+import { sortHistoryAscending, sortHistoryDescending, formatLocalISODate } from "../../lib/growth.js";
 import { readGrowthGoals, saveGrowthGoals, readTrackerState } from "../../lib/storage.js";
 
 function fmt(value) {
@@ -87,17 +73,20 @@ export async function loadGrowthPeriod(character, days, onProgress = null) {
       previous = null;
     }
   }
-  const summary = summarizeGrowthPeriod(current.history || [], normalizedDays);
-  summary.startDate = current.startDate || summary.startDate;
-  summary.endDate = current.endDate || summary.endDate;
-  const completeSummary = {
-    ...summary,
-    previousSummary: previous ? summarizeGrowthPeriod(previous.history || [], normalizedDays) : null
-  };
+  const summary = current.periodSummary
+    ? {
+        ...current.periodSummary,
+        days: current.periodSummary.expectedSnapshots ?? normalizedDays,
+        startDate: current.periodSummary.startDate || current.startDate || null,
+        endDate: current.periodSummary.endDate || current.endDate || null,
+        previousSummary: previous?.periodSummary || null
+      }
+    : null;
   return {
     days: normalizedDays,
     history: current.history || [],
-    summary: completeSummary,
+    metrics: current.metrics || null,
+    summary,
     rangeStatus: {
       availableDays: current.availableDays || 0,
       notReadyDays: current.notReadyDays || 0,
@@ -247,7 +236,7 @@ function GoalPanel({ character, metrics, history }) {
   }
   const daysRemaining = goal ? daysBetween(today, goal.targetDate) : null;
   const requiredRate = daysRemaining > 0 && validRate ? Math.max(0,100-currentRate)/daysRemaining : null;
-  const observedRate = metrics.levelProgress?.dailyProgressRate;
+  const observedRate = metrics?.levelProgress?.dailyProgressRate;
 
   return (
     <section className="growth-goal-card" aria-labelledby="growth-goal-title">
@@ -306,7 +295,7 @@ function PeriodSummary({ summary, previous, label }) {
     ? (summary.averageGrowth - previous.averageGrowth) / Math.abs(previous.averageGrowth) * 100
     : null;
   const cells = [
-    ["총 경험치 증가량",fmt(summary.growth),summary.confirmedChangeDays + "일의 경험치 변화 기준"],
+    ["총 경험치량",fmt(summary.growth),summary.confirmedChangeDays + "일의 경험치 변화 기준"],
     ["하루 평균 경험치",fmt(summary.averageGrowth),summary.confirmedChangeDays + "일의 기록 기준"],
     ["랭킹 변화",summary.rankingChange === null ? "자료 부족" : (summary.rankingChange > 0 ? "▲ " + summary.rankingChange + "위 상승" : summary.rankingChange < 0 ? "▼ " + Math.abs(summary.rankingChange) + "위 하락" : "변화 없음"),"첫 기록과 마지막 기록 비교"],
     ["지난 기간과 비교",comparisonPercent === null ? "비교 자료 부족" : (comparisonPercent > 0 ? "+" : "") + comparisonPercent.toFixed(1) + "%",previous ? "바로 앞선 같은 기간과 비교" : "지난 기간 기록 없음"],
@@ -337,7 +326,7 @@ function PeriodSummary({ summary, previous, label }) {
   );
 }
 
-export default function GrowthDashboard({ character, history, onHistoryChange, onAnalysisPeriodChange, onPersist }) {
+export default function GrowthDashboard({ character, history, metrics: serverMetrics, analysisPeriod, onHistoryChange, onAnalysisPeriodChange, onPersist }) {
   const initialState = readTrackerState() || {};
   const initialRange = [7,30,90].includes(Number(initialState.historyRange)) ? Number(initialState.historyRange) : 7;
   const [range, setRange] = useState(initialRange);
@@ -346,6 +335,7 @@ export default function GrowthDashboard({ character, history, onHistoryChange, o
   );
   const [rangeStatus, setRangeStatus] = useState(initialState.historyRangeStatus || null);
   const [periodSummary, setPeriodSummary] = useState(initialState.periodSummary || null);
+  const [periodMetrics, setPeriodMetrics] = useState(initialRange === 7 ? serverMetrics : (initialState.periodMetrics || analysisPeriod?.metrics || null));
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [progressText, setProgressText] = useState("");
@@ -360,18 +350,27 @@ export default function GrowthDashboard({ character, history, onHistoryChange, o
     setDisplayHistory(savedRange === 7 || !Array.isArray(saved.displayHistory) ? history || [] : saved.displayHistory);
     setRangeStatus(saved.historyRangeStatus || null);
     setPeriodSummary(saved.periodSummary || null);
+    setPeriodMetrics(savedRange === 7 ? serverMetrics : (saved.periodMetrics || analysisPeriod?.metrics || null));
     setError("");
     setProgressText("");
   }, [character.ocid]);
 
-  const prediction = useMemo(() => calculatePrediction(character, history || []), [character, history]);
-  const metrics = useMemo(() => calculateGrowthMetrics(character, history || [], prediction), [character, history, prediction]);
-  const levelProgress = metrics.levelProgress;
-  const timeline = useMemo(() => buildGrowthTimeline(displayHistory, 8), [displayHistory]);
-  const progressRateChanges = useMemo(
-    () => calculateDailyExperienceRateChanges(displayHistory),
-    [displayHistory]
+  useEffect(() => {
+    if (range === 7) setDisplayHistory(Array.isArray(history) ? history : []);
+  }, [history, range]);
+
+  const metrics = range === 7 ? serverMetrics : periodMetrics;
+  const levelProgress = serverMetrics?.levelProgress || metrics?.levelProgress || null;
+  const prediction = metrics?.prediction || null;
+  const timeline = Array.isArray(metrics?.timeline) ? metrics.timeline : [];
+  const chartNoticeRecords = sortHistoryAscending(displayHistory || []).filter(
+    item => item?.date && item.date <= formatLocalISODate(new Date())
   );
+  const chartNoticeLevelUps = detectLevelUpEvents(chartNoticeRecords);
+  const levelUpDaysWithoutDailyChange = chartNoticeRecords.filter((item, index) =>
+    chartNoticeLevelUps[index] &&
+    (item.experienceChange === null || item.experienceChange === undefined || item.experienceChange === "")
+  ).length;
 
   useEffect(() => {
     let cancelled = false;
@@ -384,11 +383,8 @@ export default function GrowthDashboard({ character, history, onHistoryChange, o
     const sorted = sortHistoryAscending(displayHistory)
       .filter(item => item?.date && item.date <= today);
     if (!sorted.length) return undefined;
-    const { daily, cumulative } = buildExperienceChartSeries(sorted);
-    // The history API provides daily levels rather than a levelUp flag.
-    // Detect level changes locally so the yellow star is drawn on actual events.
+    const { daily, experience } = buildExperienceChartSeries(sorted);
     const levelUpEvents = detectLevelUpEvents(sorted);
-    const levelUps = buildLevelUpMarkers(sorted, cumulative);
     import("chart.js/auto").then(({ default: Chart }) => {
       if (cancelled || !canvasRef.current) return;
       chartRef.current = new Chart(canvasRef.current.getContext("2d"), {
@@ -396,20 +392,40 @@ export default function GrowthDashboard({ character, history, onHistoryChange, o
       data: {
         labels: sorted.map(item => String(item.date || "").slice(5)),
         datasets: [
-          { label:"총 경험치 증가량",data:cumulative,yAxisID:"experience",borderColor:"#36a2eb",backgroundColor:"#36a2eb",borderWidth:3,tension:0,pointRadius:3,pointHoverRadius:6,fill:false },
-          { label:"일일 경험치 증가량",data:daily,yAxisID:"dailyGrowth",borderColor:"#ff6384",backgroundColor:"#ff6384",borderWidth:2,segment:{borderDash:dailyGrowthSegmentDash},tension:0,pointRadius:2,pointHoverRadius:5,fill:false },
-          { label:"레벨업",data:levelUps,yAxisID:"experience",showLine:false,pointStyle:"star",pointRadius:8,pointHoverRadius:10,pointBackgroundColor:"#f5c542",borderWidth:0 }
+          { label:"총 경험치량",data:experience,yAxisID:"experience",borderColor:"#36a2eb",backgroundColor:"#36a2eb",borderWidth:3,tension:0,spanGaps:false,pointRadius:levelUpEvents.map(isLevelUp=>isLevelUp?7:3),pointHoverRadius:levelUpEvents.map(isLevelUp=>isLevelUp?9:5),pointStyle:levelUpEvents.map(isLevelUp=>isLevelUp?"star":"circle"),pointBackgroundColor:levelUpEvents.map(isLevelUp=>isLevelUp?"#f5c542":"#36a2eb"),pointBorderColor:levelUpEvents.map(isLevelUp=>isLevelUp?"#805b00":"#36a2eb"),pointBorderWidth:levelUpEvents.map(isLevelUp=>isLevelUp?1.5:0),segment:{borderDash:context=>levelExperienceSegmentDash(context,levelUpEvents)},fill:false },
+          { label:"일일 경험치 증가량",data:daily,yAxisID:"dailyGrowth",borderColor:"#ff6384",backgroundColor:"#ff6384",borderWidth:2,segment:{borderDash:dailyGrowthSegmentDash},spanGaps:false,tension:0,pointRadius:sorted.map(item=>item.experienceChangeKind === "level_up_reconstructed" ? 4 : 2),pointHoverRadius:5,pointStyle:sorted.map(item=>item.experienceChangeKind === "level_up_reconstructed" ? "rectRot" : "circle"),fill:false },
         ]
       },
       options: {
         responsive:true,maintainAspectRatio:false,interaction:{intersect:false,mode:"index"},
-        plugins:{legend:{display:true},tooltip:{callbacks:{
+        plugins:{legend:{display:true},tooltip:{usePointStyle:true,callbacks:{
+          labelColor(context) {
+            const color = context.datasetIndex === 0 ? "#36a2eb" : "#ff6384";
+            return { borderColor:color, backgroundColor:color };
+          },
+          labelPointStyle(context) {
+            return { pointStyle:"circle", rotation:0 };
+          },
+          afterTitle(items) {
+            const index = items?.[0]?.dataIndex;
+            if (!Number.isInteger(index) || !levelUpEvents[index]) return [];
+            const current = sorted[index];
+            const previous = sorted.slice(0, index).reverse()
+              .find(item => item?.level !== null && item?.level !== undefined && Number.isFinite(Number(item.level)));
+            const previousLevel = current?.levelUpPreviousLevel ?? previous?.level ?? "—";
+            const currentLevel = current?.levelUpCurrentLevel ?? current?.level ?? "—";
+            return "⭐ 레벨업 · Lv. " + previousLevel + " → " + currentLevel;
+          },
           label(context) {
-            if (context.dataset.label === "레벨업") {
-              const current = sorted[context.dataIndex];
-              const previous = sorted.slice(0, context.dataIndex).reverse()
-                .find(item => item?.level !== null && item?.level !== undefined && Number.isFinite(Number(item.level)));
-              return "⭐ 레벨업 · Lv. " + (previous?.level ?? "—") + " → " + (current?.level ?? "—");
+            const current = sorted[context.dataIndex];
+            if (context.datasetIndex === 0) {
+              return context.parsed.y === null ? "" : "총 경험치량: " + context.parsed.y.toFixed(2) + "조";
+            }
+            if (current?.experienceChangeKind === "level_up_reconstructed" && context.parsed.y !== null) {
+              return "일일 경험치 증가량: " + context.parsed.y.toFixed(2) + "조";
+            }
+            if (levelUpEvents[context.dataIndex] && context.parsed.y === null) {
+              return "일일 경험치 증가량: 계산에 필요한 직전 진행률 기록이 부족해요";
             }
             return context.parsed.y === null ? "" : context.dataset.label + ": " + context.parsed.y.toFixed(2) + "조";
           }
@@ -419,13 +435,12 @@ export default function GrowthDashboard({ character, history, onHistoryChange, o
             autoSkip:false,maxRotation:0,minRotation:0,
             callback(value,index) {
               const item = sorted[index];
-              const isLevelUp = levelUpEvents[index] === true;
-              if (index % 3 !== 0 && !isLevelUp) return "";
-              const label = String(item?.date || "").slice(5);
-              return isLevelUp ? label + " ★" : label;
+              const labelInterval = range === 7 ? 1 : range === 30 ? 3 : 10;
+              if (index % labelInterval !== 0) return "";
+              return String(item?.date || "").slice(5);
             }
           }},
-          experience:{type:"linear",position:"left",title:{display:true,text:"총 경험치 증가량"},ticks:{callback:value=>Number(value).toFixed(0)+"조"}},
+          experience:{type:"linear",position:"left",title:{display:true,text:"총 경험치량"},ticks:{callback:value=>Number(value).toFixed(0)+"조"}},
           dailyGrowth:{type:"linear",position:"right",beginAtZero:true,title:{display:true,text:"일일 경험치 증가량"},grid:{drawOnChartArea:false},ticks:{callback:value=>Number(value).toFixed(0)+"조"}}
         }
       }
@@ -450,45 +465,26 @@ export default function GrowthDashboard({ character, history, onHistoryChange, o
         setDisplayHistory(history || []);
         setRangeStatus(null);
         setPeriodSummary(null);
-        onAnalysisPeriodChange?.({ days:7, history:history || [], summary:null });
-        onPersist?.({historyRange:7,displayHistory:history || [],historyRangeStatus:null,periodSummary:null});
+        setPeriodMetrics(serverMetrics || null);
+        onAnalysisPeriodChange?.({ days:7, history:history || [], summary:null, metrics:serverMetrics || null });
+        onPersist?.({historyRange:7,displayHistory:history || [],historyRangeStatus:null,periodSummary:null,periodMetrics:null,growthMetrics:serverMetrics || null});
       } else {
-        const current = await fetchHistoryArchive(days,character,{
-          collect:true,
-          onProgress:setProgressText
-        });
-        let previous = null;
-        const previousEnd = shiftDate(current.startDate,-1);
-        if (previousEnd) {
-          try { previous = await fetchHistoryArchive(days,character,{end:previousEnd,collect:false}); } catch { previous = null; }
-        }
-        const summary = summarizeGrowthPeriod(current.history || [],days);
-        summary.startDate = current.startDate || summary.startDate;
-        summary.endDate = current.endDate || summary.endDate;
+        const loaded = await loadGrowthPeriod(character,days,setProgressText);
+        const currentHistory = loaded.history || [];
+        const summary = loaded.summary || null;
         setRange(days);
-        setDisplayHistory(current.history || []);
+        setDisplayHistory(currentHistory);
         setPeriodSummary(summary);
-        onAnalysisPeriodChange?.({ days, history:current.history || [], summary:{ ...summary, previousSummary:previous ? summarizeGrowthPeriod(previous.history || [],days) : null } });
-        setRangeStatus({
-          availableDays:current.availableDays || 0,
-          notReadyDays:current.notReadyDays || 0,
-          notCollectedDays:current.notCollectedDays || 0,
-          collection:current.collectionSummary || null
-        });
+        setPeriodMetrics(loaded.metrics || null);
+        onAnalysisPeriodChange?.({ days, history:currentHistory, summary, metrics:loaded.metrics || null });
+        setRangeStatus(loaded.rangeStatus || null);
         onPersist?.({
-          historyRange:days,displayHistory:current.history || [],
-          historyRangeStatus:{
-            availableDays:current.availableDays || 0,
-            notReadyDays:current.notReadyDays || 0,
-            notCollectedDays:current.notCollectedDays || 0,
-            collection:current.collectionSummary || null
-          },
-          periodSummary:summary
+          historyRange:days,
+          displayHistory:currentHistory,
+          historyRangeStatus:loaded.rangeStatus || null,
+          periodSummary:summary,
+          periodMetrics:loaded.metrics || null
         });
-        const priorSummary = previous ? summarizeGrowthPeriod(previous.history || [],days) : null;
-        const completeSummary = { ...summary, previousSummary:priorSummary };
-        setPeriodSummary(completeSummary);
-        onPersist?.({ periodSummary:completeSummary });
       }
       setChartVersion(value => value + 1);
       setProgressText("");
@@ -500,12 +496,11 @@ export default function GrowthDashboard({ character, history, onHistoryChange, o
     }
   }
 
-  const daily = getDailyGrowth(history || []);
-  const weekly = calculateWeeklyGrowth(history || []);
-  const average = calculateAverageGrowth(history || []);
-  const rankChange = getRankingChange(history || []);
-  const percent = Number(String(character.experienceRate ?? "").replace("%",""));
-  const remaining = Number.isFinite(percent) ? Math.max(0,100-percent) : null;
+  const daily = metrics?.latestDailyGrowth ?? null;
+  const weekly = metrics?.sevenDayGrowth ?? null;
+  const average = metrics?.averageDailyGrowth ?? null;
+  const rankChange = metrics?.rankingChange ?? null;
+  const percent = levelProgress?.currentRate ?? null;
 
   return (
     <div className="growth-dashboard">
@@ -524,7 +519,7 @@ export default function GrowthDashboard({ character, history, onHistoryChange, o
 
       <section className="section" id="growth-trend">
         <div className="section-header history-chart-header">
-          <div><h2 className="section-title">성장 추이</h2><p className="section-description">첫날보다 경험치가 얼마나 늘었는지와 하루 단위 변화, 레벨업 기록을 보여줍니다.</p></div>
+          <div><h2 className="section-title">성장 추이</h2><p className="section-description">총 경험치량과 하루 단위 증가량, 레벨업 기록을 보여줍니다.</p></div>
           <label className="history-range-control">기록 범위
             <select className="history-range-select" value={range} onChange={event => changeRange(Number(event.target.value))} disabled={busy}>
               <option value="7">최근 7일</option><option value="30">저장 기록 30일</option><option value="90">저장 기록 90일</option>
@@ -535,6 +530,9 @@ export default function GrowthDashboard({ character, history, onHistoryChange, o
           {busy ? progressText || "기록을 불러오고 있습니다..." : range === 7
             ? `최근 7일 확인된 기록 ${(history || []).filter(item=>item.recordStatus==="available").length}일`
             : `최근 ${range}일 · 확인된 기록 ${rangeStatus?.availableDays ?? 0}일 · 아직 공개되지 않은 기록 ${rangeStatus?.notReadyDays ?? 0}일 · 확인하지 못한 날짜 ${rangeStatus?.notCollectedDays ?? 0}일`}
+          {!busy && levelUpDaysWithoutDailyChange > 0
+            ? ` · 레벨업 ${levelUpDaysWithoutDailyChange}일 · 당일 일일 EXP 증가량 미확인`
+            : ""}
         </p>
         {error && !busy && <p className="history-range-notice is-warning" role="alert">{error}</p>}
         {periodSummary && range !== 7 && <PeriodSummary summary={periodSummary} previous={periodSummary.previousSummary} label={`최근 ${range}일`} />}
@@ -561,12 +559,12 @@ export default function GrowthDashboard({ character, history, onHistoryChange, o
         <div className="growth-prediction-layout">
           <div className="prediction-card">
           <div className="prediction-grid">
-            <div className="prediction-item"><div className="prediction-label">다음 레벨까지</div><div className="prediction-value">{prediction?.requiredExp == null ? "자료 부족" : fmt(prediction.requiredExp) + " (" + prediction.currentRate.toFixed(3) + "%)"}</div></div>
+            <div className="prediction-item"><div className="prediction-label">다음 레벨까지</div><div className="prediction-value">{prediction?.requiredExp != null ? fmt(prediction.requiredExp) : "자료 부족"}</div></div>
             <div className="prediction-item"><div className="prediction-label">예상 소요</div><div className="prediction-value">{Number.isFinite(prediction?.days) ? "약 "+prediction.days.toFixed(1)+"일" : "자료 부족"}</div></div>
-            <div className="prediction-item"><div className="prediction-label">예상 레벨업</div><div className="prediction-value">{prediction?.date ? localDate(formatLocalISODate(prediction.date)) : "자료 부족"}</div></div>
-            <div className="prediction-item"><div className="prediction-label">최근 평균</div><div className="prediction-value">{prediction?.averageGrowth > 0 ? fmt(prediction.averageGrowth) : "자료 부족"}</div></div>
+            <div className="prediction-item"><div className="prediction-label">예상 레벨업</div><div className="prediction-value">{prediction?.date ? localDate(prediction.date) : "자료 부족"}</div></div>
+            <div className="prediction-item"><div className="prediction-label">최근 평균</div><div className="prediction-value">{(prediction?.averageGrowth ?? average) == null ? "자료 부족" : fmt(prediction?.averageGrowth ?? average)}</div></div>
           </div>
-          <p className="prediction-note">최근과 비슷한 속도로 경험치를 얻는다고 가정한 예상이에요. 기록이 없는 날짜나 레벨업으로 경험치 기준이 바뀐 구간은 예상해서 채우지 않아요.</p>
+          <p className="prediction-note">{Number.isFinite(prediction?.requiredExp) ? "현재 레벨 경험치와 진행률을 기준으로 다음 레벨까지 남은 경험치를 계산했어요." : "현재 레벨의 경험치와 진행률을 확인하면 다음 레벨까지 남은 경험치를 표시할 수 있어요."}{Number.isFinite(prediction?.averageGrowth) ? ` 최근 동일 레벨의 ${prediction.experienceSamples}개 일일 EXP 변화량 평균 ${fmt(prediction.averageGrowth)}를 기준으로 예상 날짜를 계산했어요.` : " 동일 레벨의 일일 EXP 기록이 더 쌓이면 예상 날짜를 계산할 수 있어요."}</p>
         </div>
           <div id="growth-goal"><GoalPanel character={character} metrics={metrics} history={history || []} /></div>
         </div>
@@ -578,11 +576,6 @@ export default function GrowthDashboard({ character, history, onHistoryChange, o
 
 export function GrowthHistoryTable({ history }) {
   const records = Array.isArray(history) ? history : [];
-  const progressRateChanges = useMemo(
-    () => calculateDailyExperienceRateChanges(records),
-    [records]
-  );
-
   return (
     <section className="section growth-history-section" aria-labelledby="growth-history-title">
       <div className="section-header">
@@ -600,7 +593,7 @@ export function GrowthHistoryTable({ history }) {
                 const rate = item.experienceRate == null
                   ? null
                   : Number(String(item.experienceRate).replace("%",""));
-                const rateChange = progressRateChanges[item.date];
+                const rateChange = item.experienceRateChange;
                 const validRate = Number.isFinite(rate) && rate >= 0 && rate <= 100;
                 const experienceChange = item.experienceChange == null
                   ? null

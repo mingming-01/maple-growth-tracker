@@ -5,7 +5,7 @@ from pathlib import Path
 from threading import Lock
 from urllib.parse import urlparse
 
-import psycopg
+from tracker.repositories.postgres_connection_pool import get_pooled_connection
 
 
 class AIProviderStateStore:
@@ -22,7 +22,13 @@ class AIProviderStateStore:
         if self.uses_postgres:
             host = urlparse(self.database_url).hostname
             sslmode = "disable" if host in ("localhost", "127.0.0.1", "::1") else "require"
-            return psycopg.connect(self.database_url, connect_timeout=2, sslmode=sslmode, prepare_threshold=None)
+            return get_pooled_connection(
+                self.database_url,
+                connect_timeout=3,
+                sslmode=sslmode,
+                prepare_threshold=None,
+                store="ai_provider_state",
+            )
         Path(self.sqlite_path).parent.mkdir(parents=True, exist_ok=True)
         return sqlite3.connect(self.sqlite_path, timeout=2)
 

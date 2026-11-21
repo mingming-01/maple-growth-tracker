@@ -24,22 +24,48 @@ class RuntimeCache:
         with self.lock:
             item = self.ai_response_cache.get(cache_key)
             if not item:
+                increment_metric("cache.lookups", cache="ai_response", result="miss")
                 return None
             now = time.time()
             if now - item["cached_at"] > AI_RESPONSE_CACHE_TTL:
                 self.ai_response_cache.pop(cache_key, None)
+                increment_metric("cache.lookups", cache="ai_response", result="miss")
+                increment_metric("cache.expirations", cache="ai_response")
                 return None
             item["used_at"] = now
+            increment_metric("cache.lookups", cache="ai_response", result="hit")
             return item["analysis"]
 
-    def set_ai_response(self, prompt, analysis):
+    def get_ai_response_metadata(self, prompt):
+        """Return optional metadata for a previously retrieved AI response."""
+        cache_key = hashlib.sha256(prompt.encode("utf-8")).hexdigest()
+        with self.lock:
+            item = self.ai_response_cache.get(cache_key)
+            if not item:
+                return None
+            now = time.time()
+            if now - item["cached_at"] > AI_RESPONSE_CACHE_TTL:
+                self.ai_response_cache.pop(cache_key, None)
+                increment_metric("cache.expirations", cache="ai_response")
+                return None
+            metadata = item.get("metadata")
+            return dict(metadata) if isinstance(metadata, dict) else None
+
+    def set_ai_response(self, prompt, analysis, metadata=None):
         if not analysis:
             return
         now = time.time()
         cache_key = hashlib.sha256(prompt.encode("utf-8")).hexdigest()
+        evicted = 0
         with self.lock:
+            if len(self.ai_response_cache) >= AI_RESPONSE_CACHE_MAX_ENTRIES:
+                for existing_key, item in list(self.ai_response_cache.items()):
+                    if now - item["cached_at"] > AI_RESPONSE_CACHE_TTL:
+                        self.ai_response_cache.pop(existing_key, None)
+                        evicted += 1
             self.ai_response_cache[cache_key] = {
                 "analysis": analysis,
+                "metadata": dict(metadata) if isinstance(metadata, dict) else None,
                 "cached_at": now,
                 "used_at": now,
             }
@@ -49,6 +75,10 @@ class RuntimeCache:
                     key=lambda key: self.ai_response_cache[key]["used_at"],
                 )
                 self.ai_response_cache.pop(oldest_key, None)
+                evicted += 1
+        increment_metric("cache.writes", cache="ai_response")
+        if evicted:
+            increment_metric("cache.evictions", evicted, cache="ai_response")
 
     def get(self, key):
         namespace = str(key).split(":", 1)[0]
@@ -61,6 +91,7 @@ class RuntimeCache:
             if now - item["time"] > item["ttl"]:
                 del self.cache[key]
                 increment_metric("cache.lookups", cache=namespace, result="miss")
+                increment_metric("cache.expirations", cache=namespace)
                 return None
             item["used_at"] = now
             increment_metric("cache.lookups", cache=namespace, result="hit")
@@ -72,11 +103,14 @@ class RuntimeCache:
 
     def set(self, key, data, ttl):
         now = time.time()
+        namespace = str(key).split(":", 1)[0]
+        evicted = 0
         with self.lock:
             if len(self.cache) >= RUNTIME_CACHE_MAX_ENTRIES:
                 for existing_key, item in list(self.cache.items()):
                     if now - item["time"] > item["ttl"]:
                         self.cache.pop(existing_key, None)
+                        evicted += 1
             self.cache[key] = {
                 "time": now,
                 "used_at": now,
@@ -90,7 +124,10 @@ class RuntimeCache:
                     key=lambda cache_key: self.cache[cache_key]["used_at"],
                 )
                 self.cache.pop(oldest_key, None)
-        increment_metric("cache.writes", cache=str(key).split(":", 1)[0])
+                evicted += 1
+        increment_metric("cache.writes", cache=namespace)
+        if evicted:
+            increment_metric("cache.evictions", evicted, cache=namespace)
 
     def get_timestamp(self, key):
         with self.lock:

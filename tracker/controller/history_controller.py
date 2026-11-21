@@ -1,6 +1,6 @@
 """최근·과거 성장 기록 HTTP 라우트."""
 from concurrent.futures import ThreadPoolExecutor
-from datetime import date, datetime, timedelta
+from datetime import date, datetime, timedelta, timezone
 
 import requests
 from flask import Blueprint, jsonify, request
@@ -9,6 +9,7 @@ from tracker.domain.growth_calculations import (
     calculate_archive_history_changes,
     calculate_recent_history_changes,
 )
+from tracker.domain.ai_metrics import build_server_growth_metrics
 from tracker.services.history_archive_service import fetch_historical_record
 from tracker.services.recent_history_service import (
     _get_cached_current_ranking,
@@ -38,6 +39,58 @@ from tracker.runtime import (
 )
 
 history_bp = Blueprint("history", __name__, url_prefix="/api")
+
+
+def _attach_growth_metrics(
+    payload, reference_date, period_days, character=None, calculation_records=None
+):
+    """이력 API에 모든 화면이 공유할 서버 계산 지표를 추가한다."""
+    records = payload.get("history") if isinstance(payload, dict) else None
+    records = records if isinstance(records, list) else []
+    source_records = (
+        calculation_records
+        if isinstance(calculation_records, (list, tuple))
+        else records
+    )
+    calculated = build_server_growth_metrics(
+        character,
+        source_records,
+        reference_date=reference_date,
+        period_days=period_days,
+    )
+    payload["metrics"] = calculated["metrics"]
+    payload["periodSummary"] = calculated["periodSummary"]
+
+    # 선택 기간 첫날의 일일 변화량을 계산할 수 있도록 직전 스냅샷을
+    # 집계에 포함하되, 화면에 반환하는 날짜 범위는 그대로 유지한다.
+    if source_records is not records:
+        calculated_by_date = {
+            item.get("date"): item
+            for item in calculated.get("history", [])
+            if isinstance(item, dict)
+        }
+        calculated_fields = (
+            "experienceChange",
+            "experienceChangeKind",
+            "experienceChangeLowerBound",
+            "experienceChangeUpperBound",
+            "experienceChangeMethod",
+            "experienceChangeRateResolution",
+            "experienceRateChange",
+            "rankingChange",
+            "levelUp",
+            "levelUpPreviousLevel",
+            "levelUpCurrentLevel",
+            "levelUpCatchUp",
+        )
+        for record in records:
+            computed = calculated_by_date.get(record.get("date"))
+            if computed is None:
+                continue
+            for field in calculated_fields:
+                record[field] = computed.get(field)
+
+    return payload
 
 
 def _load_recent_character_basic_snapshot(character_name, ocid, now=None):
@@ -80,6 +133,8 @@ def _load_recent_character_basic_snapshot(character_name, ocid, now=None):
         "character_level": snapshot.get("level"),
         "character_exp": snapshot.get("experience"),
         "character_exp_rate": snapshot.get("experienceRate"),
+        "_growthSource": "character/basic",
+        "_growthObservedAt": saved_at,
         "ranking": snapshot.get("ranking"),
         "ranking_scope": "overall",
         "ranking_date": snapshot.get("rankingDate"),
@@ -109,9 +164,14 @@ def _stale_history_response(cache_key, character_name, error_message):
     """현재 형식 캐시를 우선 사용하고, 구형 캐시는 순위를 제거해 제공한다."""
     snapshot, saved_at = load_api_snapshot(cache_key)
     if snapshot is not None:
+        today = datetime.now(KOREA_TIMEZONE).date()
+        if "metrics" not in snapshot or "periodSummary" not in snapshot:
+            snapshot = _attach_growth_metrics(dict(snapshot), today, 7)
         return jsonify(with_data_status(snapshot, "stale", saved_at)), 200
 
     legacy_keys = (
+        f"history:rank-overall-v4:{character_name}",
+        f"history:rank-overall-v3:{character_name}",
         f"history:rank-overall-v2:{character_name}",
         f"history:{character_name}",
     )
@@ -136,6 +196,9 @@ def _stale_history_response(cache_key, character_name, error_message):
             safe_record["rankingChange"] = None
             sanitized_history.append(safe_record)
         sanitized["history"] = sanitized_history
+        sanitized = _attach_growth_metrics(
+            sanitized, datetime.now(KOREA_TIMEZONE).date(), 7
+        )
         return jsonify(with_data_status(
             sanitized, "stale", legacy_saved_at
         )), 200
@@ -160,7 +223,7 @@ def get_history():
 
     # 이전 캐시에는 과거 집계일의 프로필 랭킹이 오늘 순위로 섞였을 수 있어
     # 정합성 기준을 적용한 새 키로 분리한다.
-    cache_key = f"history:rank-overall-v3:{character_name}"
+    cache_key = f"history:rank-overall-v5:{character_name}"
     force_refresh = request.args.get("refresh") == "1"
     cached_history = None if force_refresh else get_cache(cache_key)
     cached_records = cached_history.get("history") if isinstance(cached_history, dict) else None
@@ -213,6 +276,14 @@ def get_history():
                 )
             return jsonify({"error": "캐릭터 정보를 확인할 수 없습니다."}), response.status_code
 
+        # 기본 프로필의 세 성장 필드는 동일한 character/basic 응답에서 왔다.
+        # 캐시를 재사용한 경우에는 원래 API 스냅샷 저장 시각을 유지한다.
+        basic = dict(basic)
+        basic.setdefault("_growthSource", "character/basic")
+        basic.setdefault(
+            "_growthObservedAt",
+            datetime.now(timezone.utc).isoformat(timespec="milliseconds"),
+        )
         world_name = basic["world_name"]
         today = datetime.now(KOREA_TIMEZONE).date()
         stored_recent = {}
@@ -247,13 +318,23 @@ def get_history():
 
     failed_records = [item for item in history if item.get("recordStatus") == "unavailable"]
     if failed_records:
-        # 여러 날짜를 병렬 조회하므로 일시적 오류와 확정 오류가 섞일 수 있다.
-        # 하나라도 429/5xx/네트워크 오류가 있으면 전체 결과를 502로 단정하지 않고
-        # 저장된 정상 스냅샷을 우선 제공하거나 재시도 가능한 503으로 응답한다.
-        if any(item.get("retryable") for item in failed_records):
-            return _stale_history_response(cache_key, character_name, "성장 기록 조회가 일시적으로 지연되고 있습니다. 잠시 후 다시 시도해주세요."
+        # 일부 날짜의 API 오류가 있어도 저장된 정상 기록은 계속 표시한다.
+        # 사용 가능한 데이터가 하나도 없을 때만 이전 스냅샷으로 폴백한다.
+        usable_records = [
+            item for item in history
+            if item.get("recordStatus") in (None, "available")
+            and any(
+                item.get(field) is not None
+                for field in ("ranking", "level", "experience", "experienceRate")
             )
-        return jsonify({"error": "성장 기록을 정상적으로 가져오지 못했습니다."}), 502
+        ]
+        if not usable_records:
+            error_message = (
+                "성장 기록 조회가 일시적으로 지연되고 있습니다. 잠시 후 다시 시도해주세요."
+                if any(item.get("retryable") for item in failed_records)
+                else "성장 기록을 정상적으로 가져오지 못했습니다."
+            )
+            return _stale_history_response(cache_key, character_name, error_message)
 
     calculate_recent_history_changes(history)
 
@@ -279,8 +360,12 @@ def get_history():
     ]
     average_experience = sum(experience_changes) / len(experience_changes) if experience_changes else None
     latest_record = history[-1] if history else None
-    history_status = "today_not_ready" if latest_record and latest_record.get("recordStatus") == "not_ready" else "complete"
-    result = {
+    history_status = (
+        "partial" if failed_records
+        else "today_not_ready" if latest_record and latest_record.get("recordStatus") == "not_ready"
+        else "complete"
+    )
+    result = _attach_growth_metrics({
         "characterName": basic["character_name"],
         "worldName": world_name,
         "level": basic["character_level"],
@@ -292,7 +377,11 @@ def get_history():
             "status": storage_status,
             "savedRecords": saved_record_count
         }
-    }
+    }, today, 7, {
+        "level": basic.get("character_level"),
+        "experience": basic.get("character_exp"),
+        "experienceRate": basic.get("character_exp_rate"),
+    })
 
     saved_at = datetime.now().astimezone().isoformat(timespec="seconds")
     # 완전한 기록은 갱신하고, 부분 기록은 기존 스냅샷이 없을 때만 저장한다.
@@ -304,9 +393,15 @@ def get_history():
     if snapshot_saved_at:
         saved_at = snapshot_saved_at
 
-    # 오늘 랭킹이 준비되지 않았다면 30분 대신 5분 후 다시 확인한다.
-    cache_ttl = HISTORY_CACHE_TTL if history_status == "complete" else 300
-    set_cache(cache_key, result, cache_ttl)
+    # 정상적으로 수집된 기록은 캐시하되, 일시적인 Nexon 오류가 포함된
+    # partial 응답은 캐시하지 않아 다음 요청에서 실패 날짜를 다시 확인한다.
+    retryable_partial = history_status == "partial" and any(
+        item.get("retryable") for item in failed_records
+    )
+    if not retryable_partial:
+        # 오늘 랭킹이 준비되지 않았다면 30분 대신 5분 후 다시 확인한다.
+        cache_ttl = HISTORY_CACHE_TTL if history_status == "complete" else 300
+        set_cache(cache_key, result, cache_ttl)
     return jsonify(with_data_status(result, "current", saved_at))
 
 
@@ -339,8 +434,12 @@ def get_history_archive():
             return jsonify({"error": "조회 종료일은 최근 비교 가능한 기간 안에서 선택해주세요."}), 400
 
     start_date = end_date - timedelta(days=days - 1)
+    # 선택 기간 첫날의 변화량도 계산할 수 있도록 전날 스냅샷을 함께 읽는다.
+    calculation_start = start_date - timedelta(days=1)
     try:
-        stored_records = growth_history_service.get_records(ocid, start_date, end_date)
+        stored_records = growth_history_service.get_records(
+            ocid, calculation_start, end_date
+        )
     except Exception:
         print("날짜별 성장 기록을 조회하지 못했습니다.")
         return jsonify({"error": "저장된 성장 기록을 조회할 수 없습니다. 저장소 연결을 확인해주세요."}), 503
@@ -405,6 +504,7 @@ def get_history_archive():
             start_date + timedelta(days=index)
             for index in range(offset, min(offset + limit, days))
         ]
+        # A checked-but-missing rate is a completed check, not an uncollected date.
         missing_dates = [
             target_date for target_date in batch_dates
             if (
@@ -419,7 +519,9 @@ def get_history_archive():
                             and stored_by_date[target_date.isoformat()].get("rankingScope") != "overall"
                         )
                         or not stored_by_date[target_date.isoformat()].get("experienceRateChecked", False)
-                        or stored_by_date[target_date.isoformat()].get("experienceRate") is None
+                        # 레거시 아카이브 행도 성장 데이터 출처와 수집 시각을 확보하도록 다시 확인한다.
+                        or not stored_by_date[target_date.isoformat()].get("growthSource")
+                        or not stored_by_date[target_date.isoformat()].get("growthObservedAt")
                     )
                 )
             )
@@ -470,7 +572,8 @@ def get_history_archive():
                         and stored_by_date[(start_date + timedelta(days=index)).isoformat()].get("rankingScope") != "overall"
                     )
                     or not stored_by_date[(start_date + timedelta(days=index)).isoformat()].get("experienceRateChecked", False)
-                    or stored_by_date[(start_date + timedelta(days=index)).isoformat()].get("experienceRate") is None
+                    or not stored_by_date[(start_date + timedelta(days=index)).isoformat()].get("growthSource")
+                    or not stored_by_date[(start_date + timedelta(days=index)).isoformat()].get("growthObservedAt")
                 )
                 for index in range(days)
             )
@@ -530,7 +633,7 @@ def get_history_archive():
     available_days = sum(item["recordStatus"] == "available" for item in history)
     not_ready_days = sum(item["recordStatus"] == "not_ready" for item in history)
     not_collected_days = sum(item["recordStatus"] == "not_collected" for item in history)
-    return jsonify({
+    response_payload = {
         "ocid": ocid,
         "days": days,
         "startDate": start_date.isoformat(),
@@ -542,4 +645,18 @@ def get_history_archive():
         "collection": collection,
         "storageBackend": growth_history_service.backend,
         "persistentStorage": growth_history_service.uses_postgres
-    })
+    }
+    # 집계 입력에는 선택 기간의 모든 날짜 상태(not_collected 포함)와
+    # 기간 첫날의 변화량 계산에 필요한 전날 스냅샷만 포함한다.
+    boundary_records = [
+        item for item in stored_records
+        if item.get("date") == (start_date - timedelta(days=1)).isoformat()
+    ]
+    calculation_records = boundary_records + history
+    response_payload = _attach_growth_metrics(
+        response_payload,
+        end_date,
+        days,
+        calculation_records=calculation_records,
+    )
+    return jsonify(response_payload)

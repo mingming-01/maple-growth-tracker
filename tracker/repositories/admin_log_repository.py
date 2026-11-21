@@ -4,12 +4,14 @@ import os
 import sqlite3
 import time
 from datetime import datetime
+from urllib.parse import urlparse
 from zoneinfo import ZoneInfo
 
 import psycopg
 from psycopg.rows import dict_row
 
 from tracker.services.performance_metrics import increment_metric, observe_metric
+from tracker.repositories.postgres_connection_pool import get_pooled_connection
 
 KOREA_TIMEZONE = ZoneInfo("Asia/Seoul")
 
@@ -25,12 +27,15 @@ class AdminLogRepository:
         started_at = time.perf_counter()
         try:
             if backend == "postgres":
-                return psycopg.connect(
+                host = urlparse(self.state.growth_database_url).hostname
+                sslmode = "disable" if host in ("localhost", "127.0.0.1", "::1") else "require"
+                return get_pooled_connection(
                     self.state.growth_database_url,
                     connect_timeout=3,
-                    sslmode="require",
+                    sslmode=sslmode,
                     prepare_threshold=None,
                     row_factory=dict_row,
+                    store="admin_logs",
                 )
 
             connection = sqlite3.connect(self.state.log_db_path, timeout=5)

@@ -66,11 +66,59 @@ test("React preview loads profile data and refreshes only on explicit request", 
     body: JSON.stringify({
       history: [
         { date: "2026-11-04", level: 280, experience: 1000, experienceRate: "30.125", experienceChange: null, recordStatus: "available" },
-        { date: "2026-11-05", level: 280, experience: 1200, experienceRate: "30.500", experienceChange: 200, recordStatus: "available" },
+        { date: "2026-11-05", level: 280, experience: 1200, experienceRate: "30.500", experienceChange: 200, experienceRateChange: 0.375, recordStatus: "available" },
         { date: "2026-11-06", level: 280, experience: 1300, experienceRate: "30.250", experienceChange: 100, recordStatus: "available" }
       ],
       historyStatus: "complete",
+      metrics: {
+        observedChangeDays: 2,
+        recordedDays: 3,
+        latestDailyGrowth: 100,
+        averageDailyGrowth: 150,
+        sevenDayGrowth: 300,
+        rankingChange: null,
+        levelProgress: { currentRate: 35.6, remainingRate: 64.4, dailyProgressRate: 0.25 },
+        growthComparison: { direction: "stable", earlierAverage: null, recentAverage: null },
+        levelUps: [],
+        timeline: [
+          { type: "latest", date: "2026-11-06", title: "최근 정상 기록", description: "Lv. 280 · 경험치 1,300", priority: 3 }
+        ],
+        prediction: null
+      },
+      periodSummary: {
+        startDate: "2026-10-31",
+        endDate: "2026-11-06",
+        expectedSnapshots: 7,
+        availableDays: 3,
+        coveragePercent: 42.9,
+        confirmedChangeDays: 2,
+        averageGrowth: 150,
+        growth: 300,
+        notReadyDays: 0,
+        notCollectedDays: 4,
+        unavailableDays: 0,
+        levelUpCount: 0,
+        levelUpDates: []
+      },
       historyStorage: { backend: "postgres", status: "saved" }
+    })
+  }));
+  await page.route("**/api/ai-analysis?*", route => route.fulfill({
+    status: 200,
+    contentType: "application/json",
+    body: JSON.stringify({
+      analysis: [
+        "[성장 패턴] 최근 기록에서 성장 흐름을 확인했어요.",
+        "[성장 변화] 이전 기록과 비슷한 흐름이에요.",
+        "[레벨업 분석] 이번 기간에는 레벨 변화가 확인되지 않았어요.",
+        "[성장 전망] 현재 기록을 바탕으로 전망을 살펴볼 수 있어요.",
+        "[AI 코멘트] 최근 흐름을 차분히 확인해 보면 좋겠어요."
+      ].join("\n"),
+      aiGenerated: true,
+      aiFallbackUsed: true,
+      growthInsights: null,
+      periodSummary: null,
+      previousPeriodSummary: null
     })
   }));
   await page.route("**/api/character-details?*", route => route.fulfill({
@@ -159,6 +207,9 @@ test("React preview loads profile data and refreshes only on explicit request", 
 
   await page.locator('.mgt-nav a[href="#/analytics"]').click();
   await expect(page.locator("#analytics").getByRole("heading", { name: "AI 성장 리포트" })).toBeVisible();
+  await expect(page.getByText("기본 AI 응답이 원활하지 않아 대체 경로로 코멘트를 생성했습니다.", { exact: true })).toBeVisible();
+  await expect(page.locator('[data-testid="ai-report-provenance"]')).toHaveCount(0);
+  await expect(page.locator("#analytics")).not.toContainText(/Gemini|OpenRouter|nvidia\/|라우팅 제공자|요청 모델/);
   await page.locator('.mgt-nav a[href="#/comparison"]').click();
   await expect(page.locator("#comparison").getByRole("heading", { name: "성장 캐릭터 비교" })).toBeVisible();
 
@@ -364,7 +415,7 @@ test("React admin panel renders and filters session-protected operations logs", 
 });
 
 
-test("30-day AI report reuses cache without automatic LLM calls and only regenerates on demand", async ({ page }) => {
+test("AI report loads the server cache on entry and regenerates only on explicit refresh", async ({ page }) => {
   const character = {
     characterName: "기간캐시테스트",
     ocid: "period-cache-test-ocid",
@@ -438,8 +489,11 @@ test("30-day AI report reuses cache without automatic LLM calls and only regener
     await route.fulfill({
       status: 200, contentType: "application/json",
       body: JSON.stringify({
-        analysis: "[성장 패턴] 기간 분석 테스트 결과입니다.\\n[성장 변화] 선택 기간 기록을 확인했습니다.\\n[레벨업 분석] 확인할 기록이 부족합니다.\\n[성장 전망] 자료가 부족합니다.\\n[AI 코멘트] 테스트 리포트입니다.",
-        cacheHit: false, growthInsights: {}
+        analysis: "[성장 패턴] 기간 분석 테스트 결과입니다.\n[성장 변화] 선택 기간 기록을 확인했습니다.\n[레벨업 분석] 확인할 기록이 부족합니다.\n[성장 전망] 자료가 부족합니다.\n[AI 코멘트] 테스트 리포트입니다.",
+        cacheHit: false,
+        aiGenerated: true,
+        growthInsights: {},
+        aiFallbackUsed: true
       })
     });
   });
@@ -448,45 +502,64 @@ test("30-day AI report reuses cache without automatic LLM calls and only regener
   await page.getByLabel("캐릭터명").fill("기간캐시테스트");
   await page.getByRole("button", { name: /캐릭터 조회/ }).click();
   await expect(page.getByRole("heading", { name: "기간캐시테스트" })).toBeVisible();
-  // Opening the 7-day report checks only the local cache; it must not call the AI provider.
+  // Opening the AI report checks browser cache, then the server cache; a miss starts generation.
   await page.locator('.mgt-nav a[href="#/analytics"]').click();
-  await expect(page.getByTestId("ai-analysis-empty")).toContainText("AI 분석 시작");
-  expect(aiCalls).toBe(0);
+  await expect(page.getByText("기간 분석 테스트 결과입니다.")).toBeVisible();
+  const fallbackNotice = page.getByText(
+    "기본 AI 응답이 원활하지 않아 대체 경로로 코멘트를 생성했습니다.",
+    { exact: true }
+  );
+  await expect(fallbackNotice).toBeVisible();
+  await expect(page.locator('[data-testid="ai-report-provenance"]')).toHaveCount(0);
+  await expect(page.locator("#analytics")).not.toContainText(/Gemini|OpenRouter|sample\/free-route-model|라우팅 제공자|요청 모델/);
+  const firstCachedFallback = await page.evaluate(() => JSON.parse(localStorage.getItem("mapleGrowthTrackerAIResponsesV1") || "[]")
+    .find(entry => entry.type === "growth-report-7d")?.fallbackUsed);
+  expect(firstCachedFallback).toBe(true);
+  expect(aiCalls).toBe(1);
+  expect(submittedPayload.analysisContext.periodDays).toBe(7);
+  expect(submittedPayload.forceRefresh).toBe(false);
 
   await page.locator('.mgt-nav a[href="#/growth"]').click();
   await page.locator(".history-range-control select").selectOption("30");
   await page.locator('.mgt-nav a[href="#/analytics"]').click();
   const aiReportSection = page.locator(".section").filter({ has: page.getByRole("heading", { name: "AI 성장 리포트" }) });
   await expect(aiReportSection.locator(".section-description")).toContainText("최근 30일");
-  expect(aiCalls).toBe(0);
+  await expect(page.getByText("기간 분석 테스트 결과입니다.")).toBeVisible();
+  const secondCachedFallback = await page.evaluate(() => JSON.parse(localStorage.getItem("mapleGrowthTrackerAIResponsesV1") || "[]")
+    .find(entry => entry.type === "growth-report-30d")?.fallbackUsed);
+  expect(secondCachedFallback).toBe(true);
+  expect(aiCalls).toBe(2);
+  expect(submittedPayload.analysisContext.periodDays).toBe(30);
+  expect(submittedPayload.forceRefresh).toBe(false);
+  expect(submittedPayload.history).toHaveLength(30);
 
   await page.locator('.mgt-nav a[href="#/history"]').click();
   await expect(page.locator("#history .history-table tbody tr")).toHaveCount(30);
   await expect(page.locator("#history .history-table tbody tr").first()).toContainText("2026.11.06");
 
+  // Re-entering the same report reuses the browser cache.
   await page.locator('.mgt-nav a[href="#/analytics"]').click();
-  await page.getByRole("button", { name: "AI 분석 시작" }).click();
   await expect(page.getByText("기간 분석 테스트 결과입니다.")).toBeVisible();
-  expect(aiCalls).toBe(1);
-  expect(submittedPayload.analysisContext.periodDays).toBe(30);
-  // First generation should allow the server-side AI response cache to be reused.
-  expect(submittedPayload.forceRefresh).toBe(false);
-  expect(submittedPayload.history).toHaveLength(30);
+  await expect(fallbackNotice).toBeVisible();
+  await expect(page.locator("#analytics")).not.toContainText(/Gemini|OpenRouter|sample\/free-route-model|라우팅 제공자|요청 모델/);
+  expect(aiCalls).toBe(2);
 
   await page.getByRole("button", { name: "다시 분석" }).click();
   await expect(page.getByText("기간 분석 테스트 결과입니다.")).toBeVisible();
-  expect(aiCalls).toBe(2);
+  expect(aiCalls).toBe(3);
   expect(submittedPayload.forceRefresh).toBe(true);
 
   await page.reload();
   await expect(page.getByText("기간 분석 테스트 결과입니다.")).toBeVisible();
-  expect(aiCalls).toBe(2);
+  expect(aiCalls).toBe(3);
 
-  // Changing the period on the AI page updates the same shared period used by Growth.
+  // Changing the period on the AI page updates the shared period and creates only the missing report.
   await page.locator('.mgt-nav a[href="#/analytics"]').click();
   await page.getByLabel("AI 분석 기간").selectOption("90");
   await expect(aiReportSection.locator(".section-description")).toContainText("최근 90일");
-  expect(aiCalls).toBe(2);
+  await expect(page.getByText("기간 분석 테스트 결과입니다.")).toBeVisible();
+  expect(aiCalls).toBe(4);
+  expect(submittedPayload.analysisContext.periodDays).toBe(90);
   await page.locator('.mgt-nav a[href="#/history"]').click();
   await expect(page.locator("#history .history-table tbody tr")).toHaveCount(90);
   await page.locator('.mgt-nav a[href="#/growth"]').click();
@@ -660,7 +733,6 @@ test("React AI report restores evidence details from cache", async ({ page }) =>
   await page.getByLabel("캐릭터명").fill("근거테스트");
   await page.getByRole("button", { name: /캐릭터 조회/ }).click();
   await page.locator('.mgt-nav a[href="#/analytics"]').click();
-  await page.getByRole("button", { name: "AI 분석 시작" }).click();
 
   const evidence = page.getByTestId("ai-analysis-evidence");
   await expect(evidence).toBeVisible();
@@ -681,4 +753,160 @@ test("React AI report restores evidence details from cache", async ({ page }) =>
   const cachedEvidence = page.getByTestId("ai-analysis-evidence");
   await expect(cachedEvidence).toBeVisible();
   await expect(cachedEvidence).toContainText("10 / 15일");
+});
+
+test("React growth chart configures level-up EXP markers and timeline", async ({ page }) => {
+  const timestamp = "2026-11-20T08:45:00+09:00";
+  const character = {
+    characterName: "레벨업검증", ocid: "level-up-chart-ai-e2e",
+    character_image: null, worldName: "크로아", job: "아델", guildName: null,
+    level: 299, experience: 50805631039495, experienceRate: "2.924",
+    ranking: 12345, rankingDataStatus: "available", dataStatus: "current", dataAsOf: timestamp
+  };
+  const history = [
+    { date: "2026-11-14", level: 298, experience: 1094349410488372, experienceRate: 94.825, experienceChange: null, levelUp: false, recordStatus: "available" },
+    { date: "2026-11-15", level: 298, experience: 1103053861914765, experienceRate: 96.177, experienceChange: 8704451426393, levelUp: false, recordStatus: "available" },
+    { date: "2026-11-16", level: 298, experience: 1118748264632899, experienceRate: 97.143, experienceChange: 15694402718134, levelUp: false, recordStatus: "available" },
+    { date: "2026-11-17", level: 298, experience: 1129263590513928, experienceRate: 99.226, experienceChange: 10515325881029, levelUp: false, recordStatus: "available" },
+    { date: "2026-11-18", level: 298, experience: 6175579914147, experienceRate: 0.355, experienceChange: null, levelUp: true, levelUpPreviousLevel: 298, levelUpCurrentLevel: 299, recordStatus: "available" },
+    { date: "2026-11-19", level: 299, experience: 34219899249572, experienceRate: 1.969, experienceChange: 28044319335425, levelUp: false, levelUpCatchUp: true, recordStatus: "available" },
+    { date: "2026-11-20", level: 299, experience: 50805631039495, experienceRate: 2.924, experienceChange: 16585731789923, levelUp: false, recordStatus: "available" }
+  ];
+
+  await page.route("**/api/character?*", route => route.fulfill({
+    status: 200, contentType: "application/json", body: JSON.stringify(character)
+  }));
+  await page.route("**/api/history?*", route => route.fulfill({
+    status: 200, contentType: "application/json",
+    body: JSON.stringify({
+      characterName: character.characterName, worldName: character.worldName,
+      history, historyStatus: "complete",
+      metrics: {
+        observedChangeDays: 5, recordedDays: 7,
+        latestDailyGrowth: 16585731789923,
+        averageDailyGrowth: 15908846230180.8,
+        sevenDayGrowth: 79544231150904, rankingChange: null,
+        levelProgress: { currentRate: 2.924, remainingRate: 97.076, dailyProgressRate: 1.2845 },
+        growthComparison: { direction: "increased", earlierAverage: 1000, recentAverage: 2000 },
+        levelUps: [{ date: "2026-11-18", previousLevel: 298, currentLevel: 299 }],
+        timeline: [
+          { type: "level-up", date: "2026-11-18", title: "Lv. 299 달성", description: "Lv. 298에서 레벨업 · 당일 경험치 증가량 미확인", priority: 0 },
+          { type: "latest", date: "2026-11-20", title: "최근 정상 기록", description: "Lv. 299 · 경험치 50,805,631,039,495", priority: 3 }
+        ],
+        prediction: {
+          currentLevel: 299, nextLevel: 300, currentExperience: 50805631039495,
+          currentRate: 2.924, remainingRate: 97.076,
+          estimatedTotalExp: 1737538681241279, requiredExp: 1686733050201784,
+          requiredExpEstimated: true, requiredExpMethod: "experience_rate_reverse_estimate",
+          averageGrowth: 22315025562674, experienceSamples: 2,
+          averageDailyProgressRate: 1.2845, progressSamples: 2,
+          confidence: "initial", days: 75.5873232349398, date: "2027-02-04",
+          estimatedDays: 75.5873232349398, estimatedDate: "2027-02-04",
+          observationDate: "2026-11-20", method: "experience_rate_reverse_estimate"
+        }
+      },
+      periodSummary: {
+        startDate: "2026-11-14", endDate: "2026-11-20", expectedSnapshots: 7,
+        availableDays: 7, coveragePercent: 100, confirmedChangeDays: 5,
+        averageGrowth: 15908846230180.8, growth: 79544231150904,
+        notReadyDays: 0, notCollectedDays: 0, unavailableDays: 0,
+        levelUpCount: 1, levelUpDates: ["2026-11-18"]
+      }
+    })
+  }));
+  await page.route("**/api/character-details?*", route => route.fulfill({
+    status: 200, contentType: "application/json",
+    body: JSON.stringify({ section: "stats", status: "available", sources: [] })
+  }));
+
+  let submittedPayload = null;
+  await page.route("**/api/ai-analysis?*", async route => {
+    submittedPayload = route.request().postDataJSON();
+    await route.fulfill({
+      status: 200, contentType: "application/json",
+      body: JSON.stringify({
+        analysis: "[성장 패턴] 확인된 다섯 구간의 일일 변화가 있습니다.\\n[성장 변화] 레벨업 경계는 제외하고 새 레벨 내부의 관측 증가량을 반영했습니다.\\n[레벨업 분석] 11월 18일에 298레벨에서 299레벨로 올라갔어요.\\n[성장 전망] 관측된 진행률을 기준으로 초기 전망을 계산했습니다.\\n[AI 코멘트] 다음 기록에서도 같은 레벨의 변화를 이어서 비교해 보세요.",
+        cacheHit: false, growthInsights: {}
+      })
+    });
+  });
+
+  await page.goto("/preview/");
+  await page.getByLabel("캐릭터명").fill(character.characterName);
+  await page.getByRole("button", { name: /캐릭터 조회/ }).click();
+  await expect(page.getByRole("heading", { name: character.characterName })).toBeVisible();
+  await page.locator('.mgt-nav a[href="#/growth"]').click();
+  await expect(page.locator("#growth-trend canvas[aria-label='기간별 성장 추이 그래프']")).toBeVisible();
+
+  const canvas = page.locator("#growth-trend canvas[aria-label='기간별 성장 추이 그래프']");
+  const pinkPixelCount = () => canvas.evaluate(element => {
+    const ctx = element.getContext("2d");
+    const { data } = ctx.getImageData(0, 0, element.width, element.height);
+    let pink = 0;
+    for (let offset = 0; offset < data.length; offset += 4) {
+      const red = data[offset], green = data[offset + 1], blue = data[offset + 2], alpha = data[offset + 3];
+      if (alpha > 160 && red > 210 && green < 150 && blue > 90 && blue < 190) pink += 1;
+    }
+    return pink;
+  });
+  await expect.poll(pinkPixelCount).toBeGreaterThan(30);
+  const markerState = await canvas.evaluate(async element => {
+    const chartModuleUrl = performance.getEntriesByType("resource")
+      .map(entry => entry.name)
+      .find(url => /\/static\/react-preview\/assets\/auto-[^/]+\.js(?:\?.*)?$/.test(url));
+    if (!chartModuleUrl) return { error: "chart_module_not_loaded" };
+
+    const { default: Chart } = await import(chartModuleUrl);
+    const chart = Chart.getChart(element);
+    if (!chart) return { error: "chart_instance_not_found" };
+
+    const markerIndex = chart.data.labels.findIndex(label => String(label) === "11-18");
+    const point = markerIndex >= 0 ? chart.getDatasetMeta(0).data[markerIndex] : null;
+    const position = point?.getProps?.(["x", "y"], true) || null;
+    const area = chart.chartArea;
+    return {
+      markerIndex,
+      color: point?.options?.backgroundColor ?? null,
+      style: point?.options?.pointStyle ?? null,
+      radius: point?.options?.radius ?? null,
+      skipped: point?.skip ?? null,
+      x: position?.x ?? null,
+      y: position?.y ?? null,
+      chartArea: area ? { left: area.left, right: area.right, top: area.top, bottom: area.bottom } : null
+    };
+  });
+  expect(markerState.error).toBeUndefined();
+  expect(markerState.markerIndex).toBe(4);
+  expect(markerState.color).toBe("#f5c542");
+  expect(markerState.style).toBe("star");
+  expect(markerState.radius).toBe(7);
+  expect(markerState.skipped).toBe(false);
+  expect(markerState.x).toBeGreaterThan(markerState.chartArea.left);
+  expect(markerState.x).toBeLessThan(markerState.chartArea.right);
+  expect(markerState.y).toBeGreaterThanOrEqual(markerState.chartArea.top);
+  expect(markerState.y).toBeLessThanOrEqual(markerState.chartArea.bottom);
+
+  await expect(page.locator("#growth-timeline .growth-timeline-item.is-level-up")).toHaveCount(1);
+  await expect(page.locator("#growth-timeline")).toContainText("2026.11.18");
+  await expect(page.locator("#growth-timeline")).toContainText("당일 경험치 증가량 미확인");
+  await expect(page.locator("#growth-trend .history-range-notice")).toContainText("레벨업 1일 · 당일 일일 EXP 증가량 미확인");
+  await expect(page.locator("#growth-prediction .prediction-item").nth(0).locator(".prediction-value")).toHaveText("1687조");
+  await expect(page.locator("#growth-prediction .prediction-item").nth(1).locator(".prediction-value")).toHaveText("약 75.6일");
+  await expect(page.locator("#growth-prediction .prediction-item").nth(2).locator(".prediction-value")).toHaveText("2027.02.04");
+  await expect(page.locator("#growth-prediction .prediction-item").nth(3).locator(".prediction-value")).toHaveText("22.3조");
+  await expect(page.locator("#growth-prediction .prediction-note")).toContainText("2개 일일 EXP 변화량 평균");
+  await expect(page.locator("#growth-prediction .prediction-note")).not.toContainText("추정");
+  await expect(page.locator("#growth-prediction .prediction-note")).not.toContainText("역산");
+
+  await page.locator('.mgt-nav a[href="#/analytics"]').click();
+  await expect(page.getByText("11월 18일에 298레벨에서 299레벨로 올라갔어요.")).toBeVisible();
+  expect(submittedPayload).not.toBeNull();
+  const resetDay = submittedPayload.history.find(item => item.date === "2026-11-18");
+  const catchUpDay = submittedPayload.history.find(item => item.date === "2026-11-19");
+  const latestDay = submittedPayload.history.find(item => item.date === "2026-11-20");
+  expect(resetDay.experienceChange).toBeNull();
+  expect(resetDay.levelUp).toBe(true);
+  expect(catchUpDay.experienceChange).toBe(28044319335425);
+  expect(catchUpDay.levelUpCatchUp).toBe(true);
+  expect(latestDay.experienceChange).toBe(16585731789923);
 });

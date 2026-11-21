@@ -64,6 +64,90 @@ class AIGrowthInsightsTests(unittest.TestCase):
         self.assertEqual(result["previousPeriod"]["levelUpIntervals"], 1)
         self.assertEqual(result["previousPeriod"]["validGrowthIntervals"], 6)
 
+    def test_experience_rate_reset_counts_on_reset_date_not_delayed_level_date(self):
+        records = [
+            {
+                "date": "2026-11-12", "level": 298,
+                "experience": 1034369058697585, "experienceRate": 91.228,
+                "recordStatus": "available",
+            },
+            {
+                "date": "2026-11-13", "level": 298,
+                "experience": 1056883268251231, "experienceRate": 93.284,
+                "recordStatus": "available",
+            },
+            {
+                "date": "2026-11-14", "level": 298,
+                "experience": 1094349410488372, "experienceRate": 94.825,
+                "recordStatus": "available",
+            },
+            {
+                "date": "2026-11-15", "level": 298,
+                "experience": 1103053861914765, "experienceRate": 96.177,
+                "recordStatus": "available",
+            },
+            {
+                "date": "2026-11-16", "level": 298,
+                "experience": 1118748264632899, "experienceRate": 97.143,
+                "recordStatus": "available",
+            },
+            {
+                "date": "2026-11-17", "level": 298,
+                "experience": 1129263590513928, "experienceRate": 99.226,
+                "recordStatus": "available",
+            },
+            {
+                "date": "2026-11-18", "level": 298,
+                "experience": 6175579914147, "experienceRate": 0.355,
+                "recordStatus": "available",
+            },
+            {
+                "date": "2026-11-19", "level": 299,
+                "experience": 34219899249572, "experienceRate": 1.969,
+                "recordStatus": "available",
+            },
+        ]
+
+        result = build_growth_insights(records, reference_date="2026-11-19")
+
+        self.assertEqual(result["recentPeriod"]["levelUpIntervals"], 1)
+        # The reset date is reconstructed from the previous-level remainder
+        # plus the new-level EXP, while the exact snapshot deltas stay separate.
+        self.assertEqual(result["recentPeriod"]["validGrowthIntervals"], 7)
+        self.assertEqual(result["recentPeriod"]["observedGrowthIntervals"], 6)
+        self.assertEqual(result["recentPeriod"]["reconstructedLevelUpIntervals"], 1)
+        self.assertEqual(
+            result["recentPeriod"]["observedExperienceSum"],
+            122938851151768,
+        )
+        self.assertEqual(
+            result["recentPeriod"]["reconstructedLevelUpExperienceSum"],
+            14984259283040,
+        )
+        self.assertEqual(
+            result["recentPeriod"]["experienceGainSum"],
+            137923110434808,
+        )
+
+    def test_already_calculated_history_is_aggregated_without_recomputing(self):
+        records = self.make_records()
+        for record in records:
+            record["experienceChange"] = None
+            record["levelUp"] = False
+            record["levelUpCatchUp"] = False
+
+        result = build_growth_insights(
+            records,
+            reference_date="2026-11-06",
+            already_calculated=True,
+        )
+
+        # Raw EXP values could produce changes, but an already-normalized
+        # backend result with None must remain unknown in AI aggregation.
+        self.assertEqual(result["recentPeriod"]["validGrowthIntervals"], 0)
+        self.assertIsNone(result["recentPeriod"]["observedExperienceSum"])
+        self.assertEqual(result["previousPeriod"]["validGrowthIntervals"], 0)
+
     def test_insufficient_history_is_reported_without_a_percentage(self):
         records = self.make_records()[-7:]
 

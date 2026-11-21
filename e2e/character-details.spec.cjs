@@ -346,8 +346,8 @@ test("mobile touch opens item tooltips without clipped detail panels", async ({ 
     const unionArtifactPanel = page.locator(".game-union-artifact-panel");
     await expect(unionStatePanel).toBeVisible();
     await expect(unionArtifactPanel).toBeVisible();
-    expect(await unionWindow.evaluate(element => getComputedStyle(element).display)).toBe("grid");
-    expect(await unionWindow.evaluate(element => getComputedStyle(element).rowGap)).toBe("16px");
+    await expect(unionWindow).toHaveCSS("display", "grid");
+    await expect(unionWindow).toHaveCSS("row-gap", "16px");
 
     const crystalGrid = page.locator(".game-union-crystal-grid");
     const crystalCards = crystalGrid.locator(".game-union-crystal");
@@ -386,7 +386,7 @@ test("mobile touch opens item tooltips without clipped detail panels", async ({ 
     await page.setViewportSize({ width: 1440, height: 900 });
     const desktopAvatarBounds = await championAvatar.boundingBox();
     expect(desktopAvatarBounds.width).toBeGreaterThanOrEqual(180);
-    expect(await unionWindow.evaluate(element => getComputedStyle(element).rowGap)).toBe("22px");
+    await expect(unionWindow).toHaveCSS("row-gap", "22px");
     const desktopCrystalColumns = await crystalGrid.evaluate(element =>
       getComputedStyle(element).gridTemplateColumns.trim().split(/\s+/).length
     );

@@ -7,9 +7,12 @@ from tracker.services.ai_analysis_service import (
     _deterministic_growth_forecast,
     _error_result,
     _build_deterministic_growth_report,
+    _extract_ai_comment,
     _validate_growth_report_facts,
+    _growth_report_fact_error,
     _format_experience_korean,
     _build_growth_report_cache_key,
+    _prepare_ai_comment,
 )
 from tracker.services.ai_text_service import sanitize_ai_text, validate_growth_report
 
@@ -44,34 +47,105 @@ class AIAnalysisQualityTests(unittest.TestCase):
             "history": [],
         }
 
-    def test_long_period_prompt_separates_period_metrics_from_seven_day_metrics(self):
+    def test_long_period_prompt_uses_only_long_period_qualitative_context(self):
         prompt = _build_growth_report_prompt(self.make_source_data(30))
 
-        self.assertIn('"averageGrowth": 12000000000000', prompt)
-        self.assertIn('"recentSevenDayPrediction"', prompt)
-        self.assertNotIn('"averageDailyGrowth"', prompt)
-        self.assertNotIn('"weekOverWeek"', prompt)
-        self.assertIn('"remainingRate": 14.65', prompt)
+        self.assertIn("장기 성장 기록의 흐름", prompt)
+        self.assertIn("선택한 장기 구간의 전체 성장 기록을 중심으로 해석", prompt)
+        self.assertNotIn("12000000000000", prompt)
+        self.assertNotIn("averageDailyGrowth", prompt)
+        self.assertNotIn("weekOverWeek", prompt)
+        self.assertNotIn("remainingRate", prompt)
 
     def test_growth_report_prompt_prefers_everyday_maple_language(self):
         prompt = _build_growth_report_prompt(self.make_source_data(30))
 
-        self.assertIn("친근하고 담백한 해요체", prompt)
-        self.assertIn("하루 평균 경험치", prompt)
-        self.assertIn("관측 구간", prompt)
+        self.assertIn("친근하고 자연스러운 해요체", prompt)
         self.assertIn("메이플스토리에서 익숙한", prompt)
+        self.assertIn("AI 코멘트 본문만 작성해", prompt)
+        self.assertIn("두세 문장", prompt)
+        self.assertIn("확인된 흐름", prompt)
+        self.assertIn("기록 공백을 성장 정체", prompt)
+        self.assertIn("짧고 구체적인 표현", prompt)
+        self.assertIn("모든 문장은 리포트 본문과 같은 존댓말 해요체로 통일해", prompt)
+        self.assertIn("반말로 읽히는 끝맺음", prompt)
+        self.assertNotIn("관측 구간", prompt)
 
-    def test_ninety_day_prompt_also_omits_seven_day_comparison(self):
+    def test_ai_comment_rejects_informal_endings_and_accepts_honorific_style(self):
+        informal = (
+            "[AI 코멘트] 최근 성장 속도가 이전보다는 조금 느린 걸로 보여. "
+            "현재 흐름에서 크게 성장할 가능성이 크다. "
+            "다음엔 어떤 변화가 있는지 확인해 볼게. 꾸준히 하면 더 활짝 피어날 거야."
+        )
+        comment, error = _prepare_ai_comment(informal, None, self.make_source_data(7))
+        self.assertIsNone(comment)
+        self.assertEqual(error, "informal_tone")
+
+        polite = (
+            "[AI 코멘트] 최근 성장 흐름을 차분히 살펴볼 수 있어요. "
+            "앞으로 변화가 이어지는지도 함께 확인해 보면 좋겠어요."
+        )
+        comment, error = _prepare_ai_comment(polite, None, self.make_source_data(7))
+        self.assertIsNone(error)
+        self.assertEqual(comment, polite.replace("[AI 코멘트] ", ""))
+
+    def test_ninety_day_prompt_uses_long_period_signal_without_numeric_payload(self):
         prompt = _build_growth_report_prompt(self.make_source_data(90))
 
-        self.assertIn('"periodDays": 90', prompt)
-        self.assertNotIn('"weekOverWeek"', prompt)
+        self.assertIn("장기 성장 기록의 흐름", prompt)
+        self.assertNotIn("periodDays", prompt)
+        self.assertNotIn("weekOverWeek", prompt)
+        self.assertNotIn("averageGrowth", prompt)
 
-    def test_seven_day_prompt_keeps_seven_day_metrics_and_insights(self):
-        prompt = _build_growth_report_prompt(self.make_source_data(7))
+    def test_long_period_prompt_uses_backend_early_late_trend_without_numeric_values(self):
+        source = self.make_source_data(90)
+        source["metrics"]["periodTrend"] = {
+            "status": "available",
+            "direction": "decrease",
+            "strength": "strong",
+            "changePercent": -35.0,
+            "firstHalf": {"validGrowthIntervals": 42},
+            "secondHalf": {"validGrowthIntervals": 40},
+        }
 
-        self.assertIn('"averageDailyGrowth"', prompt)
-        self.assertIn('"weekOverWeek"', prompt)
+        prompt = _build_growth_report_prompt(source)
+
+        self.assertIn(
+            "기간 후반의 하루 평균 경험치 증가량이 초반보다 뚜렷하게 낮아짐",
+            prompt,
+        )
+        self.assertNotIn("35.0", prompt)
+        self.assertNotIn("validGrowthIntervals", prompt)
+        self.assertNotIn("changePercent", prompt)
+
+    def test_long_period_prompt_reports_insufficient_early_late_samples(self):
+        source = self.make_source_data(30)
+        source["metrics"]["periodTrend"] = {
+            "status": "insufficient_data",
+            "direction": "insufficient_data",
+        }
+
+        prompt = _build_growth_report_prompt(source)
+
+        self.assertIn(
+            "기간 초반과 후반을 비교할 만큼 확인된 경험치 변화 기록이 충분하지 않음",
+            prompt,
+        )
+
+    def test_seven_day_prompt_uses_weekly_qualitative_growth_signal(self):
+        source = self.make_source_data(7)
+        source["growthInsights"]["weekOverWeek"].update({
+            "status": "available",
+            "direction": "increase",
+            "averageDailyGrowthChangePercent": 12.4,
+        })
+        prompt = _build_growth_report_prompt(source)
+
+        self.assertIn("최근 성장 기록의 흐름", prompt)
+        self.assertIn("이전보다 성장 속도가 완만하게 높아짐", prompt)
+        self.assertNotIn("averageDailyGrowth", prompt)
+        self.assertNotIn("weekOverWeek", prompt)
+        self.assertNotIn("12.4", prompt)
 
     def test_gemini_quota_error_preserves_http_status_and_retry_delay(self):
         error = RuntimeError(
@@ -213,16 +287,150 @@ class AIAnalysisQualityTests(unittest.TestCase):
 
         self.assertEqual([item["date"] for item in filtered], ["2026-11-13", "2026-11-19"])
 
-    def test_growth_report_prompt_gives_ai_all_five_sections_and_server_facts(self):
+    def test_growth_report_prompt_sends_qualitative_signals_without_raw_facts(self):
         source = self.make_source_data(7)
         source["history"] = [{"date": "2026-11-18", "level": 299, "experienceChange": 16530569535123}]
+        source["growthInsights"]["weekOverWeek"].update({
+            "direction": "increase",
+            "averageDailyGrowthChangePercent": 35.9,
+        })
         prompt = _build_growth_report_prompt(source)
 
-        for section in ("[성장 패턴]", "[성장 변화]", "[레벨업 분석]", "[성장 전망]", "[AI 코멘트]"):
-            self.assertIn(section, prompt)
-        self.assertIn("16530569535123", prompt)
-        self.assertIn("친근하고 담백한 해요체", prompt)
-        self.assertNotIn("숫자, 숫자, 날짜", prompt)
+        self.assertNotIn("16530569535123", prompt)
+        self.assertNotIn("2026-11-18", prompt)
+        self.assertIn("이전보다 성장 속도가 뚜렷하게 높아짐", prompt)
+        self.assertIn("AI 코멘트 본문만 작성해", prompt)
+        self.assertIn("수치·날짜·평균·비율·원인·행동을 새로 계산하거나 추측하지 마", prompt)
+        for section in ("[성장 패턴]", "[성장 변화]", "[레벨업 분석]", "[성장 전망]"):
+            self.assertNotIn(section, prompt)
+
+    def test_numeric_ai_sentence_is_removed_without_rejecting_qualitative_comment(self):
+        source = self.make_source_data(7)
+        response = (
+            "[AI 코멘트] 최근 하루 평균은 16.5조예요. "
+            "전반적인 성장 흐름은 안정적으로 이어지고 있어요."
+        )
+
+        comment, error = _prepare_ai_comment(response, None, source)
+
+        self.assertIsNone(error)
+        self.assertEqual(comment, "전반적인 성장 흐름은 안정적으로 이어지고 있어요.")
+
+    def test_ai_comment_extraction_discards_model_written_factual_sections(self):
+        response = (
+            "[성장 패턴] 잘못된 수치 999조를 생성했어요.\\n"
+            "[성장 변화] 다른 가공 수치예요.\\n"
+            "[AI 코멘트] 저장된 기록을 이어서 확인하는 것이 좋아요."
+        )
+        self.assertEqual(
+            _extract_ai_comment(response),
+            "저장된 기록을 이어서 확인하는 것이 좋아요.",
+        )
+
+    def test_ai_comment_extraction_rejects_full_report_without_comment_section(self):
+        response = "[성장 패턴] 내용\\n[성장 변화] 내용"
+        self.assertEqual(_extract_ai_comment(response), "")
+
+    def test_deterministic_report_uses_selected_period_summary_for_long_period(self):
+        summary = {
+            "startDate": "2026-10-22",
+            "endDate": "2026-11-20",
+            "observedExperienceSum": 126000000000000,
+            "averageDailyExperience": 4200000000000,
+            "validGrowthIntervals": 30,
+            "levelUpIntervals": 2,
+        }
+        report = _build_deterministic_growth_report(
+            {"level": 299},
+            {"levelProgress": {"currentRate": 67.4, "remainingRate": 32.6}},
+            {},
+            {"periodDays": 30, "periodSummary": summary},
+            "기록이 쌓이는 흐름을 계속 살펴보면 좋아요.",
+        )
+
+        self.assertIn("선택한 30일", report)
+        self.assertIn("126.0조", report)
+        self.assertIn("4.2조", report)
+        self.assertIn("10월 22일~11월 20일", report)
+        self.assertIn("레벨업 전환 2회", report)
+        self.assertIn("67.4%", report)
+
+    def test_long_period_report_compares_selected_window_with_previous_same_length_window(self):
+        current_summary = {
+            "startDate": "2026-10-23",
+            "endDate": "2026-11-21",
+            "expectedSnapshots": 30,
+            "validGrowthIntervals": 30,
+            "observedExperienceSum": 80000000000000,
+            "averageDailyExperience": 2666666666666.67,
+            "levelUpIntervals": 1,
+        }
+        previous_summary = {
+            "startDate": "2026-09-23",
+            "endDate": "2026-10-22",
+            "expectedSnapshots": 30,
+            "validGrowthIntervals": 30,
+            "observedExperienceSum": 120000000000000,
+            "averageDailyExperience": 4000000000000,
+            "levelUpIntervals": 0,
+        }
+
+        report = _build_deterministic_growth_report(
+            {"level": 299},
+            {"levelProgress": {"currentRate": 3.3}, "periodTrend": {
+                "status": "available",
+                "direction": "decrease",
+                "changePercent": -10.0,
+            }},
+            {},
+            {
+                "periodDays": 30,
+                "periodSummary": current_summary,
+                "previousPeriodSummary": previous_summary,
+            },
+            "최근 흐름을 계속 살펴보면 좋겠어요.",
+        )
+
+        self.assertIn("직전 30일의 하루 평균은 4.0조", report)
+        self.assertIn("선택한 30일은 2.7조", report)
+        self.assertIn("이전 기간보다 33.3% 줄었어요.", report)
+        self.assertNotIn("비교할 이전 기간의 기록은 충분하지 않아요", report)
+
+    def test_long_period_report_uses_in_period_trend_when_previous_period_is_insufficient(self):
+        current_summary = {
+            "startDate": "2026-10-23",
+            "endDate": "2026-11-21",
+            "expectedSnapshots": 30,
+            "validGrowthIntervals": 25,
+            "observedExperienceSum": 250000000000000,
+            "averageDailyExperience": 10000000000000,
+            "levelUpIntervals": 1,
+        }
+
+        report = _build_deterministic_growth_report(
+            {"level": 299},
+            {
+                "levelProgress": {"currentRate": 3.3},
+                "periodTrend": {
+                    "status": "available",
+                    "direction": "decrease",
+                    "changePercent": -12.5,
+                },
+            },
+            {},
+            {
+                "periodDays": 30,
+                "periodSummary": current_summary,
+                "previousPeriodSummary": {
+                    "validGrowthIntervals": 2,
+                    "observedExperienceSum": 1000,
+                },
+            },
+            "최근 흐름을 계속 살펴보면 좋겠어요.",
+        )
+
+        self.assertIn("후반부의 하루 평균 경험치 증가량이 초반부보다 12.5% 낮았어요.", report)
+        self.assertNotIn("비교할 이전 기간의 기록은 충분하지 않아요", report)
 
     def test_growth_report_fact_validator_accepts_server_numbers_and_dates(self):
         source = {
@@ -257,6 +465,13 @@ class AIAnalysisQualityTests(unittest.TestCase):
             "[AI 코멘트] 지금 흐름을 이어가면 좋겠어요."
         )
         self.assertFalse(_validate_growth_report_facts(report, source))
+        self.assertEqual(_growth_report_fact_error(report, source), "unsupported_date")
+
+    def test_growth_report_fact_validator_allows_natural_prose_but_categorizes_unknown_number(self):
+        source = {"metrics": {"averageDailyGrowth": 1000}, "history": [{"date": "2026-11-18"}]}
+        prose = "기록을 보면 최근 성장 흐름이 안정적이며, 꾸준한 플레이가 이어졌습니다."
+        self.assertEqual(_growth_report_fact_error(prose, source), True)
+        self.assertEqual(_growth_report_fact_error(prose + " 9999", source), "unsupported_number")
 
     def test_report_validator_rejects_scientific_notation(self):
         report = (

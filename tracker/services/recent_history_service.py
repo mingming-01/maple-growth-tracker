@@ -1,8 +1,14 @@
 """최근 성장 기록의 Nexon API 수집 규칙."""
 
 from concurrent.futures import ThreadPoolExecutor
+from datetime import datetime, timezone
 
 import requests
+
+
+def _now_utc_iso():
+    """API 응답을 받은 시각을 UTC ISO-8601 형식으로 기록한다."""
+    return datetime.now(timezone.utc).isoformat(timespec="milliseconds")
 
 
 def _positive_rank(value):
@@ -37,6 +43,8 @@ def _get_cached_current_ranking(basic, target_date, today):
         "character_level": basic.get("character_level"),
         "character_exp": basic.get("character_exp"),
         "character_exp_rate": basic.get("character_exp_rate"),
+        "_growthSource": basic.get("_growthSource") or "character/basic",
+        "_growthObservedAt": basic.get("_growthObservedAt"),
     }
 
 
@@ -59,6 +67,8 @@ def _saved_record_without_unverified_ranking(date_string, saved):
         "experience": saved.get("experience"),
         "experienceRate": saved.get("experienceRate"),
         "experienceRateChecked": saved.get("experienceRateChecked", False),
+        "growthSource": saved.get("growthSource"),
+        "growthObservedAt": saved.get("growthObservedAt"),
         "recordStatus": saved.get("recordStatus"),
         "_fromStore": True,
     }
@@ -81,6 +91,8 @@ def _fetch_recent_record(
     """하루치 기록을 저장소 우선·랭킹 API 우선 순서로 수집한다."""
     date_string = target_date.strftime("%Y-%m-%d")
     saved = stored_recent.get(date_string)
+    # True means the rate source was checked successfully, even when Nexon supplied no rate.
+    # A missing value alone is not a reason to repeat the same historical API request.
     should_check_api = (
         target_date == today
         or (
@@ -97,7 +109,8 @@ def _fetch_recent_record(
                     and saved.get("rankingScope") != "overall"
                 )
                 or not saved.get("experienceRateChecked", False)
-                or saved.get("experienceRate") is None
+                or not saved.get("growthSource")
+                or not saved.get("growthObservedAt")
             )
         )
     )
@@ -112,6 +125,8 @@ def _fetch_recent_record(
             "experience": saved.get("experience"),
             "experienceRate": saved.get("experienceRate"),
             "experienceRateChecked": saved.get("experienceRateChecked", False),
+            "growthSource": saved.get("growthSource"),
+            "growthObservedAt": saved.get("growthObservedAt"),
             "recordStatus": saved.get("recordStatus"),
             "_fromStore": True,
         }
@@ -121,6 +136,8 @@ def _fetch_recent_record(
         response = requests.Response()
         response.status_code = 200
         increment_metric("history.current_ranking_reused")
+        growth_source = ranking_data.get("_growthSource") or "character/basic"
+        growth_observed_at = ranking_data.get("_growthObservedAt") or _now_utc_iso()
     else:
         ranking_data, response = get_ranking_snapshot(
             target_date=date_string,
@@ -128,8 +145,11 @@ def _fetch_recent_record(
             ocid=ocid,
             world_type=get_world_type(world_name),
         )
+        growth_source = "ranking/overall"
+        growth_observed_at = _now_utc_iso()
 
     if ranking_data and response is not None and response.status_code == 200:
+        growth_data = ranking_data
         experience_rate = ranking_data.get("character_exp_rate")
         rate_checked = experience_rate is not None
         if experience_rate is None:
@@ -143,7 +163,24 @@ def _fetch_recent_record(
                 except requests.RequestException:
                     rate_data, rate_response = None, None
             if rate_data and rate_response and rate_response.status_code == 200:
-                experience_rate = rate_data.get("character_exp_rate")
+                # 진행률이 별도 기본 정보 API에서 왔다면 레벨·EXP도 같은 응답에서 사용한다.
+                # 서로 다른 시점의 API 응답을 하나의 날짜 스냅샷으로 섞지 않는다.
+                if (
+                    rate_data.get("character_level") is not None
+                    and rate_data.get("character_exp") is not None
+                ):
+                    growth_data = rate_data
+                    growth_source = "character/basic"
+                    growth_observed_at = (
+                        basic.get("_growthObservedAt") or _now_utc_iso()
+                        if target_date == today
+                        else _now_utc_iso()
+                    )
+                    experience_rate = rate_data.get("character_exp_rate")
+                else:
+                    # 기본 정보 응답이 성장 스냅샷 전체를 제공하지 못하면
+                    # 해당 응답의 진행률만 랭킹 응답에 섞지 않는다.
+                    experience_rate = None
             rate_checked = bool(
                 rate_response is not None and rate_response.status_code == 200
             )
@@ -153,16 +190,38 @@ def _fetch_recent_record(
             "ranking": ranking,
             "rankingScope": "overall" if ranking is not None else None,
             "rankingSourceDate": date_string,
-            "level": ranking_data.get("character_level"),
-            "experience": ranking_data.get("character_exp"),
+            "level": growth_data.get("character_level"),
+            "experience": growth_data.get("character_exp"),
             "experienceRate": experience_rate,
             "experienceRateChecked": rate_checked,
+            "growthSource": growth_source,
+            "growthObservedAt": growth_observed_at,
             "recordStatus": "available",
         }
 
     # 랭킹 API 오류는 데이터 없음과 구분한다. 기존 행은 보존하되
     # 집계일을 증명할 수 없는 순위는 이 응답에서 노출하지 않는다.
     if response is None or response.status_code != 200:
+        # 오늘 캐릭터 기본 프로필은 현재 레벨·경험치의 유효한 원본이다.
+        # 랭킹 API만 실패한 경우에도 프로필 성장 기록은 계속 저장한다.
+        if target_date == today and isinstance(basic, dict):
+            current_level = basic.get("character_level")
+            current_experience = basic.get("character_exp")
+            if current_level is not None and current_experience is not None:
+                current_rate = basic.get("character_exp_rate")
+                return {
+                    "date": date_string,
+                    "ranking": None,
+                    "rankingScope": None,
+                    "rankingSourceDate": None,
+                    "level": current_level,
+                    "experience": current_experience,
+                    "experienceRate": current_rate,
+                    "experienceRateChecked": current_rate is not None,
+                    "growthSource": basic.get("_growthSource") or "character/basic",
+                    "growthObservedAt": basic.get("_growthObservedAt") or _now_utc_iso(),
+                    "recordStatus": "available",
+                }
         if saved and saved.get("recordStatus") == "available":
             return _saved_record_without_unverified_ranking(date_string, saved)
         return {
@@ -174,6 +233,8 @@ def _fetch_recent_record(
             "experience": None,
             "experienceRate": None,
             "experienceRateChecked": False,
+            "growthSource": None,
+            "growthObservedAt": None,
             "recordStatus": "unavailable",
             "retryable": is_temporary_nexon_failure(response),
         }
@@ -206,6 +267,8 @@ def _fetch_recent_record(
                 "experience": experience,
                 "experienceRate": basic_data.get("character_exp_rate"),
                 "experienceRateChecked": True,
+                "growthSource": "character/basic",
+                "growthObservedAt": _now_utc_iso(),
                 "recordStatus": "available",
             }
 
@@ -221,6 +284,8 @@ def _fetch_recent_record(
             "experience": saved.get("experience"),
             "experienceRate": saved.get("experienceRate"),
             "experienceRateChecked": saved.get("experienceRateChecked", False),
+            "growthSource": saved.get("growthSource"),
+            "growthObservedAt": saved.get("growthObservedAt"),
             "recordStatus": "available",
         }
 
@@ -234,6 +299,8 @@ def _fetch_recent_record(
             "experience": None,
             "experienceRate": None,
             "experienceRateChecked": True,
+            "growthSource": None,
+            "growthObservedAt": None,
             "recordStatus": "not_ready",
         }
 
@@ -246,6 +313,8 @@ def _fetch_recent_record(
         "experience": None,
         "experienceRate": None,
         "experienceRateChecked": False,
+        "growthSource": None,
+        "growthObservedAt": None,
         "recordStatus": "unavailable",
         "retryable": is_temporary_nexon_failure(basic_response),
     }

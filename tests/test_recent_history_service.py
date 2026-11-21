@@ -1,5 +1,5 @@
 """최근 성장 기록 수집 서비스 테스트."""
-from datetime import date, timedelta
+from datetime import date, datetime, timedelta
 import unittest
 from unittest.mock import Mock
 
@@ -22,7 +22,7 @@ class RecentHistoryServiceTests(unittest.TestCase):
         self.temporary_failure = Mock(return_value=False)
         self.metric = Mock()
 
-    def collect(self, dates, *, basic=None, stored=None):
+    def collect(self, dates, *, basic=None, stored=None, world_name="크로아"):
         return fetch_recent_history(
             dates,
             basic=basic or {
@@ -32,7 +32,7 @@ class RecentHistoryServiceTests(unittest.TestCase):
                 "character_exp": 12345,
             },
             ocid="test-ocid",
-            world_name="크로아",
+            world_name=world_name,
             stored_recent=stored or {},
             today=self.today,
             get_ranking_snapshot=self.ranking,
@@ -51,6 +51,8 @@ class RecentHistoryServiceTests(unittest.TestCase):
                 "experience": 9876,
                 "experienceRate": 11.2,
                 "experienceRateChecked": True,
+                "growthSource": "ranking/overall",
+                "growthObservedAt": "2026-11-09T01:00:00+00:00",
                 "rankingScope": "overall",
                 "rankingSourceDate": "2026-11-09",
                 "recordStatus": "available",
@@ -65,6 +67,39 @@ class RecentHistoryServiceTests(unittest.TestCase):
         self.ranking.assert_not_called()
         self.basic_lookup.assert_not_called()
 
+    def test_reuses_checked_snapshot_even_when_experience_rate_is_unavailable(self):
+        saved = {
+            "2026-11-09": {
+                "ranking": 456,
+                "level": 289,
+                "experience": 9876,
+                "experienceRate": None,
+                "experienceRateChecked": True,
+                "growthSource": "ranking/overall",
+                "growthObservedAt": "2026-11-09T01:00:00+00:00",
+                "rankingScope": "overall",
+                "rankingSourceDate": "2026-11-09",
+                "recordStatus": "available",
+            }
+        }
+
+        result = self.collect([self.yesterday], stored=saved)
+
+        self.assertIsNone(result[0]["experienceRate"])
+        self.assertTrue(result[0]["experienceRateChecked"])
+        self.assertTrue(result[0]["_fromStore"])
+        self.ranking.assert_not_called()
+        self.basic_lookup.assert_not_called()
+
+    def test_passes_eos_world_type_to_recent_historical_ranking(self):
+        self.world_type.return_value = 1
+
+        result = self.collect([self.yesterday], world_name="에오스")
+
+        self.assertEqual(result[0]["recordStatus"], "available")
+        self.world_type.assert_called_once_with("에오스")
+        self.assertEqual(self.ranking.call_args.kwargs["world_type"], 1)
+
     def test_legacy_saved_rank_is_refetched_as_overall_ranking(self):
         saved = {"2026-11-09": {"ranking": 377, "level": 290, "experience": 12345, "experienceRate": 12.5, "experienceRateChecked": True, "recordStatus": "available"}}
         result = self.collect([self.yesterday], stored=saved)
@@ -78,6 +113,8 @@ class RecentHistoryServiceTests(unittest.TestCase):
 
         self.assertEqual(result[0]["recordStatus"], "available")
         self.assertEqual(result[0]["experienceRate"], 12.5)
+        self.assertEqual(result[0]["growthSource"], "ranking/overall")
+        self.assertIsNotNone(datetime.fromisoformat(result[0]["growthObservedAt"]))
         self.assertEqual(result[0]["rankingSourceDate"], "2026-11-09")
         self.ranking.assert_called_once_with(
             target_date="2026-11-09",
@@ -86,6 +123,46 @@ class RecentHistoryServiceTests(unittest.TestCase):
             world_type=0,
         )
         self.basic_lookup.assert_not_called()
+
+    def test_uses_one_basic_response_for_level_experience_and_rate(self):
+        self.ranking.return_value = ({
+            "ranking": 123,
+            "character_level": 298,
+            "character_exp": 1_156_066_685_461_973,
+            "character_exp_rate": None,
+        }, self.response)
+        self.basic_lookup.return_value = ({
+            "character_level": 299,
+            "character_exp": 17_096_549_681_346,
+            "character_exp_rate": 0.355,
+        }, self.response)
+
+        result = self.collect([self.yesterday])
+
+        self.assertEqual(result[0]["level"], 299)
+        self.assertEqual(result[0]["experience"], 17_096_549_681_346)
+        self.assertEqual(result[0]["experienceRate"], 0.355)
+        self.assertEqual(result[0]["growthSource"], "character/basic")
+        self.assertIsNotNone(datetime.fromisoformat(result[0]["growthObservedAt"]))
+
+    def test_does_not_mix_a_partial_basic_rate_with_ranking_growth_values(self):
+        self.ranking.return_value = ({
+            "ranking": 123,
+            "character_level": 298,
+            "character_exp": 1_156_066_685_461_973,
+            "character_exp_rate": None,
+        }, self.response)
+        self.basic_lookup.return_value = ({
+            "character_exp_rate": 0.355,
+        }, self.response)
+
+        result = self.collect([self.yesterday])
+
+        self.assertEqual(result[0]["level"], 298)
+        self.assertEqual(result[0]["experience"], 1_156_066_685_461_973)
+        self.assertIsNone(result[0]["experienceRate"])
+        self.assertTrue(result[0]["experienceRateChecked"])
+        self.assertEqual(result[0]["growthSource"], "ranking/overall")
 
     def test_uses_basic_snapshot_when_ranking_is_empty(self):
         self.ranking.return_value = (None, self.response)
@@ -100,6 +177,8 @@ class RecentHistoryServiceTests(unittest.TestCase):
         self.assertEqual(result[0]["recordStatus"], "available")
         self.assertEqual(result[0]["level"], 288)
         self.assertEqual(result[0]["experienceRate"], 8.5)
+        self.assertEqual(result[0]["growthSource"], "character/basic")
+        self.assertIsNotNone(datetime.fromisoformat(result[0]["growthObservedAt"]))
         self.assertEqual(result[0]["rankingSourceDate"], "2026-11-09")
         self.basic_lookup.assert_called_once_with(
             "test-ocid", target_date="2026-11-09", historical=True
@@ -130,6 +209,30 @@ class RecentHistoryServiceTests(unittest.TestCase):
         self.assertEqual(result[0]["recordStatus"], "unavailable")
         self.assertTrue(result[0]["retryable"])
         self.basic_lookup.assert_not_called()
+    def test_uses_current_profile_when_today_ranking_request_fails(self):
+        basic = {
+            "character_name": "테스트",
+            "world_name": "크로아",
+            "character_level": 291,
+            "character_exp": 987654321,
+            "character_exp_rate": 3.25,
+        }
+        failed_response = Mock(status_code=503)
+        self.ranking.return_value = (None, failed_response)
+        self.temporary_failure.return_value = True
+
+        result = self.collect([self.today], basic=basic)
+
+        self.assertEqual(result[0]["recordStatus"], "available")
+        self.assertEqual(result[0]["level"], 291)
+        self.assertEqual(result[0]["experience"], 987654321)
+        self.assertEqual(result[0]["experienceRate"], 3.25)
+        self.assertEqual(result[0]["growthSource"], "character/basic")
+        self.assertIsNone(result[0]["ranking"])
+        self.assertIsNone(result[0]["rankingSourceDate"])
+        self.assertFalse(result[0].get("retryable", False))
+        self.basic_lookup.assert_not_called()
+
 
     def test_returns_records_in_chronological_display_order(self):
         older = self.today - timedelta(days=2)

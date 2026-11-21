@@ -52,5 +52,9 @@ def get_character_details():
             "bestCombatPowerObservedAt": best_power.get("observedAt"),
             "bestPresetCombination": best_power.get("presetNumbers"),
         })
-    set_cache(cache_key, result, DETAIL_CACHE_TTL)
+    # 전체 상세 응답은 모든 원본 API가 정상적으로 준비된 경우에만 캐시한다.
+    # partial/unavailable 응답을 묶어 캐시하면 일시적인 Nexon 오류가 TTL 동안
+    # 고정되어 실패한 원본만 재시도할 수 없으므로 성공한 원본 캐시만 재사용한다.
+    if result.get("status") == "available":
+        set_cache(cache_key, result, DETAIL_CACHE_TTL)
     return jsonify(result)

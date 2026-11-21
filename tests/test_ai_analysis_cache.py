@@ -1,4 +1,8 @@
+import hashlib
+import time
 import unittest
+from concurrent.futures import ThreadPoolExecutor
+from threading import Event, Lock
 from unittest.mock import patch
 
 import requests
@@ -6,7 +10,69 @@ import requests
 import app as tracker
 from tracker import create_app
 from tracker.runtime import get_runtime_state
+from tracker.services import runtime_cache
+from tracker.services.runtime_cache import RuntimeCache
+from tracker.integrations.ai_provider import ProviderText
 
+
+class AIResponseCacheMetricsTests(unittest.TestCase):
+    def test_ai_cache_reports_hit_miss_write_and_expiration_metrics(self):
+        cache = RuntimeCache()
+        with patch("tracker.services.runtime_cache.increment_metric") as metric:
+            self.assertIsNone(cache.get_ai_response("missing"))
+            with patch("tracker.services.runtime_cache.time.time", return_value=1000):
+                cache.set_ai_response("prompt", "analysis")
+            with patch("tracker.services.runtime_cache.time.time", return_value=1001):
+                self.assertEqual(cache.get_ai_response("prompt"), "analysis")
+            with patch(
+                "tracker.services.runtime_cache.time.time",
+                return_value=1000 + runtime_cache.AI_RESPONSE_CACHE_TTL + 1,
+            ):
+                self.assertIsNone(cache.get_ai_response("prompt"))
+
+        metric.assert_any_call(
+            "cache.lookups", cache="ai_response", result="miss"
+        )
+        metric.assert_any_call(
+            "cache.lookups", cache="ai_response", result="hit"
+        )
+        metric.assert_any_call("cache.writes", cache="ai_response")
+        metric.assert_any_call("cache.expirations", cache="ai_response")
+
+    def test_ai_cache_removes_expired_entries_before_capacity_eviction(self):
+        cache = RuntimeCache()
+        with patch(
+            "tracker.services.runtime_cache.AI_RESPONSE_CACHE_MAX_ENTRIES", 2
+        ), patch("tracker.services.runtime_cache.increment_metric") as metric:
+            with patch("tracker.services.runtime_cache.time.time", return_value=100):
+                cache.set_ai_response("first", "one")
+            with patch("tracker.services.runtime_cache.time.time", return_value=101):
+                cache.set_ai_response("second", "two")
+            for item in cache.ai_response_cache.values():
+                item["cached_at"] = 0
+            with patch(
+                "tracker.services.runtime_cache.time.time",
+                return_value=runtime_cache.AI_RESPONSE_CACHE_TTL + 100,
+            ):
+                cache.set_ai_response("third", "three")
+
+        self.assertEqual(len(cache.ai_response_cache), 1)
+        with patch(
+            "tracker.services.runtime_cache.time.time",
+            return_value=runtime_cache.AI_RESPONSE_CACHE_TTL + 101,
+        ):
+            self.assertEqual(cache.get_ai_response("third"), "three")
+        self.assertNotIn(hashlib.sha256(b"first").hexdigest(), cache.ai_response_cache)
+        metric.assert_any_call("cache.evictions", 2, cache="ai_response")
+
+
+    def test_ai_cache_metadata_is_preserved_without_changing_legacy_text_reads(self):
+        cache = RuntimeCache()
+        metadata = {"generation": {"provider": "gemini", "selectedModel": "gemini-test"}}
+        cache.set_ai_response("metadata prompt", "analysis text", metadata=metadata)
+
+        self.assertEqual(cache.get_ai_response("metadata prompt"), "analysis text")
+        self.assertEqual(cache.get_ai_response_metadata("metadata prompt"), metadata)
 
 class AIResponseCacheTests(unittest.TestCase):
     def setUp(self):
@@ -46,12 +112,17 @@ class AIResponseCacheTests(unittest.TestCase):
             self.assertEqual(self.state.ai_response_cache, {})
 
     def test_growth_report_reuses_successful_model_response(self):
-        generated_text = (
+        generated_text = ProviderText(
             "[성장 패턴] 기록된 성장 흐름입니다.\n"
             "[성장 변화] 최근 기록에서 변화가 보입니다.\n"
             "[레벨업 분석] 확인된 레벨업은 없습니다.\n"
             "[성장 전망] 전망 자료를 참고하세요.\n"
-            "[AI 코멘트] 기록을 이어가세요."
+            "[AI 코멘트] 기록을 이어가세요.",
+            {
+                "provider": "gemini",
+                "model_alias": "gemini-test-flash",
+                "selected_model": "gemini-test-flash",
+            },
         )
         character = {
             "characterName": "테스트캐릭터", "worldName": "크로아",
@@ -80,6 +151,11 @@ class AIResponseCacheTests(unittest.TestCase):
         self.assertEqual(first["analysis"], second["analysis"])
         self.assertFalse(first["cacheHit"])
         self.assertTrue(second["cacheHit"])
+        self.assertEqual(first["generation"]["provider"], "gemini")
+        self.assertEqual(first["generation"]["selectedModel"], "gemini-test-flash")
+        self.assertEqual(second["generation"], first["generation"])
+        self.assertEqual(first["delivery"]["source"], "generated")
+        self.assertEqual(second["delivery"]["source"], "server_cache")
         generate.assert_called_once()
 
     def test_comparison_reuses_successful_model_response(self):
@@ -188,6 +264,77 @@ class AIResponseCacheTests(unittest.TestCase):
         self.assertEqual(result["primaryErrorType"], "provider_quota")
         self.assertEqual(result["fallbackErrorType"], "provider_timeout")
         self.assertNotIn("retryAfterSeconds", result)
+
+
+    def test_concurrent_identical_reports_share_one_provider_request(self):
+        generated_text = (
+            "[성장 패턴] 동일한 기록을 분석했습니다.\\n"
+            "[성장 변화] 확인된 변화입니다.\\n"
+            "[레벨업 분석] 확인된 레벨업은 없습니다.\\n"
+            "[성장 전망] 기록을 이어가세요.\\n"
+            "[AI 코멘트] 꾸준히 기록하세요."
+        )
+        character = {
+            "characterName": "동시요청캐릭터", "worldName": "크로아",
+            "job": "히어로", "level": 280, "experienceRate": 42.5,
+        }
+        history = [{
+            "date": "2026-10-26", "level": 280, "experienceChange": 12345,
+            "ranking": 500, "rankingChange": 4, "levelUp": False,
+        }]
+        metrics = {
+            "latestDailyGrowth": 12345, "averageDailyGrowth": 12345,
+            "prediction": {"estimatedDate": "2026-11-01"},
+        }
+        started = Event()
+        release = Event()
+        calls_lock = Lock()
+        provider_calls = 0
+
+        def provider(*_args, **_kwargs):
+            nonlocal provider_calls
+            with calls_lock:
+                provider_calls += 1
+            started.set()
+            release.wait(timeout=3)
+            return generated_text
+
+        with self.app.app_context():
+            self.state.gemini_api_key = "test-key"
+            self.state.openrouter_api_key = ""
+            self.state.ai_response_cache.clear()
+
+        def generate():
+            with self.app.app_context():
+                return tracker.generate_ai_analysis(character, history, metrics)
+
+        with (
+            patch(
+                "tracker.services.ai_analysis_service.request_gemini",
+                side_effect=provider,
+            ),
+            patch(
+                "tracker.services.ai_analysis_service._gemini_cooldown_remaining",
+                return_value=0,
+            ),
+        ):
+            with ThreadPoolExecutor(max_workers=2) as executor:
+                first = executor.submit(generate)
+                self.assertTrue(started.wait(timeout=1))
+                second = executor.submit(generate)
+                time.sleep(0.1)
+                calls_before_release = provider_calls
+                release.set()
+                first_result = first.result(timeout=3)
+                second_result = second.result(timeout=3)
+
+        self.assertEqual(
+            calls_before_release,
+            1,
+            "동일한 AI 성장 리포트가 동시에 요청되면 공급자 호출을 공유해야 합니다.",
+        )
+        self.assertEqual(provider_calls, 1)
+        self.assertEqual(first_result["analysis"], second_result["analysis"])
 
 
 if __name__ == "__main__":

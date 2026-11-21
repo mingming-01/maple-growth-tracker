@@ -5,7 +5,7 @@ from unittest.mock import Mock, patch
 
 from tracker import create_app
 from tracker.controller import ai_controller
-from tracker.runtime import KOREA_TIMEZONE
+from tracker.runtime import KOREA_TIMEZONE, get_runtime_state
 
 
 class FakeGrowthStorage:
@@ -32,6 +32,31 @@ class AIServerInputTests(unittest.TestCase):
         })
         self.client = self.app.test_client()
         self.today = datetime.now(KOREA_TIMEZONE).date()
+
+    def test_public_ai_error_response_hides_provider_diagnostics(self):
+        with self.app.app_context():
+            response = ai_controller._service_error_response({
+                "error": "기본 AI와 대체 AI 분석 요청이 모두 실패했습니다. 잠시 후 다시 시도해주세요.",
+                "statusCode": 503,
+                "retryAfterSeconds": 60,
+                "errorType": "provider_fallback_failed",
+                "primaryErrorType": "provider_timeout",
+                "fallbackErrorType": "provider_invalid_output",
+                "primaryException": "TimeoutError",
+                "fallbackException": "ProviderError",
+                "primaryProviderMetadata": {"selected_model": "internal/model-a"},
+                "fallbackProviderMetadata": {"selected_model": "internal/model-b"},
+            })
+
+        self.assertEqual(response.status_code, 503)
+        self.assertEqual(
+            response.get_json(),
+            {
+                "error": "기본 AI와 대체 AI 분석 요청이 모두 실패했습니다. 잠시 후 다시 시도해주세요.",
+                "retryAfterSeconds": 60,
+            },
+        )
+        self.assertEqual(response.headers.get("Retry-After"), "60")
 
     def make_records(self, base_experience):
         return [
@@ -67,7 +92,7 @@ class AIServerInputTests(unittest.TestCase):
         storage = FakeGrowthStorage({"ocid-one": self.make_records(1000)})
 
         def generate(character, history, metrics, insights, context, force_refresh):
-            captured.update(history=history, metrics=metrics, context=context)
+            captured.update(history=history, metrics=metrics, insights=insights, context=context)
             return {"analysis": "테스트 분석"}
 
         with (
@@ -93,10 +118,197 @@ class AIServerInputTests(unittest.TestCase):
         self.assertEqual(len(captured["history"]), 2)
         self.assertNotEqual(captured["history"][0]["date"], "2099-01-01")
         self.assertEqual(captured["context"]["periodSummary"]["averageDailyExperience"], 150)
+        self.assertEqual(
+            captured["insights"]["recentPeriod"]["observedExperienceSum"],
+            captured["context"]["periodSummary"]["observedExperienceSum"],
+        )
         resolve.assert_called_once_with(
             "테스트캐릭터",
             timeout_override=(1.5, 2.5),
             max_attempts_override=1,
+        )
+
+    def test_api_ai_route_keeps_level_up_boundary_unknown_but_calculates_delayed_catch_up(self):
+        captured = {}
+        records = [
+            {
+                "date": (self.today - timedelta(days=2)).isoformat(),
+                "level": 298, "experience": 1129263590513928,
+                "experienceRate": 99.226, "recordStatus": "available",
+            },
+            {
+                "date": (self.today - timedelta(days=1)).isoformat(),
+                "level": 298, "experience": 6175579914147,
+                "experienceRate": 0.355, "recordStatus": "available",
+            },
+            {
+                "date": self.today.isoformat(),
+                "level": 299, "experience": 34219899249572,
+                "experienceRate": 1.969, "recordStatus": "available",
+            },
+        ]
+        storage = FakeGrowthStorage({"ocid-one": records})
+
+        def generate(character, history, metrics, insights, context, force_refresh):
+            captured.update(
+                history=history, metrics=metrics, insights=insights, context=context
+            )
+            return {"analysis": "실제 AI 출력 대체 검증"}
+
+        with (
+            patch.object(
+                ai_controller,
+                "resolve_character",
+                return_value=("ocid-one", self.make_basic("테스트캐릭터"), Mock(status_code=200)),
+            ),
+            patch.object(ai_controller, "get_growth_history_service", return_value=storage),
+            patch.object(ai_controller, "generate_ai_analysis", side_effect=generate),
+        ):
+            response = self.client.post(
+                "/api/ai-analysis?name=테스트캐릭터",
+                json={"analysisContext": {"periodDays": 7}},
+            )
+
+        self.assertEqual(response.status_code, 200)
+        reset_day = captured["history"][-2]
+        catch_up_day = captured["history"][-1]
+        self.assertTrue(reset_day["levelUp"])
+        self.assertEqual(reset_day["experienceChange"], 14984259283040)
+        self.assertEqual(reset_day["experienceChangeKind"], "level_up_reconstructed")
+        self.assertTrue(catch_up_day["levelUpCatchUp"])
+        self.assertFalse(catch_up_day["levelUp"])
+        self.assertEqual(catch_up_day["experienceChange"], 28044319335425)
+        self.assertEqual(captured["metrics"]["observedChangeDays"], 1)
+        self.assertEqual(captured["metrics"]["calculatedChangeDays"], 2)
+        self.assertEqual(
+            captured["metrics"]["averageDailyGrowth"],
+            (14984259283040 + 28044319335425) / 2,
+        )
+        self.assertEqual(
+            captured["metrics"]["levelUps"],
+            [{
+                "date": (self.today - timedelta(days=1)).isoformat(),
+                "previousLevel": 298,
+                "currentLevel": 299,
+            }],
+        )
+        self.assertEqual(captured["insights"]["recentPeriod"]["validGrowthIntervals"], 2)
+        self.assertEqual(
+            captured["insights"]["recentPeriod"]["observedExperienceSum"],
+            28044319335425,
+        )
+        self.assertEqual(
+            captured["insights"]["recentPeriod"]["experienceGainSum"],
+            43028578618465,
+        )
+        self.assertEqual(captured["insights"]["recentPeriod"]["reconstructedLevelUpIntervals"], 1)
+        self.assertEqual(captured["insights"]["recentPeriod"]["levelUpIntervals"], 1)
+        self.assertEqual(captured["context"]["periodSummary"]["validGrowthIntervals"], 2)
+        self.assertEqual(captured["context"]["periodSummary"]["experienceGainSum"], 43028578618465)
+
+    def test_api_route_runs_real_ai_report_pipeline_with_saved_level_up_growth(self):
+        event_date = self.today - timedelta(days=1)
+        previous_date = self.today - timedelta(days=2)
+        previous_experience = 1129263590513928
+        reset_experience = 6175579914147
+        storage = FakeGrowthStorage({"ocid-one": [
+            {
+                "date": previous_date.isoformat(),
+                "level": 298,
+                "experience": previous_experience,
+                "experienceRate": 99.226,
+                "recordStatus": "available",
+            },
+            {
+                "date": event_date.isoformat(),
+                "level": 298,
+                "experience": reset_experience,
+                "experienceRate": 0.355,
+                "recordStatus": "available",
+            },
+            {
+                "date": self.today.isoformat(),
+                "level": 299,
+                "experience": 34219899249572,
+                "experienceRate": 1.969,
+                "recordStatus": "available",
+            },
+        ]})
+        report = (
+            "[성장 패턴] 확인된 성장 기록을 바탕으로 최근 변화를 살펴봤어요.\n"
+            "[성장 변화] 레벨업 다음 날 새 레벨 구간에서 확인된 경험치 증가량을 반영했어요.\n"
+            f"[레벨업 분석] {event_date.month}월 {event_date.day}일에 298레벨에서 299레벨로 올라갔어요.\n"
+            "[성장 전망] 현재 기록만으로는 다음 레벨업 날짜를 확정하기 어려워요.\n"
+            "[AI 코멘트] 레벨업 뒤에는 새 레벨의 경험치 진행률을 기준으로 살펴보세요."
+        )
+
+        with self.app.app_context():
+            state = get_runtime_state()
+            state.gemini_api_key = "test-gemini-key"
+            state.openrouter_api_key = "test-openrouter-key"
+            state.ai_response_cache.clear()
+
+        with (
+            patch.object(
+                ai_controller,
+                "resolve_character",
+                return_value=("ocid-one", {
+                    **self.make_basic("테스트캐릭터"),
+                    "character_level": 299,
+                    "character_exp": 34219899249572,
+                    "character_exp_rate": 1.969,
+                }, Mock(status_code=200)),
+            ),
+            patch.object(ai_controller, "get_growth_history_service", return_value=storage),
+            patch(
+                "tracker.services.ai_analysis_service._gemini_cooldown_remaining",
+                return_value=0,
+            ),
+            patch(
+                "tracker.services.ai_analysis_service.request_gemini",
+                side_effect=__import__("tracker.integrations.ai_provider", fromlist=["ProviderError"]).ProviderError(
+                    "Gemini unavailable", "provider_unavailable"
+                ),
+            ) as gemini_request,
+            patch(
+                "tracker.services.ai_analysis_service.request_openrouter",
+                return_value=report,
+            ) as openrouter_request,
+        ):
+            response = self.client.post(
+                "/api/ai-analysis?name=테스트캐릭터",
+                json={
+                    "forceRefresh": True,
+                    "analysisContext": {"periodDays": 7},
+                },
+            )
+
+        self.assertEqual(response.status_code, 200, response.get_json())
+        payload = response.get_json()
+        self.assertFalse(payload["cacheHit"])
+        self.assertIn("[성장 패턴]", payload["analysis"])
+        self.assertIn("43.0조", payload["analysis"])
+        self.assertIn("21.5조", payload["analysis"])
+        self.assertIn("[AI 코멘트]", payload["analysis"])
+        self.assertIn(
+            f"{event_date.month}월 {event_date.day}일에 298레벨에서 299레벨로 올라갔어요.",
+            payload["analysis"],
+        )
+        self.assertIn("최근처럼 경험치를 얻는다면", payload["analysis"])
+        self.assertTrue(payload["aiFallbackUsed"])
+        for internal_field in ("generation", "providerMetadata", "delivery", "aiFallbackReason", "aiStatus"):
+            self.assertNotIn(internal_field, payload)
+
+        gemini_request.assert_called_once()
+        openrouter_request.assert_called_once()
+        prompt = openrouter_request.call_args.args[0]
+        self.assertIn("레벨업 전환이 확인됨", prompt)
+        self.assertNotIn('"experienceChange"', prompt)
+        self.assertNotIn('"date":', prompt)
+        self.assertNotIn(str(reset_experience), prompt)
+        self.assertNotIn(
+            str(34219899249572 - reset_experience),
+            prompt,
         )
 
     def test_analysis_excludes_unverified_legacy_ranks_before_ai_generation(self):
@@ -175,9 +387,74 @@ class AIServerInputTests(unittest.TestCase):
                     (self.today - timedelta(days=period_days - 1)).isoformat(),
                 )
                 self.assertEqual(summary["endDate"], self.today.isoformat())
-                # DB 조회는 선택 기간 첫날의 레벨업 전환을 비교할 직전 스냅샷도 포함한다.
-                self.assertEqual(storage.calls[0][1], self.today - timedelta(days=period_days))
+                # 장기 분석은 직전 동일 기간의 첫날 변화량을 계산할 경계 스냅샷까지 읽는다.
+                self.assertEqual(storage.calls[0][1], self.today - timedelta(days=period_days * 2))
                 self.assertEqual(storage.calls[0][2], self.today)
+                previous = captured["context"]["previousPeriodSummary"]
+                self.assertEqual(
+                    previous["startDate"],
+                    (self.today - timedelta(days=period_days * 2 - 1)).isoformat(),
+                )
+                self.assertEqual(
+                    previous["endDate"],
+                    (self.today - timedelta(days=period_days)).isoformat(),
+                )
+
+    def test_long_ai_report_uses_same_length_previous_period_from_server_records(self):
+        period_days = 30
+        boundary = self.today - timedelta(days=period_days * 2)
+        records = []
+        experience = 100000
+
+        for offset in range(period_days * 2 + 1):
+            record_date = boundary + timedelta(days=offset)
+            if offset:
+                experience += 100 if offset <= period_days else 200
+            records.append({
+                "date": record_date.isoformat(),
+                "level": 280,
+                "experience": experience,
+                "experienceRate": None,
+                "ranking": None,
+                "recordStatus": "available",
+            })
+
+        storage = FakeGrowthStorage({"ocid-one": records})
+        captured = {}
+
+        def generate(character, history, metrics, insights, context, force_refresh):
+            captured.update(
+                history=history, metrics=metrics, insights=insights, context=context
+            )
+            return {"analysis": "테스트 분석"}
+
+        with (
+            patch.object(
+                ai_controller,
+                "resolve_character",
+                return_value=("ocid-one", self.make_basic("테스트캐릭터"), Mock(status_code=200)),
+            ),
+            patch.object(ai_controller, "get_growth_history_service", return_value=storage),
+            patch.object(ai_controller, "generate_ai_analysis", side_effect=generate),
+        ):
+            response = self.client.post(
+                "/api/ai-analysis?name=테스트캐릭터",
+                json={"analysisContext": {"periodDays": period_days}},
+            )
+
+        self.assertEqual(response.status_code, 200, response.get_json())
+        self.assertEqual(storage.calls[0][1], boundary)
+        current = captured["context"]["periodSummary"]
+        previous = captured["context"]["previousPeriodSummary"]
+        self.assertEqual(current["validGrowthIntervals"], 30)
+        self.assertEqual(current["observedExperienceSum"], 6000)
+        self.assertEqual(current["averageDailyExperience"], 200)
+        self.assertEqual(previous["validGrowthIntervals"], 30)
+        self.assertEqual(previous["observedExperienceSum"], 3000)
+        self.assertEqual(previous["averageDailyExperience"], 100)
+        payload = response.get_json()
+        self.assertEqual(payload["periodSummary"]["observedExperienceSum"], 6000)
+        self.assertEqual(payload["previousPeriodSummary"]["observedExperienceSum"], 3000)
 
     def test_analysis_includes_previous_day_to_detect_period_start_level_up(self):
         captured = {}

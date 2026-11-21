@@ -96,13 +96,27 @@ export function readAIEntries() {
   const entries = readJson(globalThis.localStorage, STORAGE_KEYS.ai, []);
   if (!Array.isArray(entries)) return [];
   const now = Date.now();
-  return entries.filter(item =>
+  let migrated = false;
+  const validEntries = entries.filter(item =>
     item &&
     typeof item.signature === "string" &&
     typeof item.analysis === "string" &&
     Number.isFinite(item.savedAt) &&
     now - item.savedAt <= getAiTtl(item.type)
-  ).slice(0, MAX_AI_ENTRIES);
+  );
+  for (const entry of validEntries) {
+    if (Object.prototype.hasOwnProperty.call(entry, "generation")) {
+      const generation = entry.generation;
+      delete entry.generation;
+      entry.fallbackUsed = entry.fallbackUsed === true || generation?.fallbackUsed === true;
+      migrated = true;
+    }
+  }
+  const limitedEntries = validEntries.slice(0, MAX_AI_ENTRIES);
+  if (migrated || limitedEntries.length !== entries.length) {
+    writeJson(globalThis.localStorage, STORAGE_KEYS.ai, limitedEntries);
+  }
+  return limitedEntries;
 }
 
 export function getCachedAI(type, signature) {
@@ -116,11 +130,12 @@ export function getCachedAI(type, signature) {
   writeJson(globalThis.localStorage, STORAGE_KEYS.ai, entries);
   return {
     analysis: entry.analysis,
-    growthInsights: entry.growthInsights || null
+    growthInsights: entry.growthInsights || null,
+    fallbackUsed: entry.fallbackUsed === true
   };
 }
 
-export function saveCachedAI(type, signature, analysis, growthInsights = null) {
+export function saveCachedAI(type, signature, analysis, growthInsights = null, fallbackUsed = false) {
   if (!analysis) return;
   const entries = readAIEntries();
   const key = type + ":" + hashSignature(signature);
@@ -132,6 +147,7 @@ export function saveCachedAI(type, signature, analysis, growthInsights = null) {
     signature,
     analysis,
     growthInsights,
+    fallbackUsed: fallbackUsed === true,
     savedAt: now,
     lastUsedAt: now
   });
