@@ -123,11 +123,11 @@ def _provider_timeouts(provider, deadline=None):
         )
     else:
         read_timeout = min(
-            12.0, max(3.0, float(_setting("AI_OPENROUTER_READ_TIMEOUT", 12.0)))
+            18.0, max(3.0, float(_setting("AI_OPENROUTER_READ_TIMEOUT", 18.0)))
         )
         total_timeout = min(
-            14.0,
-            max(2.0, float(_setting("AI_OPENROUTER_TOTAL_TIMEOUT", 14.0))),
+            20.0,
+            max(2.0, float(_setting("AI_OPENROUTER_TOTAL_TIMEOUT", 20.0))),
         )
     read_timeout = min(read_timeout, max(0.5, total_timeout - connect_timeout))
     if deadline is not None:
@@ -258,7 +258,7 @@ def request_openrouter(prompt, api_key=None, deadline=None):
             "temperature": 0.35,
             "max_tokens": max(
                 128,
-                min(1024, int(_setting("AI_OPENROUTER_MAX_OUTPUT_TOKENS", 1024))),
+                min(4096, int(_setting("AI_OPENROUTER_MAX_OUTPUT_TOKENS", 4096))),
             ),
             "stream": False,
         },
