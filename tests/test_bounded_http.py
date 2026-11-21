@@ -62,7 +62,7 @@ class BoundedJSONHTTPTests(unittest.TestCase):
     @patch("tracker.integrations.bounded_http.time.monotonic", side_effect=[10.0, 10.5, 11.1, 11.1])
     def test_sse_deadline_failure_preserves_partial_stream_diagnostics(self, _clock, post):
         wire = (
-            'data: {"choices":[{"delta":{"content":"partial text","reasoning":"internal trace"},"finish_reason":null}]}\\n\\n'
+            'data: {"choices":[{"delta":{"content":"partial text","reasoning":"internal trace"},"finish_reason":null}]}\n\n'
         ).encode("utf-8")
         response = self.make_response([wire])
         response.headers = {"Content-Type": "text/event-stream"}
