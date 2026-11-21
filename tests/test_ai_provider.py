@@ -80,8 +80,8 @@ class AIProviderAdapterTests(unittest.TestCase):
                          "https://openrouter.ai/api/v1/chat/completions")
         self.assertEqual(post_json.call_args.kwargs["headers"]["Authorization"],
                          "Bearer openrouter-test-key")
-        self.assertEqual(post_json.call_args.kwargs["total_timeout"], 20.0)
-        self.assertEqual(post_json.call_args.kwargs["read_timeout"], 18.0)
+        self.assertEqual(post_json.call_args.kwargs["total_timeout"], 27.0)
+        self.assertEqual(post_json.call_args.kwargs["read_timeout"], 25.0)
         self.assertEqual(post_json.call_args.kwargs["json_body"]["stream"], True)
         self.assertEqual(post_json.call_args.kwargs["headers"]["Accept"], "text/event-stream")
         self.assertEqual(post_json.call_args.kwargs["response_format"], "sse")
