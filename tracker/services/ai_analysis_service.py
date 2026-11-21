@@ -716,7 +716,7 @@ def _has_informal_comment_tone(comment):
     """끝맺음에서 명확한 반말 표현이 발견되는지 보수적으로 확인한다."""
     sentences = re.split(r"(?<=[.!?])\s+|\n+", str(comment or ""))
     for sentence in sentences:
-        ending = sentence.strip().rstrip("\"'”’)]}")
+ending = sentence.strip().rstrip("\"'”’)]}.!?…")
         if not ending:
             continue
         if _INFORMAL_COMMENT_ENDING.search(ending):
