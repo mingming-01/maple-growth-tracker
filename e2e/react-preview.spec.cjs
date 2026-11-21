@@ -489,7 +489,7 @@ test("AI report loads the server cache on entry and regenerates only on explicit
     await route.fulfill({
       status: 200, contentType: "application/json",
       body: JSON.stringify({
-        analysis: "[성장 패턴] 기간 분석 테스트 결과입니다.\n[성장 변화] 선택 기간 기록을 확인했습니다.\\n[레벨업 분석] 확인할 기록이 부족합니다.\\n[성장 전망] 자료가 부족합니다.\\n[AI 코멘트] 테스트 리포트입니다.",
+        analysis: "[성장 패턴] 기간 분석 테스트 결과입니다.\n[성장 변화] 선택 기간 기록을 확인했습니다.\n[레벨업 분석] 확인할 기록이 부족합니다.\n[성장 전망] 자료가 부족합니다.\n[AI 코멘트] 테스트 리포트입니다.",
         cacheHit: false,
         aiGenerated: true,
         growthInsights: {},
