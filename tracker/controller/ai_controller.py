@@ -43,6 +43,20 @@ def _service_error_response(result):
     return response
 
 
+def _public_ai_analysis_payload(result):
+    """일반 사용자 응답에는 분석 결과와 간단한 폴백 여부만 전달한다."""
+    payload = dict(result)
+    generation = payload.pop("generation", None)
+    payload.pop("providerMetadata", None)
+    payload.pop("delivery", None)
+    payload.pop("aiFallbackReason", None)
+    payload.pop("aiStatus", None)
+    payload["aiFallbackUsed"] = (
+        isinstance(generation, dict) and generation.get("fallbackUsed") is True
+    )
+    return payload
+
+
 def _resolve_character_for_ai(character_name):
     """AI 엔드포인트의 Nexon 조회는 짧은 1회 요청으로 제한한다."""
     timeout = (
@@ -248,7 +262,7 @@ def ai_analysis():
             timings,
             total_ms,
         )
-        return jsonify(result)
+        return jsonify(_public_ai_analysis_payload(result))
     except Exception:
         current_app.logger.exception(
             "AI 리포트 요청 예외: stage=%s timings=%s elapsed_ms=%s",
