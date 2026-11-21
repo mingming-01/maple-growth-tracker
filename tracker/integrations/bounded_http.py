@@ -7,6 +7,7 @@ import requests
 
 DEFAULT_MAX_RESPONSE_BYTES = 96 * 1024
 DEFAULT_MAX_SSE_RESPONSE_BYTES = 2 * 1024 * 1024
+STREAM_READ_CHUNK_SIZE = 4096
 
 
 class InvalidProviderResponse(requests.RequestException):
@@ -91,10 +92,13 @@ def _consume_sse_frame(frame, aggregate):
             content = delta.get("content")
             if isinstance(content, str):
                 aggregate["content"].append(content)
+                aggregate["content_bytes"] += len(content.encode("utf-8"))
             elif isinstance(content, list):
                 for part in content:
                     if isinstance(part, dict) and isinstance(part.get("text"), str):
-                        aggregate["content"].append(part["text"])
+                        text_part = part["text"]
+                        aggregate["content"].append(text_part)
+                        aggregate["content_bytes"] += len(text_part.encode("utf-8"))
             reasoning = delta.get("reasoning") or delta.get("reasoning_content")
             if isinstance(reasoning, str):
                 aggregate["reasoning_bytes"] += len(reasoning.encode("utf-8"))
@@ -104,6 +108,12 @@ def _consume_sse_frame(frame, aggregate):
             aggregate["native_finish_reason"] = choice.get("native_finish_reason")
     return False
 
+
+
+def _deadline_timeout(message):
+    error = requests.Timeout(message)
+    error.provider_metadata = {"timeout_cause": "total_deadline"}
+    return error
 
 
 def _set_socket_read_timeout(response, timeout):
@@ -131,9 +141,8 @@ def post_json_with_deadline(
 ):
     """POST JSON with a total deadline, not only Requests' per-read timeout.
 
-    Streaming with one-byte chunks makes the deadline observable even when an
-    upstream keeps a chunked response alive by sending tiny pieces periodically.
-    The socket read timeout bounds the maximum delay before the next deadline check.
+    Read bounded chunks instead of one byte at a time. The socket read timeout
+    bounds blocking reads, while the wall-clock deadline is checked between chunks.
     """
     total_timeout = max(0.5, float(total_timeout))
     connect_timeout = max(0.2, min(float(connect_timeout), total_timeout))
@@ -150,8 +159,8 @@ def post_json_with_deadline(
     sse_buffer = bytearray()
     sse = {
         "event_count": 0, "model": None, "provider": None, "usage": {},
-        "content": [], "reasoning_bytes": 0, "finish_reason": None,
-        "native_finish_reason": None, "done": False,
+        "content": [], "content_bytes": 0, "reasoning_bytes": 0,
+        "finish_reason": None, "native_finish_reason": None, "done": False,
     }
     local_deadline = started_at + total_timeout
     if deadline is not None:
@@ -194,15 +203,17 @@ def post_json_with_deadline(
             "chunked" if "chunked" in str(getattr(response, "headers", {}).get("Transfer-Encoding", "")).lower()
             else None
         )
-        chunks = iter(response.iter_content(chunk_size=1))
+        chunks = iter(response.iter_content(chunk_size=STREAM_READ_CHUNK_SIZE))
         while True:
             remaining = local_deadline - time.monotonic()
             if remaining <= 0:
-                raise requests.Timeout(
+                raise _deadline_timeout(
                     f"AI provider response exceeded {total_timeout:.1f}s deadline"
                 )
             if not _set_socket_read_timeout(response, min(read_timeout, remaining)):
-                raise requests.Timeout("Unable to enforce AI provider response deadline")
+                error = requests.Timeout("Unable to enforce AI provider response deadline")
+                error.provider_metadata = {"timeout_cause": "socket_timeout_enforcement"}
+                raise error
             try:
                 chunk = next(chunks)
             except StopIteration:
@@ -239,7 +250,7 @@ def post_json_with_deadline(
                     break
 
         if time.monotonic() >= local_deadline:
-            raise requests.Timeout(
+            raise _deadline_timeout(
                 f"AI provider response exceeded {total_timeout:.1f}s deadline"
             )
 
@@ -276,6 +287,9 @@ def post_json_with_deadline(
                     "stream_event_count": sse["event_count"],
                     "stream_done": False,
                     "stream_reasoning_bytes": sse["reasoning_bytes"],
+                    "stream_content_bytes": sse["content_bytes"],
+                    "stream_finish_reason": sse["finish_reason"],
+                    "stream_native_finish_reason": sse["native_finish_reason"],
                 }
                 raise error
 
@@ -306,6 +320,9 @@ def post_json_with_deadline(
                     "stream_event_count": sse["event_count"],
                     "stream_done": True,
                     "stream_reasoning_bytes": sse["reasoning_bytes"],
+                    "stream_content_bytes": sse["content_bytes"],
+                    "stream_finish_reason": sse["finish_reason"],
+                    "stream_native_finish_reason": sse["native_finish_reason"],
                 },
             )
 
@@ -344,6 +361,17 @@ def post_json_with_deadline(
             "provider_timeout" if isinstance(error, read_errors) else
             "unknown_response_error"
         )
+        stream_metadata = {}
+        if is_sse_response:
+            stream_metadata = {
+                "response_mode": "sse",
+                "stream_event_count": sse["event_count"],
+                "stream_done": sse["done"],
+                "stream_content_bytes": sse["content_bytes"],
+                "stream_reasoning_bytes": sse["reasoning_bytes"],
+                "stream_finish_reason": sse["finish_reason"],
+                "stream_native_finish_reason": sse["native_finish_reason"],
+            }
         error.provider_metadata = {
             **existing_metadata,
             "http_status": getattr(response, "status_code", None),
@@ -354,6 +382,7 @@ def post_json_with_deadline(
             "body_complete": body_complete,
             "transfer_encoding": transfer_encoding,
             **response_header_metadata,
+            **stream_metadata,
             "cause_class": type(cause).__name__ if cause is not None else None,
             "context_class": type(context).__name__ if context is not None else None,
             "response_classification": existing_metadata.get("response_classification") or default_classification,
