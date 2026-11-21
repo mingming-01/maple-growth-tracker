@@ -82,12 +82,40 @@ class AIProviderAdapterTests(unittest.TestCase):
                          "Bearer openrouter-test-key")
         self.assertEqual(post_json.call_args.kwargs["total_timeout"], 20.0)
         self.assertEqual(post_json.call_args.kwargs["read_timeout"], 18.0)
-        self.assertEqual(post_json.call_args.kwargs["json_body"]["stream"], False)
-        self.assertEqual(post_json.call_args.kwargs["response_format"], "auto")
+        self.assertEqual(post_json.call_args.kwargs["json_body"]["stream"], True)
+        self.assertEqual(post_json.call_args.kwargs["headers"]["Accept"], "text/event-stream")
+        self.assertEqual(post_json.call_args.kwargs["response_format"], "sse")
         # Even when configured above the supported cap, the adapter sends at most 4096 tokens.
         self.assertEqual(post_json.call_args.kwargs["json_body"]["max_tokens"], 4096)
         self.assertNotIn("reasoning", post_json.call_args.kwargs["json_body"])
         self.assertEqual(post_json.call_args.kwargs["json_body"]["model"], "google/gemini-3.6-flash")
+
+    @patch("tracker.integrations.ai_provider.post_json_with_deadline")
+    def test_openrouter_sse_response_preserves_stream_and_reasoning_metadata(self, post_json):
+        post_json.return_value = ProviderHTTPPayload({
+            "model": "vendor/free-model",
+            "provider": "route-provider",
+            "usage": {"prompt_tokens": 12, "completion_tokens": 20, "total_tokens": 32},
+            "choices": [{
+                "message": {"content": "스트리밍 응답", "reasoning_length": 128},
+                "finish_reason": "stop",
+            }],
+        }, status_code=200, elapsed_ms=1200, response_bytes=420, extra_metadata={
+            "response_mode": "sse",
+            "stream_event_count": 4,
+            "stream_done": True,
+            "stream_reasoning_bytes": 128,
+        })
+
+        with self.app.app_context():
+            result = request_openrouter("prompt")
+
+        self.assertEqual(result, "스트리밍 응답")
+        self.assertEqual(result.provider_metadata["response_mode"], "sse")
+        self.assertEqual(result.provider_metadata["stream_event_count"], 4)
+        self.assertTrue(result.provider_metadata["stream_done"])
+        self.assertTrue(result.provider_metadata["reasoning_present"])
+        self.assertEqual(result.provider_metadata["reasoning_length"], 128)
 
     @patch("tracker.integrations.ai_provider.post_json_with_deadline")
     def test_openrouter_adapter_omits_optional_model_specific_reasoning_controls(self, post_json):

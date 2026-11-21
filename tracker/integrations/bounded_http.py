@@ -358,6 +358,8 @@ def post_json_with_deadline(
             "context_class": type(context).__name__ if context is not None else None,
             "response_classification": existing_metadata.get("response_classification") or default_classification,
             "timeout_phase": existing_metadata.get("timeout_phase") or (
+                "connect" if isinstance(error, requests.ConnectTimeout) else
+                "response_headers" if response is None and isinstance(error, requests.ReadTimeout) else
                 "response_body_read" if response is not None and isinstance(error, read_errors) else
                 "connect_or_headers" if isinstance(error, read_errors) else None
             ),

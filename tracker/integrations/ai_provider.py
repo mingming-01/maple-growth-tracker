@@ -237,7 +237,7 @@ def _log_openrouter_empty_response(**details):
 
 
 def request_openrouter(prompt, api_key=None, deadline=None):
-    """OpenRouter 자유 라우터의 일반 JSON 응답을 짧은 예산으로 한 번 요청한다."""
+    """OpenRouter에 제한된 SSE 요청을 보내고 완료된 텍스트만 반환한다."""
     key = api_key or _setting("OPENROUTER_API_KEY", "")
     if not key:
         return None
@@ -251,6 +251,7 @@ def request_openrouter(prompt, api_key=None, deadline=None):
         headers={
             "Authorization": f"Bearer {key}",
             "Content-Type": "application/json",
+            "Accept": "text/event-stream",
         },
         json_body={
             "model": model_alias,
@@ -260,13 +261,13 @@ def request_openrouter(prompt, api_key=None, deadline=None):
                 128,
                 min(4096, int(_setting("AI_OPENROUTER_MAX_OUTPUT_TOKENS", 4096))),
             ),
-            "stream": False,
+            "stream": True,
         },
         connect_timeout=connect_timeout,
         read_timeout=read_timeout,
         total_timeout=total_timeout,
         deadline=deadline,
-        response_format="auto",
+        response_format="sse",
     )
     metadata = _http_metadata(payload, "openrouter", model_alias)
     metadata.update({
@@ -293,6 +294,7 @@ def request_openrouter(prompt, api_key=None, deadline=None):
     content = _extract_text_parts(raw_content) if isinstance(raw_content, list) else raw_content
     finish_reason = choice.get("finish_reason") or choice.get("native_finish_reason")
     reasoning = message.get("reasoning") or message.get("reasoning_content")
+    stream_reasoning_bytes = metadata.get("stream_reasoning_bytes")
     metadata.update({
         "has_choices": True,
         "choice_count": len(choices),
@@ -302,8 +304,12 @@ def request_openrouter(prompt, api_key=None, deadline=None):
         "content_type": type(raw_content).__name__,
         "finish_reason": finish_reason,
         "native_finish_reason": choice.get("native_finish_reason"),
-        "reasoning_present": bool(reasoning),
-        "reasoning_length": len(reasoning) if isinstance(reasoning, str) else None,
+        "reasoning_present": bool(reasoning) or bool(stream_reasoning_bytes),
+        "reasoning_length": (
+            len(reasoning) if isinstance(reasoning, str)
+            else stream_reasoning_bytes if isinstance(stream_reasoning_bytes, int)
+            else None
+        ),
     })
     if finish_reason == "length":
         metadata["response_classification"] = "truncated_output"

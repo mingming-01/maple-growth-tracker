@@ -66,7 +66,8 @@ _PROVIDER_LOG_FIELDS = (
     "expected_response_bytes", "body_complete", "transfer_encoding",
     "response_content_type", "response_content_encoding", "response_server",
     "response_request_id", "cause_class", "context_class",
-    "stream_event_count", "stream_done", "stream_reasoning_bytes",
+    "stream_event_count", "stream_done", "stream_reasoning_bytes", "response_mode",
+    "retry_count",
 )
 _SAFE_USAGE_FIELDS = (
     "prompt_tokens", "completion_tokens", "total_tokens", "reasoning_tokens",
@@ -315,6 +316,70 @@ def _require_provider_text(value, provider):
         raise ProviderError(f"{provider} 응답에 분석 텍스트가 없습니다.", "provider_empty_response")
     text = value.strip()
     return ProviderText(text, getattr(value, "provider_metadata", {})) if isinstance(value, ProviderText) else text
+
+
+_OPENROUTER_MAX_ATTEMPTS = 2
+_OPENROUTER_RETRY_BACKOFF_SECONDS = 0.25
+_OPENROUTER_RETRY_MIN_REMAINING_SECONDS = 5.0
+
+
+def _is_retryable_openrouter_error(error):
+    """전송 중단·일시적 제공자 장애만 재시도 대상으로 분류한다."""
+    metadata = getattr(error, "provider_metadata", None) or getattr(error, "http_metadata", None) or {}
+    classification = metadata.get("response_classification") if isinstance(metadata, dict) else None
+    if classification in {"response_body_incomplete", "stream_incomplete"}:
+        return True
+    return provider_error_type(error) in {"provider_timeout", "provider_unavailable"}
+
+
+def _request_openrouter_with_retry(prompt, *, api_key, deadline, operation):
+    """OpenRouter 전송 장애에 한해 전체 deadline 안에서 최대 한 번 재시도한다."""
+    for attempt in range(1, _OPENROUTER_MAX_ATTEMPTS + 1):
+        attempt_started_at = time.monotonic()
+        try:
+            value = request_openrouter(prompt, api_key=api_key, deadline=deadline)
+            response_text = _require_provider_text(value, "OpenRouter")
+            metadata = dict(getattr(response_text, "provider_metadata", {}) or {})
+            metadata.update({"attempt": attempt, "retry_count": attempt - 1})
+            return ProviderText(str(response_text), metadata)
+        except Exception as error:
+            metadata = dict(
+                getattr(error, "provider_metadata", None)
+                or getattr(error, "http_metadata", None)
+                or {}
+            )
+            metadata.update({"attempt": attempt, "retry_count": attempt - 1})
+            try:
+                error.provider_metadata = metadata
+                error.attempt = attempt
+                error._ai_failure_logged = True
+            except Exception:
+                pass
+            _log_provider_failure(
+                operation, error, attempt_started_at, deadline, attempt=attempt
+            )
+
+            remaining = float(deadline) - time.monotonic() if deadline is not None else float("inf")
+            can_retry = (
+                attempt < _OPENROUTER_MAX_ATTEMPTS
+                and _is_retryable_openrouter_error(error)
+                and remaining >= (
+                    _OPENROUTER_RETRY_MIN_REMAINING_SECONDS
+                    + _OPENROUTER_RETRY_BACKOFF_SECONDS
+                )
+            )
+            if not can_retry:
+                raise
+
+            logger = current_app.logger if has_app_context() else logging.getLogger(__name__)
+            logger.info(
+                "OpenRouter 일시적 전송 오류로 재시도합니다: attempt=%s, remaining_seconds=%.1f",
+                attempt,
+                remaining,
+            )
+            time.sleep(_OPENROUTER_RETRY_BACKOFF_SECONDS)
+
+    raise RuntimeError("OpenRouter retry loop exited unexpectedly")
 
 
 
@@ -1234,16 +1299,13 @@ def _generate_ai_analysis_impl(character, history, computed_metrics=None, growth
     if openrouter_api_key:
         openrouter_started_at = time.monotonic()
         try:
-            response_text = _require_provider_text(
-                request_openrouter(
-                    prompt,
-                    api_key=openrouter_api_key,
-                    deadline=deadline,
-                ),
-                "OpenRouter",
+            response_text = _request_openrouter_with_retry(
+                prompt,
+                api_key=openrouter_api_key,
+                deadline=deadline,
+                operation="openrouter",
             )
             provider_metadata = dict(getattr(response_text, "provider_metadata", {}) or {})
-            provider_metadata["attempt"] = 1
             print("OpenRouter로 성장 리포트를 처리했습니다.")
             if computed_metrics is not None:
                 analysis = _compose_growth_report_from_ai(
@@ -1294,7 +1356,11 @@ def _generate_ai_analysis_impl(character, history, computed_metrics=None, growth
                 "delivery": {"source": "generated"},
             }
         except Exception as error:
-            _log_provider_failure("openrouter", error, openrouter_started_at, deadline)
+            if not getattr(error, "_ai_failure_logged", False):
+                _log_provider_failure(
+                    "openrouter", error, openrouter_started_at, deadline,
+                    attempt=getattr(error, "attempt", 1),
+                )
             if computed_metrics is not None:
                 return _server_fallback_growth_report(
                     character,
@@ -1398,16 +1464,22 @@ def _generate_ai_comparison_impl(primary, comparison):
     if openrouter_api_key:
         openrouter_started_at = time.monotonic()
         try:
-            response_text = _require_provider_text(
-                request_openrouter(prompt, api_key=openrouter_api_key, deadline=deadline),
-                "OpenRouter",
+            response_text = _request_openrouter_with_retry(
+                prompt,
+                api_key=openrouter_api_key,
+                deadline=deadline,
+                operation="openrouter_comparison",
             )
             print("OpenRouter로 성장 비교 분석을 처리했습니다.")
             analysis = sanitize_ai_text(response_text)
             _store_cached_ai_response(prompt, analysis)
             return {"analysis": analysis, "cacheHit": False}
         except Exception as error:
-            _log_provider_failure("openrouter_comparison", error, openrouter_started_at, deadline)
+            if not getattr(error, "_ai_failure_logged", False):
+                _log_provider_failure(
+                    "openrouter_comparison", error, openrouter_started_at, deadline,
+                    attempt=getattr(error, "attempt", 1),
+                )
             return _fallback_failure_result(gemini_error, error)
 
     if gemini_error:

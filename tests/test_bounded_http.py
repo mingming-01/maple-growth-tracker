@@ -57,6 +57,18 @@ class BoundedJSONHTTPTests(unittest.TestCase):
         self.assertEqual(caught.exception.provider_metadata["response_classification"], "response_body_incomplete")
         self.assertFalse(caught.exception.provider_metadata["body_complete"])
 
+    @patch("tracker.integrations.bounded_http.requests.post", side_effect=requests.ReadTimeout("header wait timed out"))
+    @patch("tracker.integrations.bounded_http.time.monotonic", return_value=10.0)
+    def test_read_timeout_before_response_is_classified_as_response_headers(self, _clock, _post):
+        with self.assertRaises(requests.ReadTimeout) as caught:
+            post_json_with_deadline(
+                "https://provider.invalid", headers={}, json_body={"prompt": "x"}
+            )
+
+        self.assertEqual(caught.exception.provider_metadata["timeout_phase"], "response_headers")
+        self.assertEqual(caught.exception.provider_metadata["http_status"], None)
+        self.assertEqual(caught.exception.provider_metadata["response_bytes"], 0)
+
     @patch("tracker.integrations.bounded_http.requests.post")
     @patch("tracker.integrations.bounded_http.time.monotonic", side_effect=[10.0, 10.1, 10.2, 10.3])
     def test_rejects_an_oversized_provider_response(self, _clock, post):
