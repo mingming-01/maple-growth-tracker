@@ -55,8 +55,27 @@ class BoundedJSONHTTPTests(unittest.TestCase):
         response.close.assert_called_once()
         self.assertEqual(caught.exception.provider_metadata["http_status"], 200)
         self.assertEqual(caught.exception.provider_metadata["response_classification"], "response_body_incomplete")
-        self.assertEqual(caught.exception.provider_metadata["timeout_cause"], "total_deadline")
+        self.assertEqual(caught.exception.provider_metadata["timeout_cause"], "provider_attempt_deadline")
         self.assertFalse(caught.exception.provider_metadata["body_complete"])
+
+    @patch("tracker.integrations.bounded_http.requests.post")
+    @patch("tracker.integrations.bounded_http.time.monotonic", side_effect=[10.0, 10.5, 10.9, 11.0])
+    def test_overall_request_deadline_is_classified_separately(self, _clock, post):
+        response = self.make_response([b"{"])
+        response.headers = {"Content-Length": "10"}
+        post.return_value = response
+
+        with self.assertRaises(requests.Timeout) as caught:
+            post_json_with_deadline(
+                "https://provider.invalid",
+                headers={},
+                json_body={"prompt": "x"},
+                total_timeout=5.0,
+                deadline=10.8,
+            )
+
+        self.assertEqual(caught.exception.provider_metadata["timeout_cause"], "request_deadline")
+        response.close.assert_called_once()
 
     @patch("tracker.integrations.bounded_http.requests.post")
     @patch("tracker.integrations.bounded_http.time.monotonic", side_effect=[10.0, 10.5, 11.1, 11.1])
@@ -83,6 +102,8 @@ class BoundedJSONHTTPTests(unittest.TestCase):
         self.assertFalse(metadata["stream_done"])
         self.assertEqual(metadata["stream_content_bytes"], len("partial text"))
         self.assertEqual(metadata["stream_reasoning_bytes"], len("internal trace"))
+        self.assertEqual(metadata["stream_first_content_ms"], 1100.0)
+        self.assertEqual(metadata["stream_first_reasoning_ms"], 1100.0)
         self.assertIsNone(metadata["stream_finish_reason"])
         response.close.assert_called_once()
 
@@ -186,6 +207,8 @@ class BoundedJSONHTTPTests(unittest.TestCase):
         self.assertEqual(result["usage"]["total_tokens"], 20)
         self.assertTrue(result.provider_metadata["stream_done"])
         self.assertEqual(result.provider_metadata["stream_event_count"], 4)
+        self.assertEqual(result.provider_metadata["stream_first_content_ms"], 0.0)
+        self.assertEqual(result.provider_metadata["stream_first_reasoning_ms"], None)
         self.assertEqual(result.provider_metadata["response_content_type"], "text/event-stream")
         self.assertEqual(result.provider_metadata["response_request_id"], "req-test-123")
         response.close.assert_called_once()
