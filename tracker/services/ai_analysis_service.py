@@ -442,7 +442,90 @@ def _build_ai_commentary_context(source_data):
 
     period_days = selected_period.get("periodDays", 7)
     if period_days in (30, 90):
-        growth_comparison = "선택한 장기 구간의 전체 성장 기록을 중심으로 해석"
+        current_summary = selected_period.get("periodSummary") or {}
+        previous_summary = selected_period.get("previousPeriodSummary") or {}
+        current_count = current_summary.get("validGrowthIntervals")
+        previous_count = previous_summary.get("validGrowthIntervals")
+        current_total = current_summary.get(
+            "experienceGainSum", current_summary.get("observedExperienceSum")
+        )
+        previous_total = previous_summary.get(
+            "experienceGainSum", previous_summary.get("observedExperienceSum")
+        )
+        minimum_intervals = max(4, (period_days * 2 + 4) // 5)
+        enough_period_comparison = (
+            isinstance(current_count, int) and not isinstance(current_count, bool)
+            and isinstance(previous_count, int) and not isinstance(previous_count, bool)
+            and current_count >= minimum_intervals
+            and previous_count >= minimum_intervals
+            and current_total is not None
+            and previous_total is not None
+        )
+        if enough_period_comparison:
+            try:
+                current_total = Decimal(str(current_total))
+                previous_total = Decimal(str(previous_total))
+                if not current_total.is_finite() or not previous_total.is_finite():
+                    raise InvalidOperation
+            except (InvalidOperation, TypeError, ValueError):
+                enough_period_comparison = False
+
+        if enough_period_comparison and previous_total > 0:
+            change_percent = (
+                (current_total * previous_count - previous_total * current_count)
+                * Decimal("100")
+                / (previous_total * current_count)
+            )
+            magnitude = abs(change_percent)
+            if change_percent > Decimal("0.5"):
+                growth_comparison = (
+                    "이전 동일 기간보다 하루 평균 경험치 증가량이 뚜렷하게 높아짐"
+                    if magnitude >= Decimal("20")
+                    else "이전 동일 기간보다 하루 평균 경험치 증가량이 완만하게 높아짐"
+                    if magnitude >= Decimal("5")
+                    else "이전 동일 기간보다 하루 평균 경험치 증가량이 소폭 높아짐"
+                )
+            elif change_percent < Decimal("-0.5"):
+                growth_comparison = (
+                    "이전 동일 기간보다 하루 평균 경험치 증가량이 뚜렷하게 낮아짐"
+                    if magnitude >= Decimal("20")
+                    else "이전 동일 기간보다 하루 평균 경험치 증가량이 완만하게 낮아짐"
+                    if magnitude >= Decimal("5")
+                    else "이전 동일 기간보다 하루 평균 경험치 증가량이 소폭 낮아짐"
+                )
+            else:
+                growth_comparison = "이전 동일 기간과 하루 평균 경험치 증가량이 대체로 비슷함"
+        elif enough_period_comparison and current_total > 0:
+            growth_comparison = (
+                "이전 동일 기간에는 확인된 경험치 증가가 없었지만 "
+                "선택한 기간에는 경험치 증가가 확인됨"
+            )
+        elif enough_period_comparison:
+            growth_comparison = "두 기간 모두 확인된 경험치 증가가 거의 없음"
+        else:
+            period_trend = metrics.get("periodTrend") or {}
+            trend_status = period_trend.get("status")
+            trend_direction = period_trend.get("direction")
+            if trend_status == "available" and trend_direction == "increase":
+                growth_comparison = (
+                    "직전 동일 기간과 비교할 기록은 충분하지 않지만 "
+                    "선택한 기간 안에서는 후반부의 하루 평균 경험치 증가량이 초반부보다 높아짐"
+                )
+            elif trend_status == "available" and trend_direction == "decrease":
+                growth_comparison = (
+                    "직전 동일 기간과 비교할 기록은 충분하지 않지만 "
+                    "선택한 기간 안에서는 후반부의 하루 평균 경험치 증가량이 초반부보다 낮아짐"
+                )
+            elif trend_status == "available":
+                growth_comparison = (
+                    "직전 동일 기간과 비교할 기록은 충분하지 않지만 "
+                    "선택한 기간 안에서는 초반과 후반의 성장 흐름이 대체로 비슷함"
+                )
+            else:
+                growth_comparison = (
+                    "직전 동일 기간과 비교하거나 선택 기간 내부의 흐름을 판단할 "
+                    "경험치 변화 기록이 충분하지 않음"
+                )
     elif comparison.get("status") != "available" or direction in (None, "insufficient", "insufficient_data"):
         growth_comparison = "비교할 이전 성장 기록이 충분하지 않음"
     elif direction == "increase":
