@@ -66,7 +66,8 @@ _PROVIDER_LOG_FIELDS = (
     "expected_response_bytes", "body_complete", "transfer_encoding",
     "response_content_type", "response_content_encoding", "response_server",
     "response_request_id", "cause_class", "context_class",
-    "stream_event_count", "stream_done", "stream_reasoning_bytes", "response_mode",
+    "stream_event_count", "stream_done", "stream_reasoning_bytes", "stream_content_bytes",
+    "stream_finish_reason", "stream_native_finish_reason", "response_mode", "timeout_cause",
     "retry_count",
 )
 _SAFE_USAGE_FIELDS = (
@@ -78,7 +79,7 @@ _SAFE_USAGE_FIELDS = (
 def _safe_provider_metadata(metadata):
     source = metadata if isinstance(metadata, dict) else {}
     safe = {key: source[key] for key in _PROVIDER_LOG_FIELDS if key in source}
-    for key in ("provider", "model_alias", "selected_model", "selected_provider", "response_classification"):
+    for key in ("provider", "model_alias", "selected_model", "selected_provider", "response_classification", "timeout_cause", "stream_finish_reason", "stream_native_finish_reason"):
         if safe.get(key) is not None:
             safe[key] = str(safe[key])[:120]
     usage = source.get("usage")
@@ -326,6 +327,10 @@ _OPENROUTER_RETRY_MIN_REMAINING_SECONDS = 5.0
 def _is_retryable_openrouter_error(error):
     """전송 중단·일시적 제공자 장애만 재시도 대상으로 분류한다."""
     metadata = getattr(error, "provider_metadata", None) or getattr(error, "http_metadata", None) or {}
+    if isinstance(metadata, dict) and metadata.get("timeout_cause") == "total_deadline":
+        # The provider kept streaming until our own wall-clock limit; replaying the
+        # same request is unlikely to help and consumes the remaining request budget.
+        return False
     classification = metadata.get("response_classification") if isinstance(metadata, dict) else None
     if classification in {"response_body_incomplete", "stream_incomplete"}:
         return True
