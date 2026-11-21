@@ -36,7 +36,10 @@ def _service_error_response(result):
     status_code = result.get("statusCode", 502)
     retry_after = result.get("retryAfterSeconds")
     error_message = result.get("error") or "AI 분석을 처리하지 못했습니다."
-    response = jsonify({"error": str(error_message)})
+    payload = {"error": str(error_message)}
+    if isinstance(retry_after, int) and retry_after > 0:
+        payload["retryAfterSeconds"] = retry_after
+    response = jsonify(payload)
     response.status_code = status_code if isinstance(status_code, int) and 400 <= status_code <= 599 else 502
     if isinstance(retry_after, int) and retry_after > 0:
         response.headers["Retry-After"] = str(retry_after)
