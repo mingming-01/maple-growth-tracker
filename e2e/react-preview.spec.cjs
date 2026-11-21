@@ -512,6 +512,9 @@ test("AI report loads the server cache on entry and regenerates only on explicit
   await expect(fallbackNotice).toBeVisible();
   await expect(page.locator('[data-testid="ai-report-provenance"]')).toHaveCount(0);
   await expect(page.locator("#analytics")).not.toContainText(/Gemini|OpenRouter|sample\/free-route-model|라우팅 제공자|요청 모델/);
+  const firstCachedFallback = await page.evaluate(() => JSON.parse(localStorage.getItem("mapleGrowthTrackerAIResponsesV1") || "[]")
+    .find(entry => entry.type === "growth-report-7d")?.fallbackUsed);
+  expect(firstCachedFallback).toBe(true);
   expect(aiCalls).toBe(1);
   expect(submittedPayload.analysisContext.periodDays).toBe(7);
   expect(submittedPayload.forceRefresh).toBe(false);
@@ -522,6 +525,9 @@ test("AI report loads the server cache on entry and regenerates only on explicit
   const aiReportSection = page.locator(".section").filter({ has: page.getByRole("heading", { name: "AI 성장 리포트" }) });
   await expect(aiReportSection.locator(".section-description")).toContainText("최근 30일");
   await expect(page.getByText("기간 분석 테스트 결과입니다.")).toBeVisible();
+  const secondCachedFallback = await page.evaluate(() => JSON.parse(localStorage.getItem("mapleGrowthTrackerAIResponsesV1") || "[]")
+    .find(entry => entry.type === "growth-report-30d")?.fallbackUsed);
+  expect(secondCachedFallback).toBe(true);
   expect(aiCalls).toBe(2);
   expect(submittedPayload.analysisContext.periodDays).toBe(30);
   expect(submittedPayload.forceRefresh).toBe(false);
