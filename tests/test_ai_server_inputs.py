@@ -51,7 +51,10 @@ class AIServerInputTests(unittest.TestCase):
         self.assertEqual(response.status_code, 503)
         self.assertEqual(
             response.get_json(),
-            {"error": "기본 AI와 대체 AI 분석 요청이 모두 실패했습니다. 잠시 후 다시 시도해주세요."},
+            {
+                "error": "기본 AI와 대체 AI 분석 요청이 모두 실패했습니다. 잠시 후 다시 시도해주세요.",
+                "retryAfterSeconds": 60,
+            },
         )
         self.assertEqual(response.headers.get("Retry-After"), "60")
 
