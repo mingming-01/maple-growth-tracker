@@ -39,7 +39,7 @@ test("AI report cache signature includes current growth data, not only character
     "utf8"
   );
 
-  assert.match(analytics, /cacheVersion:\s*10/);
+  assert.match(analytics, /cacheVersion:\s*11/);
   assert.match(
     analytics,
     /buildReportSignature\(\s*character,\s*analysisHistory,\s*metrics,\s*analysisContext\s*\)/
