@@ -105,7 +105,7 @@ export function AIReport({ character, history, analysisHistory = history, period
       setAnalysis(cached.analysis);
       setGrowthInsights(cached.growthInsights || null);
       setNotice(cached.fallbackUsed === true
-        ? "기본 AI 응답이 원활하지 않아 대체 경로로 생성된 코멘트입니다."
+        ? "기본 AI 응답이 원활하지 않아 대체 경로로 코멘트를 생성했습니다."
         : analysisContext.periodDays > 7 ? `지난 ${analysisContext.periodDays}일 분석 결과를 불러왔어요.` : "");
       setAiGenerated(true);
       setLoading(false);
