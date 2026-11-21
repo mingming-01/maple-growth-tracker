@@ -492,6 +492,8 @@ def _build_growth_report_prompt(source_data):
 - 레벨업이 확인됐다면 그 성취나 새 레벨에서 이어지는 성장을 자연스럽게 짚어도 좋아. 확인되지 않은 레벨업을 축하하거나 성과를 만들어내지는 마.
 - 응원은 전체 분석과 연결되는 짧고 구체적인 표현으로 필요할 때 한 번만 덧붙여. 과장된 칭찬, 상투적인 격려, 뜬금없는 응원, 플레이를 강요하는 표현은 피해야 해.
 - 기록만으로 말할 수 있는 내용이 적다면 억지로 풍성하게 쓰지 말고, 짧더라도 정확하고 따뜻하게 마무리해.
+- 모든 문장은 리포트 본문과 같은 존댓말 해요체로 통일해. 문장 중간이나 끝에서 반말로 바꾸지 마.
+- '보여', '있어', '좋아', '할게', '볼게', '거야'처럼 반말로 읽히는 끝맺음과 평서형 '-다' 체는 사용하지 마.
 
 [정확성 규칙]
 - 제공된 정성 신호에 없는 성장 방향이나 원인을 만들어내지 마.
@@ -558,7 +560,7 @@ def _build_growth_report_cache_key(prompt, source_data):
     """정성 신호 프롬프트와 해당 캐릭터의 실제 계산 데이터로 캐시를 구분한다."""
     return (
         prompt
-        + "\n[리포트 형식 버전] 8\n"
+        + "\n[리포트 형식 버전] 9\n"
         + "[캐시 식별 데이터]\n"
         + json.dumps(source_data, ensure_ascii=False, sort_keys=True)
     )
@@ -703,15 +705,34 @@ def _remove_numeric_comment_sentences(comment):
     return " ".join(kept), removed
 
 
+_INFORMAL_COMMENT_ENDING = re.compile(
+    r"(?:보여|볼게|해\\s*볼게|해볼게|할게|할\\s*거야|거야|이야|야|같아|좋아|"
+    r"있어|없어|돼|해|했어|했지|하자|크다|작다|높다|낮다|맞아|아니야|구나|"
+    r"겠지|하네|그렇네|많아|적어|필요해|어려워|좋겠네|괜찮아|맞네|해봐|해줘)$"
+)
+
+
+def _has_informal_comment_tone(comment):
+    """끝맺음에서 명확한 반말 표현이 발견되는지 보수적으로 확인한다."""
+    sentences = re.split(r"(?<=[.!?])\\s+|\\n+", str(comment or ""))
+    return any(
+        _INFORMAL_COMMENT_ENDING.search(sentence.strip().rstrip("\\\"'”’)]}"))
+        for sentence in sentences
+        if sentence.strip()
+    )
+
+
 def _prepare_ai_comment(value, expected_date, source_data):
-    """Keep usable qualitative prose; numeric facts remain exclusively server-owned."""
+    """Keep usable, consistently polite prose; numeric facts remain server-owned."""
     sanitized = sanitize_ai_text(value, expected_date)
     comment = _extract_ai_comment(sanitized)
     comment, removed_numeric_sentences = _remove_numeric_comment_sentences(comment)
-    compact = re.sub(r"[\s.!?…·]", "", comment)
+    compact = re.sub(r"[\\s.!?…·]", "", comment)
     if len(compact) < 8:
         reason = "numeric_claim_only" if removed_numeric_sentences else "empty_comment"
         return None, reason
+    if _has_informal_comment_tone(comment):
+        return None, "informal_tone"
     return comment, None
 
 
