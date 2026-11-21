@@ -66,6 +66,18 @@ class AIAnalysisFallbackTests(unittest.TestCase):
         self.assertIn('"error_type": "provider_timeout"', captured.output[0])
         self.assertNotIn("temporary provider failure", captured.output[0])
 
+    def test_provider_attempt_deadline_remains_retryable(self):
+        error = requests.Timeout("provider attempt budget expired")
+        error.provider_metadata = {"timeout_cause": "provider_attempt_deadline"}
+
+        self.assertTrue(service._is_retryable_openrouter_error(error))
+
+    def test_end_to_end_request_deadline_is_not_retryable(self):
+        error = requests.Timeout("overall request budget expired")
+        error.provider_metadata = {"timeout_cause": "request_deadline"}
+
+        self.assertFalse(service._is_retryable_openrouter_error(error))
+
     def test_success_log_records_provider_model_transport_and_validation_without_content(self):
         metadata = {
             "provider": "openrouter", "model_alias": "openrouter/free",
