@@ -32,11 +32,11 @@ def _ai_rate_limit_response():
 
 
 def _service_error_response(result):
-    """서비스 계층의 공급자 상태를 HTTP 응답에 정확히 반영한다."""
-    payload = dict(result)
-    status_code = payload.pop("statusCode", 502)
-    retry_after = payload.get("retryAfterSeconds")
-    response = jsonify(payload)
+    """일반 응답에는 사용자용 오류 문구만 남기고 진단 정보는 서버 로그에 둔다."""
+    status_code = result.get("statusCode", 502)
+    retry_after = result.get("retryAfterSeconds")
+    error_message = result.get("error") or "AI 분석을 처리하지 못했습니다."
+    response = jsonify({"error": str(error_message)})
     response.status_code = status_code if isinstance(status_code, int) and 400 <= status_code <= 599 else 502
     if isinstance(retry_after, int) and retry_after > 0:
         response.headers["Retry-After"] = str(retry_after)
